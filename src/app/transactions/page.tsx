@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo } from "react"
@@ -17,7 +16,13 @@ import {
   FilterX,
   Plus,
   Trash2,
-  ChevronRight
+  ChevronRight,
+  ArrowUpRight,
+  ArrowDownLeft,
+  ArrowRightLeft,
+  PlusCircle,
+  MinusCircle,
+  RefreshCw
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -25,6 +30,18 @@ import { Badge } from "@/components/ui/badge"
 import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase"
 import { collection, doc } from "firebase/firestore"
 import { cn } from "@/lib/utils"
+
+const txTypeMap: Record<string, { label: string, icon: any, color: string }> = {
+  sale: { label: "Venta", icon: ArrowUpRight, color: "text-emerald-600 bg-emerald-50" },
+  refill: { label: "Reposición", icon: ArrowUpRight, color: "text-emerald-600 bg-emerald-50" },
+  service: { label: "Servicio Técnico", icon: ArrowUpRight, color: "text-emerald-600 bg-emerald-50" },
+  cobro: { label: "Cobro de Saldo", icon: Wallet, color: "text-emerald-600 bg-emerald-50" },
+  adjustment: { label: "Ajuste Interno", icon: RefreshCw, color: "text-slate-600 bg-slate-50" },
+  FinancialTransferOut: { label: "Transferencia (Salida)", icon: ArrowRightLeft, color: "text-amber-600 bg-amber-50" },
+  FinancialTransferIn: { label: "Transferencia (Entrada)", icon: ArrowRightLeft, color: "text-emerald-600 bg-emerald-50" },
+  Adjustment: { label: "Ajuste de Saldo", icon: RefreshCw, color: "text-slate-600 bg-slate-50" },
+  Expense: { label: "Gasto Manual", icon: ArrowDownLeft, color: "text-rose-600 bg-rose-50" },
+}
 
 export default function TransactionsPage() {
   const { toast } = useToast()
@@ -174,7 +191,7 @@ export default function TransactionsPage() {
       <Sidebar className="hidden md:flex w-64 fixed inset-y-0" />
       <main className="flex-1 md:ml-64 p-4 md:p-8 space-y-6">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <h1 className="text-3xl font-bold text-primary">Operaciones Cloud</h1>
+          <h1 className="text-3xl font-bold text-primary font-headline">Operaciones Cloud</h1>
           <Tabs value={mainView} onValueChange={setMainView}>
             <TabsList><TabsTrigger value="register">Nueva</TabsTrigger><TabsTrigger value="history">Historial</TabsTrigger></TabsList>
           </Tabs>
@@ -392,18 +409,38 @@ export default function TransactionsPage() {
                   <div className="p-12 text-center text-muted-foreground italic">No hay transacciones registradas.</div>
                 ) : (
                   <Table>
-                    <TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Cliente</TableHead><TableHead>Tipo</TableHead><TableHead>Descripción</TableHead><TableHead className="text-right">Monto</TableHead></TableRow></TableHeader>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Tipo de Operación</TableHead>
+                        <TableHead>Descripción</TableHead>
+                        <TableHead className="text-right">Monto</TableHead>
+                      </TableRow>
+                    </TableHeader>
                     <TableBody>
                       {filteredTransactions.map((tx: any) => {
                         const customer = customers?.find(c => c.id === tx.clientId);
                         const isCobro = tx.type === 'cobro';
+                        const typeInfo = txTypeMap[tx.type] || { label: tx.type, icon: PlusCircle, color: "text-slate-600 bg-slate-50" };
+                        const Icon = typeInfo.icon;
+                        
                         return (
-                          <TableRow key={tx.id} className={cn(isCobro && "bg-emerald-50/30")}>
+                          <TableRow key={tx.id} className={cn(isCobro && "bg-emerald-50/10")}>
                             <TableCell className="text-xs whitespace-nowrap">{new Date(tx.date).toLocaleDateString('es-AR')}</TableCell>
                             <TableCell className="font-medium">{customer ? `${customer.apellido}, ${customer.nombre}` : 'N/A'}</TableCell>
-                            <TableCell><Badge variant="outline" className="text-[10px] uppercase">{tx.type}</Badge></TableCell>
-                            <TableCell className="text-[11px] max-w-[200px] truncate">{tx.description}</TableCell>
-                            <TableCell className={cn("text-right font-black", isCobro ? "text-emerald-600" : "text-foreground")}>{tx.currency === 'ARS' ? '$' : 'u$s'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <div className={cn("p-1.5 rounded-full", typeInfo.color)}>
+                                  <Icon className="h-3.5 w-3.5" />
+                                </div>
+                                <span className="text-xs font-semibold">{typeInfo.label}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-[11px] max-w-[200px] truncate italic text-muted-foreground">{tx.description}</TableCell>
+                            <TableCell className={cn("text-right font-black", tx.amount > 0 || isCobro ? "text-emerald-600" : "text-rose-600")}>
+                              {tx.currency === 'ARS' ? '$' : 'u$s'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}
+                            </TableCell>
                           </TableRow>
                         )
                       })}

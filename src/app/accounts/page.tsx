@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -18,7 +17,9 @@ import {
   Trash2,
   RefreshCw,
   Loader2,
-  TrendingUp
+  TrendingUp,
+  PlusCircle,
+  MinusCircle
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -40,6 +41,18 @@ import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, setDocumentNonBlocking, addDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase"
 import { collection, doc, query, orderBy, limit } from "firebase/firestore"
+
+const txTypeMap: Record<string, { label: string, icon: any, color: string }> = {
+  sale: { label: "Venta", icon: ArrowUpRight, color: "text-emerald-600 bg-emerald-50" },
+  refill: { label: "Reposición", icon: ArrowUpRight, color: "text-emerald-600 bg-emerald-50" },
+  service: { label: "Servicio Técnico", icon: ArrowUpRight, color: "text-emerald-600 bg-emerald-50" },
+  cobro: { label: "Cobro de Saldo", icon: Wallet, color: "text-emerald-600 bg-emerald-50" },
+  adjustment: { label: "Ajuste Interno", icon: RefreshCw, color: "text-slate-600 bg-slate-50" },
+  FinancialTransferOut: { label: "Transferencia (Salida)", icon: ArrowRightLeft, color: "text-amber-600 bg-amber-50" },
+  FinancialTransferIn: { label: "Transferencia (Entrada)", icon: ArrowRightLeft, color: "text-emerald-600 bg-emerald-50" },
+  Adjustment: { label: "Ajuste de Saldo", icon: RefreshCw, color: "text-slate-600 bg-slate-50" },
+  Expense: { label: "Gasto Manual", icon: ArrowDownLeft, color: "text-rose-600 bg-rose-50" },
+}
 
 export default function AccountsPage() {
   const { toast } = useToast()
@@ -335,24 +348,28 @@ export default function AccountsPage() {
                 {!recentTxs || recentTxs.length === 0 ? (
                   <p className="text-sm text-center text-muted-foreground py-12 italic">No se registran transacciones recientes.</p>
                 ) : (
-                  recentTxs.map((move: any) => (
-                    <div key={move.id} className="flex items-center justify-between p-4 hover:bg-muted/5 transition-colors">
-                      <div className="flex items-center gap-4">
-                        <div className={`p-2 rounded-full ${move.amount > 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                          {move.amount > 0 ? <Plus className="h-4 w-4" /> : <ArrowDownLeft className="h-4 w-4" />}
+                  recentTxs.map((move: any) => {
+                    const typeInfo = txTypeMap[move.type] || { label: move.type, icon: RefreshCw, color: "text-slate-600 bg-slate-50" };
+                    const Icon = typeInfo.icon;
+                    return (
+                      <div key={move.id} className="flex items-center justify-between p-4 hover:bg-muted/5 transition-colors">
+                        <div className="flex items-center gap-4">
+                          <div className={cn("p-2 rounded-full", typeInfo.color)}>
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold leading-none">{move.description || typeInfo.label}</p>
+                            <p className="text-[10px] text-muted-foreground mt-1 uppercase">
+                              {move.date ? new Date(move.date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' }) : 'S/D'} • <span className="font-bold">{typeInfo.label}</span>
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-bold leading-none">{move.description || move.type}</p>
-                          <p className="text-[10px] text-muted-foreground mt-1 uppercase">
-                            {move.date ? new Date(move.date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' }) : 'S/D'}
-                          </p>
-                        </div>
+                        <span className={`font-black text-sm ${move.amount > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {move.currency === 'USD' ? 'u$s' : '$'}{Math.abs(move.amount).toLocaleString('es-AR')}
+                        </span>
                       </div>
-                      <span className={`font-black text-sm ${move.amount > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {move.currency === 'USD' ? 'u$s' : '$'}{Math.abs(move.amount).toLocaleString('es-AR')}
-                      </span>
-                    </div>
-                  ))
+                    )
+                  })
                 )}
               </div>
             </CardContent>
