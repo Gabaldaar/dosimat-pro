@@ -138,7 +138,13 @@ export default function TransactionsPage() {
                     <Label>Cliente</Label>
                     <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
                       <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                      <SelectContent>{customers?.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                      <SelectContent>
+                        {customers?.map((c: any) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.apellido}, {c.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
@@ -205,7 +211,11 @@ export default function TransactionsPage() {
                      <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
                      <SelectContent>
                        <SelectItem value="all">Todos</SelectItem>
-                       {customers?.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                       {customers?.map((c: any) => (
+                         <SelectItem key={c.id} value={c.id}>
+                           {c.apellido}, {c.nombre}
+                         </SelectItem>
+                       ))}
                      </SelectContent>
                    </Select>
                  </div>
@@ -242,16 +252,21 @@ export default function TransactionsPage() {
                   <div className="p-8 text-center text-muted-foreground">No hay transacciones que coincidan con los filtros.</div>
                 ) : (
                   <Table>
-                    <TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Cliente</TableHead><TableHead>Descripción</TableHead><TableHead className="text-right">Monto</TableHead></TableRow></TableHeader>
+                    <TableHeader><TableRow><TableHead>Fecha</TableHead> <TableHead>Cliente</TableHead><TableHead>Descripción</TableHead><TableHead className="text-right">Monto</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {filteredTransactions.map((tx: any) => (
-                        <TableRow key={tx.id}>
-                          <TableCell className="text-xs">{new Date(tx.date).toLocaleDateString()}</TableCell>
-                          <TableCell className="font-medium">{customers?.find(c => c.id === tx.clientId)?.name || 'N/A'}</TableCell>
-                          <TableCell className="text-xs">{tx.description}</TableCell>
-                          <TableCell className="text-right font-bold">{tx.currency} {Math.abs(tx.amount || 0).toLocaleString()}</TableCell>
-                        </TableRow>
-                      ))}
+                      {filteredTransactions.map((tx: any) => {
+                        const customer = customers?.find(c => c.id === tx.clientId);
+                        return (
+                          <TableRow key={tx.id}>
+                            <TableCell className="text-xs">{new Date(tx.date).toLocaleDateString()}</TableCell>
+                            <TableCell className="font-medium">
+                              {customer ? `${customer.apellido}, ${customer.nombre}` : 'N/A'}
+                            </TableCell>
+                            <TableCell className="text-xs">{tx.description}</TableCell>
+                            <TableCell className="text-right font-bold">{tx.currency} {Math.abs(tx.amount || 0).toLocaleString()}</TableCell>
+                          </TableRow>
+                        )
+                      })}
                     </TableBody>
                   </Table>
                 )}
