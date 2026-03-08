@@ -22,7 +22,9 @@ import {
   ArrowRightLeft,
   PlusCircle,
   MinusCircle,
-  RefreshCw
+  RefreshCw,
+  TrendingUp,
+  Banknote
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -185,6 +187,26 @@ export default function TransactionsPage() {
       return matchCustomer && matchAccount && matchMonth
     }).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
   }, [transactions, filterCustomer, filterAccount, filterMonth])
+
+  const filteredTotals = useMemo(() => {
+    return filteredTransactions.reduce((acc, tx) => {
+      const amount = tx.amount || 0
+      acc[tx.currency as 'ARS' | 'USD'] = (acc[tx.currency as 'ARS' | 'USD'] || 0) + amount
+      return acc
+    }, { ARS: 0, USD: 0 })
+  }, [filteredTransactions])
+
+  const monthsOptions = useMemo(() => {
+    const options = []
+    const now = new Date()
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const value = d.toISOString().substring(0, 7)
+      const label = d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+      options.push({ value, label: label.charAt(0).toUpperCase() + label.slice(1) })
+    }
+    return options
+  }, [])
 
   return (
     <div className="flex min-h-screen">
@@ -371,13 +393,38 @@ export default function TransactionsPage() {
             </Card>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-6">
+            <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card className="glass-card border-l-4 border-l-primary bg-primary/5">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] font-bold text-primary uppercase tracking-wider">Total Filtrado ARS</p>
+                      <h3 className="text-2xl font-black">${filteredTotals.ARS.toLocaleString('es-AR')}</h3>
+                    </div>
+                    <div className="p-2 bg-primary/10 rounded-full"><TrendingUp className="h-5 w-5 text-primary" /></div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="glass-card border-l-4 border-l-emerald-500 bg-emerald-50/50">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Total Filtrado USD</p>
+                      <h3 className="text-2xl font-black">u$s {filteredTotals.USD.toLocaleString('es-AR')}</h3>
+                    </div>
+                    <div className="p-2 bg-emerald-100 rounded-full"><Banknote className="h-5 w-5 text-emerald-600" /></div>
+                  </div>
+                </CardContent>
+              </Card>
+            </section>
+
             <Card className="glass-card">
               <CardContent className="p-4 flex flex-wrap gap-4 items-end">
                  <div className="space-y-1">
                    <Label className="text-xs">Cliente</Label>
                    <Select value={filterCustomer} onValueChange={setFilterCustomer}>
-                     <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
+                     <SelectTrigger className="w-[200px] h-9"><SelectValue /></SelectTrigger>
                      <SelectContent>
                        <SelectItem value="all">Todos</SelectItem>
                        {customers?.map((c: any) => (
@@ -389,7 +436,7 @@ export default function TransactionsPage() {
                  <div className="space-y-1">
                    <Label className="text-xs">Cuenta Financiera</Label>
                    <Select value={filterAccount} onValueChange={setFilterAccount}>
-                     <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                     <SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger>
                      <SelectContent>
                        <SelectItem value="all">Todas</SelectItem>
                        <SelectItem value="null">A Cuenta (Pendiente)</SelectItem>
@@ -397,7 +444,21 @@ export default function TransactionsPage() {
                      </SelectContent>
                    </Select>
                  </div>
-                 <Button variant="ghost" size="icon" onClick={() => { setFilterCustomer("all"); setFilterAccount("all"); }}><FilterX className="h-4 w-4" /></Button>
+                 <div className="space-y-1">
+                   <Label className="text-xs">Mes / Periodo</Label>
+                   <Select value={filterMonth} onValueChange={setFilterMonth}>
+                     <SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger>
+                     <SelectContent>
+                       <SelectItem value="all">Todos los tiempos</SelectItem>
+                       {monthsOptions.map((opt) => (
+                         <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                       ))}
+                     </SelectContent>
+                   </Select>
+                 </div>
+                 <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => { setFilterCustomer("all"); setFilterAccount("all"); setFilterMonth("all"); }}>
+                   <FilterX className="h-4 w-4" />
+                 </Button>
               </CardContent>
             </Card>
 
