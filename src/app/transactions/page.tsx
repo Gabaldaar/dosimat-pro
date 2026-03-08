@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -97,6 +97,19 @@ export default function TransactionsPage() {
   const [cobroCurrency, setCobroCurrency] = useState("ARS")
   const [cobroAccountId, setCobroAccountId] = useState("pending")
   const [txDescription, setTxDescription] = useState("")
+
+  // SOLUCIÓN TÉCNICA DEFINITIVA: Observador de mutaciones para forzar desbloqueo del puntero
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      if (document.body.style.pointerEvents === 'none') {
+        if (!txToDelete) {
+          document.body.style.pointerEvents = 'auto';
+        }
+      }
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+    return () => observer.disconnect();
+  }, [txToDelete]);
 
   const handleAddItem = (itemId: string) => {
     const item = catalog?.find((i: any) => i.id === itemId)
@@ -198,6 +211,7 @@ export default function TransactionsPage() {
     revertTxBalances(txToDelete)
     deleteDocumentNonBlocking(doc(db, 'transactions', txToDelete.id))
     setTxToDelete(null)
+    setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100)
     toast({ title: "Operación eliminada" })
   }
 
@@ -686,7 +700,12 @@ export default function TransactionsPage() {
           </div>
         )}
 
-        <AlertDialog open={!!txToDelete} onOpenChange={(o) => !o && setTxToDelete(null)}>
+        <AlertDialog open={!!txToDelete} onOpenChange={(o) => {
+          if(!o) {
+            setTxToDelete(null);
+            setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
+          }
+        }}>
           <AlertDialogContent className="glass-card">
             <AlertDialogHeader>
               <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
