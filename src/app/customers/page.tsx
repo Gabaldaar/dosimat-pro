@@ -73,7 +73,10 @@ export default function CustomersPage() {
   // Carga robusta de Google Maps
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-    if (!apiKey) return;
+    if (!apiKey) {
+      console.warn("Google Maps API Key no encontrada en .env");
+      return;
+    }
 
     const initServices = () => {
       if (window.google?.maps?.places) {
@@ -82,6 +85,7 @@ export default function CustomersPage() {
           const dummyDiv = document.createElement('div');
           placesService.current = new window.google.maps.places.PlacesService(dummyDiv);
           setIsGoogleReady(true);
+          console.log("Google Places Services inicializados correctamente");
         } catch (e) {
           console.error("Error inicializando Google Places:", e);
         }
