@@ -1,5 +1,7 @@
+
 "use client"
 
+import { useState, useEffect } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -29,6 +31,12 @@ const accounts = [
 ]
 
 export default function AccountsPage() {
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   return (
     <div className="flex min-h-screen">
       <Sidebar className="hidden md:flex w-64 fixed inset-y-0" />
@@ -86,7 +94,7 @@ export default function AccountsPage() {
                 <div className="flex items-baseline gap-1">
                   <span className="text-2xl font-bold">
                     {account.currency === 'USD' ? 'u$s' : '$'}
-                    {account.balance.toLocaleString()}
+                    {mounted ? account.balance.toLocaleString() : account.balance}
                   </span>
                 </div>
                 <div className="mt-4 flex gap-2">

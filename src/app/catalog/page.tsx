@@ -1,5 +1,7 @@
+
 "use client"
 
+import { useState, useEffect } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -31,6 +33,12 @@ const catalogItems = [
 ]
 
 export default function CatalogPage() {
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   return (
     <div className="flex min-h-screen">
       <Sidebar className="hidden md:flex w-64 fixed inset-y-0" />
@@ -81,7 +89,7 @@ export default function CatalogPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-3xl font-bold">
                     {item.currency === 'USD' ? 'u$s ' : '$'}
-                    {item.price.toLocaleString()}
+                    {mounted ? item.price.toLocaleString() : item.price}
                   </span>
                   {item.stock !== null && (
                     <div className="flex flex-col items-end">

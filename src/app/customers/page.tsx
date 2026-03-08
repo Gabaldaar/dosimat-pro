@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -76,10 +76,15 @@ const initialCustomers: Customer[] = [
 
 export default function CustomersPage() {
   const { toast } = useToast()
+  const [mounted, setMounted] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Form State
   const [formData, setFormData] = useState<Omit<Customer, 'id' | 'status'>>({
@@ -207,7 +212,9 @@ export default function CustomersPage() {
                     <div className="flex items-center justify-between mb-1">
                       <h3 className="text-lg font-bold truncate group-hover:text-primary transition-colors">{customer.name}</h3>
                       {customer.status === 'debtor' && (
-                        <Badge variant="destructive" className="ml-2 whitespace-nowrap animate-pulse">Deuda: ${customer.debt.toLocaleString()}</Badge>
+                        <Badge variant="destructive" className="ml-2 whitespace-nowrap animate-pulse">
+                          Deuda: ${mounted ? customer.debt.toLocaleString() : customer.debt}
+                        </Badge>
                       )}
                     </div>
                     <p className="text-sm text-muted-foreground flex items-center gap-1 mb-2">
