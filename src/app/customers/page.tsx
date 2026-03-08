@@ -24,8 +24,6 @@ import {
   TrendingUp,
   Banknote,
   PlusCircle,
-  AlertCircle,
-  Package,
   RefreshCw
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -214,32 +212,14 @@ export default function CustomersPage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <div className="space-y-1">
                 <Label className="text-[10px] uppercase font-bold text-muted-foreground">Saldo</Label>
-                <div className="flex bg-muted/30 p-1 rounded-lg border">
-                  <Button 
-                    variant={filterBalance === 'all' ? 'secondary' : 'ghost'} 
-                    size="sm" 
-                    className="flex-1 font-bold text-[10px] uppercase h-8"
-                    onClick={() => setFilterBalance('all')}
-                  >
-                    Todos
-                  </Button>
-                  <Button 
-                    variant={filterBalance === 'debt' ? 'secondary' : 'ghost'} 
-                    size="sm" 
-                    className={cn("flex-1 font-bold text-[10px] uppercase h-8", filterBalance === 'debt' && "text-rose-600")}
-                    onClick={() => setFilterBalance('debt')}
-                  >
-                    Deuda
-                  </Button>
-                  <Button 
-                    variant={filterBalance === 'credit' ? 'secondary' : 'ghost'} 
-                    size="sm" 
-                    className={cn("flex-1 font-bold text-[10px] uppercase h-8", filterBalance === 'credit' && "text-emerald-600")}
-                    onClick={() => setFilterBalance('credit')}
-                  >
-                    A Favor
-                  </Button>
-                </div>
+                <Select value={filterBalance} onValueChange={setFilterBalance}>
+                  <SelectTrigger className="h-10 bg-white/50"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Ver Todos</SelectItem>
+                    <SelectItem value="debt" className="text-rose-600">Solo Deuda</SelectItem>
+                    <SelectItem value="credit" className="text-emerald-600">Solo A Favor</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-1">
@@ -498,7 +478,7 @@ export default function CustomersPage() {
                   <Label className="font-bold text-amber-700">Equipo en Comodato</Label>
                   <p className="text-[10px] text-amber-600 uppercase tracking-widest font-black">Propiedad de la empresa</p>
                 </div>
-                <Switch checked={formData.equipoInstalado.enComodato} onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v}})} />
+                <Switch checked={formData.equipoInstalado.enComodato} onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v})} />
               </div>
               <div className="space-y-2 mt-4">
                 <Label>Medidas y Dosis</Label>
