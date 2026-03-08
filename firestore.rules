@@ -1,69 +1,15 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Funciones de ayuda para validación de acceso
-    function isSignedIn() {
-      return request.auth != null;
+    // Permitimos lectura y escritura a cualquier usuario autenticado (incluyendo anónimos)
+    // para facilitar el prototipado y el acceso desde diferentes dispositivos.
+    match /{document=**} {
+      allow read, write: if request.auth != null;
     }
     
-    function isAdmin() {
-      return isSignedIn() && exists(/databases/$(database)/documents/admin_roles/$(request.auth.uid));
-    }
-    
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    // Perfiles de usuario y notificaciones personales
-    match /users/{userId} {
-      allow read, write: if isOwner(userId) || isAdmin();
-      
-      match /notifications/{notificationId} {
-        allow read, write: if isOwner(userId) || isAdmin();
-      }
-    }
-
-    // Roles administrativos (solo lectura para usuarios, escritura para admins)
-    match /admin_roles/{adminUid} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
-    }
-
-    // Clientes y sus piscinas/equipamiento
-    match /clients/{clientId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn(); // En prototipo permitimos escritura a empleados
-      
-      match /pools/{poolId} {
-        allow read: if isSignedIn();
-        allow write: if isSignedIn();
-      }
-    }
-
-    // Catálogo de Productos y Servicios (Público para lectura en este prototipo)
+    // El catálogo de productos puede ser leído por cualquiera (incluso sin login)
     match /products_services/{id} {
-      allow read: if true; 
-      allow write: if isSignedIn();
-    }
-
-    // Cuentas financieras y categorías de gasto
-    match /financial_accounts/{id} {
-      allow read, write: if isSignedIn();
-    }
-    
-    match /expense_categories/{id} {
-      allow read, write: if isSignedIn();
-    }
-    
-    // Transacciones históricas
-    match /transactions/{id} {
-      allow read, write: if isSignedIn();
-    }
-
-    // Reglas de notificación automática
-    match /notification_rules/{id} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow read: if true;
     }
   }
 }

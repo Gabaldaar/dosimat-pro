@@ -3,7 +3,6 @@
 import { useState, useMemo } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { 
   Plus, 
@@ -14,11 +13,7 @@ import {
   Banknote,
   MoreVertical,
   ArrowRightLeft,
-  Save,
-  DollarSign,
-  History,
   Tag,
-  FileText,
   Trash2
 } from "lucide-react"
 import { 
@@ -30,7 +25,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -47,12 +41,12 @@ export default function AccountsPage() {
   const { toast } = useToast()
   const db = useFirestore()
   
-  // Firestore Collections
+  // Firestore Collections - No seeding, just live data
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
   const categoriesQuery = useMemoFirebase(() => collection(db, 'expense_categories'), [db])
   const txQuery = useMemoFirebase(() => collection(db, 'transactions'), [db])
 
-  const { data: accounts = [] } = useCollection(accountsQuery)
+  const { data: accounts = [], isLoading: loadingAccounts } = useCollection(accountsQuery)
   const { data: expenseCategories = [] } = useCollection(categoriesQuery)
   const { data: recentTxs = [] } = useCollection(txQuery)
   
@@ -116,15 +110,11 @@ export default function AccountsPage() {
       return
     }
 
-    if (editingAccountId) {
-      updateDocumentNonBlocking(doc(db, 'financial_accounts', editingAccountId), accountFormData)
-      toast({ title: "Cuenta actualizada" })
-    } else {
-      const id = Math.random().toString(36).substr(2, 9)
-      setDocumentNonBlocking(doc(db, 'financial_accounts', id), { ...accountFormData, id }, { merge: true })
-      toast({ title: "Cuenta creada" })
-    }
+    const id = editingAccountId || Math.random().toString(36).substr(2, 9)
+    setDocumentNonBlocking(doc(db, 'financial_accounts', id), { ...accountFormData, id }, { merge: true })
+    
     setIsAccountDialogOpen(false)
+    toast({ title: editingAccountId ? "Cuenta actualizada" : "Cuenta creada" })
   }
 
   const handleOpenTxDialog = (account: any, type: 'income' | 'expense') => {
@@ -202,7 +192,7 @@ export default function AccountsPage() {
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-headline font-bold text-primary">Cuentas Financieras</h1>
-            <p className="text-muted-foreground">Estado de saldos y cajas en tiempo real (Firestore).</p>
+            <p className="text-muted-foreground">Estado de saldos y cajas en tiempo real en la nube.</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setIsTransferDialogOpen(true)}>
@@ -214,69 +204,86 @@ export default function AccountsPage() {
           </div>
         </header>
 
-        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {accounts?.map((account: any) => (
-            <Card key={account.id} className="glass-card">
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between">
-                  <div className={`p-2 rounded-lg ${
-                    account.type === 'Bank' ? 'bg-blue-100 text-blue-700' : 
-                    account.type === 'Cash' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-                  }`}>
-                    {account.type === 'Bank' ? <Building2 className="h-5 w-5" /> : 
-                     account.type === 'Cash' ? <Banknote className="h-5 w-5" /> : <Wallet className="h-5 w-5" />}
+        {loadingAccounts ? (
+          <div className="flex items-center justify-center h-32">
+            <p className="text-muted-foreground">Cargando cuentas...</p>
+          </div>
+        ) : accounts.length === 0 ? (
+          <Card className="p-12 text-center border-dashed">
+            <Wallet className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
+            <h3 className="text-lg font-semibold">No hay cuentas registradas</h3>
+            <p className="text-muted-foreground mb-6">Crea tu primera caja o cuenta bancaria para empezar.</p>
+            <Button onClick={() => handleOpenAccountDialog()}><Plus className="mr-2 h-4 w-4" /> Agregar Cuenta</Button>
+          </Card>
+        ) : (
+          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {accounts.map((account: any) => (
+              <Card key={account.id} className="glass-card">
+                <CardHeader className="pb-2">
+                  <div className="flex items-start justify-between">
+                    <div className={`p-2 rounded-lg ${
+                      account.type === 'Bank' ? 'bg-blue-100 text-blue-700' : 
+                      account.type === 'Cash' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                    }`}>
+                      {account.type === 'Bank' ? <Building2 className="h-5 w-5" /> : 
+                       account.type === 'Cash' ? <Banknote className="h-5 w-5" /> : <Wallet className="h-5 w-5" />}
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleOpenAccountDialog(account)}>Editar</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleOpenAccountDialog(account)}>Editar</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-                <CardTitle className="text-base mt-2">{account.name}</CardTitle>
-                <CardDescription className="text-xs font-bold">{account.currency}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {account.currency === 'USD' ? 'u$s' : '$'}
-                  {(account.initialBalance || 0).toLocaleString('es-AR')}
-                </div>
-                <div className="mt-4 flex gap-2">
-                  <Button size="sm" variant="ghost" className="flex-1 bg-emerald-50 text-emerald-700" onClick={() => handleOpenTxDialog(account, 'income')}>
-                    <Plus className="h-3 w-3 mr-1" /> INGRESO
-                  </Button>
-                  <Button size="sm" variant="ghost" className="flex-1 bg-rose-50 text-rose-700" onClick={() => handleOpenTxDialog(account, 'expense')}>
-                    <ArrowDownLeft className="h-3 w-3 mr-1" /> GASTO
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </section>
+                  <CardTitle className="text-base mt-2">{account.name}</CardTitle>
+                  <CardDescription className="text-xs font-bold">{account.currency}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {account.currency === 'USD' ? 'u$s' : '$'}
+                    {(account.initialBalance || 0).toLocaleString('es-AR')}
+                  </div>
+                  <div className="mt-4 flex gap-2">
+                    <Button size="sm" variant="ghost" className="flex-1 bg-emerald-50 text-emerald-700" onClick={() => handleOpenTxDialog(account, 'income')}>
+                      <Plus className="h-3 w-3 mr-1" /> INGRESO
+                    </Button>
+                    <Button size="sm" variant="ghost" className="flex-1 bg-rose-50 text-rose-700" onClick={() => handleOpenTxDialog(account, 'expense')}>
+                      <ArrowDownLeft className="h-3 w-3 mr-1" /> GASTO
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </section>
+        )}
 
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="lg:col-span-2 glass-card">
             <CardHeader><CardTitle>Últimos Movimientos</CardTitle></CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {recentTxs?.slice(0, 5).map((move: any) => (
-                  <div key={move.id} className="flex items-center justify-between p-3 border-b">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-full ${move.amount > 0 ? 'bg-emerald-100' : 'bg-rose-100'}`}>
-                        {move.amount > 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownLeft className="h-4 w-4" />}
+                {recentTxs.length === 0 ? (
+                  <p className="text-sm text-center text-muted-foreground py-8">No hay transacciones registradas.</p>
+                ) : (
+                  recentTxs.slice(0, 5).map((move: any) => (
+                    <div key={move.id} className="flex items-center justify-between p-3 border-b">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-full ${move.amount > 0 ? 'bg-emerald-100' : 'bg-rose-100'}`}>
+                          {move.amount > 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownLeft className="h-4 w-4" />}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold">{move.description || move.type}</p>
+                          <p className="text-xs text-muted-foreground">{new Date(move.date).toLocaleDateString()}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-semibold">{move.description || move.type}</p>
-                        <p className="text-xs text-muted-foreground">{new Date(move.date).toLocaleDateString()}</p>
-                      </div>
+                      <span className={`font-bold ${move.amount > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {move.currency === 'USD' ? 'u$s' : '$'}{Math.abs(move.amount).toLocaleString()}
+                      </span>
                     </div>
-                    <span className={`font-bold ${move.amount > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {move.currency === 'USD' ? 'u$s' : '$'}{Math.abs(move.amount).toLocaleString()}
-                    </span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
@@ -286,7 +293,7 @@ export default function AccountsPage() {
               <CardTitle className="text-lg flex items-center gap-2"><Tag className="h-5 w-5" /> Categorías</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {expenseCategories?.map((cat: any) => (
+              {expenseCategories.map((cat: any) => (
                 <div key={cat.id} className="flex justify-between items-center p-2 rounded bg-muted/20">
                   <span className="text-sm">{cat.name}</span>
                 </div>
@@ -349,7 +356,7 @@ export default function AccountsPage() {
               <Button size="icon" onClick={handleAddCategory}><Plus className="h-4 w-4" /></Button>
             </div>
             <ScrollArea className="h-[200px]">
-              {expenseCategories?.map((cat: any) => (
+              {expenseCategories.map((cat: any) => (
                 <div key={cat.id} className="flex items-center justify-between p-2 border-b">
                   <span>{cat.name}</span>
                   <Button variant="ghost" size="icon" onClick={() => handleDeleteCategory(cat.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
@@ -357,6 +364,41 @@ export default function AccountsPage() {
               ))}
             </ScrollArea>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transaction Dialog */}
+      <Dialog open={isTxDialogOpen} onOpenChange={setIsTxDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{txType === 'income' ? 'Registrar Ingreso' : 'Registrar Gasto'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Monto</Label>
+              <Input type="number" value={txFormData.amount} onChange={(e) => setTxFormData({...txFormData, amount: Number(e.target.value)})} />
+            </div>
+            {txType === 'expense' && (
+              <div className="space-y-2">
+                <Label>Categoría</Label>
+                <Select value={txFormData.categoryId} onValueChange={(v) => setTxFormData({...txFormData, categoryId: v})}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar rubro..." /></SelectTrigger>
+                  <SelectContent>
+                    {expenseCategories.map((cat: any) => (
+                      <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Descripción / Concepto</Label>
+              <Input placeholder="Ej: Compra de cloro, Pago de cliente..." value={txFormData.description} onChange={(e) => setTxFormData({...txFormData, description: e.target.value})} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleProcessTx} className="w-full">Procesar Operación</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
