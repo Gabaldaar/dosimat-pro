@@ -3,7 +3,7 @@
 
 import { useState, useMemo } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
-import { Card, CardContent, CardFooter } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -13,23 +13,22 @@ import {
   Plus, 
   MapPin, 
   ChevronRight, 
-  Phone, 
+  PhoneCall, 
   Mail, 
   User, 
   Info, 
   Droplets, 
   Trash2, 
   Map, 
-  PhoneCall, 
-  ExternalLink,
-  Wallet,
-  Box
+  Box,
+  FilterX
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from "@/firebase"
 import { collection, doc } from "firebase/firestore"
@@ -39,7 +38,12 @@ export default function CustomersPage() {
   const { toast } = useToast()
   const db = useFirestore()
   const { user } = useUser()
+  
+  // States for search and filters
   const [searchTerm, setSearchTerm] = useState("")
+  const [filterBalance, setFilterBalance] = useState("all") // all, debt, credit
+  const [filterType, setFilterType] = useState("all") // all, reposicion, ocasional
+  const [filterComodato, setFilterComodato] = useState("all") // all, comodato, propio
   
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const { data: customers, isLoading } = useCollection(clientsQuery)
@@ -75,11 +79,36 @@ export default function CustomersPage() {
 
   const filteredCustomers = useMemo(() => {
     if (!customers) return []
-    return customers.filter((c: any) => 
-      `${c.nombre} ${c.apellido}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (c.cuit_dni && c.cuit_dni.includes(searchTerm))
-    )
-  }, [customers, searchTerm])
+    return customers.filter((c: any) => {
+      // Search term filter
+      const searchMatch = `${c.nombre} ${c.apellido}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (c.cuit_dni && c.cuit_dni.includes(searchTerm))
+      
+      if (!searchMatch) return false
+
+      // Balance filter
+      if (filterBalance === 'debt' && (c.saldoActual || 0) >= 0) return false
+      if (filterBalance === 'credit' && (c.saldoActual || 0) <= 0) return false
+
+      // Type filter
+      if (filterType === 'reposicion' && !c.esClienteReposicion) return false
+      if (filterType === 'ocasional' && c.esClienteReposicion) return false
+
+      // Comodato filter
+      const isComodato = c.equipoInstalado?.enComodato === true
+      if (filterComodato === 'comodato' && !isComodato) return false
+      if (filterComodato === 'propio' && isComodato) return false
+
+      return true
+    })
+  }, [customers, searchTerm, filterBalance, filterType, filterComodato])
+
+  const resetFilters = () => {
+    setSearchTerm("")
+    setFilterBalance("all")
+    setFilterType("all")
+    setFilterComodato("all")
+  }
 
   const handleOpenDialog = (customer?: any) => {
     if (customer) {
@@ -149,15 +178,51 @@ export default function CustomersPage() {
           </Button>
         </header>
 
-        <div className="relative max-w-2xl">
-          <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-          <Input 
-            placeholder="Buscar por nombre, apellido o CUIT/DNI..." 
-            className="pl-10 h-11 bg-white/50 backdrop-blur-sm" 
-            value={searchTerm} 
-            onChange={(e) => setSearchTerm(e.target.value)} 
-          />
-        </div>
+        <section className="space-y-4">
+          <div className="flex flex-col lg:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
+              <Input 
+                placeholder="Buscar por nombre, apellido o CUIT/DNI..." 
+                className="pl-10 h-11 bg-white/50 backdrop-blur-sm" 
+                value={searchTerm} 
+                onChange={(e) => setSearchTerm(e.target.value)} 
+              />
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <Select value={filterBalance} onValueChange={setFilterBalance}>
+                <SelectTrigger className="h-11 bg-white/50"><SelectValue placeholder="Saldo" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los saldos</SelectItem>
+                  <SelectItem value="debt">Deudores</SelectItem>
+                  <SelectItem value="credit">A favor</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              <Select value={filterType} onValueChange={setFilterType}>
+                <SelectTrigger className="h-11 bg-white/50"><SelectValue placeholder="Tipo" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los tipos</SelectItem>
+                  <SelectItem value="reposicion">Reposición</SelectItem>
+                  <SelectItem value="ocasional">Ocasional</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={filterComodato} onValueChange={setFilterComodato}>
+                <SelectTrigger className="h-11 bg-white/50"><SelectValue placeholder="Equipo" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los equipos</SelectItem>
+                  <SelectItem value="comodato">En Comodato</SelectItem>
+                  <SelectItem value="propio">Equipo Propio</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Button variant="outline" className="h-11" onClick={resetFilters}>
+                <FilterX className="h-4 w-4 mr-2" /> Limpiar
+              </Button>
+            </div>
+          </div>
+        </section>
 
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
@@ -167,7 +232,8 @@ export default function CustomersPage() {
           <Card className="p-12 text-center border-dashed border-2 bg-muted/5">
             <User className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
             <h3 className="text-lg font-semibold">Sin coincidencias</h3>
-            <p className="text-muted-foreground">No hay clientes que coincidan con tu búsqueda.</p>
+            <p className="text-muted-foreground">No hay clientes que coincidan con los filtros aplicados.</p>
+            <Button variant="link" onClick={resetFilters} className="mt-2 text-primary">Restablecer filtros</Button>
           </Card>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -181,7 +247,7 @@ export default function CustomersPage() {
                   <div className="flex items-start gap-4">
                     <Avatar className="h-14 w-14 border-2 border-primary/10">
                       <AvatarFallback className="bg-primary/5 text-primary font-bold text-xl">
-                        {customer.nombre[0]}{customer.apellido[0]}
+                        {customer.nombre?.[0]}{customer.apellido?.[0]}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
@@ -201,7 +267,9 @@ export default function CustomersPage() {
                         </div>
                         <div className={cn(
                           "text-right font-bold text-sm px-2 py-1 rounded-lg border",
-                          (customer.saldoActual || 0) < 0 ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                          (customer.saldoActual || 0) < 0 ? "bg-rose-50 text-rose-700 border-rose-100" : 
+                          (customer.saldoActual || 0) > 0 ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
+                          "bg-muted text-muted-foreground border-border"
                         )}>
                           Saldo: ${(customer.saldoActual || 0).toLocaleString('es-AR')}
                         </div>
