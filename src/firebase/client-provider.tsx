@@ -20,8 +20,16 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
   const router = useRouter();
   const pathname = usePathname();
   const [isInitializing, setIsInitializing] = useState(true);
+  const [mounted, setMounted] = useState(false);
+
+  // Garantizamos que el componente solo empiece a procesar lógica de cliente tras el montaje
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
+    if (!mounted) return;
+
     if (firebaseServices.auth && firebaseServices.firestore) {
       const unsubscribe = onAuthStateChanged(firebaseServices.auth, async (user) => {
         if (!user) {
@@ -32,14 +40,12 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
           return;
         }
 
-        // Intentamos cargar el perfil, pero no bloqueamos la app si falla o no existe aún
         try {
           const userDoc = await getDoc(doc(firebaseServices.firestore, 'users', user.uid));
           if (userDoc.exists() && pathname === '/login') {
             router.replace('/');
           }
         } catch (error) {
-          // Error de permisos silencioso durante la inicialización
           console.warn("Aviso: El perfil del usuario aún no es accesible.");
         } finally {
           setIsInitializing(false);
@@ -47,9 +53,10 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
       });
       return () => unsubscribe();
     }
-  }, [firebaseServices.auth, firebaseServices.firestore, pathname, router]);
+  }, [firebaseServices.auth, firebaseServices.firestore, pathname, router, mounted]);
 
-  if (isInitializing) {
+  // Si no está montado o está inicializando, mostramos la pantalla de carga de forma consistente
+  if (!mounted || isInitializing) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <RefreshCw className="h-10 w-10 animate-spin text-primary" />
