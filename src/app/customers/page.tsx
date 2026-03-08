@@ -39,11 +39,10 @@ export default function CustomersPage() {
   const db = useFirestore()
   const { user } = useUser()
   
-  // States for search and filters
   const [searchTerm, setSearchTerm] = useState("")
-  const [filterBalance, setFilterBalance] = useState("all") // all, debt, credit
-  const [filterType, setFilterType] = useState("all") // all, reposicion, ocasional
-  const [filterComodato, setFilterComodato] = useState("all") // all, comodato, propio
+  const [filterBalance, setFilterBalance] = useState("all") 
+  const [filterType, setFilterType] = useState("all") 
+  const [filterComodato, setFilterComodato] = useState("all") 
   
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const { data: customers, isLoading } = useCollection(clientsQuery)
@@ -72,6 +71,7 @@ export default function CustomersPage() {
     },
     esClienteReposicion: true,
     saldoActual: 0,
+    saldoUSD: 0,
     fechaUltimaReposicion: null
   }
 
@@ -80,21 +80,17 @@ export default function CustomersPage() {
   const filteredCustomers = useMemo(() => {
     if (!customers) return []
     return customers.filter((c: any) => {
-      // Search term filter
       const searchMatch = `${c.nombre} ${c.apellido}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (c.cuit_dni && c.cuit_dni.includes(searchTerm))
       
       if (!searchMatch) return false
 
-      // Balance filter
-      if (filterBalance === 'debt' && (c.saldoActual || 0) >= 0) return false
-      if (filterBalance === 'credit' && (c.saldoActual || 0) <= 0) return false
+      if (filterBalance === 'debt' && (c.saldoActual || 0) >= 0 && (c.saldoUSD || 0) >= 0) return false
+      if (filterBalance === 'credit' && (c.saldoActual || 0) <= 0 && (c.saldoUSD || 0) <= 0) return false
 
-      // Type filter
       if (filterType === 'reposicion' && !c.esClienteReposicion) return false
       if (filterType === 'ocasional' && c.esClienteReposicion) return false
 
-      // Comodato filter
       const isComodato = c.equipoInstalado?.enComodato === true
       if (filterComodato === 'comodato' && !isComodato) return false
       if (filterComodato === 'propio' && isComodato) return false
@@ -171,7 +167,7 @@ export default function CustomersPage() {
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-primary font-headline">Listado de Clientes</h1>
-            <p className="text-muted-foreground">Gestión centralizada de perfiles y equipos instalados.</p>
+            <p className="text-muted-foreground">Gestión centralizada de perfiles y cuentas corrientes.</p>
           </div>
           <Button onClick={() => handleOpenDialog()} className="h-12 px-6 shadow-lg shadow-primary/20">
             <Plus className="mr-2 h-5 w-5" /> Nuevo Cliente
@@ -265,13 +261,19 @@ export default function CustomersPage() {
                             )}
                           </div>
                         </div>
-                        <div className={cn(
-                          "text-right font-bold text-sm px-2 py-1 rounded-lg border",
-                          (customer.saldoActual || 0) < 0 ? "bg-rose-50 text-rose-700 border-rose-100" : 
-                          (customer.saldoActual || 0) > 0 ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
-                          "bg-muted text-muted-foreground border-border"
-                        )}>
-                          Saldo: ${(customer.saldoActual || 0).toLocaleString('es-AR')}
+                        <div className="text-right space-y-1">
+                          <div className={cn(
+                            "text-[10px] font-black px-2 py-0.5 rounded border uppercase",
+                            (customer.saldoActual || 0) < 0 ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                          )}>
+                            ARS: ${(customer.saldoActual || 0).toLocaleString('es-AR')}
+                          </div>
+                          <div className={cn(
+                            "text-[10px] font-black px-2 py-0.5 rounded border uppercase",
+                            (customer.saldoUSD || 0) < 0 ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                          )}>
+                            USD: u$s{(customer.saldoUSD || 0).toLocaleString('es-AR')}
+                          </div>
                         </div>
                       </div>
                       <div className="space-y-2 mt-3">
@@ -289,29 +291,8 @@ export default function CustomersPage() {
                             <Map className="h-3 w-3" /> Cómo llegar
                           </Button>
                           {customer.telefono && (
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="h-8 gap-2"
-                              asChild
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <a href={`tel:${customer.telefono}`}>
-                                <PhoneCall className="h-3 w-3" /> Llamar
-                              </a>
-                            </Button>
-                          )}
-                          {customer.mail && (
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="h-8 gap-2"
-                              asChild
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <a href={`mailto:${customer.mail}`}>
-                                <Mail className="h-3 w-3" /> Email
-                              </a>
+                            <Button variant="outline" size="sm" className="h-8 gap-2" asChild onClick={(e) => e.stopPropagation()}>
+                              <a href={`tel:${customer.telefono}`}><PhoneCall className="h-3 w-3" /> Llamar</a>
                             </Button>
                           )}
                         </div>
@@ -372,17 +353,12 @@ export default function CustomersPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Email</Label>
-                  <Input type="email" value={formData.mail} onChange={(e) => setFormData({...formData, mail: e.target.value})} placeholder="cliente@ejemplo.com" />
+                  <Label>Saldo ARS ($)</Label>
+                  <Input type="number" value={formData.saldoActual} onChange={(e) => setFormData({...formData, saldoActual: Number(e.target.value)})} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Saldo Actual ($)</Label>
-                  <Input 
-                    type="number" 
-                    value={formData.saldoActual} 
-                    onChange={(e) => setFormData({...formData, saldoActual: Number(e.target.value)})} 
-                    placeholder="0.00" 
-                  />
+                  <Label>Saldo USD (u$s)</Label>
+                  <Input type="number" value={formData.saldoUSD} onChange={(e) => setFormData({...formData, saldoUSD: Number(e.target.value)})} />
                 </div>
               </div>
               <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
@@ -390,22 +366,14 @@ export default function CustomersPage() {
                   <Label>Cliente de Reposición</Label>
                   <p className="text-xs text-muted-foreground">Habilitar seguimiento de cloro.</p>
                 </div>
-                <Switch 
-                  checked={formData.esClienteReposicion} 
-                  onCheckedChange={(v) => setFormData({...formData, esClienteReposicion: v})} 
-                />
+                <Switch checked={formData.esClienteReposicion} onCheckedChange={(v) => setFormData({...formData, esClienteReposicion: v})} />
               </div>
             </TabsContent>
 
             <TabsContent value="address" className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label>Dirección</Label>
-                <div className="flex gap-2">
-                  <Input value={formData.direccion} onChange={(e) => setFormData({...formData, direccion: e.target.value})} placeholder="Av. Principal 123" />
-                  <Button variant="outline" size="icon" onClick={() => handleOpenMaps(formData.direccion, formData.localidad)}>
-                    <Map className="h-4 w-4" />
-                  </Button>
-                </div>
+                <Input value={formData.direccion} onChange={(e) => setFormData({...formData, direccion: e.target.value})} placeholder="Av. Principal 123" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -418,13 +386,8 @@ export default function CustomersPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Observaciones / Notas</Label>
-                <Textarea 
-                  value={formData.observaciones} 
-                  onChange={(e) => setFormData({...formData, observaciones: e.target.value})} 
-                  placeholder="Detalles adicionales sobre el cliente o acceso al domicilio..."
-                  className="min-h-[100px]"
-                />
+                <Label>Observaciones</Label>
+                <Textarea value={formData.observaciones} onChange={(e) => setFormData({...formData, observaciones: e.target.value})} />
               </div>
             </TabsContent>
 
@@ -432,49 +395,23 @@ export default function CustomersPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Modelo del Equipo</Label>
-                  <Input value={formData.equipoInstalado.modeloEquipo} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, modeloEquipo: e.target.value}})} placeholder="Ej: Dosimat Pro V2" />
+                  <Input value={formData.equipoInstalado.modeloEquipo} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, modeloEquipo: e.target.value}})} />
                 </div>
-                <div className="space-y-2">
-                  <Label>Medidas Pileta</Label>
-                  <Input value={formData.equipoInstalado.medidasPileta} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, medidasPileta: e.target.value}})} placeholder="8x4 m" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Volumen (Litros)</Label>
                   <Input type="number" value={formData.equipoInstalado.volumen} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, volumen: Number(e.target.value)}})} />
                 </div>
-                <div className="space-y-2">
-                  <Label>Dosis Diaria Cloro</Label>
-                  <Input value={formData.equipoInstalado.dosisCloro} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, dosisCloro: e.target.value}})} placeholder="500ml / día" />
-                </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Cantidad Bidones</Label>
-                  <Input type="number" value={formData.equipoInstalado.cantidadBidones} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, cantidadBidones: Number(e.target.value)}})} />
-                </div>
-                <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20 mt-6">
-                  <Label className="cursor-pointer">En Comodato</Label>
-                  <Switch 
-                    checked={formData.equipoInstalado.enComodato} 
-                    onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v}})} 
-                  />
-                </div>
+              <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20 mt-6">
+                <Label>En Comodato</Label>
+                <Switch checked={formData.equipoInstalado.enComodato} onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v}})} />
               </div>
             </TabsContent>
           </Tabs>
 
           <DialogFooter className="mt-6 border-t pt-4">
-            <div className="flex justify-between items-center w-full">
-              <p className="text-[10px] text-muted-foreground uppercase font-bold">
-                {editingCustomer ? `Modificado por: ${editingCustomer.ultimaModificacionPor || 'S/D'}` : 'Nuevo Registro'}
-              </p>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-                <Button onClick={handleSave} className="px-8"><Plus className="mr-2 h-4 w-4" /> Guardar Cliente</Button>
-              </div>
-            </div>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSave} className="px-8"><Plus className="mr-2 h-4 w-4" /> Guardar Cliente</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

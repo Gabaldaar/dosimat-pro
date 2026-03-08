@@ -43,7 +43,8 @@
           }
         },
         "esClienteReposicion": { "type": "boolean" },
-        "saldoActual": { "type": "number" },
+        "saldoActual": { "type": "number", "description": "Saldo en pesos (ARS)" },
+        "saldoUSD": { "type": "number", "description": "Saldo en dólares (USD)" },
         "fechaUltimaReposicion": { "type": "string", "format": "date-time" },
         "creadoPor": { "type": "string" },
         "fechaCreacion": { "type": "string", "format": "date-time" },
@@ -83,14 +84,14 @@
       "properties": {
         "id": { "type": "string" },
         "date": { "type": "string", "format": "date-time" },
-        "type": { "type": "string" },
+        "type": { "type": "string", "enum": ["sale", "refill", "service", "adjustment", "cobro"] },
         "amount": { "type": "number" },
         "currency": { "type": "string" },
         "financialAccountId": { "type": "string" },
         "clientId": { "type": "string" },
         "description": { "type": "string" }
       },
-      "required": ["id", "date", "type", "amount", "currency", "financialAccountId"]
+      "required": ["id", "date", "type", "amount", "currency"]
     }
   },
   "auth": {
