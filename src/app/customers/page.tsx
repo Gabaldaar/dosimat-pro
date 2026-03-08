@@ -21,7 +21,9 @@ import {
   Trash2, 
   Map, 
   PhoneCall, 
-  ExternalLink 
+  ExternalLink,
+  Wallet,
+  Box
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -31,6 +33,7 @@ import { Switch } from "@/components/ui/switch"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from "@/firebase"
 import { collection, doc } from "firebase/firestore"
+import { cn } from "@/lib/utils"
 
 export default function CustomersPage() {
   const { toast } = useToast()
@@ -183,10 +186,25 @@ export default function CustomersPage() {
                     </Avatar>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-lg font-bold truncate">{customer.apellido}, {customer.nombre}</h3>
-                        <Badge variant={customer.esClienteReposicion ? "default" : "secondary"} className="text-[10px]">
-                          {customer.esClienteReposicion ? 'REPOSICIÓN' : 'OCASIONAL'}
-                        </Badge>
+                        <div className="flex flex-col gap-1">
+                          <h3 className="text-lg font-bold truncate">{customer.apellido}, {customer.nombre}</h3>
+                          <div className="flex gap-1 flex-wrap">
+                            <Badge variant={customer.esClienteReposicion ? "default" : "secondary"} className="text-[10px]">
+                              {customer.esClienteReposicion ? 'REPOSICIÓN' : 'OCASIONAL'}
+                            </Badge>
+                            {customer.equipoInstalado?.enComodato && (
+                              <Badge variant="outline" className="text-[10px] border-amber-200 bg-amber-50 text-amber-700">
+                                <Box className="h-2 w-2 mr-1" /> COMODATO
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <div className={cn(
+                          "text-right font-bold text-sm px-2 py-1 rounded-lg border",
+                          (customer.saldoActual || 0) < 0 ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                        )}>
+                          Saldo: ${(customer.saldoActual || 0).toLocaleString('es-AR')}
+                        </div>
                       </div>
                       <div className="space-y-2 mt-3">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -284,9 +302,20 @@ export default function CustomersPage() {
                   <Input value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: e.target.value})} placeholder="+54 9 11 ..." />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <Input type="email" value={formData.mail} onChange={(e) => setFormData({...formData, mail: e.target.value})} placeholder="cliente@ejemplo.com" />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input type="email" value={formData.mail} onChange={(e) => setFormData({...formData, mail: e.target.value})} placeholder="cliente@ejemplo.com" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Saldo Actual ($)</Label>
+                  <Input 
+                    type="number" 
+                    value={formData.saldoActual} 
+                    onChange={(e) => setFormData({...formData, saldoActual: Number(e.target.value)})} 
+                    placeholder="0.00" 
+                  />
+                </div>
               </div>
               <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
                 <div className="space-y-0.5">
