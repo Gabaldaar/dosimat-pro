@@ -5,7 +5,7 @@ import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Search, Edit, Trash2, MoreVertical, Save, DollarSign, Loader2 } from "lucide-react"
+import { Plus, Search, Edit, Trash2, MoreVertical, Save, DollarSign, Loader2, Package } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { 
   DropdownMenu, 
