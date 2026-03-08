@@ -36,22 +36,22 @@ export default function LoginPage() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password)
         const user = userCredential.user
         
-        // Al registrarse, creamos el perfil del usuario
-        // El primer usuario podría ser Admin por defecto o requerir habilitación
+        // Al registrarse, creamos el perfil del usuario.
+        // Importante: Hacemos que el primer registro sea 'Admin' para que puedas gestionar la app.
         setDocumentNonBlocking(doc(firestore, 'users', user.uid), {
           id: user.uid,
-          name: name,
+          name: name || email.split('@')[0],
           email: email,
-          role: 'Employee' // Por defecto empleado hasta que un Admin lo cambie
+          role: 'Admin' 
         }, { merge: true })
         
-        toast({ title: "Cuenta creada", description: "Tu perfil ha sido registrado." })
+        toast({ title: "Cuenta creada", description: "Tu perfil de Administrador ha sido registrado." })
       }
       router.push("/")
     } catch (error: any) {
       toast({ 
-        title: "Error", 
-        description: error.message.includes("auth/user-not-found") ? "Usuario no encontrado" : "Credenciales inválidas", 
+        title: "Error de autenticación", 
+        description: error.message.includes("auth/user-not-found") ? "Usuario no encontrado" : "Verifica tus credenciales", 
         variant: "destructive" 
       })
     } finally {
@@ -70,7 +70,7 @@ export default function LoginPage() {
           </div>
           <CardTitle className="text-2xl font-bold font-headline">Dosimat Pro</CardTitle>
           <CardDescription>
-            {isLogin ? "Ingresa tus credenciales para continuar" : "Regístrate para comenzar a gestionar"}
+            {isLogin ? "Ingresa tus credenciales para continuar" : "Crea tu cuenta de Administrador"}
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleAuth}>
@@ -80,7 +80,7 @@ export default function LoginPage() {
                 <Label htmlFor="name">Nombre Completo</Label>
                 <Input 
                   id="name" 
-                  placeholder="Juan Pérez" 
+                  placeholder="Ej: Juan Pérez" 
                   value={name} 
                   onChange={(e) => setName(e.target.value)} 
                   required 
@@ -112,7 +112,7 @@ export default function LoginPage() {
           <CardFooter className="flex flex-col gap-4">
             <Button type="submit" className="w-full font-bold" disabled={isLoading}>
               {isLoading && <RefreshCw className="h-4 w-4 animate-spin mr-2" />}
-              {isLogin ? "Iniciar Sesión" : "Registrarse"}
+              {isLogin ? "Iniciar Sesión" : "Registrarse como Admin"}
             </Button>
             <Button 
               type="button" 

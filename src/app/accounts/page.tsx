@@ -271,7 +271,7 @@ export default function AccountsPage() {
                         </div>
                         <div>
                           <p className="text-sm font-semibold">{move.description || move.type}</p>
-                          <p className="text-xs text-muted-foreground">{new Date(move.date).toLocaleDateString()}</p>
+                          <p className="text-xs text-muted-foreground">{move.date ? new Date(move.date).toLocaleDateString() : 'S/D'}</p>
                         </div>
                       </div>
                       <span className={`font-bold ${move.amount > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
