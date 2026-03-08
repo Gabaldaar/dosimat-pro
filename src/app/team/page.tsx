@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -34,6 +34,11 @@ export default function TeamPage() {
   const usersQuery = useMemoFirebase(() => collection(db, 'users'), [db])
   const { data: team, isLoading } = useCollection(usersQuery)
 
+  // Safety lock for scrolling
+  useEffect(() => {
+    document.body.style.pointerEvents = 'auto';
+  }, []);
+
   const handleUpdateRole = (userId: string, newRole: string) => {
     updateDocumentNonBlocking(doc(db, 'users', userId), { role: newRole })
     toast({ title: "Rol actualizado", description: `Usuario ahora es ${newRole}` })
@@ -62,20 +67,14 @@ export default function TeamPage() {
         <div className="grid grid-cols-1 gap-4">
           {isLoading ? (
             <p className="text-center py-10 text-muted-foreground">Cargando equipo...</p>
-          ) : !team || team.length === 0 ? (
-            <Card className="p-12 text-center border-dashed">
-              <Users className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
-              <h3 className="text-lg font-semibold">No hay usuarios registrados</h3>
-              <p className="text-muted-foreground">Invita a tus colaboradores a registrarse en la App.</p>
-            </Card>
-          ) : (
+          ) : (team && team.length > 0) ? (
             team.map((member: any) => (
               <Card key={member.id} className="glass-card">
                 <CardContent className="p-4 flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <Avatar className="h-12 w-12 border-2 border-primary/10">
                       <AvatarImage src={`https://picsum.photos/seed/${member.id}/100/100`} />
-                      <AvatarFallback>{member.name ? member.name[0] : member.email[0]}</AvatarFallback>
+                      <AvatarFallback>{member.name ? member.name[0] : (member.email ? member.email[0] : '?')}</AvatarFallback>
                     </Avatar>
                     <div>
                       <div className="flex items-center gap-2">
@@ -108,6 +107,12 @@ export default function TeamPage() {
                 </CardContent>
               </Card>
             ))
+          ) : (
+            <Card className="p-12 text-center border-dashed">
+              <Users className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
+              <h3 className="text-lg font-semibold">No hay usuarios registrados</h3>
+              <p className="text-muted-foreground">Invita a tus colaboradores a registrarse en la App.</p>
+            </Card>
           )}
         </div>
 

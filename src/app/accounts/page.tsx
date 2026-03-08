@@ -1,6 +1,7 @@
+
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -59,6 +60,13 @@ export default function AccountsPage() {
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false)
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false)
   
+  // Safety fix for pointer-events: none lockup
+  useEffect(() => {
+    if (!isAccountDialogOpen && !isTxDialogOpen && !isTransferDialogOpen && !isCategoryManagerOpen) {
+      document.body.style.pointerEvents = 'auto';
+    }
+  }, [isAccountDialogOpen, isTxDialogOpen, isTransferDialogOpen, isCategoryManagerOpen]);
+
   // Form States
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
@@ -211,14 +219,7 @@ export default function AccountsPage() {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
             <p className="text-sm text-muted-foreground">Cargando cuentas...</p>
           </div>
-        ) : (!accounts || accounts.length === 0) ? (
-          <Card className="p-12 text-center border-dashed bg-muted/5">
-            <Wallet className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
-            <h3 className="text-lg font-semibold">No hay cuentas registradas</h3>
-            <p className="text-muted-foreground mb-6">Crea una caja o banco para empezar a registrar movimientos.</p>
-            <Button onClick={() => handleOpenAccountDialog()}><Plus className="mr-2 h-4 w-4" /> Agregar Cuenta</Button>
-          </Card>
-        ) : (
+        ) : (accounts && accounts.length > 0) ? (
           <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {accounts.map((account: any) => (
               <Card key={account.id} className="glass-card overflow-hidden group">
@@ -260,6 +261,13 @@ export default function AccountsPage() {
               </Card>
             ))}
           </section>
+        ) : (
+          <Card className="p-12 text-center border-dashed bg-muted/5">
+            <Wallet className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
+            <h3 className="text-lg font-semibold">No hay cuentas registradas</h3>
+            <p className="text-muted-foreground mb-6">Crea una caja o banco para empezar a registrar movimientos.</p>
+            <Button onClick={() => handleOpenAccountDialog()}><Plus className="mr-2 h-4 w-4" /> Agregar Cuenta</Button>
+          </Card>
         )}
 
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -314,7 +322,6 @@ export default function AccountsPage() {
           </Card>
         </section>
 
-        {/* DIALOGS - SIN CLAVES DINÁMICAS PARA EVITAR BLOQUEO DE SCROLL */}
         <Dialog open={isAccountDialogOpen} onOpenChange={setIsAccountDialogOpen}>
           <DialogContent>
             <DialogHeader><DialogTitle>{editingAccountId ? "Editar Cuenta" : "Nueva Cuenta"}</DialogTitle></DialogHeader>
