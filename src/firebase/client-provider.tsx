@@ -1,9 +1,10 @@
+
 'use client';
 
 import React, { useMemo, useEffect, type ReactNode } from 'react';
 import { FirebaseProvider } from '@/firebase/provider';
 import { initializeFirebase } from '@/firebase';
-import { signInAnonymously } from 'firebase/auth';
+import { usePathname, useRouter } from 'next/navigation';
 
 interface FirebaseClientProviderProps {
   children: ReactNode;
@@ -11,24 +12,23 @@ interface FirebaseClientProviderProps {
 
 export function FirebaseClientProvider({ children }: FirebaseClientProviderProps) {
   const firebaseServices = useMemo(() => {
-    // Initialize Firebase on the client side, once per component mount.
     return initializeFirebase();
   }, []); 
 
+  const router = useRouter();
+  const pathname = usePathname();
+
   useEffect(() => {
-    // Aseguramos que el usuario tenga una identidad (sesión anónima)
-    // para que las reglas de seguridad de Firestore funcionen.
     if (firebaseServices.auth) {
       const unsubscribe = firebaseServices.auth.onAuthStateChanged((user) => {
-        if (!user) {
-          signInAnonymously(firebaseServices.auth).catch((error) => {
-            console.error("Error al iniciar sesión anónima:", error);
-          });
+        // Si no hay usuario y no estamos en la página de login, redirigimos
+        if (!user && pathname !== '/login') {
+          router.push('/login');
         }
       });
       return () => unsubscribe();
     }
-  }, [firebaseServices.auth]);
+  }, [firebaseServices.auth, pathname, router]);
 
   return (
     <FirebaseProvider

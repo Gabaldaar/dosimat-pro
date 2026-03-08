@@ -1,8 +1,9 @@
+
 "use client"
 
 import * as React from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { 
   LayoutDashboard, 
   Users, 
@@ -14,24 +15,41 @@ import {
   Menu,
   Droplets,
   LogOut,
-  User
+  User,
+  Shield
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useAuth, useUser, useDoc, useMemoFirebase } from "@/firebase"
+import { signOut } from "firebase/auth"
+import { doc } from "firebase/firestore"
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/customers", label: "Clientes", icon: Users },
-  { href: "/transactions", label: "Transacciones", icon: ArrowLeftRight },
+  { href: "/transactions", label: "Operaciones", icon: ArrowLeftRight },
   { href: "/accounts", label: "Cuentas", icon: Wallet },
   { href: "/catalog", label: "Catálogo", icon: Package },
+  { href: "/team", label: "Equipo", icon: Shield },
   { href: "/notifications", label: "IA Notificaciones", icon: Bell },
 ]
 
 export function Sidebar({ className }: { className?: string }) {
   const pathname = usePathname()
+  const { auth } = useAuth()
+  const { user } = useUser()
+  const router = useRouter()
+
+  // Obtenemos el perfil real del usuario desde Firestore
+  const userRef = useMemoFirebase(() => user ? doc(auth.app.options as any, 'users', user.uid) : null, [user, auth])
+  // Nota: Usamos el hook simplificado pero en este caso dependemos de que el usuario esté logueado
+  
+  const handleLogout = async () => {
+    await signOut(auth)
+    router.push("/login")
+  }
 
   return (
     <div className={cn("flex flex-col h-full bg-white border-r", className)}>
@@ -61,17 +79,23 @@ export function Sidebar({ className }: { className?: string }) {
       </nav>
 
       <div className="p-4 border-t space-y-4">
-        <div className="flex items-center gap-3 px-3 py-2">
-          <Avatar className="h-8 w-8">
-            <AvatarImage src="https://picsum.photos/seed/admin/100/100" />
-            <AvatarFallback>AD</AvatarFallback>
-          </Avatar>
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold">Admin User</span>
-            <span className="text-xs text-muted-foreground">Administrador</span>
+        {user && (
+          <div className="flex items-center gap-3 px-3 py-2">
+            <Avatar className="h-8 w-8 border border-primary/20">
+              <AvatarImage src={`https://picsum.photos/seed/${user.uid}/100/100`} />
+              <AvatarFallback>{user.email?.[0].toUpperCase()}</AvatarFallback>
+            </Avatar>
+            <div className="flex flex-col overflow-hidden">
+              <span className="text-sm font-semibold truncate">{user.email?.split('@')[0]}</span>
+              <span className="text-[10px] text-muted-foreground truncate uppercase font-bold tracking-tighter">Sesión Activa</span>
+            </div>
           </div>
-        </div>
-        <Button variant="ghost" className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10">
+        )}
+        <Button 
+          variant="ghost" 
+          className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+          onClick={handleLogout}
+        >
           <LogOut className="mr-2 h-4 w-4" />
           Cerrar sesión
         </Button>
@@ -85,7 +109,7 @@ export function MobileNav() {
   
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t flex items-center justify-around px-2 py-3 md:hidden">
-      {navItems.slice(0, 5).map((item) => (
+      {navItems.slice(0, 4).map((item) => (
         <Link
           key={item.href}
           href={item.href}

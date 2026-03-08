@@ -1,15 +1,72 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Permitimos lectura y escritura a cualquier usuario autenticado (incluyendo anónimos)
-    // para facilitar el prototipado y el acceso desde diferentes dispositivos.
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    
+    // Función para verificar si el usuario tiene un perfil registrado
+    function isAuthenticated() {
+      return request.auth != null && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // Función para verificar si el usuario es administrador
+    function isAdmin() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin';
+    }
+
+    // Reglas para perfiles de usuario
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth.uid == userId || isAdmin();
+    }
+
+    // Reglas para Roles Administrativos (Colección explícita de seguridad)
+    match /admin_roles/{adminUid} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Reglas para Clientes
+    match /clients/{clientId} {
+      allow read, write: if isAuthenticated();
+      match /pools/{poolId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    // Reglas para Catálogo (Lectura todos, Escritura solo Admin)
+    match /products_services/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Reglas para Finanzas y Cuentas (Lectura Empleados, Escritura Admin)
+    match /financial_accounts/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || (isAuthenticated() && request.method == 'update'); 
+      // Permitimos update a empleados para que puedan impactar saldos tras una venta
+    }
+
+    match /expense_categories/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Reglas para Transacciones
+    match /transactions/{id} {
+      allow read, create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // Reglas para Notificaciones
+    match /users/{userId}/notifications/{notificationId} {
+      allow read: if request.auth.uid == userId || isAdmin();
+      allow write: if isAdmin();
     }
     
-    // El catálogo de productos puede ser leído por cualquiera (incluso sin login)
-    match /products_services/{id} {
-      allow read: if true;
+    match /notification_rules/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
   }
 }
