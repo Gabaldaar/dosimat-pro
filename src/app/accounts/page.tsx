@@ -60,10 +60,13 @@ export default function AccountsPage() {
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false)
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false)
   
-  // Safety fix for pointer-events: none lockup
+  // SOLUCIÓN DEFINITIVA: Desbloqueo forzado del puntero al cerrar cualquier diálogo
   useEffect(() => {
     if (!isAccountDialogOpen && !isTxDialogOpen && !isTransferDialogOpen && !isCategoryManagerOpen) {
-      document.body.style.pointerEvents = 'auto';
+      const timeout = setTimeout(() => {
+        document.body.style.pointerEvents = 'auto';
+      }, 100);
+      return () => clearTimeout(timeout);
     }
   }, [isAccountDialogOpen, isTxDialogOpen, isTransferDialogOpen, isCategoryManagerOpen]);
 

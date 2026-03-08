@@ -34,10 +34,13 @@ export default function TeamPage() {
   const usersQuery = useMemoFirebase(() => collection(db, 'users'), [db])
   const { data: team, isLoading } = useCollection(usersQuery)
 
-  // Safety lock for scrolling
+  // Desbloqueo forzado del puntero
   useEffect(() => {
-    document.body.style.pointerEvents = 'auto';
-  }, []);
+    const timeout = setTimeout(() => {
+      document.body.style.pointerEvents = 'auto';
+    }, 100);
+    return () => clearTimeout(timeout);
+  }, [team, isLoading]);
 
   const handleUpdateRole = (userId: string, newRole: string) => {
     updateDocumentNonBlocking(doc(db, 'users', userId), { role: newRole })
