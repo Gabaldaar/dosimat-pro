@@ -55,17 +55,17 @@ interface ExpenseCategory {
   currency: 'ARS' | 'USD';
 }
 
-const STORAGE_KEY = 'dosimat_pro_accounts_v3'
-const EXPENSE_KEY = 'dosimat_pro_expense_categories_v3'
+const ACCOUNTS_STORAGE_KEY = 'dosimat_pro_accounts_final'
+const EXPENSES_STORAGE_KEY = 'dosimat_pro_expenses_final'
 
-const initialAccounts: FinancialAccount[] = [
+const defaultAccounts: FinancialAccount[] = [
   { id: '1', name: "Caja Efectivo ARS", type: "Cash", balance: 145000, currency: "ARS", status: "active" },
   { id: '2', name: "Banco Galicia", type: "Bank", balance: 850300, currency: "ARS", status: "active" },
   { id: '3', name: "Caja Efectivo USD", type: "Cash", balance: 2450, currency: "USD", status: "active" },
   { id: '4', name: "Mercado Pago", type: "Digital", balance: 12000, currency: "ARS", status: "active" },
 ]
 
-const initialExpenseCategories: ExpenseCategory[] = [
+const defaultExpenses: ExpenseCategory[] = [
   { id: 'e1', name: "Insumos Químicos", totalSpent: 120400, currency: 'ARS' },
   { id: 'e2', name: "Combustible / Viáticos", totalSpent: 45000, currency: 'ARS' },
   { id: 'e3', name: "Publicidad y Marketing", totalSpent: 12000, currency: 'ARS' },
@@ -108,30 +108,30 @@ export default function AccountsPage() {
     amount: 0
   })
 
+  // Load data once on mount
   useEffect(() => {
-    setMounted(true)
-    const savedAccounts = localStorage.getItem(STORAGE_KEY)
-    const savedExpenses = localStorage.getItem(EXPENSE_KEY)
+    const savedAccounts = localStorage.getItem(ACCOUNTS_STORAGE_KEY)
+    const savedExpenses = localStorage.getItem(EXPENSES_STORAGE_KEY)
     
     if (savedAccounts) {
       setAccounts(JSON.parse(savedAccounts))
     } else {
-      setAccounts(initialAccounts)
+      setAccounts(defaultAccounts)
     }
     
     if (savedExpenses) {
       setExpenseCategories(JSON.parse(savedExpenses))
     } else {
-      setExpenseCategories(initialExpenseCategories)
+      setExpenseCategories(defaultExpenses)
     }
+    setMounted(true)
   }, [])
 
+  // Save data whenever it changes (only after mount)
   useEffect(() => {
-    if (mounted && accounts.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts))
-    }
-    if (mounted && expenseCategories.length > 0) {
-      localStorage.setItem(EXPENSE_KEY, JSON.stringify(expenseCategories))
+    if (mounted) {
+      localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts))
+      localStorage.setItem(EXPENSES_STORAGE_KEY, JSON.stringify(expenseCategories))
     }
   }, [accounts, expenseCategories, mounted])
 
@@ -164,22 +164,24 @@ export default function AccountsPage() {
       return
     }
 
-    if (editingAccountId) {
-      // Actualizar cuenta existente
-      setAccounts(accounts.map(a => a.id === editingAccountId ? { ...a, ...accountFormData } : a))
-      toast({ title: "Cuenta actualizada", description: "Los cambios se guardaron correctamente." })
-    } else {
-      // Crear nueva cuenta
-      const newAccount: FinancialAccount = {
-        ...accountFormData,
-        id: Math.random().toString(36).substr(2, 9)
-      }
-      setAccounts([...accounts, newAccount])
-      toast({ title: "Cuenta creada", description: "La cuenta financiera ha sido agregada." })
-    }
-
+    // Close dialog FIRST to avoid Radix UI focus/lock hang
     setIsAccountDialogOpen(false)
-    setEditingAccountId(null)
+
+    // Delay state update slightly to ensure dialog closing animation doesn't fight with re-render
+    setTimeout(() => {
+      if (editingAccountId) {
+        setAccounts(prev => prev.map(a => a.id === editingAccountId ? { ...a, ...accountFormData } : a))
+        toast({ title: "Cuenta actualizada", description: "Los cambios se guardaron correctamente." })
+      } else {
+        const newAccount: FinancialAccount = {
+          ...accountFormData,
+          id: Math.random().toString(36).substr(2, 9)
+        }
+        setAccounts(prev => [...prev, newAccount])
+        toast({ title: "Cuenta creada", description: "La cuenta financiera ha sido agregada." })
+      }
+      setEditingAccountId(null)
+    }, 100)
   }
 
   const handleOpenTxDialog = (account: FinancialAccount, type: 'income' | 'expense') => {
@@ -192,30 +194,28 @@ export default function AccountsPage() {
   const handleProcessTx = () => {
     if (!selectedAccount || txFormData.amount <= 0) return
 
-    const multiplier = txType === 'income' ? 1 : -1
-    setAccounts(accounts.map(a => 
-      a.id === selectedAccountId 
-        ? { ...a, balance: a.balance + (txFormData.amount * multiplier) } 
-        : a
-    ))
-
     setIsTxDialogOpen(false)
-    setSelectedAccountId(null)
-    toast({ 
-      title: txType === 'income' ? "Ingreso registrado" : "Gasto registrado", 
-      description: `Se procesó el movimiento en ${selectedAccount.name}` 
-    })
+    
+    setTimeout(() => {
+      const multiplier = txType === 'income' ? 1 : -1
+      setAccounts(prev => prev.map(a => 
+        a.id === selectedAccountId 
+          ? { ...a, balance: a.balance + (txFormData.amount * multiplier) } 
+          : a
+      ))
+
+      setSelectedAccountId(null)
+      toast({ 
+        title: txType === 'income' ? "Ingreso registrado" : "Gasto registrado", 
+        description: `Se procesó el movimiento en ${selectedAccount.name}` 
+      })
+    }, 100)
   }
 
   const handleTransfer = () => {
     const { fromId, toId, amount } = transferFormData
     if (!fromId || !toId || amount <= 0) {
-      toast({ title: "Error", description: "Completa todos los campos de transferencia", variant: "destructive" })
-      return
-    }
-
-    if (fromId === toId) {
-      toast({ title: "Error", description: "No puedes transferir a la misma cuenta", variant: "destructive" })
+      toast({ title: "Error", description: "Completa todos los campos", variant: "destructive" })
       return
     }
 
@@ -223,20 +223,24 @@ export default function AccountsPage() {
     const toAcc = accounts.find(a => a.id === toId)
 
     if (fromAcc?.currency !== toAcc?.currency) {
-      toast({ title: "Error", description: "Solo se pueden transferir entre cuentas de la misma moneda", variant: "destructive" })
+      toast({ title: "Error", description: "Solo transferencias entre cuentas de la misma moneda", variant: "destructive" })
       return
     }
 
-    setAccounts(accounts.map(a => {
-      if (a.id === fromId) return { ...a, balance: a.balance - amount }
-      if (a.id === toId) return { ...a, balance: a.balance + amount }
-      return a
-    }))
-
     setIsTransferDialogOpen(false)
-    setTransferFormData({ fromId: "", toId: "", amount: 0 })
-    toast({ title: "Transferencia exitosa", description: "El dinero ha sido movido correctamente." })
+
+    setTimeout(() => {
+      setAccounts(prev => prev.map(a => {
+        if (a.id === fromId) return { ...a, balance: a.balance - amount }
+        if (a.id === toId) return { ...a, balance: a.balance + amount }
+        return a
+      }))
+      setTransferFormData({ fromId: "", toId: "", amount: 0 })
+      toast({ title: "Transferencia exitosa", description: "Movimiento realizado con éxito." })
+    }, 100)
   }
+
+  if (!mounted) return null;
 
   return (
     <div className="flex min-h-screen">
@@ -293,7 +297,7 @@ export default function AccountsPage() {
                 <div className="flex items-baseline gap-1">
                   <span className={`text-2xl font-bold ${account.balance < 0 ? 'text-destructive' : ''}`}>
                     {account.currency === 'USD' ? 'u$s' : '$'}
-                    {mounted ? account.balance.toLocaleString('es-AR') : account.balance}
+                    {account.balance.toLocaleString('es-AR')}
                   </span>
                 </div>
                 <div className="mt-4 flex gap-2">
@@ -370,7 +374,7 @@ export default function AccountsPage() {
                     <span className="text-sm">{cat.name}</span>
                     <span className="font-bold text-rose-600">
                       {cat.currency === 'USD' ? 'u$s' : '$'}
-                      {mounted ? cat.totalSpent.toLocaleString('es-AR') : cat.totalSpent}
+                      {cat.totalSpent.toLocaleString('es-AR')}
                     </span>
                   </div>
                 ))}
@@ -397,51 +401,42 @@ export default function AccountsPage() {
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>{editingAccountId ? "Editar Cuenta" : "Nueva Cuenta"}</DialogTitle>
-            <DialogDescription>
-              Configura los detalles de tu cuenta financiera o caja.
-            </DialogDescription>
+            <DialogDescription>Configura los detalles de tu cuenta financiera.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="name">Nombre de la Cuenta</Label>
               <Input 
                 id="name" 
-                placeholder="Ej: Banco Macro, Caja Chica..." 
                 value={accountFormData.name}
                 onChange={(e) => setAccountFormData({...accountFormData, name: e.target.value})}
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="type">Tipo</Label>
-                <Select 
-                  value={accountFormData.type} 
-                  onValueChange={(v: any) => setAccountFormData({...accountFormData, type: v})}
-                >
+                <Label>Tipo</Label>
+                <Select value={accountFormData.type} onValueChange={(v: any) => setAccountFormData({...accountFormData, type: v})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Cash">Efectivo / Caja</SelectItem>
-                    <SelectItem value="Bank">Banco / CBU</SelectItem>
-                    <SelectItem value="Digital">Digital / CVU</SelectItem>
+                    <SelectItem value="Cash">Efectivo</SelectItem>
+                    <SelectItem value="Bank">Banco</SelectItem>
+                    <SelectItem value="Digital">Digital</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="currency">Moneda</Label>
-                <Select 
-                  value={accountFormData.currency} 
-                  onValueChange={(v: any) => setAccountFormData({...accountFormData, currency: v})}
-                >
+                <Label>Moneda</Label>
+                <Select value={accountFormData.currency} onValueChange={(v: any) => setAccountFormData({...accountFormData, currency: v})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ARS">Pesos (ARS)</SelectItem>
-                    <SelectItem value="USD">Dólares (USD)</SelectItem>
+                    <SelectItem value="ARS">ARS</SelectItem>
+                    <SelectItem value="USD">USD</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="balance">Saldo Inicial</Label>
+              <Label htmlFor="balance">Saldo</Label>
               <Input 
                 id="balance" 
                 type="number" 
@@ -452,7 +447,7 @@ export default function AccountsPage() {
           </div>
           <DialogFooter>
             <Button onClick={handleSaveAccount} className="w-full">
-              <Save className="mr-2 h-4 w-4" /> Guardar Cuenta
+              <Save className="mr-2 h-4 w-4" /> Guardar
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -462,42 +457,25 @@ export default function AccountsPage() {
       <Dialog open={isTxDialogOpen} onOpenChange={setIsTxDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {txType === 'income' ? <Plus className="text-emerald-600" /> : <ArrowDownLeft className="text-rose-600" />}
-              Registrar {txType === 'income' ? 'Ingreso' : 'Gasto'}
-            </DialogTitle>
-            <DialogDescription>
-              Registrar movimiento rápido en <strong>{selectedAccount?.name}</strong>.
-            </DialogDescription>
+            <DialogTitle>Registrar {txType === 'income' ? 'Ingreso' : 'Gasto'}</DialogTitle>
+            <DialogDescription>En: {selectedAccount?.name}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="amount">Monto ({selectedAccount?.currency})</Label>
+              <Label>Monto ({selectedAccount?.currency})</Label>
               <div className="relative">
                 <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input 
-                  id="amount" 
                   type="number" 
-                  className="pl-10 font-bold text-lg"
+                  className="pl-10 font-bold"
                   value={txFormData.amount}
                   onChange={(e) => setTxFormData({...txFormData, amount: Number(e.target.value)})}
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="desc">Descripción / Motivo</Label>
-              <Input 
-                id="desc" 
-                placeholder="Ej: Pago servicio, Compra insumos..." 
-                value={txFormData.description}
-                onChange={(e) => setTxFormData({...txFormData, description: e.target.value})}
-              />
-            </div>
           </div>
           <DialogFooter>
-            <Button onClick={handleProcessTx} className={`w-full ${txType === 'income' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'}`}>
-              Confirmar Movimiento
-            </Button>
+            <Button onClick={handleProcessTx} className={`w-full ${txType === 'income' ? 'bg-emerald-600' : 'bg-rose-600'}`}>Confirmar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -506,30 +484,29 @@ export default function AccountsPage() {
       <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Transferencia entre Cuentas</DialogTitle>
-            <DialogDescription>Mueve dinero internamente entre tus cajas y bancos.</DialogDescription>
+            <DialogTitle>Transferencia</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
-              <Label>Desde Cuenta</Label>
-              <Select onValueChange={(v) => setTransferFormData({...transferFormData, fromId: v})}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar origen" /></SelectTrigger>
+              <Label>Origen</Label>
+              <Select value={transferFormData.fromId} onValueChange={(v) => setTransferFormData({...transferFormData, fromId: v})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {accounts.map(a => <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Hacia Cuenta</Label>
-              <Select onValueChange={(v) => setTransferFormData({...transferFormData, toId: v})}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar destino" /></SelectTrigger>
+              <Label>Destino</Label>
+              <Select value={transferFormData.toId} onValueChange={(v) => setTransferFormData({...transferFormData, toId: v})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {accounts.map(a => <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Monto a Transferir</Label>
+              <Label>Monto</Label>
               <Input 
                 type="number" 
                 value={transferFormData.amount}
@@ -538,7 +515,7 @@ export default function AccountsPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={handleTransfer} className="w-full">Procesar Transferencia</Button>
+            <Button onClick={handleTransfer} className="w-full">Procesar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
