@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { useAuth, useUser, useDoc, useMemoFirebase } from "@/firebase"
+import { useFirebase, useDoc, useMemoFirebase } from "@/firebase"
 import { signOut } from "firebase/auth"
 import { doc } from "firebase/firestore"
 
@@ -38,13 +38,12 @@ const navItems = [
 
 export function Sidebar({ className }: { className?: string }) {
   const pathname = usePathname()
-  const { auth } = useAuth()
-  const { user } = useUser()
+  const { auth, firestore, user } = useFirebase()
   const router = useRouter()
 
   // Obtenemos el perfil real del usuario desde Firestore
-  const userRef = useMemoFirebase(() => user ? doc(auth.app.options as any, 'users', user.uid) : null, [user, auth])
-  // Nota: Usamos el hook simplificado pero en este caso dependemos de que el usuario esté logueado
+  const userDocRef = useMemoFirebase(() => user ? doc(firestore, 'users', user.uid) : null, [user, firestore])
+  const { data: userData } = useDoc(userDocRef)
   
   const handleLogout = async () => {
     await signOut(auth)
@@ -86,8 +85,10 @@ export function Sidebar({ className }: { className?: string }) {
               <AvatarFallback>{user.email?.[0].toUpperCase()}</AvatarFallback>
             </Avatar>
             <div className="flex flex-col overflow-hidden">
-              <span className="text-sm font-semibold truncate">{user.email?.split('@')[0]}</span>
-              <span className="text-[10px] text-muted-foreground truncate uppercase font-bold tracking-tighter">Sesión Activa</span>
+              <span className="text-sm font-semibold truncate">{userData?.name || user.email?.split('@')[0]}</span>
+              <span className="text-[10px] text-muted-foreground truncate uppercase font-bold tracking-tighter">
+                {userData?.role || 'Cargando...'}
+              </span>
             </div>
           </div>
         )}

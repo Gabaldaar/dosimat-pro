@@ -3,9 +3,9 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { useAuth, useFirestore, setDocumentNonBlocking } from "@/firebase"
+import { useFirebase, setDocumentNonBlocking } from "@/firebase"
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth"
-import { doc, getDoc } from "firebase/firestore"
+import { doc } from "firebase/firestore"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,8 +20,7 @@ export default function LoginPage() {
   const [name, setName] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   
-  const { auth } = useAuth()
-  const db = useFirestore()
+  const { auth, firestore } = useFirebase()
   const router = useRouter()
   const { toast } = useToast()
 
@@ -39,7 +38,7 @@ export default function LoginPage() {
         
         // Al registrarse, creamos el perfil del usuario
         // El primer usuario podría ser Admin por defecto o requerir habilitación
-        await setDocumentNonBlocking(doc(db, 'users', user.uid), {
+        setDocumentNonBlocking(doc(firestore, 'users', user.uid), {
           id: user.uid,
           name: name,
           email: email,
@@ -52,7 +51,7 @@ export default function LoginPage() {
     } catch (error: any) {
       toast({ 
         title: "Error", 
-        description: error.message === "Firebase: Error (auth/user-not-found)." ? "Usuario no encontrado" : "Credenciales inválidas", 
+        description: error.message.includes("auth/user-not-found") ? "Usuario no encontrado" : "Credenciales inválidas", 
         variant: "destructive" 
       })
     } finally {
@@ -112,7 +111,7 @@ export default function LoginPage() {
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
             <Button type="submit" className="w-full font-bold" disabled={isLoading}>
-              {isLoading ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
+              {isLoading && <RefreshCw className="h-4 w-4 animate-spin mr-2" />}
               {isLogin ? "Iniciar Sesión" : "Registrarse"}
             </Button>
             <Button 
