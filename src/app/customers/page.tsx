@@ -70,13 +70,9 @@ export default function CustomersPage() {
   const autocompleteService = useRef<any>(null)
   const placesService = useRef<any>(null)
 
-  // Carga e inicialización de Google Maps
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-    if (!apiKey) {
-      console.warn("Google Maps API Key no encontrada en .env");
-      return;
-    }
+    if (!apiKey) return;
 
     const initServices = () => {
       if (window.google?.maps?.places) {
@@ -86,7 +82,7 @@ export default function CustomersPage() {
           placesService.current = new window.google.maps.places.PlacesService(dummyDiv);
           setIsGoogleReady(true);
         } catch (e) {
-          console.error("Error al inicializar servicios de Google:", e);
+          console.error("Error inicializando Google Places:", e);
         }
       }
     };
@@ -107,7 +103,6 @@ export default function CustomersPage() {
     }
   }, []);
 
-  // Desbloqueo forzado del puntero (fix para diálogos de Shadcn)
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
