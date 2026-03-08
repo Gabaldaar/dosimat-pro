@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -23,7 +22,8 @@ import {
   History,
   FilterX,
   TrendingUp,
-  Banknote
+  Banknote,
+  PlusCircle
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -49,7 +49,7 @@ export default function CustomersPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<any>(null)
   
-  // SOLUCIÓN TÉCNICA: Asegurar que el puntero del ratón se desbloquee siempre
+  // SOLUCIÓN TÉCNICA DEFINITIVA: Observador de mutaciones para forzar desbloqueo del puntero
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -288,6 +288,17 @@ export default function CustomersPage() {
                           >
                             <Link href={`/transactions?clientId=${customer.id}`}>
                               <History className="h-3 w-3" /> Historial
+                            </Link>
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="h-8 gap-2 font-bold bg-primary/10 hover:bg-primary/20 text-primary border-primary/20" 
+                            asChild 
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Link href={`/transactions?clientId=${customer.id}&mode=new`}>
+                              <PlusCircle className="h-3 w-3" /> Operación
                             </Link>
                           </Button>
                         </div>

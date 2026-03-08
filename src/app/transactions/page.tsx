@@ -70,6 +70,7 @@ function TransactionsContent() {
   const db = useFirestore()
   const searchParams = useSearchParams()
   const clientIdParam = searchParams.get('clientId')
+  const modeParam = searchParams.get('mode')
 
   const [mainView, setMainView] = useState("register")
   const [activeTab, setActiveTab] = useState("sale")
@@ -105,13 +106,18 @@ function TransactionsContent() {
   const [cobroAccountId, setCobroAccountId] = useState("pending")
   const [txDescription, setTxDescription] = useState("")
 
-  // Efecto para manejar el filtrado automático desde URL
+  // Manejar el filtrado automático desde URL
   useEffect(() => {
     if (clientIdParam) {
       setFilterCustomer(clientIdParam)
-      setMainView("history")
+      setSelectedCustomerId(clientIdParam)
+      if (modeParam === 'new') {
+        setMainView("register")
+      } else {
+        setMainView("history")
+      }
     }
-  }, [clientIdParam])
+  }, [clientIdParam, modeParam])
 
   const handleAddItem = (itemId: string) => {
     const item = catalog?.find((i: any) => i.id === itemId)
