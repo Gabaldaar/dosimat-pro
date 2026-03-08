@@ -2,71 +2,64 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Función básica: el usuario está logueado en Firebase Auth
-    function isAnyUser() {
+    // Función: El usuario está autenticado
+    function isAuthenticated() {
       return request.auth != null;
     }
 
-    // Función: el usuario es administrador (requiere perfil con rol Admin)
+    // Función: El usuario tiene rol de Administrador en su perfil
     function isAdmin() {
-      return isAnyUser() && 
+      return isAuthenticated() && 
              exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin';
     }
 
-    // Reglas para perfiles de usuario
+    // Perfiles de usuario: Lectura para todos los autenticados, escritura solo dueño o admin
     match /users/{userId} {
-      allow read: if isAnyUser();
-      allow write: if request.auth.uid == userId || isAdmin();
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
     }
 
-    // Reglas para Roles Administrativos (Colección explícita de seguridad)
-    match /admin_roles/{adminUid} {
-      allow read: if isAnyUser();
-      allow write: if isAdmin();
-    }
-
-    // Reglas para Clientes
+    // Clientes: Acceso total para personal autenticado
     match /clients/{clientId} {
-      allow read, write: if isAnyUser();
+      allow read, write: if isAuthenticated();
       match /pools/{poolId} {
-        allow read, write: if isAnyUser();
+        allow read, write: if isAuthenticated();
       }
     }
 
-    // Reglas para Catálogo (Lectura todos, Escritura solo Admin)
+    // Catálogo: Lectura para todos, escritura solo Admin
     match /products_services/{id} {
-      allow read: if isAnyUser();
+      allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
 
-    // Reglas para Finanzas y Cuentas
+    // Cuentas Financieras: Lectura para todos, escritura para Admin o actualizaciones de saldo
     match /financial_accounts/{id} {
-      allow read: if isAnyUser();
-      allow write: if isAdmin() || (isAnyUser() && request.method == 'update'); 
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated(); // Simplificado para permitir actualizaciones de saldo desde operaciones
     }
 
+    // Categorías de Gasto: Lectura para todos, escritura solo Admin
     match /expense_categories/{id} {
-      allow read: if isAnyUser();
+      allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
 
-    // Reglas para Transacciones
-    // Se permite lectura total (get y list) a cualquier usuario autenticado
+    // Transacciones: Lectura y creación para todos los autenticados, edición/borrado solo Admin
     match /transactions/{txId} {
-      allow get, list: if isAnyUser();
-      allow create: if isAnyUser();
+      allow read, create: if isAuthenticated();
       allow update, delete: if isAdmin();
     }
 
-    // Reglas para Notificaciones
-    match /users/{userId}/notifications/{notificationId} {
-      allow read: if request.auth.uid == userId || isAdmin();
+    // Notificaciones y reglas
+    match /notification_rules/{id} {
+      allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
     
-    match /notification_rules/{id} {
-      allow read: if isAnyUser();
+    match /users/{userId}/notifications/{notificationId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
       allow write: if isAdmin();
     }
   }

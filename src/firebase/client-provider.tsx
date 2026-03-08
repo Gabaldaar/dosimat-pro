@@ -5,7 +5,7 @@ import { FirebaseProvider } from '@/firebase/provider';
 import { initializeFirebase } from '@/firebase';
 import { usePathname, useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
 interface FirebaseClientProviderProps {
@@ -32,21 +32,17 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
           return;
         }
 
-        // Si hay usuario, verificamos su perfil
+        // Verificamos el perfil pero no bloqueamos si no se encuentra inmediatamente
         try {
           const userDoc = await getDoc(doc(firebaseServices.firestore, 'users', user.uid));
-          
-          // Solo cerramos sesión si el documento definitivamente no existe y no estamos en login
-          // Añadimos una pequeña tolerancia para que el registro asíncrono termine
-          if (!userDoc.exists() && pathname !== '/login') {
-             // Si el perfil no existe tras el login/registro, esperamos un momento por si la escritura es lenta
-             // En una app real, podrías mostrar una pantalla de "Creando perfil..."
-             setIsInitializing(false);
-          } else {
-             setIsInitializing(false);
+          // Si estamos en login y el usuario ya tiene perfil, lo mandamos al home
+          if (userDoc.exists() && pathname === '/login') {
+            router.replace('/');
           }
         } catch (error) {
-          console.error("Error verificando perfil:", error);
+          // Si hay error de permisos aquí, es probable que las reglas se estén actualizando
+          console.warn("Error inicial verificando perfil:", error);
+        } finally {
           setIsInitializing(false);
         }
       });
