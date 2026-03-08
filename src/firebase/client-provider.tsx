@@ -22,7 +22,6 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
   const [isInitializing, setIsInitializing] = useState(true);
   const [mounted, setMounted] = useState(false);
 
-  // Garantizamos que el componente solo empiece a procesar lógica de cliente tras el montaje
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -41,12 +40,13 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
         }
 
         try {
+          // Intentamos obtener el perfil pero no bloqueamos la app si falla o tarda
           const userDoc = await getDoc(doc(firebaseServices.firestore, 'users', user.uid));
           if (userDoc.exists() && pathname === '/login') {
             router.replace('/');
           }
         } catch (error) {
-          console.warn("Aviso: El perfil del usuario aún no es accesible.");
+          console.warn("Aviso: Sincronizando perfil de usuario...");
         } finally {
           setIsInitializing(false);
         }
@@ -55,7 +55,7 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
     }
   }, [firebaseServices.auth, firebaseServices.firestore, pathname, router, mounted]);
 
-  // Si no está montado o está inicializando, mostramos la pantalla de carga de forma consistente
+  // Pantalla de carga consistente para evitar errores de hidratación
   if (!mounted || isInitializing) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
