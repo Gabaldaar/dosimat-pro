@@ -41,6 +41,7 @@ import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, setDocumentNonBlocking, addDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase"
 import { collection, doc, query, orderBy, limit } from "firebase/firestore"
+import { cn } from "@/lib/utils"
 
 const txTypeMap: Record<string, { label: string, icon: any, color: string }> = {
   sale: { label: "Venta", icon: ArrowUpRight, color: "text-emerald-600 bg-emerald-50" },
@@ -289,7 +290,6 @@ export default function AccountsPage() {
               const isUSD = account.currency === 'USD';
               const themeColor = isUSD ? 'text-emerald-700' : 'text-blue-700';
               const bgColor = isUSD ? 'bg-emerald-100' : 'bg-blue-100';
-              const borderColor = isUSD ? 'border-emerald-200' : 'border-blue-200';
 
               return (
                 <Card key={account.id} className={`glass-card overflow-hidden group border-l-4 ${isUSD ? 'border-l-emerald-500' : 'border-l-blue-500'}`}>
