@@ -11,7 +11,7 @@ interface FirebaseClientProviderProps {
   children: ReactNode;
 }
 
-// Mensaje unificado para evitar errores de hidratación. Debe coincidir exactamente con el servidor.
+// Mensaje único y constante para evitar errores de hidratación.
 const LOADING_MESSAGE = "Sincronizando acceso...";
 
 export function FirebaseClientProvider({ children }: FirebaseClientProviderProps) {
@@ -20,10 +20,7 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
   }, []); 
 
   const router = useRouter();
-  const pathname = pathnameFromNext();
-  function pathnameFromNext() {
-    try { return usePathname(); } catch { return null; }
-  }
+  const pathname = usePathname();
   
   const [isInitializing, setIsInitializing] = useState(true);
   const [mounted, setMounted] = useState(false);
@@ -53,7 +50,7 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
     }
   }, [firebaseServices.auth, pathname, router, mounted]);
 
-  // Si no está montado (SSR) o está inicializando auth, mostramos la pantalla de carga
+  // Renderizado consistente para evitar Hydration Error
   if (!mounted || isInitializing) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
