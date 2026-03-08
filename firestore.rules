@@ -1,10 +1,39 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Regla global y robusta para un entorno administrativo: 
-    // Permite cualquier operación si el usuario está logueado.
+    // Función auxiliar para verificar autenticación
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Reglas específicas por colección para evitar errores de listado
+    match /users/{userId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /clients/{clientId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /products_services/{id} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /financial_accounts/{id} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /transactions/{id} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /expense_categories/{id} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Regla global de respaldo para cualquier otra ruta
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAuthenticated();
     }
   }
 }
