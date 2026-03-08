@@ -64,6 +64,8 @@ interface Customer {
   fechaCreacion: string;
 }
 
+const STORAGE_KEY = 'dosimat_pro_v1_customers'
+
 const initialCustomers: Customer[] = [
   { 
     id: "1", 
@@ -119,13 +121,9 @@ export default function CustomersPage() {
   const { toast } = useToast()
   const [mounted, setMounted] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
-  const [customers, setCustomers] = useState<Customer[]>(initialCustomers)
+  const [customers, setCustomers] = useState<Customer[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   // Form State
   const [formData, setFormData] = useState<Omit<Customer, 'id' | 'creadoPorId' | 'fechaCreacion'>>({
@@ -149,6 +147,22 @@ export default function CustomersPage() {
     saldoActual: 0,
     fechaUltimaReposicion: new Date().toISOString()
   })
+
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      setCustomers(JSON.parse(saved))
+    } else {
+      setCustomers(initialCustomers)
+    }
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (mounted) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(customers))
+    }
+  }, [customers, mounted])
 
   const filteredCustomers = customers.filter(c => 
     `${c.nombre} ${c.apellido}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -224,7 +238,7 @@ export default function CustomersPage() {
     } else {
       const newCustomer: Customer = {
         ...formData,
-        id: (customers.length + 1).toString(),
+        id: Math.random().toString(36).substr(2, 9),
         creadoPorId: "current-user-id",
         fechaCreacion: new Date().toISOString()
       }
@@ -249,6 +263,8 @@ export default function CustomersPage() {
     const fullAddress = `${customer.direccion}, ${customer.localidad}, ${customer.provincia}, ${customer.pais}`
     window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`, '_blank')
   }
+
+  if (!mounted) return null
 
   return (
     <div className="flex min-h-screen">
@@ -297,8 +313,8 @@ export default function CustomersPage() {
                         {customer.apellido}, {customer.nombre}
                       </h3>
                       {customer.saldoActual > 0 && (
-                        <Badge variant="destructive" className="ml-2 whitespace-nowrap animate-pulse">
-                          Deuda: ${mounted ? customer.saldoActual.toLocaleString() : customer.saldoActual}
+                        <Badge variant="destructive" className="ml-2 whitespace-nowrap">
+                          Deuda: ${customer.saldoActual.toLocaleString('es-AR')}
                         </Badge>
                       )}
                     </div>
