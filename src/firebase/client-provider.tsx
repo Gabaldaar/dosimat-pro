@@ -54,13 +54,13 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
     }
   }, [firebaseServices.auth, firebaseServices.firestore, pathname, router, mounted]);
 
-  // Pantalla de carga unificada para evitar errores de hidratación
+  // Pantalla de carga unificada con texto estable para evitar errores de hidratación
   if (!mounted || isInitializing) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <RefreshCw className="h-10 w-10 animate-spin text-primary" />
         <p className="text-muted-foreground animate-pulse font-medium">
-          Validando acceso...
+          Sincronizando acceso...
         </p>
       </div>
     );

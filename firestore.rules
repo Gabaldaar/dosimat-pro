@@ -36,9 +36,9 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
-    // Transacciones - Permiso de lectura y creación para cualquier usuario autenticado
+    // Transacciones - Permiso explícito de listado y obtención para usuarios autenticados
     match /transactions/{txId} {
-      allow read, create: if isAuthenticated();
+      allow get, list, create: if request.auth != null;
       allow update, delete: if isAdmin();
     }
 
