@@ -49,6 +49,7 @@ interface Account {
   id: string;
   name: string;
   currency: 'ARS' | 'USD';
+  balance: number;
 }
 
 interface SelectedItem {
@@ -81,6 +82,7 @@ const STORAGE_KEYS = {
 export default function TransactionsPage() {
   const { toast } = useToast()
   const [mounted, setMounted] = useState(false)
+  const [isDataLoaded, setIsDataLoaded] = useState(false)
   const [mainView, setMainView] = useState("register")
   const [activeTab, setActiveTab] = useState("sale")
   
@@ -105,6 +107,7 @@ export default function TransactionsPage() {
   const [filterMonth, setFilterMonth] = useState("all")
   const [filterAccount, setFilterAccount] = useState("all")
 
+  // Load Initial Data
   useEffect(() => {
     const savedCatalog = localStorage.getItem(STORAGE_KEYS.CATALOG)
     const savedCustomers = localStorage.getItem(STORAGE_KEYS.CUSTOMERS)
@@ -114,16 +117,22 @@ export default function TransactionsPage() {
     if (savedCatalog) setCatalog(JSON.parse(savedCatalog))
     if (savedCustomers) setCustomers(JSON.parse(savedCustomers))
     if (savedAccounts) setAccounts(JSON.parse(savedAccounts))
-    if (savedTransactions) setTransactions(JSON.parse(savedTransactions))
+    if (savedTransactions) {
+      const parsed = JSON.parse(savedTransactions)
+      if (Array.isArray(parsed)) setTransactions(parsed)
+    }
     
     setMounted(true)
+    setIsDataLoaded(true)
   }, [])
 
+  // Persistent Save Effect (Only if data is loaded)
   useEffect(() => {
-    if (mounted) {
+    if (mounted && isDataLoaded) {
       localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions))
+      localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accounts))
     }
-  }, [transactions, mounted])
+  }, [transactions, accounts, mounted, isDataLoaded])
 
   const handleAddItem = (itemId: string) => {
     if (!itemId || itemId === "none") return;
@@ -166,6 +175,16 @@ export default function TransactionsPage() {
       return
     }
 
+    // Validar cuentas si hay montos
+    if (cartTotals.ARS > 0 && !destinationAccounts.ARS) {
+      toast({ title: "Error", description: "Selecciona una cuenta para los Pesos.", variant: "destructive" })
+      return
+    }
+    if (cartTotals.USD > 0 && !destinationAccounts.USD) {
+      toast({ title: "Error", description: "Selecciona una cuenta para los Dólares.", variant: "destructive" })
+      return
+    }
+
     const customer = customers.find(c => c.id === selectedCustomerId)
     const newTx: Transaction = {
       id: Math.random().toString(36).substr(2, 9),
@@ -179,14 +198,24 @@ export default function TransactionsPage() {
       createdAt: new Date().toISOString()
     }
 
+    // 1. Actualizar balances de las cuentas financieras
+    setAccounts(prev => prev.map(acc => {
+      let newBalance = acc.balance
+      if (acc.id === destinationAccounts.ARS) newBalance += cartTotals.ARS
+      if (acc.id === destinationAccounts.USD) newBalance += cartTotals.USD
+      return { ...acc, balance: newBalance }
+    }))
+
+    // 2. Guardar transacción en el historial
     setTransactions(prev => [newTx, ...prev])
-    toast({ title: "Operación Registrada", description: "Se ha guardado en el historial con éxito." })
+    
+    toast({ title: "Operación Registrada", description: "Se ha guardado y actualizado el saldo de cuentas." })
     
     // Reset
     setSelectedCustomerId("")
     setSelectedItems([])
     setDestinationAccounts({ ARS: "", USD: "" })
-    setMainView("history") // Cambiar a historial para ver el resultado
+    setMainView("history") 
   }
 
   // Filtering Logic
@@ -211,6 +240,13 @@ export default function TransactionsPage() {
     const months = transactions.map(tx => tx.date.substring(0, 7))
     return Array.from(new Set(months)).sort().reverse()
   }, [transactions])
+
+  const filteredCatalog = useMemo(() => {
+    if (activeTab === 'refill') return catalog.filter(i => i.category === 'Químicos')
+    if (activeTab === 'service') return catalog.filter(i => i.category === 'Servicios' || i.category === 'Equipos')
+    if (activeTab === 'adjustment') return catalog.filter(i => i.stock !== null)
+    return catalog
+  }, [catalog, activeTab])
 
   if (!mounted) return null
 
@@ -269,13 +305,13 @@ export default function TransactionsPage() {
 
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase text-muted-foreground">Agregar Items</Label>
+                        <Label className="text-xs font-bold uppercase text-muted-foreground">Agregar Items ({activeTab})</Label>
                         <Select value={currentAddItem} onValueChange={handleAddItem}>
                           <SelectTrigger className="bg-white border-primary/20">
                             <SelectValue placeholder="Elegir del catálogo..." />
                           </SelectTrigger>
                           <SelectContent>
-                            {catalog.map(item => (
+                            {filteredCatalog.map(item => (
                               <SelectItem key={item.id} value={item.id}>
                                 {item.name} - {item.currency === 'USD' ? 'u$s' : '$'}{item.price}
                               </SelectItem>
@@ -314,7 +350,7 @@ export default function TransactionsPage() {
                                       <span className="text-xs text-muted-foreground">{item.currency}</span>
                                       <Input 
                                         type="number" 
-                                        className="h-8 text-right font-bold w-20" 
+                                        className="h-8 text-right font-bold w-24" 
                                         value={item.price} 
                                         onChange={(e) => handleUpdateItem(index, 'price', Number(e.target.value))}
                                       />
@@ -342,26 +378,38 @@ export default function TransactionsPage() {
                     </CardHeader>
                     <CardContent className="pt-6 space-y-6">
                       <div className="space-y-3">
-                        <div className={`p-4 rounded-xl border ${cartTotals.ARS > 0 ? 'bg-primary/5 border-primary/20' : 'opacity-40'}`}>
-                          <p className="text-[10px] uppercase font-bold text-muted-foreground">Total ARS</p>
-                          <p className="text-3xl font-black text-primary">${cartTotals.ARS.toLocaleString()}</p>
-                          {cartTotals.ARS > 0 && (
-                            <Select value={destinationAccounts.ARS} onValueChange={(v) => setDestinationAccounts(p => ({...p, ARS: v}))}>
-                              <SelectTrigger className="h-8 mt-2 text-xs"><SelectValue placeholder="Elegir cuenta ARS" /></SelectTrigger>
-                              <SelectContent>{accounts.filter(a => a.currency === 'ARS').map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent>
-                            </Select>
-                          )}
-                        </div>
-                        <div className={`p-4 rounded-xl border ${cartTotals.USD > 0 ? 'bg-emerald-50 border-emerald-200' : 'opacity-40'}`}>
-                          <p className="text-[10px] uppercase font-bold text-muted-foreground">Total USD</p>
-                          <p className="text-3xl font-black text-emerald-600">u$s {cartTotals.USD.toLocaleString()}</p>
-                          {cartTotals.USD > 0 && (
-                            <Select value={destinationAccounts.USD} onValueChange={(v) => setDestinationAccounts(p => ({...p, USD: v}))}>
-                              <SelectTrigger className="h-8 mt-2 text-xs"><SelectValue placeholder="Elegir cuenta USD" /></SelectTrigger>
-                              <SelectContent>{accounts.filter(a => a.currency === 'USD').map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent>
-                            </Select>
-                          )}
-                        </div>
+                        {cartTotals.ARS > 0 && (
+                          <div className="p-4 rounded-xl border bg-primary/5 border-primary/20">
+                            <p className="text-[10px] uppercase font-bold text-muted-foreground">Total ARS</p>
+                            <p className="text-3xl font-black text-primary">${cartTotals.ARS.toLocaleString()}</p>
+                            <div className="mt-3">
+                              <Label className="text-[9px] font-bold uppercase text-muted-foreground mb-1 block">Cuenta de Cobro ARS</Label>
+                              <Select value={destinationAccounts.ARS} onValueChange={(v) => setDestinationAccounts(p => ({...p, ARS: v}))}>
+                                <SelectTrigger className="h-8 text-xs bg-white"><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                                <SelectContent>{accounts.filter(a => a.currency === 'ARS').map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        )}
+                        {cartTotals.USD > 0 && (
+                          <div className="p-4 rounded-xl border bg-emerald-50 border-emerald-200">
+                            <p className="text-[10px] uppercase font-bold text-muted-foreground">Total USD</p>
+                            <p className="text-3xl font-black text-emerald-600">u$s {cartTotals.USD.toLocaleString()}</p>
+                            <div className="mt-3">
+                              <Label className="text-[9px] font-bold uppercase text-muted-foreground mb-1 block">Cuenta de Cobro USD</Label>
+                              <Select value={destinationAccounts.USD} onValueChange={(v) => setDestinationAccounts(p => ({...p, USD: v}))}>
+                                <SelectTrigger className="h-8 text-xs bg-white"><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                                <SelectContent>{accounts.filter(a => a.currency === 'USD').map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        )}
+                        {activeTab === 'adjustment' && cartTotals.ARS === 0 && cartTotals.USD === 0 && selectedItems.length > 0 && (
+                          <div className="p-4 rounded-xl border bg-orange-50 border-orange-200">
+                            <p className="text-sm font-bold text-orange-700">Movimiento de Stock</p>
+                            <p className="text-xs text-orange-600">Esta operación no genera cargos financieros.</p>
+                          </div>
+                        )}
                       </div>
                       <Button 
                         className="w-full h-12 font-bold" 
@@ -421,15 +469,15 @@ export default function TransactionsPage() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle>Listado Histórico</CardTitle>
-                  <CardDescription>Resumen de movimientos según filtros aplicados</CardDescription>
+                  <CardDescription>Resumen de movimientos según filtros</CardDescription>
                 </div>
                 <div className="flex gap-4">
                   <div className="text-right">
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Subtotal Pesos</p>
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Pesos</p>
                     <p className="text-xl font-black text-primary">${historyTotals.ARS.toLocaleString()}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Subtotal Dólares</p>
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Dólares</p>
                     <p className="text-xl font-black text-emerald-600">u$s {historyTotals.USD.toLocaleString()}</p>
                   </div>
                 </div>
@@ -442,13 +490,13 @@ export default function TransactionsPage() {
                         <TableHead>Fecha</TableHead>
                         <TableHead>Cliente</TableHead>
                         <TableHead>Tipo</TableHead>
-                        <TableHead>Detalle Items</TableHead>
+                        <TableHead>Detalle</TableHead>
                         <TableHead className="text-right">Total</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredTransactions.length === 0 ? (
-                        <TableRow><TableCell colSpan={5} className="text-center py-20 text-muted-foreground">No se encontraron transacciones</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={5} className="text-center py-20 text-muted-foreground italic">No hay transacciones que coincidan con los filtros</TableCell></TableRow>
                       ) : (
                         filteredTransactions.map(tx => (
                           <TableRow key={tx.id} className="hover:bg-muted/20 transition-colors">
@@ -460,7 +508,7 @@ export default function TransactionsPage() {
                               </Badge>
                             </TableCell>
                             <TableCell>
-                              <div className="text-[10px] text-muted-foreground">
+                              <div className="text-[10px] text-muted-foreground max-w-[200px] truncate">
                                 {tx.items.map(i => `${i.qty}x ${i.name}`).join(", ")}
                               </div>
                             </TableCell>
@@ -468,7 +516,7 @@ export default function TransactionsPage() {
                               <div className="flex flex-col items-end">
                                 {tx.totals.ARS > 0 && <span className="font-bold text-primary">${tx.totals.ARS.toLocaleString()}</span>}
                                 {tx.totals.USD > 0 && <span className="font-bold text-emerald-600">u$s {tx.totals.USD.toLocaleString()}</span>}
-                                {tx.totals.ARS === 0 && tx.totals.USD === 0 && <span className="text-muted-foreground italic text-xs">Ajuste</span>}
+                                {tx.totals.ARS === 0 && tx.totals.USD === 0 && <span className="text-muted-foreground italic text-xs">Sin cargo</span>}
                               </div>
                             </TableCell>
                           </TableRow>

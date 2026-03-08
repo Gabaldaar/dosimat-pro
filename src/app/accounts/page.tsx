@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
@@ -69,9 +70,9 @@ const defaultAccounts: FinancialAccount[] = [
 ]
 
 const defaultExpenses: ExpenseCategory[] = [
-  { id: 'e1', name: "Insumos Químicos", totalSpent: 120400, currency: 'ARS' },
-  { id: 'e2', name: "Combustible / Viáticos", totalSpent: 45000, currency: 'ARS' },
-  { id: 'e3', name: "Publicidad y Marketing", totalSpent: 12000, currency: 'ARS' },
+  { id: 'e1', name: "Insumos Químicos", totalSpent: 0, currency: 'ARS' },
+  { id: 'e2', name: "Combustible / Viáticos", totalSpent: 0, currency: 'ARS' },
+  { id: 'e3', name: "Publicidad y Marketing", totalSpent: 0, currency: 'ARS' },
   { id: 'e4', name: "Sueldos y Comisiones", totalSpent: 0, currency: 'ARS' },
   { id: 'e5', name: "Gastos Varios", totalSpent: 0, currency: 'ARS' },
 ]
@@ -79,6 +80,7 @@ const defaultExpenses: ExpenseCategory[] = [
 export default function AccountsPage() {
   const { toast } = useToast()
   const [mounted, setMounted] = useState(false)
+  const [isDataLoaded, setIsDataLoaded] = useState(false)
   const [accounts, setAccounts] = useState<FinancialAccount[]>([])
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([])
   
@@ -116,6 +118,7 @@ export default function AccountsPage() {
     amount: 0
   })
 
+  // Load Initial Data once
   useEffect(() => {
     const savedAccounts = localStorage.getItem(STORAGE_KEY_ACCOUNTS)
     const savedExpenses = localStorage.getItem(STORAGE_KEY_EXPENSES)
@@ -131,15 +134,18 @@ export default function AccountsPage() {
     } else {
       setExpenseCategories(defaultExpenses)
     }
+    
     setMounted(true)
+    setIsDataLoaded(true)
   }, [])
 
+  // Sync Data to LocalStorage only if data has been loaded
   useEffect(() => {
-    if (mounted) {
+    if (mounted && isDataLoaded) {
       localStorage.setItem(STORAGE_KEY_ACCOUNTS, JSON.stringify(accounts))
       localStorage.setItem(STORAGE_KEY_EXPENSES, JSON.stringify(expenseCategories))
     }
-  }, [accounts, expenseCategories, mounted])
+  }, [accounts, expenseCategories, mounted, isDataLoaded])
 
   const handleOpenAccountDialog = (account?: FinancialAccount) => {
     if (account) {
@@ -363,10 +369,8 @@ export default function AccountsPage() {
             <CardContent>
               <div className="space-y-4">
                 {[
-                  { desc: "Pago Cliente: Carlos R.", amount: "+$12.500", account: "Banco Galicia", type: "income" },
-                  { desc: "Compra Cloro Granulado", amount: "-$45.000", account: "Caja Efectivo ARS", type: "expense" },
-                  { desc: "Venta Reposición Líquida", amount: "+$8.200", account: "Caja Efectivo ARS", type: "income" },
-                  { desc: "Servicio Técnico: Quinta Paz", amount: "+u$s 50", account: "Caja Efectivo USD", type: "income" },
+                  { desc: "Ingreso Manual / Venta", amount: "+$12.500", account: "Caja Efectivo ARS", type: "income" },
+                  { desc: "Gasto de Insumos", amount: "-$45.000", account: "Banco Galicia", type: "expense" },
                 ].map((move, i) => (
                   <div key={i} className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/30 transition-colors border-b last:border-0">
                     <div className="flex items-center gap-3">
