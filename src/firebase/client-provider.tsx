@@ -13,7 +13,7 @@ interface FirebaseClientProviderProps {
 
 /**
  * Mensaje de carga sincronizado para evitar errores de hidratación.
- * El servidor y el cliente DEBEN renderizar exactamente el mismo texto.
+ * El servidor y el cliente DEBEN renderizar exactamente el mismo texto inicial.
  */
 const LOADING_MESSAGE = "Sincronizando acceso...";
 

@@ -26,7 +26,8 @@ import {
   PlusCircle,
   RefreshCw,
   Calculator,
-  Loader2
+  Loader2,
+  CheckCircle2
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -58,8 +59,9 @@ export default function CustomersPage() {
   // Autocomplete Address State
   const [addressSuggestions, setAddressSuggestions] = useState<any[]>([])
   const [isSearchingAddress, setIsSearchingAddress] = useState(false)
+  const [showNoResults, setShowNoResults] = useState(false)
 
-  // SOLUCIÓN TÉCNICA DEFINITIVA: Observador de mutaciones para forzar desbloqueo del puntero
+  // SOLUCIÓN TÉCNICA: Observador de mutaciones para forzar desbloqueo del puntero
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -101,12 +103,15 @@ export default function CustomersPage() {
 
   const handleAddressSearch = async (val: string) => {
     setFormData({ ...formData, direccion: val })
+    setShowNoResults(false)
     if (val.length > 4) {
       setIsSearchingAddress(true)
       try {
         const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(val)}&limit=5&lang=es`)
         const data = await res.json()
-        setAddressSuggestions(data.features || [])
+        const features = data.features || []
+        setAddressSuggestions(features)
+        if (features.length === 0) setShowNoResults(true)
       } catch (e) {
         console.error("Error fetching address:", e)
       } finally {
@@ -131,6 +136,7 @@ export default function CustomersPage() {
       provincia: state
     })
     setAddressSuggestions([])
+    setShowNoResults(false)
   }
 
   const filteredCustomers = useMemo(() => {
@@ -188,6 +194,7 @@ export default function CustomersPage() {
       setFormData(defaultFormData)
     }
     setAddressSuggestions([])
+    setShowNoResults(false)
     setIsDialogOpen(true)
   }
 
@@ -505,26 +512,40 @@ export default function CustomersPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2"><Banknote className="h-3 w-3 text-primary" /> Saldo ARS ($)</Label>
-                  <Input type="number" value={formData.saldoActual} onChange={(e) => setFormData({...formData, saldoActual: Number(e.target.value)})} />
+                  <Label className="flex items-center gap-2 font-bold"><Banknote className="h-3 w-3 text-primary" /> Saldo ARS ($)</Label>
+                  <Input type="number" value={formData.saldoActual} onChange={(e) => setFormData({...formData, saldoActual: Number(e.target.value)})} className="bg-muted/10 font-bold" />
                 </div>
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2"><TrendingUp className="h-3 w-3 text-emerald-600" /> Saldo USD (u$s)</Label>
-                  <Input type="number" value={formData.saldoUSD} onChange={(e) => setFormData({...formData, saldoUSD: Number(e.target.value)})} />
+                  <Label className="flex items-center gap-2 font-bold"><TrendingUp className="h-3 w-3 text-emerald-600" /> Saldo USD (u$s)</Label>
+                  <Input type="number" value={formData.saldoUSD} onChange={(e) => setFormData({...formData, saldoUSD: Number(e.target.value)})} className="bg-muted/10 font-bold" />
                 </div>
               </div>
-              <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
-                <div className="space-y-0.5">
-                  <Label className="font-bold">Cliente de Reposición</Label>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">Seguimiento de cloro habilitado</p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
+                  <div className="space-y-0.5">
+                    <Label className="font-bold">Cliente de Reposición</Label>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">Seguimiento de cloro habilitado</p>
+                  </div>
+                  <Switch checked={formData.esClienteReposicion} onCheckedChange={(v) => setFormData({...formData, esClienteReposicion: v})} />
                 </div>
-                <Switch checked={formData.esClienteReposicion} onCheckedChange={(v) => setFormData({...formData, esClienteReposicion: v})} />
+
+                <div className="flex items-center justify-between p-3 border rounded-lg bg-amber-50/50 border-amber-200">
+                  <div className="space-y-0.5">
+                    <Label className="font-bold text-amber-700">Equipo en Comodato</Label>
+                    <p className="text-[10px] text-amber-600 uppercase tracking-widest font-black">Propiedad de la empresa</p>
+                  </div>
+                  <Switch 
+                    checked={formData.equipoInstalado.enComodato} 
+                    onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v}})} 
+                  />
+                </div>
               </div>
             </TabsContent>
 
-            <TabsContent value="address" className="space-y-4 py-4">
+            <TabsContent value="address" className="space-y-4 py-4 relative">
               <div className="space-y-2 relative">
-                <Label>Dirección</Label>
+                <Label className="flex items-center gap-2">Dirección (Escribir para autocompletar)</Label>
                 <div className="relative">
                   <Input 
                     value={formData.direccion} 
@@ -538,21 +559,30 @@ export default function CustomersPage() {
                     </div>
                   )}
                 </div>
-                {addressSuggestions.length > 0 && (
-                  <Card className="absolute z-[100] w-full mt-1 bg-white shadow-xl max-h-60 overflow-auto border-primary/20">
+                
+                {/* Sugerencias de dirección con mayor visibilidad */}
+                {(addressSuggestions.length > 0 || showNoResults) && (
+                  <Card className="absolute z-[100] w-full mt-1 bg-white shadow-2xl border-2 border-primary/20 max-h-60 overflow-auto animate-in fade-in slide-in-from-top-2">
                     <CardContent className="p-0">
-                      {addressSuggestions.map((s, i) => (
-                        <div 
-                          key={i} 
-                          className="p-3 hover:bg-primary/5 cursor-pointer text-sm border-b last:border-0 transition-colors"
-                          onClick={() => selectAddress(s)}
-                        >
-                          <p className="font-bold text-primary">{s.properties.name} {s.properties.housenumber || ""}</p>
-                          <p className="text-[10px] text-muted-foreground uppercase">
-                            {s.properties.city || s.properties.town || ""}, {s.properties.state || ""}, {s.properties.country || ""}
-                          </p>
-                        </div>
-                      ))}
+                      {showNoResults ? (
+                        <div className="p-4 text-center text-sm text-muted-foreground italic">No se encontraron resultados</div>
+                      ) : (
+                        addressSuggestions.map((s, i) => (
+                          <div 
+                            key={i} 
+                            className="p-3 hover:bg-primary/10 cursor-pointer text-sm border-b last:border-0 transition-colors flex items-start gap-3"
+                            onClick={() => selectAddress(s)}
+                          >
+                            <MapPin className="h-4 w-4 mt-0.5 text-primary shrink-0" />
+                            <div>
+                              <p className="font-bold text-primary">{s.properties.name} {s.properties.housenumber || ""}</p>
+                              <p className="text-[10px] text-muted-foreground uppercase">
+                                {s.properties.city || s.properties.town || ""}, {s.properties.state || ""}, {s.properties.country || ""}
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                      )}
                     </CardContent>
                   </Card>
                 )}
@@ -606,7 +636,7 @@ export default function CustomersPage() {
               setIsDialogOpen(false);
               setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
             }} className="font-bold">Cancelar</Button>
-            <Button onClick={handleSave} className="px-8 font-bold"><Plus className="mr-2 h-4 w-4" /> Guardar Cambios</Button>
+            <Button onClick={handleSave} className="px-8 font-bold"><CheckCircle2 className="mr-2 h-4 w-4" /> Guardar Cambios</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
