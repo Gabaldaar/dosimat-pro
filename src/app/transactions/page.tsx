@@ -40,7 +40,7 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu"
-import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase"
+import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase"
 import { collection, doc } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 
@@ -148,28 +148,48 @@ export default function TransactionsPage() {
     setMainView("register")
   }
 
+  const revertTxBalances = (tx: any) => {
+    const client = customers?.find(c => c.id === tx.clientId)
+    const acc = accounts?.find(a => a.id === tx.financialAccountId)
+    const amount = Number(tx.amount) || 0;
+    
+    if (tx.type === 'cobro') {
+      // Revertir Cobro: Restar de la caja, restar del saldo del cliente (volver a deuda)
+      if (acc) {
+        updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { 
+          initialBalance: Number(acc.initialBalance || 0) - amount 
+        })
+      }
+      const balanceField = tx.currency === 'ARS' ? 'saldoActual' : 'saldoUSD'
+      if (client) {
+        updateDocumentNonBlocking(doc(db, 'clients', client.id), { 
+          [balanceField]: Number(client[balanceField] || 0) - amount 
+        })
+      }
+    } else {
+      // Revertir Venta/Reposición/Servicio: Restar de la caja (si se pagó) o sumar al saldo del cliente (si quedó a cuenta)
+      if (acc) {
+        updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { 
+          initialBalance: Number(acc.initialBalance || 0) - amount 
+        })
+      } else {
+        const balanceField = tx.currency === 'ARS' ? 'saldoActual' : 'saldoUSD'
+        if (client) {
+          updateDocumentNonBlocking(doc(db, 'clients', client.id), { 
+            [balanceField]: Number(client[balanceField] || 0) + amount 
+          })
+        }
+      }
+    }
+  }
+
   const handleDeleteTx = (tx: any) => {
     if (!tx || !tx.id) return;
     if (!confirm("¿Eliminar esta operación? Esto revertirá los saldos automáticamente.")) return
 
-    const client = customers?.find(c => c.id === tx.clientId)
-    const acc = accounts?.find(a => a.id === tx.financialAccountId)
-    
-    if (tx.type === 'cobro') {
-      if (acc) setDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) - tx.amount }, { merge: true })
-      const balanceField = tx.currency === 'ARS' ? 'saldoActual' : 'saldoUSD'
-      if (client) setDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) - tx.amount }, { merge: true })
-    } else {
-      if (acc) {
-        setDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) - tx.amount }, { merge: true })
-      } else {
-        const balanceField = tx.currency === 'ARS' ? 'saldoActual' : 'saldoUSD'
-        if (client) setDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) + tx.amount }, { merge: true })
-      }
-    }
-
+    revertTxBalances(tx);
     deleteDocumentNonBlocking(doc(db, 'transactions', tx.id))
-    toast({ title: "Operación eliminada y saldos revertidos" })
+    toast({ title: "Operación eliminada" })
   }
 
   const handleSaveTransaction = () => {
@@ -182,14 +202,15 @@ export default function TransactionsPage() {
     if (!client) return
 
     if (editingTx) {
-      handleDeleteTx(editingTx);
+      revertTxBalances(editingTx);
+      deleteDocumentNonBlocking(doc(db, 'transactions', editingTx.id));
       setEditingTx(null);
     }
 
     if (activeTab === 'cobro') {
       if (cobroAmount <= 0) return
       
-      const txId = Math.random().toString(36).substr(2, 9)
+      const txId = Math.random().toString(36).substring(2, 11)
       const txData = {
         id: txId,
         date: new Date(operationDate).toISOString(),
@@ -204,10 +225,10 @@ export default function TransactionsPage() {
       setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
       
       const acc = accounts?.find(a => a.id === cobroAccountId)
-      if (acc) setDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) + Number(cobroAmount) }, { merge: true })
+      if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: Number(acc.initialBalance || 0) + Number(cobroAmount) })
       
       const balanceField = cobroCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'
-      setDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) + Number(cobroAmount) }, { merge: true })
+      updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: Number(client[balanceField] || 0) + Number(cobroAmount) })
 
       toast({ title: "Cobro registrado correctamente" })
     } else {
@@ -218,7 +239,7 @@ export default function TransactionsPage() {
         const itemsOfCurrency = selectedItems.filter(item => item.currency === curr)
 
         if (total > 0) {
-          const txId = Math.random().toString(36).substr(2, 9)
+          const txId = Math.random().toString(36).substring(2, 11)
           const accId = destinationAccounts[curr]
           const isPending = !accId || accId === "pending"
           
@@ -238,10 +259,10 @@ export default function TransactionsPage() {
 
           if (!isPending) {
             const acc = accounts?.find(a => a.id === accId)
-            if (acc) setDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) + Number(total) }, { merge: true })
+            if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: Number(acc.initialBalance || 0) + Number(total) })
           } else {
             const balanceField = curr === 'ARS' ? 'saldoActual' : 'saldoUSD'
-            setDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) - Number(total) }, { merge: true })
+            updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: Number(client[balanceField] || 0) - Number(total) })
           }
         }
       })
