@@ -38,7 +38,8 @@ service cloud.firestore {
 
     // Transacciones
     match /transactions/{txId} {
-      allow read, create: if isAuthenticated();
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
       allow update, delete: if isAdmin();
     }
 
