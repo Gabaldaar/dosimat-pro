@@ -24,13 +24,16 @@ import {
   TrendingUp,
   Banknote,
   PlusCircle,
-  AlertCircle
+  AlertCircle,
+  Package,
+  RefreshCw
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from "@/firebase"
 import { collection, doc } from "firebase/firestore"
@@ -43,6 +46,8 @@ export default function CustomersPage() {
   
   const [searchTerm, setSearchTerm] = useState("")
   const [filterBalance, setFilterBalance] = useState("all") 
+  const [filterComodato, setFilterComodato] = useState("all")
+  const [filterReposicion, setFilterReposicion] = useState("all")
   
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const { data: customers, isLoading } = useCollection(clientsQuery)
@@ -93,28 +98,36 @@ export default function CustomersPage() {
   const filteredCustomers = useMemo(() => {
     if (!customers) return []
     return customers.filter((c: any) => {
+      // 1. Buscador
       const searchMatch = `${c.nombre} ${c.apellido}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (c.cuit_dni && c.cuit_dni.includes(searchTerm))
-      
       if (!searchMatch) return false
       
+      // 2. Filtro de Saldo
       const saldoARS = Number(c.saldoActual || 0)
       const saldoUSD = Number(c.saldoUSD || 0)
+      if (filterBalance === 'debt' && (saldoARS >= 0 && saldoUSD >= 0)) return false
+      if (filterBalance === 'credit' && (saldoARS <= 0 && saldoUSD <= 0)) return false
 
-      if (filterBalance === 'debt') {
-        if (saldoARS >= 0 && saldoUSD >= 0) return false
-      }
-      if (filterBalance === 'credit') {
-        if (saldoARS <= 0 && saldoUSD <= 0) return false
-      }
+      // 3. Filtro de Comodato
+      const isComodato = c.equipoInstalado?.enComodato === true
+      if (filterComodato === 'yes' && !isComodato) return false
+      if (filterComodato === 'no' && isComodato) return false
+
+      // 4. Filtro de Reposición
+      const isRepo = c.esClienteReposicion === true
+      if (filterReposicion === 'yes' && !isRepo) return false
+      if (filterReposicion === 'no' && isRepo) return false
 
       return true
     })
-  }, [customers, searchTerm, filterBalance])
+  }, [customers, searchTerm, filterBalance, filterComodato, filterReposicion])
 
   const resetFilters = () => {
     setSearchTerm("")
     setFilterBalance("all")
+    setFilterComodato("all")
+    setFilterReposicion("all")
   }
 
   const handleOpenDialog = (customer?: any) => {
@@ -179,7 +192,7 @@ export default function CustomersPage() {
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-primary font-headline">Listado de Clientes</h1>
-            <p className="text-muted-foreground">Gestión centralizada de perfiles y cuentas corrientes.</p>
+            <p className="text-muted-foreground">Gestión de perfiles, equipos y cuentas corrientes.</p>
           </div>
           <Button onClick={() => handleOpenDialog()} className="h-12 px-6 shadow-lg shadow-primary/20 font-bold">
             <Plus className="mr-2 h-5 w-5" /> Nuevo Cliente
@@ -187,7 +200,7 @@ export default function CustomersPage() {
         </header>
 
         <section className="space-y-4">
-          <div className="flex flex-col lg:flex-row gap-4">
+          <div className="flex flex-col gap-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
               <input 
@@ -197,41 +210,75 @@ export default function CustomersPage() {
                 onChange={(e) => setSearchTerm(e.target.value)} 
               />
             </div>
-            <div className="flex bg-muted/30 p-1 rounded-lg border">
-              <Button 
-                variant={filterBalance === 'all' ? 'secondary' : 'ghost'} 
-                size="sm" 
-                className="px-4 font-bold text-[10px] uppercase tracking-wider"
-                onClick={() => setFilterBalance('all')}
-              >
-                Todos
-              </Button>
-              <Button 
-                variant={filterBalance === 'debt' ? 'secondary' : 'ghost'} 
-                size="sm" 
-                className={cn("px-4 font-bold text-[10px] uppercase tracking-wider", filterBalance === 'debt' && "text-rose-600")}
-                onClick={() => setFilterBalance('debt')}
-              >
-                Deudores
-              </Button>
-              <Button 
-                variant={filterBalance === 'credit' ? 'secondary' : 'ghost'} 
-                size="sm" 
-                className={cn("px-4 font-bold text-[10px] uppercase tracking-wider", filterBalance === 'credit' && "text-emerald-600")}
-                onClick={() => setFilterBalance('credit')}
-              >
-                A Favor
-              </Button>
+            
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Saldo</Label>
+                <div className="flex bg-muted/30 p-1 rounded-lg border">
+                  <Button 
+                    variant={filterBalance === 'all' ? 'secondary' : 'ghost'} 
+                    size="sm" 
+                    className="flex-1 font-bold text-[10px] uppercase h-8"
+                    onClick={() => setFilterBalance('all')}
+                  >
+                    Todos
+                  </Button>
+                  <Button 
+                    variant={filterBalance === 'debt' ? 'secondary' : 'ghost'} 
+                    size="sm" 
+                    className={cn("flex-1 font-bold text-[10px] uppercase h-8", filterBalance === 'debt' && "text-rose-600")}
+                    onClick={() => setFilterBalance('debt')}
+                  >
+                    Deuda
+                  </Button>
+                  <Button 
+                    variant={filterBalance === 'credit' ? 'secondary' : 'ghost'} 
+                    size="sm" 
+                    className={cn("flex-1 font-bold text-[10px] uppercase h-8", filterBalance === 'credit' && "text-emerald-600")}
+                    onClick={() => setFilterBalance('credit')}
+                  >
+                    A Favor
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Comodato</Label>
+                <Select value={filterComodato} onValueChange={setFilterComodato}>
+                  <SelectTrigger className="h-10 bg-white/50"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Ver Todos</SelectItem>
+                    <SelectItem value="yes">Con Comodato</SelectItem>
+                    <SelectItem value="no">Sin Comodato</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Reposición</Label>
+                <Select value={filterReposicion} onValueChange={setFilterReposicion}>
+                  <SelectTrigger className="h-10 bg-white/50"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Ver Todos</SelectItem>
+                    <SelectItem value="yes">Solo Reposición</SelectItem>
+                    <SelectItem value="no">Solo Ocasionales</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-end">
+                <Button variant="outline" className="h-10 w-full font-bold" onClick={resetFilters}>
+                  <FilterX className="h-4 w-4 mr-2" /> Reset Filtros
+                </Button>
+              </div>
             </div>
-            <Button variant="outline" className="h-11 font-bold" onClick={resetFilters}>
-              <FilterX className="h-4 w-4 mr-2" /> Limpiar
-            </Button>
           </div>
         </section>
 
         {isLoading ? (
-          <div className="flex items-center justify-center h-64">
-            <p className="text-muted-foreground animate-pulse">Cargando base de datos...</p>
+          <div className="flex flex-col items-center justify-center h-64 gap-2">
+            <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-muted-foreground text-sm">Sincronizando clientes...</p>
           </div>
         ) : filteredCustomers.length === 0 ? (
           <Card className="p-12 text-center border-dashed border-2 bg-muted/5">
@@ -408,7 +455,7 @@ export default function CustomersPage() {
               <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
                 <div className="space-y-0.5">
                   <Label className="font-bold">Cliente de Reposición</Label>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">Habilitar seguimiento de cloro</p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">Seguimiento de cloro habilitado</p>
                 </div>
                 <Switch checked={formData.esClienteReposicion} onCheckedChange={(v) => setFormData({...formData, esClienteReposicion: v})} />
               </div>
@@ -449,7 +496,7 @@ export default function CustomersPage() {
               <div className="flex items-center justify-between p-3 border rounded-lg bg-amber-50/50 border-amber-200 mt-6">
                 <div className="space-y-0.5">
                   <Label className="font-bold text-amber-700">Equipo en Comodato</Label>
-                  <p className="text-[10px] text-amber-600 uppercase tracking-widest font-black">El equipo es propiedad de la empresa</p>
+                  <p className="text-[10px] text-amber-600 uppercase tracking-widest font-black">Propiedad de la empresa</p>
                 </div>
                 <Switch checked={formData.equipoInstalado.enComodato} onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v}})} />
               </div>
