@@ -70,11 +70,11 @@ export default function CustomersPage() {
   const autocompleteService = useRef<any>(null)
   const placesService = useRef<any>(null)
 
-  // Carga robusta de Google Maps con logs de depuración
+  // Inicialización robusta de Google Maps
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
     if (!apiKey) {
-      console.warn("Google Maps API Key no encontrada en .env. Por favor añádela.");
+      console.warn("Google Maps API Key no encontrada en .env");
       return;
     }
 
@@ -108,7 +108,7 @@ export default function CustomersPage() {
     }
   }, []);
 
-  // Fix para evitar que el puntero quede bloqueado por diálogos de ShadCN
+  // Fix para puntero bloqueado
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -153,7 +153,7 @@ export default function CustomersPage() {
     
     if (val.length >= 3 && autocompleteService.current) {
       setIsSearchingAddress(true);
-      console.log("Buscando dirección en Google:", val);
+      console.log("Buscando en Google Places:", val);
       
       autocompleteService.current.getPlacePredictions({
         input: val,
@@ -161,12 +161,11 @@ export default function CustomersPage() {
         types: ['address']
       }, (predictions: any, status: any) => {
         setIsSearchingAddress(false);
-        console.log("Status de respuesta Google:", status);
+        console.log("Google Autocomplete Status:", status);
         
         if (status === 'OK' && predictions) {
           setAddressSuggestions(predictions);
         } else {
-          console.warn("Google no devolvió predicciones o devolvió un error:", status);
           setAddressSuggestions([]);
         }
       });
@@ -176,19 +175,13 @@ export default function CustomersPage() {
   }
 
   const selectAddress = (prediction: any) => {
-    if (!placesService.current) {
-      console.error("PlacesService no está listo");
-      return;
-    }
-
-    console.log("Obteniendo detalles para:", prediction.description);
+    if (!placesService.current) return;
 
     placesService.current.getDetails({
       placeId: prediction.place_id,
       fields: ['address_components', 'formatted_address']
     }, (place: any, status: any) => {
       if (status === 'OK' && place) {
-        console.log("Lugar encontrado:", place);
         const components = place.address_components;
         let street = "";
         let number = "";
@@ -209,8 +202,6 @@ export default function CustomersPage() {
           provincia: state || prev.provincia
         }));
         setAddressSuggestions([]);
-      } else {
-        console.error("Error obteniendo detalles del lugar:", status);
       }
     });
   }
@@ -659,7 +650,7 @@ export default function CustomersPage() {
                 </div>
                 
                 {addressSuggestions.length > 0 && (
-                  <div className="absolute z-[999] w-full mt-1 bg-white shadow-2xl border-2 border-primary/20 rounded-xl overflow-hidden animate-in fade-in slide-in-from-top-2">
+                  <div className="absolute z-[9999] w-full mt-1 bg-white shadow-2xl border-2 border-primary/20 rounded-xl overflow-hidden animate-in fade-in slide-in-from-top-2">
                     <div className="divide-y">
                       {addressSuggestions.map((s, i) => (
                         <div 
