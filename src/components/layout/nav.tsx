@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -40,9 +41,9 @@ export function Sidebar({ className }: { className?: string }) {
   const { auth, firestore, user } = useFirebase()
   const router = useRouter()
 
-  // Obtenemos el perfil real del usuario desde Firestore de forma segura
+  // Obtenemos el perfil real del usuario desde Firestore
   const userDocRef = useMemoFirebase(() => user ? doc(firestore, 'users', user.uid) : null, [user, firestore])
-  const { data: userData } = useDoc(userDocRef)
+  const { data: userData, isLoading: isUserDocLoading } = useDoc(userDocRef)
   
   const handleLogout = async () => {
     try {
@@ -85,12 +86,14 @@ export function Sidebar({ className }: { className?: string }) {
           <div className="flex items-center gap-3 px-3 py-2">
             <Avatar className="h-8 w-8 border border-primary/20">
               <AvatarImage src={`https://picsum.photos/seed/${user.uid}/100/100`} />
-              <AvatarFallback>{user.email?.[0].toUpperCase()}</AvatarFallback>
+              <AvatarFallback>{user.email?.[0].toUpperCase() || 'U'}</AvatarFallback>
             </Avatar>
             <div className="flex flex-col overflow-hidden">
-              <span className="text-sm font-semibold truncate">{userData?.name || user.email?.split('@')[0]}</span>
+              <span className="text-sm font-semibold truncate">
+                {userData?.name || user.email?.split('@')[0] || 'Usuario'}
+              </span>
               <span className="text-[10px] text-muted-foreground truncate uppercase font-bold tracking-tighter">
-                {userData?.role || 'Cargando...'}
+                {isUserDocLoading ? 'Cargando...' : (userData?.role || 'Sin Rol')}
               </span>
             </div>
           </div>
