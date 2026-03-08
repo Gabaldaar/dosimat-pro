@@ -133,7 +133,6 @@ export default function AccountsPage() {
 
     const id = editingAccountId || Math.random().toString(36).substring(2, 11)
     
-    // Cerramos primero el diálogo para evitar conflictos de renderizado
     setIsAccountDialogOpen(false)
     
     setDocumentNonBlocking(doc(db, 'financial_accounts', id), { ...accountFormData, id }, { merge: true })
@@ -231,45 +230,51 @@ export default function AccountsPage() {
           </div>
         ) : (accounts && accounts.length > 0) ? (
           <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {accounts.map((account: any) => (
-              <Card key={account.id} className="glass-card overflow-hidden group">
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between">
-                    <div className={`p-2 rounded-lg ${
-                      account.type === 'Bank' ? 'bg-blue-100 text-blue-700' : 
-                      account.type === 'Cash' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-                    }`}>
-                      {account.type === 'Bank' ? <Building2 className="h-5 w-5" /> : 
-                       account.type === 'Cash' ? <Banknote className="h-5 w-5" /> : <Wallet className="h-5 w-5" />}
+            {accounts.map((account: any) => {
+              const isUSD = account.currency === 'USD';
+              const themeColor = isUSD ? 'text-emerald-700' : 'text-blue-700';
+              const bgColor = isUSD ? 'bg-emerald-100' : 'bg-blue-100';
+              const borderColor = isUSD ? 'border-emerald-200' : 'border-blue-200';
+
+              return (
+                <Card key={account.id} className={`glass-card overflow-hidden group border-l-4 ${isUSD ? 'border-l-emerald-500' : 'border-l-blue-500'}`}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between">
+                      <div className={`p-2 rounded-lg ${bgColor} ${themeColor}`}>
+                        {account.type === 'Bank' ? <Building2 className="h-5 w-5" /> : 
+                         account.type === 'Cash' ? <Banknote className="h-5 w-5" /> : <Wallet className="h-5 w-5" />}
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"><MoreVertical className="h-4 w-4" /></Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleOpenAccountDialog(account)}>Editar parámetros</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"><MoreVertical className="h-4 w-4" /></Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleOpenAccountDialog(account)}>Editar parámetros</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  <CardTitle className="text-base mt-2 truncate">{account.name}</CardTitle>
-                  <CardDescription className="text-[10px] font-bold uppercase tracking-widest">{account.currency}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-black tracking-tight">
-                    {account.currency === 'USD' ? 'u$s' : '$'}
-                    {Number(account.initialBalance || 0).toLocaleString('es-AR')}
-                  </div>
-                  <div className="mt-4 flex gap-2">
-                    <Button size="sm" variant="outline" className="flex-1 text-[10px] h-8 bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100" onClick={() => handleOpenTxDialog(account, 'income')}>
-                      INGRESO
-                    </Button>
-                    <Button size="sm" variant="outline" className="flex-1 text-[10px] h-8 bg-rose-50 text-rose-700 border-rose-100 hover:bg-rose-100" onClick={() => handleOpenTxDialog(account, 'expense')}>
-                      GASTO
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                    <CardTitle className="text-base mt-2 truncate">{account.name}</CardTitle>
+                    <CardDescription className={`text-[10px] font-bold uppercase tracking-widest ${themeColor}`}>
+                      {account.currency}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className={`text-2xl font-black tracking-tight ${themeColor}`}>
+                      {isUSD ? 'u$s' : '$'}
+                      {Number(account.initialBalance || 0).toLocaleString('es-AR')}
+                    </div>
+                    <div className="mt-4 flex gap-2">
+                      <Button size="sm" variant="outline" className="flex-1 text-[10px] h-8 hover:bg-emerald-50" onClick={() => handleOpenTxDialog(account, 'income')}>
+                        INGRESO
+                      </Button>
+                      <Button size="sm" variant="outline" className="flex-1 text-[10px] h-8 hover:bg-rose-50" onClick={() => handleOpenTxDialog(account, 'expense')}>
+                        GASTO
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </section>
         ) : (
           <Card className="p-12 text-center border-dashed bg-muted/5">
