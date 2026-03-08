@@ -105,7 +105,7 @@ export default function CustomersPage() {
   const handleAddressSearch = async (val: string) => {
     setFormData({ ...formData, direccion: val })
     setShowNoResults(false)
-    if (val.length > 3) {
+    if (val.length >= 3) {
       setIsSearchingAddress(true)
       try {
         const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(val)}&limit=5&lang=es`)
@@ -438,6 +438,19 @@ export default function CustomersPage() {
                               <PhoneCall className="h-3 w-3" /> Llamar
                             </a>
                           </Button>
+                          {customer.mail && (
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="h-8 gap-2 font-bold hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200"
+                              asChild
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <a href={`mailto:${customer.mail}`}>
+                                <Mail className="h-3 w-3" /> Email
+                              </a>
+                            </Button>
+                          )}
                           <Button 
                             variant="outline" 
                             size="sm" 
