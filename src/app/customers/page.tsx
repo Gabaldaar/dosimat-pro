@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -478,7 +479,7 @@ export default function CustomersPage() {
                   <Label className="font-bold text-amber-700">Equipo en Comodato</Label>
                   <p className="text-[10px] text-amber-600 uppercase tracking-widest font-black">Propiedad de la empresa</p>
                 </div>
-                <Switch checked={formData.equipoInstalado.enComodato} onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v})} />
+                <Switch checked={formData.equipoInstalado.enComodato} onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v}})} />
               </div>
               <div className="space-y-2 mt-4">
                 <Label>Medidas y Dosis</Label>

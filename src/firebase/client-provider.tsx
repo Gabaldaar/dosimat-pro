@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useMemo, useEffect, useState, type ReactNode } from 'react';
@@ -15,7 +16,7 @@ interface FirebaseClientProviderProps {
  * Mensaje de carga sincronizado para evitar errores de hidratación.
  * Debe ser exactamente el mismo en el servidor y en el cliente.
  */
-const LOADING_MESSAGE = "Validando acceso...";
+const LOADING_MESSAGE = "Sincronizando acceso...";
 
 export function FirebaseClientProvider({ children }: FirebaseClientProviderProps) {
   const firebaseServices = useMemo(() => {
