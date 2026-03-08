@@ -55,14 +55,14 @@ interface ExpenseCategory {
   currency: 'ARS' | 'USD';
 }
 
-const STORAGE_KEY = 'dosimat_pro_accounts_v2'
-const EXPENSE_KEY = 'dosimat_pro_expense_categories_v2'
+const STORAGE_KEY = 'dosimat_pro_accounts_v3'
+const EXPENSE_KEY = 'dosimat_pro_expense_categories_v3'
 
 const initialAccounts: FinancialAccount[] = [
   { id: '1', name: "Caja Efectivo ARS", type: "Cash", balance: 145000, currency: "ARS", status: "active" },
   { id: '2', name: "Banco Galicia", type: "Bank", balance: 850300, currency: "ARS", status: "active" },
   { id: '3', name: "Caja Efectivo USD", type: "Cash", balance: 2450, currency: "USD", status: "active" },
-  { id: '4', name: "Mercado Pago", type: "Digital", balance: -2500, currency: "ARS", status: "active" },
+  { id: '4', name: "Mercado Pago", type: "Digital", balance: 12000, currency: "ARS", status: "active" },
 ]
 
 const initialExpenseCategories: ExpenseCategory[] = [
@@ -164,29 +164,22 @@ export default function AccountsPage() {
       return
     }
 
-    const isEdit = !!editingAccountId;
-
-    if (isEdit) {
-      setAccounts(prev => prev.map(a => a.id === editingAccountId ? { ...a, ...accountFormData } : a))
+    if (editingAccountId) {
+      // Actualizar cuenta existente
+      setAccounts(accounts.map(a => a.id === editingAccountId ? { ...a, ...accountFormData } : a))
+      toast({ title: "Cuenta actualizada", description: "Los cambios se guardaron correctamente." })
     } else {
+      // Crear nueva cuenta
       const newAccount: FinancialAccount = {
         ...accountFormData,
         id: Math.random().toString(36).substr(2, 9)
       }
-      setAccounts(prev => [...prev, newAccount])
+      setAccounts([...accounts, newAccount])
+      toast({ title: "Cuenta creada", description: "La cuenta financiera ha sido agregada." })
     }
 
     setIsAccountDialogOpen(false)
-    
-    // Mostramos el toast después de cerrar para evitar conflictos de UI
-    setTimeout(() => {
-      toast({ 
-        title: isEdit ? "Cuenta actualizada" : "Cuenta creada", 
-        description: isEdit ? "Los cambios se guardaron correctamente." : "La cuenta financiera ha sido agregada." 
-      })
-      // Limpiamos el ID de edición después de que el diálogo se haya cerrado por completo
-      setEditingAccountId(null)
-    }, 200)
+    setEditingAccountId(null)
   }
 
   const handleOpenTxDialog = (account: FinancialAccount, type: 'income' | 'expense') => {
@@ -200,21 +193,18 @@ export default function AccountsPage() {
     if (!selectedAccount || txFormData.amount <= 0) return
 
     const multiplier = txType === 'income' ? 1 : -1
-    setAccounts(prev => prev.map(a => 
+    setAccounts(accounts.map(a => 
       a.id === selectedAccountId 
         ? { ...a, balance: a.balance + (txFormData.amount * multiplier) } 
         : a
     ))
 
     setIsTxDialogOpen(false)
-    
-    setTimeout(() => {
-      toast({ 
-        title: txType === 'income' ? "Ingreso registrado" : "Gasto registrado", 
-        description: `Se procesó el movimiento en ${selectedAccount.name}` 
-      })
-      setSelectedAccountId(null)
-    }, 200)
+    setSelectedAccountId(null)
+    toast({ 
+      title: txType === 'income' ? "Ingreso registrado" : "Gasto registrado", 
+      description: `Se procesó el movimiento en ${selectedAccount.name}` 
+    })
   }
 
   const handleTransfer = () => {
@@ -237,18 +227,15 @@ export default function AccountsPage() {
       return
     }
 
-    setAccounts(prev => prev.map(a => {
+    setAccounts(accounts.map(a => {
       if (a.id === fromId) return { ...a, balance: a.balance - amount }
       if (a.id === toId) return { ...a, balance: a.balance + amount }
       return a
     }))
 
     setIsTransferDialogOpen(false)
-
-    setTimeout(() => {
-      toast({ title: "Transferencia exitosa", description: "El dinero ha sido movido correctamente." })
-      setTransferFormData({ fromId: "", toId: "", amount: 0 })
-    }, 200)
+    setTransferFormData({ fromId: "", toId: "", amount: 0 })
+    toast({ title: "Transferencia exitosa", description: "El dinero ha sido movido correctamente." })
   }
 
   return (
@@ -296,7 +283,6 @@ export default function AccountsPage() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={() => handleOpenAccountDialog(account)}>Editar Cuenta</DropdownMenuItem>
-                      <DropdownMenuItem>Ver Historial</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
