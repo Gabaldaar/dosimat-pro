@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 import Link from "next/link"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent } from "@/components/ui/card"
@@ -42,6 +42,12 @@ import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, d
 import { collection, doc } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 
+declare global {
+  interface Window {
+    google: any;
+  }
+}
+
 export default function CustomersPage() {
   const { toast } = useToast()
   const db = useFirestore()
@@ -60,7 +66,32 @@ export default function CustomersPage() {
   
   const [addressSuggestions, setAddressSuggestions] = useState<any[]>([])
   const [isSearchingAddress, setIsSearchingAddress] = useState(false)
-  const [showNoResults, setShowNoResults] = useState(false)
+  
+  const autocompleteService = useRef<any>(null)
+  const placesService = useRef<any>(null)
+
+  // Cargar Google Maps Script si no existe
+  useEffect(() => {
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    if (!apiKey) return;
+
+    if (!window.google) {
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+      script.async = true;
+      script.defer = true;
+      script.onload = () => {
+        autocompleteService.current = new window.google.maps.places.AutocompleteService();
+        const dummyDiv = document.createElement('div');
+        placesService.current = new window.google.maps.places.PlacesService(dummyDiv);
+      };
+      document.head.appendChild(script);
+    } else if (!autocompleteService.current) {
+      autocompleteService.current = new window.google.maps.places.AutocompleteService();
+      const dummyDiv = document.createElement('div');
+      placesService.current = new window.google.maps.places.PlacesService(dummyDiv);
+    }
+  }, []);
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -103,39 +134,55 @@ export default function CustomersPage() {
 
   const handleAddressSearch = async (val: string) => {
     setFormData({ ...formData, direccion: val })
-    setShowNoResults(false)
-    if (val.length >= 3) {
+    if (val.length >= 3 && autocompleteService.current) {
       setIsSearchingAddress(true)
-      try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(val + ', Argentina')}&limit=5&addressdetails=1&countrycodes=ar`)
-        const data = await res.json()
-        setAddressSuggestions(data || [])
-        if (!data || data.length === 0) setShowNoResults(true)
-      } catch (e) {
-        console.error("Error fetching address:", e)
-      } finally {
+      autocompleteService.current.getPlacePredictions({
+        input: val,
+        componentRestrictions: { country: 'ar' },
+        types: ['address']
+      }, (predictions: any, status: any) => {
         setIsSearchingAddress(false)
-      }
+        if (status === 'OK' && predictions) {
+          setAddressSuggestions(predictions)
+        } else {
+          setAddressSuggestions([])
+        }
+      })
     } else {
       setAddressSuggestions([])
     }
   }
 
-  const selectAddress = (s: any) => {
-    const addr = s.address;
-    const street = addr.road || addr.pedestrian || addr.suburb || addr.neighbourhood || "";
-    const num = addr.house_number ? ` ${addr.house_number}` : "";
-    const city = addr.city || addr.town || addr.village || addr.municipality || "";
-    const state = addr.state || "";
-    
-    setFormData({
-      ...formData,
-      direccion: `${street}${num}`.trim(),
-      localidad: city,
-      provincia: state
+  const selectAddress = (prediction: any) => {
+    if (!placesService.current) return;
+
+    placesService.current.getDetails({
+      placeId: prediction.place_id,
+      fields: ['address_components', 'formatted_address']
+    }, (place: any, status: any) => {
+      if (status === 'OK' && place) {
+        const components = place.address_components;
+        let street = "";
+        let number = "";
+        let city = "";
+        let state = "";
+
+        components.forEach((c: any) => {
+          if (c.types.includes('route')) street = c.long_name;
+          if (c.types.includes('street_number')) number = c.long_name;
+          if (c.types.includes('locality')) city = c.long_name;
+          if (c.types.includes('administrative_area_level_1')) state = c.long_name;
+        });
+
+        setFormData({
+          ...formData,
+          direccion: `${street} ${number}`.trim(),
+          localidad: city,
+          provincia: state
+        })
+        setAddressSuggestions([])
+      }
     })
-    setAddressSuggestions([])
-    setShowNoResults(false)
   }
 
   const filteredCustomers = useMemo(() => {
@@ -195,7 +242,6 @@ export default function CustomersPage() {
       setFormData(defaultFormData)
     }
     setAddressSuggestions([])
-    setShowNoResults(false)
     setIsDialogOpen(true)
   }
 
@@ -322,7 +368,7 @@ export default function CustomersPage() {
                     ${filteredTotals.ars.toLocaleString('es-AR')}
                   </h3>
                 </div>
-                <div className="text-[10px] text-muted-foreground font-bold uppercase">Pesos Argentinos</div>
+                <div className="text-[10px] text-muted-foreground font-bold uppercase text-right">Pesos Argentinos</div>
               </CardContent>
             </Card>
 
@@ -338,7 +384,7 @@ export default function CustomersPage() {
                     u$s {filteredTotals.usd.toLocaleString('es-AR')}
                   </h3>
                 </div>
-                <div className="text-[10px] text-muted-foreground font-bold uppercase">Dólares Estadounidenses</div>
+                <div className="text-[10px] text-muted-foreground font-bold uppercase text-right">Dólares Estadounidenses</div>
               </CardContent>
             </Card>
           </section>
@@ -410,12 +456,6 @@ export default function CustomersPage() {
                           <MapPin className="h-4 w-4 shrink-0 text-primary/60" />
                           <span className="truncate">{customer.direccion}, {customer.localidad}</span>
                         </div>
-                        {customer.mail && (
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Mail className="h-3 w-3 shrink-0 text-primary/60" />
-                            <span className="truncate">{customer.mail}</span>
-                          </div>
-                        )}
                         <div className="flex flex-wrap gap-2 mt-4">
                           <Button 
                             variant="secondary" 
@@ -572,13 +612,13 @@ export default function CustomersPage() {
 
             <TabsContent value="address" className="space-y-4 py-4">
               <div className="space-y-2 relative">
-                <Label className="flex items-center gap-2 font-bold text-primary">Dirección (Búsqueda inteligente)</Label>
+                <Label className="flex items-center gap-2 font-bold text-primary">Dirección (Google Maps)</Label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-3 h-4 w-4 text-primary" />
                   <Input 
                     value={formData.direccion} 
                     onChange={(e) => handleAddressSearch(e.target.value)} 
-                    placeholder="Ej: Av. del Libertador 123" 
+                    placeholder="Escribe para buscar..." 
                     className="pl-10 h-11 border-primary/20 focus:border-primary shadow-sm"
                   />
                   {isSearchingAddress && (
@@ -588,35 +628,27 @@ export default function CustomersPage() {
                   )}
                 </div>
                 
-                {/* Sugerencias de dirección con mayor prioridad visual */}
-                {(addressSuggestions.length > 0 || showNoResults) && (
+                {addressSuggestions.length > 0 && (
                   <div className="absolute z-[999] w-full mt-1 bg-white shadow-2xl border-2 border-primary/20 rounded-xl overflow-hidden animate-in fade-in slide-in-from-top-2">
-                    {showNoResults ? (
-                      <div className="p-4 text-center text-sm text-muted-foreground italic flex flex-col items-center gap-2">
-                        <MapPin className="h-6 w-6 opacity-20" />
-                        No se encontraron resultados
-                      </div>
-                    ) : (
-                      <div className="divide-y">
-                        {addressSuggestions.map((s, i) => (
-                          <div 
-                            key={i} 
-                            className="p-4 hover:bg-primary/5 cursor-pointer text-sm transition-colors flex items-start gap-3 group"
-                            onClick={() => selectAddress(s)}
-                          >
-                            <MapPin className="h-5 w-5 mt-0.5 text-primary/40 group-hover:text-primary shrink-0" />
-                            <div>
-                              <p className="font-bold text-foreground group-hover:text-primary transition-colors">
-                                {s.display_name.split(',')[0]}
-                              </p>
-                              <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium mt-0.5">
-                                {s.display_name.split(',').slice(1, 4).join(',')}
-                              </p>
-                            </div>
+                    <div className="divide-y">
+                      {addressSuggestions.map((s, i) => (
+                        <div 
+                          key={i} 
+                          className="p-4 hover:bg-primary/5 cursor-pointer text-sm transition-colors flex items-start gap-3 group"
+                          onClick={() => selectAddress(s)}
+                        >
+                          <MapPin className="h-5 w-5 mt-0.5 text-primary/40 group-hover:text-primary shrink-0" />
+                          <div>
+                            <p className="font-bold text-foreground group-hover:text-primary transition-colors">
+                              {s.structured_formatting?.main_text || s.description}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium mt-0.5">
+                              {s.structured_formatting?.secondary_text}
+                            </p>
                           </div>
-                        ))}
-                      </div>
-                    )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
