@@ -15,7 +15,6 @@ import {
   ChevronRight, 
   PhoneCall, 
   User, 
-  Info, 
   Droplets, 
   Trash2, 
   Map, 
@@ -23,7 +22,6 @@ import {
   FilterX,
   TrendingUp,
   Banknote,
-  PlusCircle,
   RefreshCw,
   Calculator,
   Loader2,
@@ -70,22 +68,18 @@ export default function CustomersPage() {
   const autocompleteService = useRef<any>(null)
   const placesService = useRef<any>(null)
 
-  // Inicialización de Google Maps
+  // Carga e inicialización de Google Maps
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-    if (!apiKey) {
-      console.warn("Google Maps API Key no encontrada en .env");
-      return;
-    }
+    if (!apiKey) return;
 
-    const initServices = () => {
+    const initGoogle = () => {
       if (window.google?.maps?.places && !autocompleteService.current) {
         try {
           autocompleteService.current = new window.google.maps.places.AutocompleteService();
           const dummyDiv = document.createElement('div');
           placesService.current = new window.google.maps.places.PlacesService(dummyDiv);
           setIsGoogleReady(true);
-          console.log("Google Places Services inicializados correctamente");
         } catch (e) {
           console.error("Error inicializando Google Places:", e);
         }
@@ -93,22 +87,22 @@ export default function CustomersPage() {
     };
 
     if (window.google?.maps?.places) {
-      initServices();
+      initGoogle();
     } else {
-      const scriptId = 'google-maps-script';
+      const scriptId = 'google-maps-loader';
       if (!document.getElementById(scriptId)) {
         const script = document.createElement('script');
         script.id = scriptId;
         script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
         script.async = true;
         script.defer = true;
-        script.onload = initServices;
+        script.onload = initGoogle;
         document.head.appendChild(script);
       }
     }
   }, []);
 
-  // Fix para puntero bloqueado
+  // Fix para puntero bloqueado en ShadCN Dialogs
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -148,13 +142,11 @@ export default function CustomersPage() {
 
   const [formData, setFormData] = useState(defaultFormData)
 
-  const handleAddressSearch = async (val: string) => {
+  const handleAddressSearch = (val: string) => {
     setFormData(prev => ({ ...prev, direccion: val }));
     
     if (val.length >= 3 && autocompleteService.current) {
       setIsSearchingAddress(true);
-      console.log("Buscando dirección:", val);
-      
       autocompleteService.current.getPlacePredictions({
         input: val,
         componentRestrictions: { country: 'ar' },
@@ -164,7 +156,6 @@ export default function CustomersPage() {
         if (status === 'OK' && predictions) {
           setAddressSuggestions(predictions);
         } else {
-          console.log("Google Status:", status);
           setAddressSuggestions([]);
         }
       });
@@ -379,31 +370,27 @@ export default function CustomersPage() {
           <section className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
             <Card className="glass-card bg-primary/5 border-l-4 border-l-primary overflow-hidden relative">
               <Calculator className="absolute right-4 top-1/2 -translate-y-1/2 h-12 w-12 text-primary/10 -rotate-12" />
-              <CardContent className="p-4 flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] font-black text-primary uppercase tracking-widest">Total Filtrado ARS</p>
-                  <h3 className={cn(
-                    "text-xl font-black mt-1",
-                    filteredTotals.ars < 0 ? "text-rose-600" : "text-emerald-600"
-                  )}>
-                    ${filteredTotals.ars.toLocaleString('es-AR')}
-                  </h3>
-                </div>
+              <CardContent className="p-4">
+                <p className="text-[10px] font-black text-primary uppercase tracking-widest">Total Filtrado ARS</p>
+                <h3 className={cn(
+                  "text-xl font-black mt-1",
+                  filteredTotals.ars < 0 ? "text-rose-600" : "text-emerald-600"
+                )}>
+                  ${filteredTotals.ars.toLocaleString('es-AR')}
+                </h3>
               </CardContent>
             </Card>
 
             <Card className="glass-card bg-emerald-50/50 border-l-4 border-l-emerald-500 overflow-hidden relative">
               <TrendingUp className="absolute right-4 top-1/2 -translate-y-1/2 h-12 w-12 text-emerald-500/10 -rotate-12" />
-              <CardContent className="p-4 flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Total Filtrado USD</p>
-                  <h3 className={cn(
-                    "text-xl font-black mt-1",
-                    filteredTotals.usd < 0 ? "text-rose-600" : "text-emerald-600"
-                  )}>
-                    u$s {filteredTotals.usd.toLocaleString('es-AR')}
-                  </h3>
-                </div>
+              <CardContent className="p-4">
+                <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Total Filtrado USD</p>
+                <h3 className={cn(
+                  "text-xl font-black mt-1",
+                  filteredTotals.usd < 0 ? "text-rose-600" : "text-emerald-600"
+                )}>
+                  u$s {filteredTotals.usd.toLocaleString('es-AR')}
+                </h3>
               </CardContent>
             </Card>
           </section>
@@ -589,7 +576,7 @@ export default function CustomersPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                 <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
                   <Label className="font-bold">Cliente de Reposición</Label>
-                  <Switch checked={formData.esClienteReposicion} onCheckedChange={(v) => setFormData({...formData, esClienteReposicion: v})} />
+                  <Switch checked={formData.esClienteReposicion} onCheckedChange={(v) => setFormData(prev => ({ ...prev, esClienteReposicion: v }))} />
                 </div>
                 <div className="flex items-center justify-between p-3 border rounded-lg bg-amber-50/50 border-amber-200">
                   <Label className="font-bold text-amber-700">Equipo en Comodato</Label>
@@ -620,7 +607,7 @@ export default function CustomersPage() {
                 </div>
                 
                 {addressSuggestions.length > 0 && (
-                  <div className="absolute z-[9999] w-full mt-1 bg-white shadow-2xl border-2 border-primary/20 rounded-xl overflow-hidden animate-in fade-in slide-in-from-top-2">
+                  <div className="fixed z-[9999] bg-white shadow-2xl border-2 border-primary/20 rounded-xl overflow-hidden mt-1 max-w-[500px] w-full animate-in fade-in slide-in-from-top-2">
                     <div className="divide-y">
                       {addressSuggestions.map((s, i) => (
                         <div 
