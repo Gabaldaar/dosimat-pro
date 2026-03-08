@@ -620,7 +620,7 @@ export default function CustomersPage() {
                   </div>
                   <Switch 
                     checked={formData.equipoInstalado?.enComodato} 
-                    onCheckedChange={(v) => setFormData({ ...formData, equipoInstalado: { ...formData.equipoInstalado, enComodato: v } })} 
+                    onCheckedChange={(v) => setFormData(prev => ({ ...prev, equipoInstalado: { ...prev.equipoInstalado, enComodato: v } }))} 
                   />
                 </div>
               </div>
@@ -688,11 +688,11 @@ export default function CustomersPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Modelo del Dosificador</Label>
-                  <Input value={formData.equipoInstalado.modeloEquipo} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, modeloEquipo: e.target.value}})} placeholder="Ej: Dosimat G4" />
+                  <Input value={formData.equipoInstalado.modeloEquipo} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, modeloEquipo: e.target.value}}))} placeholder="Ej: Dosimat G4" />
                 </div>
                 <div className="space-y-2">
                   <Label>Volumen de Piscina (Litros)</Label>
-                  <Input type="number" value={formData.equipoInstalado.volumen} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, volumen: Number(e.target.value)}})} />
+                  <Input type="number" value={formData.equipoInstalado.volumen} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, volumen: Number(e.target.value)}}))} />
                 </div>
               </div>
               <div className="flex items-center justify-between p-3 border rounded-lg bg-amber-50/50 border-amber-200 mt-6">
@@ -702,12 +702,12 @@ export default function CustomersPage() {
                 </div>
                 <Switch 
                   checked={formData.equipoInstalado?.enComodato} 
-                  onCheckedChange={(v) => setFormData({ ...formData, equipoInstalado: { ...formData.equipoInstalado, enComodato: v } })} 
+                  onCheckedChange={(v) => setFormData(prev => ({ ...prev, equipoInstalado: { ...prev.equipoInstalado, enComodato: v } }))} 
                 />
               </div>
               <div className="space-y-2 mt-4">
                 <Label>Medidas y Dosis</Label>
-                <Input value={formData.equipoInstalado.medidasPileta} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, medidasPileta: e.target.value}})} placeholder="Ej: 8x4 metros" />
+                <Input value={formData.equipoInstalado.medidasPileta} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, medidasPileta: e.target.value}}))} placeholder="Ej: 8x4 metros" />
               </div>
             </TabsContent>
           </Tabs>
