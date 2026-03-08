@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import Link from "next/link"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent } from "@/components/ui/card"
@@ -39,6 +39,8 @@ import { cn } from "@/lib/utils"
 const txTypeMap: Record<string, { label: string, icon: any, color: string }> = {
   sale: { label: "Venta", icon: History, color: "text-blue-600 bg-blue-50" },
   refill: { label: "Reposición", icon: Droplets, color: "text-cyan-600 bg-cyan-50" },
+  service: { label: "Servicio", icon: Box, color: "text-indigo-600 bg-indigo-50" },
+  cobro: { label: "Cobro", icon: Box, color: "text-emerald-600 bg-emerald-50" },
 }
 
 export default function CustomersPage() {
@@ -57,6 +59,19 @@ export default function CustomersPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<any>(null)
   
+  // SOLUCIÓN TÉCNICA DEFINITIVA: Observador de mutaciones para forzar desbloqueo del puntero del ratón
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      if (document.body.style.pointerEvents === 'none') {
+        if (!isDialogOpen) {
+          document.body.style.pointerEvents = 'auto';
+        }
+      }
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+    return () => observer.disconnect();
+  }, [isDialogOpen]);
+
   const defaultFormData = {
     apellido: "",
     nombre: "",
@@ -163,6 +178,7 @@ export default function CustomersPage() {
 
     setDocumentNonBlocking(doc(db, 'clients', id), finalData, { merge: true })
     setIsDialogOpen(false)
+    setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100)
     toast({ title: editingCustomer ? "Cliente actualizado" : "Cliente creado" })
   }
 
@@ -344,7 +360,10 @@ export default function CustomersPage() {
         )}
       </main>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={isDialogOpen} onOpenChange={(o) => {
+        setIsDialogOpen(o);
+        if(!o) setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
+      }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold flex items-center gap-2">
@@ -495,7 +514,10 @@ export default function CustomersPage() {
           </Tabs>
 
           <DialogFooter className="mt-6 border-t pt-4">
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => {
+              setIsDialogOpen(false);
+              setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
+            }}>Cancelar</Button>
             <Button onClick={handleSave} className="px-8"><Plus className="mr-2 h-4 w-4" /> Guardar Cliente</Button>
           </DialogFooter>
         </DialogContent>

@@ -12,7 +12,7 @@ interface FirebaseClientProviderProps {
 }
 
 /**
- * Mensaje de carga constante sincronizado con el servidor para evitar errores de hidratación.
+ * Mensaje de carga constante sincronizado para evitar errores de hidratación de Next.js.
  */
 const LOADING_MESSAGE = "Validando acceso...";
 
@@ -52,7 +52,7 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
     }
   }, [firebaseServices.auth, pathname, router, mounted]);
 
-  // Si no ha montado o está validando auth, mostramos pantalla de carga consistente
+  // Si no ha montado o está validando auth, mostramos pantalla de carga consistente con el servidor
   if (!mounted || isInitializing) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
