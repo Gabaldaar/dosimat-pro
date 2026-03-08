@@ -89,7 +89,20 @@
         "currency": { "type": "string" },
         "financialAccountId": { "type": "string" },
         "clientId": { "type": "string" },
-        "description": { "type": "string" }
+        "description": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "itemId": { "type": "string" },
+              "name": { "type": "string" },
+              "qty": { "type": "number" },
+              "price": { "type": "number" },
+              "currency": { "type": "string" }
+            }
+          }
+        }
       },
       "required": ["id", "date", "type", "amount", "currency"]
     }
