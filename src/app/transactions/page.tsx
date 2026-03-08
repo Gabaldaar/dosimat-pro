@@ -3,9 +3,9 @@
 
 import { useState, useEffect, useMemo } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -18,10 +18,17 @@ import {
   AlertCircle,
   CreditCard,
   Banknote,
-  ClipboardCheck
+  ClipboardCheck,
+  History,
+  Search,
+  Calendar,
+  Filter,
+  User,
+  ArrowRight
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
 
 interface CatalogItem {
   id: string;
@@ -52,63 +59,71 @@ interface SelectedItem {
   currency: 'ARS' | 'USD';
 }
 
+interface Transaction {
+  id: string;
+  date: string;
+  customerId: string;
+  customerName: string;
+  type: 'sale' | 'refill' | 'service' | 'adjustment';
+  items: SelectedItem[];
+  totals: Record<string, number>;
+  destinationAccounts: Record<string, string>;
+  createdAt: string;
+}
+
 const STORAGE_KEYS = {
   CATALOG: 'dosimat_pro_v1_catalog',
   CUSTOMERS: 'dosimat_pro_v1_customers',
-  ACCOUNTS: 'dosimat_pro_v1_accounts'
+  ACCOUNTS: 'dosimat_pro_v1_accounts',
+  TRANSACTIONS: 'dosimat_pro_v1_transactions'
 }
 
 export default function TransactionsPage() {
   const { toast } = useToast()
   const [mounted, setMounted] = useState(false)
+  const [mainView, setMainView] = useState("register")
   const [activeTab, setActiveTab] = useState("sale")
   
   // Data from other modules
   const [catalog, setCatalog] = useState<CatalogItem[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [transactions, setTransactions] = useState<Transaction[]>([])
 
-  // Transaction state
+  // Registration state
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("")
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([])
   const [currentAddItem, setCurrentAddItem] = useState<string>("")
-
-  // Destino por moneda: { ARS: accountId, USD: accountId }
   const [destinationAccounts, setDestinationAccounts] = useState<Record<string, string>>({
     ARS: "",
     USD: ""
   })
 
+  // History filters
+  const [filterCustomer, setFilterCustomer] = useState("all")
+  const [filterMonth, setFilterMonth] = useState("all")
+  const [filterAccount, setFilterAccount] = useState("all")
+
   useEffect(() => {
     const savedCatalog = localStorage.getItem(STORAGE_KEYS.CATALOG)
     const savedCustomers = localStorage.getItem(STORAGE_KEYS.CUSTOMERS)
     const savedAccounts = localStorage.getItem(STORAGE_KEYS.ACCOUNTS)
+    const savedTransactions = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS)
 
     if (savedCatalog) setCatalog(JSON.parse(savedCatalog))
     if (savedCustomers) setCustomers(JSON.parse(savedCustomers))
     if (savedAccounts) setAccounts(JSON.parse(savedAccounts))
+    if (savedTransactions) setTransactions(JSON.parse(savedTransactions))
     
     setMounted(true)
   }, [])
 
-  // Filtrar catálogo según la pestaña activa
-  const filteredCatalog = useMemo(() => {
-    if (activeTab === "sale") return catalog;
-    if (activeTab === "refill") return catalog.filter(i => i.category === "Químicos");
-    if (activeTab === "service") return catalog.filter(i => i.category === "Servicios" || i.category === "Equipos" || i.category === "Repuestos");
-    if (activeTab === "adjustment") return catalog.filter(i => i.stock !== null); // Solo productos con stock para ajustes
-    return catalog;
-  }, [catalog, activeTab]);
-
-  const tabInfo = useMemo(() => {
-    switch (activeTab) {
-      case "refill": return { title: "Nueva Reposición", desc: "Registro de entrega de químicos.", icon: Droplets };
-      case "service": return { title: "Servicio Técnico", desc: "Mantenimiento o reparación de equipos.", icon: Wrench };
-      case "adjustment": return { title: "Ajuste de Stock", desc: "Registro de mermas, roturas o consumo propio.", icon: RefreshCw };
-      default: return { title: "Nueva Venta", desc: "Venta directa de productos o servicios.", icon: ShoppingCart };
+  useEffect(() => {
+    if (mounted) {
+      localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions))
     }
-  }, [activeTab]);
+  }, [transactions, mounted])
 
   const handleAddItem = (itemId: string) => {
     if (!itemId || itemId === "none") return;
@@ -121,7 +136,7 @@ export default function TransactionsPage() {
         itemId: item.id,
         name: item.name,
         qty: 1,
-        price: activeTab === 'adjustment' ? 0 : item.price, // Precio 0 por defecto si es ajuste
+        price: activeTab === 'adjustment' ? 0 : item.price,
         currency: item.currency
       }
     ])
@@ -138,325 +153,334 @@ export default function TransactionsPage() {
     ))
   }
 
-  const totals = useMemo(() => {
+  const cartTotals = useMemo(() => {
     return selectedItems.reduce((acc, item) => {
       acc[item.currency] = (acc[item.currency] || 0) + (item.price * item.qty)
       return acc
     }, { ARS: 0, USD: 0 } as Record<string, number>)
   }, [selectedItems])
 
-  const currenciesInCart = useMemo(() => {
-    // Solo requerimos cuenta de destino si hay un monto mayor a 0
-    const currencies = selectedItems
-      .filter(i => (i.price * i.qty) > 0)
-      .map(i => i.currency);
-    return Array.from(new Set(currencies));
-  }, [selectedItems]);
-
   const handleSaveTransaction = () => {
     if (!selectedCustomerId || selectedItems.length === 0) {
-      toast({
-        title: "Error",
-        description: "Completa el cliente y selecciona al menos un ítem.",
-        variant: "destructive"
-      })
+      toast({ title: "Error", description: "Completa el cliente y selecciona al menos un ítem.", variant: "destructive" })
       return
     }
 
-    const missingAccounts = currenciesInCart.filter(curr => !destinationAccounts[curr]);
-    if (missingAccounts.length > 0) {
-      toast({
-        title: "Atención",
-        description: `Selecciona una cuenta de destino para: ${missingAccounts.join(', ')}`,
-        variant: "destructive"
-      })
-      return;
+    const customer = customers.find(c => c.id === selectedCustomerId)
+    const newTx: Transaction = {
+      id: Math.random().toString(36).substr(2, 9),
+      date,
+      customerId: selectedCustomerId,
+      customerName: customer ? `${customer.apellido}, ${customer.nombre}` : "Desconocido",
+      type: activeTab as any,
+      items: [...selectedItems],
+      totals: { ...cartTotals },
+      destinationAccounts: { ...destinationAccounts },
+      createdAt: new Date().toISOString()
     }
 
-    toast({
-      title: "Operación Registrada",
-      description: `Se ha procesado el registro de ${tabInfo.title.toLowerCase()} exitosamente.`,
-    })
+    setTransactions(prev => [newTx, ...prev])
+    toast({ title: "Operación Registrada", description: "Se ha guardado en el historial con éxito." })
     
-    // Reset form
+    // Reset
     setSelectedCustomerId("")
-    setDestinationAccounts({ ARS: "", USD: "" })
     setSelectedItems([])
+    setDestinationAccounts({ ARS: "", USD: "" })
+    setMainView("history") // Cambiar a historial para ver el resultado
   }
 
-  if (!mounted) return null
+  // Filtering Logic
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter(tx => {
+      const matchCustomer = filterCustomer === "all" || tx.customerId === filterCustomer
+      const matchMonth = filterMonth === "all" || tx.date.startsWith(filterMonth)
+      const matchAccount = filterAccount === "all" || Object.values(tx.destinationAccounts).includes(filterAccount)
+      return matchCustomer && matchMonth && matchAccount
+    })
+  }, [transactions, filterCustomer, filterMonth, filterAccount])
 
-  const TabIcon = tabInfo.icon;
+  const historyTotals = useMemo(() => {
+    return filteredTransactions.reduce((acc, tx) => {
+      acc.ARS += tx.totals.ARS || 0
+      acc.USD += tx.totals.USD || 0
+      return acc
+    }, { ARS: 0, USD: 0 })
+  }, [filteredTransactions])
+
+  const monthsAvailable = useMemo(() => {
+    const months = transactions.map(tx => tx.date.substring(0, 7))
+    return Array.from(new Set(months)).sort().reverse()
+  }, [transactions])
+
+  if (!mounted) return null
 
   return (
     <div className="flex min-h-screen">
       <Sidebar className="hidden md:flex w-64 fixed inset-y-0" />
       
       <main className="flex-1 md:ml-64 pb-20 md:pb-8 p-4 md:p-8 space-y-6">
-        <header>
-          <h1 className="text-3xl font-headline font-bold text-primary">Operaciones</h1>
-          <p className="text-muted-foreground">Gestión integrada de ventas, servicios y stock.</p>
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-headline font-bold text-primary">Operaciones</h1>
+            <p className="text-muted-foreground">Gestión integrada y seguimiento histórico.</p>
+          </div>
+          <Tabs value={mainView} onValueChange={setMainView} className="w-full md:w-auto">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="register">Nueva Operación</TabsTrigger>
+              <TabsTrigger value="history">Historial</TabsTrigger>
+            </TabsList>
+          </Tabs>
         </header>
 
-        <Tabs value={activeTab} onValueChange={(v) => {
-          setActiveTab(v);
-          setSelectedItems([]); // Limpiar items al cambiar de tipo de operacion para evitar errores
-        }} className="w-full">
-          <TabsList className="grid grid-cols-2 md:grid-cols-4 h-auto p-1 bg-white border mb-6">
-            <TabsTrigger value="sale" className="data-[state=active]:bg-primary data-[state=active]:text-white py-3">
-              <ShoppingCart className="h-4 w-4 mr-2" /> Venta
-            </TabsTrigger>
-            <TabsTrigger value="refill" className="data-[state=active]:bg-primary data-[state=active]:text-white py-3">
-              <Droplets className="h-4 w-4 mr-2" /> Reposición
-            </TabsTrigger>
-            <TabsTrigger value="service" className="data-[state=active]:bg-primary data-[state=active]:text-white py-3">
-              <Wrench className="h-4 w-4 mr-2" /> Técnico
-            </TabsTrigger>
-            <TabsTrigger value="adjustment" className="data-[state=active]:bg-primary data-[state=active]:text-white py-3">
-              <RefreshCw className="h-4 w-4 mr-2" /> Ajuste Stock
-            </TabsTrigger>
-          </TabsList>
+        {mainView === "register" ? (
+          <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
+            <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedItems([]); }} className="w-full">
+              <TabsList className="grid grid-cols-2 md:grid-cols-4 h-auto p-1 bg-white border mb-6">
+                <TabsTrigger value="sale" className="py-3"><ShoppingCart className="h-4 w-4 mr-2" /> Venta</TabsTrigger>
+                <TabsTrigger value="refill" className="py-3"><Droplets className="h-4 w-4 mr-2" /> Reposición</TabsTrigger>
+                <TabsTrigger value="service" className="py-3"><Wrench className="h-4 w-4 mr-2" /> Técnico</TabsTrigger>
+                <TabsTrigger value="adjustment" className="py-3"><RefreshCw className="h-4 w-4 mr-2" /> Ajuste Stock</TabsTrigger>
+              </TabsList>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <Card className="lg:col-span-2 glass-card border-t-4 border-t-primary">
-              <CardHeader className="pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-primary/10 rounded-lg text-primary">
-                    <TabIcon className="h-6 w-6" />
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <Card className="lg:col-span-2 glass-card">
+                  <CardHeader>
+                    <CardTitle className="text-xl capitalize">{activeTab === 'adjustment' ? 'Ajuste de Stock' : `Registro de ${activeTab}`}</CardTitle>
+                    <CardDescription>Completa los datos de la operación</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase text-muted-foreground">Cliente / Responsable</Label>
+                        <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
+                          <SelectTrigger className="bg-white">
+                            <SelectValue placeholder="Seleccionar..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase text-muted-foreground">Fecha</Label>
+                        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="bg-white" />
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase text-muted-foreground">Agregar Items</Label>
+                        <Select value={currentAddItem} onValueChange={handleAddItem}>
+                          <SelectTrigger className="bg-white border-primary/20">
+                            <SelectValue placeholder="Elegir del catálogo..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {catalog.map(item => (
+                              <SelectItem key={item.id} value={item.id}>
+                                {item.name} - {item.currency === 'USD' ? 'u$s' : '$'}{item.price}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
+                        <Table>
+                          <TableHeader className="bg-muted/30">
+                            <TableRow>
+                              <TableHead className="text-[10px] font-bold uppercase">Concepto</TableHead>
+                              <TableHead className="text-center w-20 text-[10px] font-bold uppercase">Cant.</TableHead>
+                              <TableHead className="text-right text-[10px] font-bold uppercase">Precio</TableHead>
+                              <TableHead className="w-[50px]"></TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {selectedItems.length === 0 ? (
+                              <TableRow><TableCell colSpan={4} className="text-center py-10 text-muted-foreground italic">Carrito vacío</TableCell></TableRow>
+                            ) : (
+                              selectedItems.map((item, index) => (
+                                <TableRow key={index}>
+                                  <TableCell className="text-sm font-medium">{item.name}</TableCell>
+                                  <TableCell>
+                                    <Input 
+                                      type="number" 
+                                      className="h-8 text-center" 
+                                      value={item.qty} 
+                                      onChange={(e) => handleUpdateItem(index, 'qty', Number(e.target.value))}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex items-center justify-end gap-1">
+                                      <span className="text-xs text-muted-foreground">{item.currency}</span>
+                                      <Input 
+                                        type="number" 
+                                        className="h-8 text-right font-bold w-20" 
+                                        value={item.price} 
+                                        onChange={(e) => handleUpdateItem(index, 'price', Number(e.target.value))}
+                                      />
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(index)} className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <div className="space-y-6">
+                  <Card className="glass-card border-primary/30 shadow-lg">
+                    <CardHeader className="bg-primary/5 pb-4">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <ClipboardCheck className="h-4 w-4 text-primary" /> Resumen Liquidación
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-6 space-y-6">
+                      <div className="space-y-3">
+                        <div className={`p-4 rounded-xl border ${cartTotals.ARS > 0 ? 'bg-primary/5 border-primary/20' : 'opacity-40'}`}>
+                          <p className="text-[10px] uppercase font-bold text-muted-foreground">Total ARS</p>
+                          <p className="text-3xl font-black text-primary">${cartTotals.ARS.toLocaleString()}</p>
+                          {cartTotals.ARS > 0 && (
+                            <Select value={destinationAccounts.ARS} onValueChange={(v) => setDestinationAccounts(p => ({...p, ARS: v}))}>
+                              <SelectTrigger className="h-8 mt-2 text-xs"><SelectValue placeholder="Elegir cuenta ARS" /></SelectTrigger>
+                              <SelectContent>{accounts.filter(a => a.currency === 'ARS').map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                          )}
+                        </div>
+                        <div className={`p-4 rounded-xl border ${cartTotals.USD > 0 ? 'bg-emerald-50 border-emerald-200' : 'opacity-40'}`}>
+                          <p className="text-[10px] uppercase font-bold text-muted-foreground">Total USD</p>
+                          <p className="text-3xl font-black text-emerald-600">u$s {cartTotals.USD.toLocaleString()}</p>
+                          {cartTotals.USD > 0 && (
+                            <Select value={destinationAccounts.USD} onValueChange={(v) => setDestinationAccounts(p => ({...p, USD: v}))}>
+                              <SelectTrigger className="h-8 mt-2 text-xs"><SelectValue placeholder="Elegir cuenta USD" /></SelectTrigger>
+                              <SelectContent>{accounts.filter(a => a.currency === 'USD').map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                          )}
+                        </div>
+                      </div>
+                      <Button 
+                        className="w-full h-12 font-bold" 
+                        onClick={handleSaveTransaction}
+                        disabled={selectedItems.length === 0 || !selectedCustomerId}
+                      >
+                        CONFIRMAR Y GUARDAR
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            </Tabs>
+          </div>
+        ) : (
+          <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Card className="glass-card">
+                <CardContent className="pt-6">
+                  <Label className="text-[10px] font-bold uppercase mb-2 block">Filtrar por Cliente</Label>
+                  <Select value={filterCustomer} onValueChange={setFilterCustomer}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos los clientes</SelectItem>
+                      {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </CardContent>
+              </Card>
+              <Card className="glass-card">
+                <CardContent className="pt-6">
+                  <Label className="text-[10px] font-bold uppercase mb-2 block">Filtrar por Mes</Label>
+                  <Select value={filterMonth} onValueChange={setFilterMonth}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todo el tiempo</SelectItem>
+                      {monthsAvailable.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </CardContent>
+              </Card>
+              <Card className="glass-card">
+                <CardContent className="pt-6">
+                  <Label className="text-[10px] font-bold uppercase mb-2 block">Filtrar por Cuenta</Label>
+                  <Select value={filterAccount} onValueChange={setFilterAccount}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas las cuentas</SelectItem>
+                      {accounts.map(a => <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card className="glass-card">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Listado Histórico</CardTitle>
+                  <CardDescription>Resumen de movimientos según filtros aplicados</CardDescription>
+                </div>
+                <div className="flex gap-4">
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Subtotal Pesos</p>
+                    <p className="text-xl font-black text-primary">${historyTotals.ARS.toLocaleString()}</p>
                   </div>
-                  <div>
-                    <CardTitle>{tabInfo.title}</CardTitle>
-                    <CardDescription>{tabInfo.desc}</CardDescription>
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Subtotal Dólares</p>
+                    <p className="text-xl font-black text-emerald-600">u$s {historyTotals.USD.toLocaleString()}</p>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      {activeTab === 'adjustment' ? 'Responsable / Ubicación' : 'Seleccionar Cliente'}
-                    </Label>
-                    <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
-                      <SelectTrigger className="bg-white">
-                        <SelectValue placeholder="Buscar..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {customers.map(c => (
-                          <SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Fecha Operación</Label>
-                    <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="bg-white" />
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      {activeTab === 'adjustment' ? 'Elegir Producto para Ajustar' : `Agregar del Catálogo (${activeTab})`}
-                    </Label>
-                    <Select value={currentAddItem} onValueChange={handleAddItem}>
-                      <SelectTrigger className="bg-white border-primary/20 hover:border-primary transition-colors">
-                        <SelectValue placeholder="Elegir producto o servicio..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {filteredCatalog.length > 0 ? (
-                          filteredCatalog.map(item => (
-                            <SelectItem key={item.id} value={item.id}>
-                              [{item.category}] {item.name} {item.stock !== null ? `(Stock: ${item.stock})` : ''} - {item.currency === 'USD' ? 'u$s' : '$'}{item.price.toLocaleString('es-AR')}
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value="none" disabled>No hay ítems disponibles</SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
-                    <Table>
-                      <TableHeader className="bg-muted/30">
-                        <TableRow>
-                          <TableHead className="text-[10px] font-bold uppercase">Concepto</TableHead>
-                          <TableHead className="text-center w-20 text-[10px] font-bold uppercase">Cant.</TableHead>
-                          <TableHead className="text-right text-[10px] font-bold uppercase">Precio Un.</TableHead>
-                          <TableHead className="text-right text-[10px] font-bold uppercase">Subtotal</TableHead>
-                          <TableHead className="w-[50px]"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {selectedItems.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={5} className="text-center py-16 text-muted-foreground">
-                              <div className="flex flex-col items-center gap-2 opacity-40">
-                                <ClipboardCheck className="h-10 w-10" />
-                                <p className="text-sm font-medium">Usa el buscador superior para agregar ítems</p>
+              <CardContent>
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-muted/50">
+                      <TableRow>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Detalle Items</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredTransactions.length === 0 ? (
+                        <TableRow><TableCell colSpan={5} className="text-center py-20 text-muted-foreground">No se encontraron transacciones</TableCell></TableRow>
+                      ) : (
+                        filteredTransactions.map(tx => (
+                          <TableRow key={tx.id} className="hover:bg-muted/20 transition-colors">
+                            <TableCell className="text-xs font-bold">{tx.date}</TableCell>
+                            <TableCell className="text-sm font-medium">{tx.customerName}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-[9px] uppercase font-bold">
+                                {tx.type === 'sale' ? 'Venta' : tx.type === 'refill' ? 'Reposición' : tx.type === 'service' ? 'Técnico' : 'Ajuste'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-[10px] text-muted-foreground">
+                                {tx.items.map(i => `${i.qty}x ${i.name}`).join(", ")}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex flex-col items-end">
+                                {tx.totals.ARS > 0 && <span className="font-bold text-primary">${tx.totals.ARS.toLocaleString()}</span>}
+                                {tx.totals.USD > 0 && <span className="font-bold text-emerald-600">u$s {tx.totals.USD.toLocaleString()}</span>}
+                                {tx.totals.ARS === 0 && tx.totals.USD === 0 && <span className="text-muted-foreground italic text-xs">Ajuste</span>}
                               </div>
                             </TableCell>
                           </TableRow>
-                        ) : (
-                          selectedItems.map((item, index) => (
-                            <TableRow key={index} className="hover:bg-muted/10">
-                              <TableCell className="font-medium text-xs md:text-sm py-4">
-                                {item.name}
-                                <div className="text-[9px] text-primary font-bold uppercase mt-0.5">{item.currency}</div>
-                              </TableCell>
-                              <TableCell>
-                                <Input 
-                                  type="number" 
-                                  className="h-8 text-center text-xs" 
-                                  value={item.qty} 
-                                  onChange={(e) => handleUpdateItem(index, 'qty', Number(e.target.value))}
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center justify-end">
-                                  <span className="text-[10px] mr-1 text-muted-foreground">{item.currency === 'USD' ? 'u$s' : '$'}</span>
-                                  <Input 
-                                    type="number" 
-                                    className="h-8 text-right font-bold text-xs w-24" 
-                                    value={item.price} 
-                                    onChange={(e) => handleUpdateItem(index, 'price', Number(e.target.value))}
-                                  />
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-right font-bold text-xs">
-                                {item.currency === 'USD' ? 'u$s' : '$'}
-                                {(item.price * item.qty).toLocaleString('es-AR')}
-                              </TableCell>
-                              <TableCell>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => handleRemoveItem(index)}>
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
                 </div>
               </CardContent>
             </Card>
-
-            <div className="space-y-6">
-              <Card className="glass-card border-primary/20 shadow-xl overflow-hidden flex flex-col">
-                <CardHeader className="bg-primary/5 pb-4">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <ClipboardCheck className="h-4 w-4 text-primary" />
-                    Resumen de Operación
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-6 space-y-6 flex-1">
-                  {/* Totales */}
-                  <div className="space-y-3">
-                    <div className={`p-4 rounded-xl border transition-all ${totals.ARS > 0 ? 'bg-primary/5 border-primary/20 shadow-inner' : 'bg-muted/10 opacity-40'}`}>
-                      <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Total Pesos (ARS)</p>
-                      <p className="text-3xl font-black text-primary">${totals.ARS.toLocaleString('es-AR')}</p>
-                    </div>
-                    <div className={`p-4 rounded-xl border transition-all ${totals.USD > 0 ? 'bg-emerald-50 border-emerald-200 shadow-inner' : 'bg-muted/10 opacity-40'}`}>
-                      <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Total Dólares (USD)</p>
-                      <p className="text-3xl font-black text-emerald-600">u$s {totals.USD.toLocaleString('es-AR')}</p>
-                    </div>
-                  </div>
-
-                  <div className="h-px bg-border" />
-
-                  {/* Asignación de Cuentas (Solo si hay dinero involucrado) */}
-                  <div className="space-y-4">
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                      <div className="h-1 w-4 bg-primary rounded-full" /> 
-                      Liquidación Financiera
-                    </h4>
-                    
-                    {currenciesInCart.includes('ARS') && (
-                      <div className="space-y-2 animate-in fade-in slide-in-from-right-2 duration-300">
-                        <Label className="text-[10px] font-bold flex items-center gap-1 text-primary">
-                          <Banknote className="h-3 w-3" /> CUENTA DESTINO PESOS
-                        </Label>
-                        <Select 
-                          value={destinationAccounts.ARS} 
-                          onValueChange={(v) => setDestinationAccounts(prev => ({...prev, ARS: v}))}
-                        >
-                          <SelectTrigger className="h-10 bg-white">
-                            <SelectValue placeholder="Elegir cuenta ARS" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {accounts.filter(a => a.currency === 'ARS').map(acc => (
-                              <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-
-                    {currenciesInCart.includes('USD') && (
-                      <div className="space-y-2 animate-in fade-in slide-in-from-right-2 duration-300">
-                        <Label className="text-[10px] font-bold flex items-center gap-1 text-emerald-600">
-                          <CreditCard className="h-3 w-3" /> CUENTA DESTINO DÓLARES
-                        </Label>
-                        <Select 
-                          value={destinationAccounts.USD} 
-                          onValueChange={(v) => setDestinationAccounts(prev => ({...prev, USD: v}))}
-                        >
-                          <SelectTrigger className="h-10 bg-white">
-                            <SelectValue placeholder="Elegir cuenta USD" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {accounts.filter(a => a.currency === 'USD').map(acc => (
-                              <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-
-                    {currenciesInCart.length === 0 && selectedItems.length > 0 && (
-                      <div className="text-center py-8 bg-emerald-50/50 rounded-xl border border-dashed border-emerald-200">
-                        <p className="text-[10px] font-bold text-emerald-700 uppercase">
-                          Operación sin impacto monetario
-                        </p>
-                        <p className="text-[9px] text-emerald-600 mt-1 italic">
-                          Solo se registrará el movimiento de stock / servicio.
-                        </p>
-                      </div>
-                    )}
-
-                    {selectedItems.length === 0 && (
-                      <div className="text-center py-8 bg-muted/20 rounded-xl border border-dashed border-muted-foreground/20">
-                        <p className="text-[10px] font-medium text-muted-foreground">
-                          Agrega ítems para habilitar el cierre
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-                <div className="p-4 bg-muted/30 border-t">
-                  <Button 
-                    className="w-full h-14 text-lg font-black shadow-xl rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98]" 
-                    onClick={handleSaveTransaction}
-                    disabled={selectedItems.length === 0 || !selectedCustomerId}
-                  >
-                    {activeTab === 'adjustment' ? 'REGISTRAR AJUSTE' : 'CONFIRMAR OPERACIÓN'}
-                  </Button>
-                </div>
-              </Card>
-
-              <div className="p-5 bg-amber-50 rounded-xl border border-amber-200 flex gap-3 shadow-sm">
-                <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
-                <div className="space-y-1">
-                  <p className="text-xs font-bold text-amber-800">Control de Precios</p>
-                  <p className="text-[10px] text-amber-700 leading-relaxed italic">
-                    Cualquier cambio de precio realizado en la tabla superior se aplicará solo a este comprobante. El catálogo permanecerá intacto.
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
-        </Tabs>
+        )}
       </main>
 
       <MobileNav />
