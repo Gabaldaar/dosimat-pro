@@ -12,7 +12,9 @@ import {
   ArrowRight,
   Droplet,
   Plus,
-  Loader2
+  Loader2,
+  MapPin,
+  Calendar
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
@@ -24,7 +26,6 @@ import { collection, query, orderBy, limit } from "firebase/firestore"
 export default function Dashboard() {
   const db = useFirestore()
 
-  // Queries a Firestore
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
   const txQuery = useMemoFirebase(() => query(collection(db, 'transactions'), orderBy('date', 'desc'), limit(50)), [db])
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
@@ -33,7 +34,6 @@ export default function Dashboard() {
   const { data: transactions, isLoading: loadingTx } = useCollection(txQuery)
   const { data: clients, isLoading: loadingClients } = useCollection(clientsQuery)
 
-  // Cálculos de Saldos
   const totals = useMemo(() => {
     if (!accounts) return { ARS: 0, USD: 0 }
     return accounts.reduce((acc: any, curr: any) => {
@@ -42,7 +42,6 @@ export default function Dashboard() {
     }, { ARS: 0, USD: 0 })
   }, [accounts])
 
-  // Procesamiento para el Gráfico (Agrupado por mes)
   const chartData = useMemo(() => {
     if (!transactions) return []
     const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
@@ -84,13 +83,13 @@ export default function Dashboard() {
       <main className="flex-1 md:ml-64 pb-20 md:pb-8 p-4 md:p-8 space-y-8">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-headline font-bold text-primary">Dashboard</h1>
-            <p className="text-muted-foreground">Resumen financiero de Dosimat Pro sincronizado en la nube.</p>
+            <h1 className="text-3xl font-headline font-bold text-primary">Dashboard Administrativo</h1>
+            <p className="text-muted-foreground">ChloriTrack Pro Cloud • Control financiero y operativo.</p>
           </div>
           <div className="flex gap-2">
             <Link href="/transactions">
-              <Button className="shadow-lg rounded-full px-6">
-                <Plus className="mr-2 h-4 w-4" /> Nueva Operación
+              <Button className="shadow-lg rounded-full px-6 bg-primary font-bold">
+                <Plus className="mr-2 h-4 w-4" /> Registrar Operación
               </Button>
             </Link>
           </div>
@@ -108,12 +107,10 @@ export default function Dashboard() {
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Saldo Total ARS</p>
-                      <h3 className="text-2xl font-bold mt-1">${totals.ARS.toLocaleString('es-AR')}</h3>
+                      <p className="text-sm font-medium text-muted-foreground">Saldo ARS</p>
+                      <h3 className="text-2xl font-black mt-1">${totals.ARS.toLocaleString('es-AR')}</h3>
                     </div>
-                    <div className="bg-primary/10 p-2 rounded-full">
-                      <Wallet className="h-5 w-5 text-primary" />
-                    </div>
+                    <div className="bg-primary/10 p-2 rounded-full"><Wallet className="h-5 w-5 text-primary" /></div>
                   </div>
                 </CardContent>
               </Card>
@@ -122,12 +119,10 @@ export default function Dashboard() {
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Saldo Total USD</p>
-                      <h3 className="text-2xl font-bold mt-1">u$s {totals.USD.toLocaleString('es-AR')}</h3>
+                      <p className="text-sm font-medium text-muted-foreground">Saldo USD</p>
+                      <h3 className="text-2xl font-black mt-1">u$s {totals.USD.toLocaleString('es-AR')}</h3>
                     </div>
-                    <div className="bg-accent/20 p-2 rounded-full">
-                      <Wallet className="h-5 w-5 text-accent-foreground" />
-                    </div>
+                    <div className="bg-accent/20 p-2 rounded-full"><Wallet className="h-5 w-5 text-accent-foreground" /></div>
                   </div>
                 </CardContent>
               </Card>
@@ -136,26 +131,24 @@ export default function Dashboard() {
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Clientes Activos</p>
-                      <h3 className="text-2xl font-bold mt-1">{clients?.length || 0}</h3>
+                      <p className="text-sm font-medium text-muted-foreground">Total Clientes</p>
+                      <h3 className="text-2xl font-black mt-1">{clients?.length || 0}</h3>
                     </div>
-                    <div className="bg-emerald-100 p-2 rounded-full">
-                      <Users className="h-5 w-5 text-emerald-600" />
-                    </div>
+                    <div className="bg-emerald-100 p-2 rounded-full"><Users className="h-5 w-5 text-emerald-600" /></div>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="glass-card">
+              <Card className="glass-card border-l-4 border-l-accent">
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Operaciones Realizadas</p>
-                      <h3 className="text-2xl font-bold mt-1">{transactions?.length || 0}</h3>
+                      <p className="text-sm font-medium text-muted-foreground">Reposiciones</p>
+                      <h3 className="text-2xl font-black mt-1">
+                        {clients?.filter((c: any) => c.esClienteReposicion).length || 0}
+                      </h3>
                     </div>
-                    <div className="bg-blue-100 p-2 rounded-full">
-                      <Droplet className="h-5 w-5 text-blue-600" />
-                    </div>
+                    <div className="bg-blue-100 p-2 rounded-full"><Droplet className="h-5 w-5 text-blue-600" /></div>
                   </div>
                 </CardContent>
               </Card>
@@ -164,8 +157,7 @@ export default function Dashboard() {
             <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <Card className="lg:col-span-2 glass-card">
                 <CardHeader>
-                  <CardTitle>Flujo de Caja (ARS)</CardTitle>
-                  <CardDescription>Comparativa de ingresos y gastos mensuales reales.</CardDescription>
+                  <CardTitle className="text-xl font-bold">Flujo de Caja Mensual (ARS)</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <ChartContainer config={chartConfig} className="h-[300px] w-full">
@@ -181,51 +173,53 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
 
-              <Card className="glass-card">
-                <CardHeader>
-                  <CardTitle>Estado Actual</CardTitle>
-                  <CardDescription>Resumen de actividad reciente</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {transactions && transactions.length > 0 ? (
-                    <div className="space-y-4">
-                      {transactions.slice(0, 3).map((tx: any) => (
-                        <div key={tx.id} className="p-3 bg-muted/30 rounded-lg flex justify-between items-center">
-                          <div>
-                            <p className="text-xs font-bold uppercase text-muted-foreground">{tx.type}</p>
-                            <p className="text-sm font-medium">{tx.description || 'Sin descripción'}</p>
+              <div className="space-y-6">
+                <Card className="glass-card">
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Users className="h-5 w-5" /> Clientes Recientes
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {clients && clients.length > 0 ? (
+                      clients.slice(0, 4).map((c: any) => (
+                        <div key={c.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">
+                            {c.nombre[0]}{c.apellido[0]}
                           </div>
-                          <p className={`font-bold ${tx.amount > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                            {tx.currency} {Math.abs(tx.amount).toLocaleString()}
-                          </p>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold truncate">{c.apellido}, {c.nombre}</p>
+                            <p className="text-[10px] text-muted-foreground flex items-center gap-1"><MapPin className="h-2 w-2" /> {c.localidad}</p>
+                          </div>
                         </div>
-                      ))}
-                      <Link href="/transactions" className="text-sm text-primary font-bold flex items-center justify-center gap-1 mt-4">
-                        Ver todo el historial <ArrowRight className="h-4 w-4" />
-                      </Link>
+                      ))
+                    ) : (
+                      <p className="text-sm text-center py-4 italic text-muted-foreground">Sin clientes registrados.</p>
+                    )}
+                    <Link href="/customers" className="block text-center text-xs font-bold text-primary hover:underline mt-2">
+                      Ver maestro de clientes
+                    </Link>
+                  </CardContent>
+                </Card>
+
+                <Card className="glass-card bg-primary text-primary-foreground border-none">
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2 text-white">
+                      <AlertCircle className="h-5 w-5" /> Alertas Operativas
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="p-3 bg-white/10 rounded-lg text-xs flex items-center gap-2">
+                      <Calendar className="h-4 w-4" /> 
+                      Próxima revisión de reposiciones: Lunes
                     </div>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground italic">
-                      No hay operaciones registradas todavía.
+                    <div className="p-3 bg-white/10 rounded-lg text-xs flex items-center gap-2">
+                      <Droplet className="h-4 w-4" /> 
+                      {clients?.filter((c: any) => c.equipoInstalado?.enComodato).length || 0} Equipos en comodato activos.
                     </div>
-                  )}
-                  
-                  <div className="pt-4 border-t">
-                    <p className="text-sm font-bold mb-3 flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4 text-accent-foreground" />
-                      Accesos Directos
-                    </p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Link href="/accounts" className="p-2 text-center text-xs bg-accent/10 hover:bg-accent/20 rounded-md transition-colors">
-                        Gestionar Cuentas
-                      </Link>
-                      <Link href="/catalog" className="p-2 text-center text-xs bg-accent/10 hover:bg-accent/20 rounded-md transition-colors">
-                        Ver Catálogo
-                      </Link>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </div>
             </section>
           </>
         )}
