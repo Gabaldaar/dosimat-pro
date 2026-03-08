@@ -15,8 +15,8 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Line, LineChart } from "recharts"
+import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+import { Bar, BarChart, XAxis, YAxis, CartesianGrid } from "recharts"
 
 const chartData = [
   { month: "Ene", sales: 4500, expenses: 3200 },
@@ -26,6 +26,17 @@ const chartData = [
   { month: "May", sales: 5900, expenses: 3900 },
   { month: "Jun", sales: 7200, expenses: 4500 },
 ]
+
+const chartConfig = {
+  sales: {
+    label: "Ingresos",
+    color: "hsl(var(--primary))",
+  },
+  expenses: {
+    label: "Gastos",
+    color: "hsl(var(--accent))",
+  },
+} satisfies ChartConfig
 
 export default function Dashboard() {
   return (
@@ -125,18 +136,16 @@ export default function Dashboard() {
               <CardDescription>Comparativa de ingresos y gastos mensuales (ARS)</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="month" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="sales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="expenses" fill="hsl(var(--accent))" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <ChartContainer config={chartConfig} className="h-[300px] w-full">
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="month" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Bar dataKey="sales" fill="var(--color-sales)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="expenses" fill="var(--color-expenses)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ChartContainer>
             </CardContent>
           </Card>
 
