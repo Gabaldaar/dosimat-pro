@@ -23,9 +23,6 @@ service cloud.firestore {
     // Clientes
     match /clients/{clientId} {
       allow read, write: if isAuthenticated();
-      match /pools/{poolId} {
-        allow read, write: if isAuthenticated();
-      }
     }
 
     // Catálogo
@@ -36,8 +33,7 @@ service cloud.firestore {
 
     // Cuentas Financieras
     match /financial_accounts/{id} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read, write: if isAuthenticated();
     }
 
     // Transacciones - Se permite lectura y creación a cualquier usuario autenticado
@@ -54,11 +50,6 @@ service cloud.firestore {
     
     match /notification_rules/{id} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-    
-    match /users/{userId}/notifications/{notificationId} {
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
       allow write: if isAdmin();
     }
   }
