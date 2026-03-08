@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -14,13 +14,11 @@ import {
   Wrench, 
   ShoppingCart, 
   ArrowRightLeft,
-  Calendar,
-  Plus,
   Trash2,
-  CheckCircle2,
   AlertCircle,
   CreditCard,
-  Banknote
+  Banknote,
+  ClipboardCheck
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -93,7 +91,26 @@ export default function TransactionsPage() {
     setMounted(true)
   }, [])
 
+  // Filtrar catálogo según la pestaña activa
+  const filteredCatalog = useMemo(() => {
+    if (activeTab === "sale") return catalog;
+    if (activeTab === "refill") return catalog.filter(i => i.category === "Químicos");
+    if (activeTab === "service") return catalog.filter(i => i.category === "Servicios" || i.category === "Equipos" || i.category === "Repuestos");
+    if (activeTab === "transfer") return catalog; 
+    return catalog;
+  }, [catalog, activeTab]);
+
+  const tabInfo = useMemo(() => {
+    switch (activeTab) {
+      case "refill": return { title: "Nueva Reposición", desc: "Registro de entrega de químicos.", icon: Droplets };
+      case "service": return { title: "Servicio Técnico", desc: "Mantenimiento o reparación de equipos.", icon: Wrench };
+      case "transfer": return { title: "Movimiento Interno", desc: "Uso interno de materiales o ajustes.", icon: ArrowRightLeft };
+      default: return { title: "Nueva Venta", desc: "Venta directa de productos o servicios.", icon: ShoppingCart };
+    }
+  }, [activeTab]);
+
   const handleAddItem = (itemId: string) => {
+    if (!itemId || itemId === "none") return;
     const item = catalog.find(i => i.id === itemId)
     if (!item) return
 
@@ -124,7 +141,7 @@ export default function TransactionsPage() {
     return selectedItems.reduce((acc, item) => {
       acc[item.currency] = (acc[item.currency] || 0) + (item.price * item.qty)
       return acc
-    }, { ARS: 0, USD: 0 })
+    }, { ARS: 0, USD: 0 } as Record<string, number>)
   }, [selectedItems])
 
   const currenciesInCart = useMemo(() => {
@@ -142,20 +159,19 @@ export default function TransactionsPage() {
       return
     }
 
-    // Validar que se hayan elegido cuentas para todas las monedas presentes
     const missingAccounts = currenciesInCart.filter(curr => !destinationAccounts[curr]);
     if (missingAccounts.length > 0) {
       toast({
         title: "Atención",
-        description: `Debes seleccionar una cuenta de destino para: ${missingAccounts.join(', ')}`,
+        description: `Selecciona una cuenta de destino para: ${missingAccounts.join(', ')}`,
         variant: "destructive"
       })
       return;
     }
 
     toast({
-      title: "¡Éxito!",
-      description: "La transacción ha sido registrada, los saldos de cuentas actualizados y el cliente notificado.",
+      title: "Transacción Registrada",
+      description: `Se ha procesado la ${tabInfo.title.toLowerCase()} exitosamente.`,
     })
     
     // Reset form
@@ -166,17 +182,19 @@ export default function TransactionsPage() {
 
   if (!mounted) return null
 
+  const TabIcon = tabInfo.icon;
+
   return (
     <div className="flex min-h-screen">
       <Sidebar className="hidden md:flex w-64 fixed inset-y-0" />
       
       <main className="flex-1 md:ml-64 pb-20 md:pb-8 p-4 md:p-8 space-y-6">
         <header>
-          <h1 className="text-3xl font-headline font-bold text-primary">Nueva Operación</h1>
-          <p className="text-muted-foreground">Ventas y servicios integrados con tu catálogo real.</p>
+          <h1 className="text-3xl font-headline font-bold text-primary">Operaciones</h1>
+          <p className="text-muted-foreground">Gestión integrada de ventas, servicios y reposiciones.</p>
         </header>
 
-        <Tabs defaultValue="sale" className="w-full" onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid grid-cols-2 md:grid-cols-4 h-auto p-1 bg-white border mb-6">
             <TabsTrigger value="sale" className="data-[state=active]:bg-primary data-[state=active]:text-white py-3">
               <ShoppingCart className="h-4 w-4 mr-2" /> Venta
@@ -193,19 +211,24 @@ export default function TransactionsPage() {
           </TabsList>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <Card className="lg:col-span-2 glass-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  Detalles del Comprobante
-                </CardTitle>
-                <CardDescription>Usa tu catálogo y clientes reales.</CardDescription>
+            <Card className="lg:col-span-2 glass-card border-t-4 border-t-primary">
+              <CardHeader className="pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-lg text-primary">
+                    <TabIcon className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <CardTitle>{tabInfo.title}</CardTitle>
+                    <CardDescription>{tabInfo.desc}</CardDescription>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Cliente</Label>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Seleccionar Cliente</Label>
                     <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
-                      <SelectTrigger>
+                      <SelectTrigger className="bg-white">
                         <SelectValue placeholder="Buscar cliente..." />
                       </SelectTrigger>
                       <SelectContent>
@@ -216,79 +239,87 @@ export default function TransactionsPage() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Fecha</Label>
-                    <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Fecha Operación</Label>
+                    <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="bg-white" />
                   </div>
                 </div>
 
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Agregar Producto / Servicio de Catálogo</Label>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Agregar del Catálogo ({activeTab === 'sale' ? 'Todo' : activeTab})
+                    </Label>
                     <Select value={currentAddItem} onValueChange={handleAddItem}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar ítem..." />
+                      <SelectTrigger className="bg-white border-primary/20 hover:border-primary transition-colors">
+                        <SelectValue placeholder="Elegir producto o servicio..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {catalog.length > 0 ? (
-                          catalog.map(item => (
+                        {filteredCatalog.length > 0 ? (
+                          filteredCatalog.map(item => (
                             <SelectItem key={item.id} value={item.id}>
-                              {item.name} ({item.currency === 'USD' ? 'u$s' : '$'}{item.price.toLocaleString('es-AR')})
+                              [{item.category}] {item.name} - {item.currency === 'USD' ? 'u$s' : '$'}{item.price.toLocaleString('es-AR')}
                             </SelectItem>
                           ))
                         ) : (
-                          <SelectItem value="none" disabled>No hay ítems en catálogo</SelectItem>
+                          <SelectItem value="none" disabled>No hay ítems para esta categoría</SelectItem>
                         )}
                       </SelectContent>
                     </Select>
                   </div>
 
-                  <div className="border rounded-lg overflow-hidden">
+                  <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
                     <Table>
-                      <TableHeader className="bg-muted/50">
+                      <TableHeader className="bg-muted/30">
                         <TableRow>
-                          <TableHead>Concepto</TableHead>
-                          <TableHead className="text-center w-20">Cant.</TableHead>
-                          <TableHead className="text-right">Precio Un.</TableHead>
-                          <TableHead className="text-right">Subtotal</TableHead>
+                          <TableHead className="text-[10px] font-bold uppercase">Concepto</TableHead>
+                          <TableHead className="text-center w-20 text-[10px] font-bold uppercase">Cant.</TableHead>
+                          <TableHead className="text-right text-[10px] font-bold uppercase">Precio Un.</TableHead>
+                          <TableHead className="text-right text-[10px] font-bold uppercase">Subtotal</TableHead>
                           <TableHead className="w-[50px]"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {selectedItems.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
-                              El carrito está vacío. Agrega ítems desde tu catálogo.
+                            <TableCell colSpan={5} className="text-center py-16 text-muted-foreground">
+                              <div className="flex flex-col items-center gap-2 opacity-40">
+                                <ClipboardCheck className="h-10 w-10" />
+                                <p className="text-sm font-medium">Usa el catálogo para agregar ítems al comprobante</p>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ) : (
                           selectedItems.map((item, index) => (
-                            <TableRow key={index}>
-                              <TableCell className="font-medium text-xs md:text-sm">
+                            <TableRow key={index} className="hover:bg-muted/10">
+                              <TableCell className="font-medium text-xs md:text-sm py-4">
                                 {item.name}
-                                <div className="text-[10px] text-muted-foreground uppercase">{item.currency}</div>
+                                <div className="text-[9px] text-primary font-bold uppercase mt-0.5">{item.currency}</div>
                               </TableCell>
                               <TableCell>
                                 <Input 
                                   type="number" 
-                                  className="h-8 text-center" 
+                                  className="h-8 text-center text-xs" 
                                   value={item.qty} 
                                   onChange={(e) => handleUpdateItem(index, 'qty', Number(e.target.value))}
                                 />
                               </TableCell>
                               <TableCell>
-                                <Input 
-                                  type="number" 
-                                  className="h-8 text-right font-bold" 
-                                  value={item.price} 
-                                  onChange={(e) => handleUpdateItem(index, 'price', Number(e.target.value))}
-                                />
+                                <div className="flex items-center justify-end">
+                                  <span className="text-[10px] mr-1 text-muted-foreground">{item.currency === 'USD' ? 'u$s' : '$'}</span>
+                                  <Input 
+                                    type="number" 
+                                    className="h-8 text-right font-bold text-xs w-24" 
+                                    value={item.price} 
+                                    onChange={(e) => handleUpdateItem(index, 'price', Number(e.target.value))}
+                                  />
+                                </div>
                               </TableCell>
-                              <TableCell className="text-right font-bold">
+                              <TableCell className="text-right font-bold text-xs">
                                 {item.currency === 'USD' ? 'u$s' : '$'}
                                 {(item.price * item.qty).toLocaleString('es-AR')}
                               </TableCell>
                               <TableCell>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveItem(index)}>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => handleRemoveItem(index)}>
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </TableCell>
@@ -303,20 +334,23 @@ export default function TransactionsPage() {
             </Card>
 
             <div className="space-y-6">
-              <Card className="glass-card border-primary/20 shadow-xl overflow-hidden">
+              <Card className="glass-card border-primary/20 shadow-xl overflow-hidden flex flex-col">
                 <CardHeader className="bg-primary/5 pb-4">
-                  <CardTitle className="text-lg">Resumen y Liquidación</CardTitle>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <ClipboardCheck className="h-4 w-4 text-primary" />
+                    Resumen de Liquidación
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="pt-6 space-y-6">
+                <CardContent className="pt-6 space-y-6 flex-1">
                   {/* Totales */}
-                  <div className="grid grid-cols-1 gap-4">
-                    <div className={`p-3 rounded-lg border ${totals.ARS > 0 ? 'bg-primary/5 border-primary/20' : 'bg-muted/10 opacity-50'}`}>
-                      <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Total en Pesos</p>
-                      <p className="text-2xl font-bold text-primary">${totals.ARS.toLocaleString('es-AR')}</p>
+                  <div className="space-y-3">
+                    <div className={`p-4 rounded-xl border transition-all ${totals.ARS > 0 ? 'bg-primary/5 border-primary/20 shadow-inner' : 'bg-muted/10 opacity-40'}`}>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Total Pesos (ARS)</p>
+                      <p className="text-3xl font-black text-primary">${totals.ARS.toLocaleString('es-AR')}</p>
                     </div>
-                    <div className={`p-3 rounded-lg border ${totals.USD > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-muted/10 opacity-50'}`}>
-                      <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Total en Dólares</p>
-                      <p className="text-2xl font-bold text-emerald-600">u$s {totals.USD.toLocaleString('es-AR')}</p>
+                    <div className={`p-4 rounded-xl border transition-all ${totals.USD > 0 ? 'bg-emerald-50 border-emerald-200 shadow-inner' : 'bg-muted/10 opacity-40'}`}>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Total Dólares (USD)</p>
+                      <p className="text-3xl font-black text-emerald-600">u$s {totals.USD.toLocaleString('es-AR')}</p>
                     </div>
                   </div>
 
@@ -324,19 +358,22 @@ export default function TransactionsPage() {
 
                   {/* Asignación de Cuentas */}
                   <div className="space-y-4">
-                    <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Ingresar Dinero en:</h4>
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                      <div className="h-1 w-4 bg-primary rounded-full" /> 
+                      Destino de Fondos
+                    </h4>
                     
                     {currenciesInCart.includes('ARS') && (
-                      <div className="space-y-2">
-                        <Label className="text-[10px] flex items-center gap-1">
-                          <Banknote className="h-3 w-3" /> CUENTA PARA ARS
+                      <div className="space-y-2 animate-in fade-in slide-in-from-right-2 duration-300">
+                        <Label className="text-[10px] font-bold flex items-center gap-1 text-primary">
+                          <Banknote className="h-3 w-3" /> CAJA/BANCO PARA PESOS
                         </Label>
                         <Select 
                           value={destinationAccounts.ARS} 
                           onValueChange={(v) => setDestinationAccounts(prev => ({...prev, ARS: v}))}
                         >
-                          <SelectTrigger className="h-9">
-                            <SelectValue placeholder="Elegir caja/banco ARS" />
+                          <SelectTrigger className="h-10 bg-white">
+                            <SelectValue placeholder="Elegir cuenta ARS" />
                           </SelectTrigger>
                           <SelectContent>
                             {accounts.filter(a => a.currency === 'ARS').map(acc => (
@@ -348,16 +385,16 @@ export default function TransactionsPage() {
                     )}
 
                     {currenciesInCart.includes('USD') && (
-                      <div className="space-y-2">
-                        <Label className="text-[10px] flex items-center gap-1">
-                          <CreditCard className="h-3 w-3" /> CUENTA PARA USD
+                      <div className="space-y-2 animate-in fade-in slide-in-from-right-2 duration-300">
+                        <Label className="text-[10px] font-bold flex items-center gap-1 text-emerald-600">
+                          <CreditCard className="h-3 w-3" /> CAJA PARA DÓLARES
                         </Label>
                         <Select 
                           value={destinationAccounts.USD} 
                           onValueChange={(v) => setDestinationAccounts(prev => ({...prev, USD: v}))}
                         >
-                          <SelectTrigger className="h-9">
-                            <SelectValue placeholder="Elegir caja/banco USD" />
+                          <SelectTrigger className="h-10 bg-white">
+                            <SelectValue placeholder="Elegir cuenta USD" />
                           </SelectTrigger>
                           <SelectContent>
                             {accounts.filter(a => a.currency === 'USD').map(acc => (
@@ -369,29 +406,31 @@ export default function TransactionsPage() {
                     )}
 
                     {currenciesInCart.length === 0 && (
-                      <p className="text-xs italic text-muted-foreground text-center py-4 bg-muted/20 rounded">
-                        Agrega ítems para elegir destino de fondos.
-                      </p>
+                      <div className="text-center py-8 bg-muted/20 rounded-xl border border-dashed border-muted-foreground/20">
+                        <p className="text-[10px] font-medium text-muted-foreground">
+                          Agrega ítems para habilitar la liquidación
+                        </p>
+                      </div>
                     )}
                   </div>
                 </CardContent>
                 <div className="p-4 bg-muted/30 border-t">
                   <Button 
-                    className="w-full h-12 text-lg font-bold shadow-lg" 
+                    className="w-full h-14 text-lg font-black shadow-xl rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98]" 
                     onClick={handleSaveTransaction}
                     disabled={selectedItems.length === 0 || !selectedCustomerId}
                   >
-                    Registrar y Cobrar
+                    CONFIRMAR Y COBRAR
                   </Button>
                 </div>
               </Card>
 
-              <div className="p-5 bg-amber-50 rounded-xl border border-amber-200 flex gap-3">
+              <div className="p-5 bg-amber-50 rounded-xl border border-amber-200 flex gap-3 shadow-sm">
                 <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
                 <div className="space-y-1">
-                  <p className="text-xs font-bold text-amber-800">Nota de Precios</p>
+                  <p className="text-xs font-bold text-amber-800">Control de Precios</p>
                   <p className="text-[10px] text-amber-700 leading-relaxed italic">
-                    Modificar el precio unitario en la tabla NO altera los precios base de tu catálogo. Solo aplica a esta venta puntual.
+                    Cualquier cambio de precio realizado en la tabla superior se aplicará solo a este comprobante. El catálogo permanecerá intacto.
                   </p>
                 </div>
               </div>
