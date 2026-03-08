@@ -14,7 +14,8 @@ import {
   ClipboardCheck, 
   Calendar as CalendarIcon, 
   Wallet, 
-  FilterX 
+  FilterX,
+  Plus
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -45,7 +46,7 @@ export default function TransactionsPage() {
 
   const [selectedCustomerId, setSelectedCustomerId] = useState("")
   const [selectedItems, setSelectedItems] = useState<any[]>([])
-  const [destinationAccounts, setDestinationAccounts] = useState<Record<string, string>>({ ARS: "", USD: "" })
+  const [destinationAccounts, setDestinationAccounts] = useState<Record<string, string>>({ ARS: "pending", USD: "pending" })
   const [operationDate, setOperationDate] = useState(new Date().toISOString().split('T')[0])
   
   const [cobroAmount, setCobroAmount] = useState(0)
@@ -112,6 +113,8 @@ export default function TransactionsPage() {
         const total = cartTotals[curr as 'ARS' | 'USD']
         if (total > 0) {
           const accId = destinationAccounts[curr]
+          const isPending = !accId || accId === "pending"
+          
           const txData = {
             id: Math.random().toString(36).substr(2, 9),
             date: new Date(operationDate).toISOString(),
@@ -120,12 +123,12 @@ export default function TransactionsPage() {
             amount: total,
             currency: curr,
             description: `Operación ${activeTab} - ${curr}`,
-            financialAccountId: accId || null // NULL = "A Cuenta / Pendiente"
+            financialAccountId: isPending ? null : accId
           }
 
           addDocumentNonBlocking(collection(db, 'transactions'), txData)
 
-          if (accId) {
+          if (!isPending) {
             const acc = accounts?.find(a => a.id === accId)
             if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) + total })
           } else {
@@ -274,7 +277,7 @@ export default function TransactionsPage() {
                         <Select value={destinationAccounts.ARS} onValueChange={(v) => setDestinationAccounts(p => ({...p, ARS: v}))}>
                           <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Pendiente / A Cuenta" /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">Dejar pendiente (A cuenta)</SelectItem>
+                            <SelectItem value="pending">Dejar pendiente (A cuenta)</SelectItem>
                             {accounts?.filter((a: any) => a.currency === 'ARS').map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
                           </SelectContent>
                         </Select>
@@ -287,7 +290,7 @@ export default function TransactionsPage() {
                         <Select value={destinationAccounts.USD} onValueChange={(v) => setDestinationAccounts(p => ({...p, USD: v}))}>
                           <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Pendiente / A Cuenta" /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">Dejar pendiente (A cuenta)</SelectItem>
+                            <SelectItem value="pending">Dejar pendiente (A cuenta)</SelectItem>
                             {accounts?.filter((a: any) => a.currency === 'USD').map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
                           </SelectContent>
                         </Select>
