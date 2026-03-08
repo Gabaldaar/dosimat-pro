@@ -1,7 +1,6 @@
-
 "use client"
 
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -44,23 +43,23 @@ export default function AccountsPage() {
   const { toast } = useToast()
   const db = useFirestore()
   
-  // Queries estables
+  // Queries
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
   const categoriesQuery = useMemoFirebase(() => collection(db, 'expense_categories'), [db])
   const txQuery = useMemoFirebase(() => query(collection(db, 'transactions'), orderBy('date', 'desc'), limit(15)), [db])
 
-  // Data streams
+  // Data
   const { data: accounts, isLoading: loadingAccounts } = useCollection(accountsQuery)
   const { data: expenseCategories } = useCollection(categoriesQuery)
   const { data: recentTxs } = useCollection(txQuery)
   
-  // Dialog visibility states
+  // Dialog States
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false)
   const [isTxDialogOpen, setIsTxDialogOpen] = useState(false)
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false)
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false)
   
-  // Logic states
+  // Form States
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [txType, setTxType] = useState<'income' | 'expense'>('income')
@@ -90,8 +89,8 @@ export default function AccountsPage() {
     amount: 0
   })
 
-  // Handlers para gestionar el estado de los diálogos de forma estable
-  const handleOpenAccountDialog = useCallback((account?: any) => {
+  // Handlers
+  const handleOpenAccountDialog = (account?: any) => {
     if (account) {
       setEditingAccountId(account.id)
       setAccountFormData({
@@ -110,12 +109,7 @@ export default function AccountsPage() {
       })
     }
     setIsAccountDialogOpen(true)
-  }, [])
-
-  const handleCloseAccountDialog = useCallback((open: boolean) => {
-    setIsAccountDialogOpen(open)
-    // No limpiamos los datos inmediatamente para permitir que la animación de cierre termine
-  }, [])
+  }
 
   const handleSaveAccount = () => {
     if (!accountFormData.name) {
@@ -215,7 +209,7 @@ export default function AccountsPage() {
         {loadingAccounts ? (
           <div className="flex flex-col items-center justify-center h-48 gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Sincronizando con la nube...</p>
+            <p className="text-sm text-muted-foreground">Cargando cuentas...</p>
           </div>
         ) : (!accounts || accounts.length === 0) ? (
           <Card className="p-12 text-center border-dashed bg-muted/5">
@@ -320,8 +314,8 @@ export default function AccountsPage() {
           </Card>
         </section>
 
-        {/* DIALOGS - ELIMINADAS LAS KEYS DINÁMICAS PARA EVITAR BLOQUEOS DE SCROLL */}
-        <Dialog open={isAccountDialogOpen} onOpenChange={handleCloseAccountDialog}>
+        {/* DIALOGS - SIN CLAVES DINÁMICAS PARA EVITAR BLOQUEO DE SCROLL */}
+        <Dialog open={isAccountDialogOpen} onOpenChange={setIsAccountDialogOpen}>
           <DialogContent>
             <DialogHeader><DialogTitle>{editingAccountId ? "Editar Cuenta" : "Nueva Cuenta"}</DialogTitle></DialogHeader>
             <div className="grid gap-4 py-4">
@@ -352,7 +346,7 @@ export default function AccountsPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Saldo Actual</Label>
+                <Label>Saldo Inicial / Actual</Label>
                 <Input type="number" value={accountFormData.initialBalance} onChange={(e) => setAccountFormData({...accountFormData, initialBalance: Number(e.target.value)})} />
               </div>
             </div>
@@ -446,7 +440,7 @@ export default function AccountsPage() {
                 <Label>Monto a transferir</Label>
                 <Input type="number" value={transferFormData.amount} onChange={(e) => setTransferFormData({...transferFormData, amount: Number(e.target.value)})} />
               </div>
-              <p className="text-[10px] text-muted-foreground italic">Nota: Las cuentas deben ser de la misma moneda para que el saldo sea coherente.</p>
+              <p className="text-[10px] text-muted-foreground italic">Nota: El saldo se ajustará en ambas cuentas según el monto ingresado.</p>
             </div>
             <DialogFooter><Button onClick={handleTransfer} className="w-full font-bold">Confirmar Transferencia</Button></DialogFooter>
           </DialogContent>
