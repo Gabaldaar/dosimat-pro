@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect, useRef } from "react"
+import { useState, useMemo, useEffect } from "react"
 import Link from "next/link"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent } from "@/components/ui/card"
@@ -15,7 +15,6 @@ import {
   ChevronRight, 
   PhoneCall, 
   User, 
-  Droplets, 
   Trash2, 
   Map, 
   History,
@@ -24,9 +23,9 @@ import {
   Banknote,
   RefreshCw,
   Calculator,
-  Loader2,
   CheckCircle2,
-  Mail
+  Mail,
+  PlusCircle
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -38,12 +37,6 @@ import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from "@/firebase"
 import { collection, doc } from "firebase/firestore"
 import { cn } from "@/lib/utils"
-
-declare global {
-  interface Window {
-    google: any;
-  }
-}
 
 export default function CustomersPage() {
   const { toast } = useToast()
@@ -60,47 +53,6 @@ export default function CustomersPage() {
   
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<any>(null)
-  
-  const [addressSuggestions, setAddressSuggestions] = useState<any[]>([])
-  const [isSearchingAddress, setIsSearchingAddress] = useState(false)
-  const [isGoogleReady, setIsGoogleReady] = useState(false)
-  
-  const autocompleteService = useRef<any>(null)
-  const placesService = useRef<any>(null)
-
-  // Carga e inicialización de Google Maps
-  useEffect(() => {
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-    if (!apiKey) return;
-
-    const initGoogle = () => {
-      if (window.google?.maps?.places && !autocompleteService.current) {
-        try {
-          autocompleteService.current = new window.google.maps.places.AutocompleteService();
-          const dummyDiv = document.createElement('div');
-          placesService.current = new window.google.maps.places.PlacesService(dummyDiv);
-          setIsGoogleReady(true);
-        } catch (e) {
-          console.error("Error inicializando Google Places:", e);
-        }
-      }
-    };
-
-    if (window.google?.maps?.places) {
-      initGoogle();
-    } else {
-      const scriptId = 'google-maps-loader';
-      if (!document.getElementById(scriptId)) {
-        const script = document.createElement('script');
-        script.id = scriptId;
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
-        script.async = true;
-        script.defer = true;
-        script.onload = initGoogle;
-        document.head.appendChild(script);
-      }
-    }
-  }, []);
 
   // Fix para puntero bloqueado en ShadCN Dialogs
   useEffect(() => {
@@ -141,61 +93,6 @@ export default function CustomersPage() {
   }
 
   const [formData, setFormData] = useState(defaultFormData)
-
-  const handleAddressSearch = (val: string) => {
-    setFormData(prev => ({ ...prev, direccion: val }));
-    
-    if (val.length >= 3 && autocompleteService.current) {
-      setIsSearchingAddress(true);
-      autocompleteService.current.getPlacePredictions({
-        input: val,
-        componentRestrictions: { country: 'ar' },
-        types: ['address']
-      }, (predictions: any, status: any) => {
-        setIsSearchingAddress(false);
-        if (status === 'OK' && predictions) {
-          setAddressSuggestions(predictions);
-        } else {
-          setAddressSuggestions([]);
-        }
-      });
-    } else {
-      setAddressSuggestions([]);
-    }
-  }
-
-  const selectAddress = (prediction: any) => {
-    if (!placesService.current) return;
-
-    placesService.current.getDetails({
-      placeId: prediction.place_id,
-      fields: ['address_components', 'formatted_address']
-    }, (place: any, status: any) => {
-      if (status === 'OK' && place) {
-        const components = place.address_components;
-        let street = "";
-        let number = "";
-        let city = "";
-        let state = "";
-
-        components.forEach((c: any) => {
-          if (c.types.includes('route')) street = c.long_name;
-          if (c.types.includes('street_number')) number = c.long_name;
-          if (c.types.includes('locality')) city = c.long_name;
-          if (c.types.includes('administrative_area_level_1')) state = c.long_name;
-        });
-
-        setFormData(prev => ({
-          ...prev,
-          direccion: `${street} ${number}`.trim() || prediction.description,
-          localidad: city || prev.localidad,
-          provincia: state || prev.provincia
-        }));
-        setAddressSuggestions([]);
-        toast({ title: "Dirección seleccionada" });
-      }
-    });
-  }
 
   const filteredCustomers = useMemo(() => {
     if (!customers) return []
@@ -253,7 +150,6 @@ export default function CustomersPage() {
       setEditingCustomer(null)
       setFormData(defaultFormData)
     }
-    setAddressSuggestions([])
     setIsDialogOpen(true)
   }
 
@@ -464,6 +360,17 @@ export default function CustomersPage() {
                         </div>
                         <div className="flex flex-wrap gap-2 mt-4">
                           <Button 
+                            variant="default" 
+                            size="sm" 
+                            className="h-8 gap-2 font-bold bg-primary text-primary-foreground"
+                            asChild
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Link href={`/transactions?clientId=${customer.id}&mode=new`}>
+                              <PlusCircle className="h-3.5 w-3.5" /> Nueva Operación
+                            </Link>
+                          </Button>
+                          <Button 
                             variant="secondary" 
                             size="sm" 
                             className="h-8 gap-2 font-bold"
@@ -589,46 +496,13 @@ export default function CustomersPage() {
             </TabsContent>
 
             <TabsContent value="address" className="space-y-4 py-4">
-              <div className="space-y-2 relative">
-                <Label className="flex items-center gap-2 font-bold text-primary">Dirección (Google Maps)</Label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-3 h-4 w-4 text-primary" />
-                  <Input 
-                    value={formData.direccion} 
-                    onChange={(e) => handleAddressSearch(e.target.value)} 
-                    placeholder={isGoogleReady ? "Escribe para buscar..." : "Cargando mapas..."} 
-                    className="pl-10 h-11 border-primary/20 focus:border-primary shadow-sm"
-                  />
-                  {isSearchingAddress && (
-                    <div className="absolute right-3 top-3">
-                      <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                    </div>
-                  )}
-                </div>
-                
-                {addressSuggestions.length > 0 && (
-                  <div className="fixed z-[9999] bg-white shadow-2xl border-2 border-primary/20 rounded-xl overflow-hidden mt-1 max-w-[500px] w-full animate-in fade-in slide-in-from-top-2">
-                    <div className="divide-y">
-                      {addressSuggestions.map((s, i) => (
-                        <div 
-                          key={i} 
-                          className="p-4 hover:bg-primary/5 cursor-pointer text-sm transition-colors flex items-start gap-3 group"
-                          onClick={() => selectAddress(s)}
-                        >
-                          <MapPin className="h-5 w-5 mt-0.5 text-primary/40 group-hover:text-primary shrink-0" />
-                          <div>
-                            <p className="font-bold text-foreground group-hover:text-primary transition-colors">
-                              {s.structured_formatting?.main_text || s.description}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium mt-0.5">
-                              {s.structured_formatting?.secondary_text}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              <div className="space-y-2">
+                <Label className="font-bold text-primary">Dirección</Label>
+                <Input 
+                  value={formData.direccion} 
+                  onChange={(e) => setFormData({...formData, direccion: e.target.value})} 
+                  placeholder="Calle y altura" 
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
