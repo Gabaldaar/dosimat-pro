@@ -18,7 +18,9 @@ import {
   DollarSign,
   History,
   Tag,
-  FileText
+  FileText,
+  Trash2,
+  X
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -38,6 +40,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface FinancialAccount {
   id: string;
@@ -83,11 +86,13 @@ export default function AccountsPage() {
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false)
   const [isTxDialogOpen, setIsTxDialogOpen] = useState(false)
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false)
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false)
   
   // Form States
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [txType, setTxType] = useState<'income' | 'expense'>('income')
+  const [newCategoryName, setNewCategoryName] = useState("")
   
   const selectedAccount = useMemo(() => accounts.find(a => a.id === selectedAccountId), [accounts, selectedAccountId])
 
@@ -178,7 +183,6 @@ export default function AccountsPage() {
     }
     
     setIsAccountDialogOpen(false)
-    setEditingAccountId(null)
   }
 
   const handleOpenTxDialog = (account: FinancialAccount, type: 'income' | 'expense') => {
@@ -205,7 +209,7 @@ export default function AccountsPage() {
         : a
     ))
 
-    // 2. Si es gasto, actualizar el total de la categoría (Cuenta de Gasto)
+    // 2. Si es gasto, actualizar el total de la categoría
     if (txType === 'expense') {
       setExpenseCategories(prev => prev.map(cat => 
         cat.id === txFormData.categoryId 
@@ -215,7 +219,6 @@ export default function AccountsPage() {
     }
 
     setIsTxDialogOpen(false)
-    setSelectedAccountId(null)
     toast({ 
       title: txType === 'income' ? "Ingreso registrado" : "Gasto registrado", 
       description: `Se procesó el movimiento en ${selectedAccount.name}` 
@@ -244,8 +247,25 @@ export default function AccountsPage() {
     }))
     
     setIsTransferDialogOpen(false)
-    setTransferFormData({ fromId: "", toId: "", amount: 0 })
     toast({ title: "Transferencia exitosa", description: "Movimiento realizado con éxito." })
+  }
+
+  const handleAddCategory = () => {
+    if (!newCategoryName) return
+    const newCat: ExpenseCategory = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: newCategoryName,
+      totalSpent: 0,
+      currency: 'ARS'
+    }
+    setExpenseCategories(prev => [...prev, newCat])
+    setNewCategoryName("")
+    toast({ title: "Categoría agregada", description: "El rubro de gasto ha sido creado." })
+  }
+
+  const handleDeleteCategory = (id: string) => {
+    setExpenseCategories(prev => prev.filter(c => c.id !== id))
+    toast({ title: "Categoría eliminada", description: "El rubro de gasto ha sido removido." })
   }
 
   if (!mounted) return null;
@@ -388,7 +408,9 @@ export default function AccountsPage() {
                 ))}
               </CardContent>
               <CardFooter className="pt-0">
-                <Button variant="outline" size="sm" className="w-full text-xs font-bold">ADMINISTRAR CATEGORÍAS</Button>
+                <Button variant="outline" size="sm" className="w-full text-xs font-bold" onClick={() => setIsCategoryManagerOpen(true)}>
+                  ADMINISTRAR CATEGORÍAS
+                </Button>
               </CardFooter>
             </Card>
             
@@ -397,7 +419,7 @@ export default function AccountsPage() {
                 <History className="h-4 w-4" /> Resumen Financiero
               </h4>
               <p className="text-xs text-primary/80 leading-relaxed">
-                Los saldos reflejan el efectivo en mano y en bancos. Los gastos se acumulan en sus respectivas cuentas para reportes mensuales.
+                Los saldos reflejan el efectivo en mano y en bancos. Los gastos se acumulan en sus respectivas categorías para reportes mensuales.
               </p>
             </div>
           </div>
@@ -497,10 +519,10 @@ export default function AccountsPage() {
 
             {txType === 'expense' && (
               <div className="space-y-2">
-                <Label>Cuenta de Gasto (Categoría)</Label>
+                <Label>Categoría de Gasto</Label>
                 <Select value={txFormData.categoryId} onValueChange={(v) => setTxFormData({...txFormData, categoryId: v})}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar categoría" />
+                    <SelectValue placeholder="Seleccionar rubro" />
                   </SelectTrigger>
                   <SelectContent>
                     {expenseCategories.map(cat => (
@@ -556,6 +578,51 @@ export default function AccountsPage() {
           </div>
           <DialogFooter>
             <Button onClick={handleTransfer} className="w-full">Procesar Transferencia</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Category Manager Dialog */}
+      <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Administrar Categorías</DialogTitle>
+            <DialogDescription>Define los rubros de gastos de tu negocio.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex gap-2">
+              <Input 
+                placeholder="Nueva categoría..." 
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
+              />
+              <Button size="icon" onClick={handleAddCategory}>
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+            <ScrollArea className="h-[250px] pr-4">
+              <div className="space-y-2">
+                {expenseCategories.map(cat => (
+                  <div key={cat.id} className="flex items-center justify-between p-2 rounded border bg-muted/10">
+                    <span className="text-sm font-medium">{cat.name}</span>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 text-destructive"
+                      onClick={() => handleDeleteCategory(cat.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </div>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setIsCategoryManagerOpen(false)} className="w-full">
+              Cerrar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
