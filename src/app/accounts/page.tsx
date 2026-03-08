@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
@@ -54,6 +55,9 @@ interface ExpenseCategory {
   currency: 'ARS' | 'USD';
 }
 
+const STORAGE_KEY = 'dosimat_pro_accounts'
+const EXPENSE_KEY = 'dosimat_pro_expense_categories'
+
 const initialAccounts: FinancialAccount[] = [
   { id: '1', name: "Caja Efectivo ARS", type: "Cash", balance: 145000, currency: "ARS", status: "active" },
   { id: '2', name: "Banco Galicia", type: "Bank", balance: 850300, currency: "ARS", status: "active" },
@@ -70,8 +74,8 @@ const initialExpenseCategories: ExpenseCategory[] = [
 export default function AccountsPage() {
   const { toast } = useToast()
   const [mounted, setMounted] = useState(false)
-  const [accounts, setAccounts] = useState<FinancialAccount[]>(initialAccounts)
-  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>(initialExpenseCategories)
+  const [accounts, setAccounts] = useState<FinancialAccount[]>([])
+  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([])
   
   // Dialog States
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false)
@@ -107,7 +111,28 @@ export default function AccountsPage() {
 
   useEffect(() => {
     setMounted(true)
+    const savedAccounts = localStorage.getItem(STORAGE_KEY)
+    const savedExpenses = localStorage.getItem(EXPENSE_KEY)
+    
+    if (savedAccounts) {
+      setAccounts(JSON.parse(savedAccounts))
+    } else {
+      setAccounts(initialAccounts)
+    }
+    
+    if (savedExpenses) {
+      setExpenseCategories(JSON.parse(savedExpenses))
+    } else {
+      setExpenseCategories(initialExpenseCategories)
+    }
   }, [])
+
+  useEffect(() => {
+    if (mounted) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts))
+      localStorage.setItem(EXPENSE_KEY, JSON.stringify(expenseCategories))
+    }
+  }, [accounts, expenseCategories, mounted])
 
   const handleOpenAccountDialog = (account?: FinancialAccount) => {
     if (account) {
@@ -150,14 +175,15 @@ export default function AccountsPage() {
       setAccounts(prev => [...prev, newAccount])
     }
 
-    // Close and reset BEFORE toast to avoid focus issues
     setIsAccountDialogOpen(false)
     setEditingAccountId(null)
 
-    toast({ 
-      title: isEdit ? "Cuenta actualizada" : "Cuenta creada", 
-      description: isEdit ? "Los cambios se guardaron correctamente." : "La cuenta financiera ha sido agregada." 
-    })
+    setTimeout(() => {
+      toast({ 
+        title: isEdit ? "Cuenta actualizada" : "Cuenta creada", 
+        description: isEdit ? "Los cambios se guardaron correctamente." : "La cuenta financiera ha sido agregada." 
+      })
+    }, 100)
   }
 
   const handleOpenTxDialog = (account: FinancialAccount, type: 'income' | 'expense') => {
@@ -190,6 +216,11 @@ export default function AccountsPage() {
     const { fromId, toId, amount } = transferFormData
     if (!fromId || !toId || amount <= 0) {
       toast({ title: "Error", description: "Completa todos los campos de transferencia", variant: "destructive" })
+      return
+    }
+
+    if (fromId === toId) {
+      toast({ title: "Error", description: "No puedes transferir a la misma cuenta", variant: "destructive" })
       return
     }
 
@@ -259,7 +290,6 @@ export default function AccountsPage() {
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={() => handleOpenAccountDialog(account)}>Editar Cuenta</DropdownMenuItem>
                       <DropdownMenuItem>Ver Historial</DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive">Inactivar</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
@@ -270,7 +300,7 @@ export default function AccountsPage() {
                 <div className="flex items-baseline gap-1">
                   <span className={`text-2xl font-bold ${account.balance < 0 ? 'text-destructive' : ''}`}>
                     {account.currency === 'USD' ? 'u$s' : '$'}
-                    {mounted ? account.balance.toLocaleString() : account.balance}
+                    {mounted ? account.balance.toLocaleString('es-AR') : account.balance}
                   </span>
                 </div>
                 <div className="mt-4 flex gap-2">
@@ -347,7 +377,7 @@ export default function AccountsPage() {
                     <span className="text-sm">{cat.name}</span>
                     <span className="font-bold text-rose-600">
                       {cat.currency === 'USD' ? 'u$s' : '$'}
-                      {mounted ? cat.totalSpent.toLocaleString() : cat.totalSpent}
+                      {mounted ? cat.totalSpent.toLocaleString('es-AR') : cat.totalSpent}
                     </span>
                   </div>
                 ))}
@@ -362,7 +392,7 @@ export default function AccountsPage() {
                 <History className="h-4 w-4" /> Resumen de Cierres
               </h4>
               <p className="text-xs text-primary/80 leading-relaxed">
-                El último cierre de caja fue realizado ayer a las 20:00 por el Admin. Todo coincide con el sistema.
+                El último cierre de caja fue realizado hoy al iniciar la jornada. Todos los saldos están conciliados.
               </p>
             </div>
           </div>
