@@ -15,7 +15,8 @@ import {
   MoreVertical,
   ArrowRightLeft,
   Tag,
-  Trash2
+  Trash2,
+  RefreshCw
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -36,7 +37,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, setDocumentNonBlocking, addDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase"
-import { collection, doc } from "firebase/firestore"
+import { collection, doc, query, orderBy, limit } from "firebase/firestore"
 
 export default function AccountsPage() {
   const { toast } = useToast()
@@ -44,7 +45,8 @@ export default function AccountsPage() {
   
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
   const categoriesQuery = useMemoFirebase(() => collection(db, 'expense_categories'), [db])
-  const txQuery = useMemoFirebase(() => collection(db, 'transactions'), [db])
+  // Limitamos la consulta de transacciones para evitar bloqueos
+  const txQuery = useMemoFirebase(() => query(collection(db, 'transactions'), orderBy('date', 'desc'), limit(20)), [db])
 
   const { data: accounts, isLoading: loadingAccounts } = useCollection(accountsQuery)
   const { data: expenseCategories } = useCollection(categoriesQuery)
@@ -201,8 +203,9 @@ export default function AccountsPage() {
         </header>
 
         {loadingAccounts ? (
-          <div className="flex items-center justify-center h-32">
-            <p className="text-muted-foreground">Cargando cuentas...</p>
+          <div className="flex flex-col items-center justify-center h-32 gap-2">
+            <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">Sincronizando cuentas...</p>
           </div>
         ) : !accounts || accounts.length === 0 ? (
           <Card className="p-12 text-center border-dashed">
@@ -263,7 +266,7 @@ export default function AccountsPage() {
                 {!recentTxs || recentTxs.length === 0 ? (
                   <p className="text-sm text-center text-muted-foreground py-8">No hay transacciones registradas.</p>
                 ) : (
-                  recentTxs.slice(0, 5).map((move: any) => (
+                  recentTxs.slice(0, 10).map((move: any) => (
                     <div key={move.id} className="flex items-center justify-between p-3 border-b">
                       <div className="flex items-center gap-3">
                         <div className={`p-2 rounded-full ${move.amount > 0 ? 'bg-emerald-100' : 'bg-rose-100'}`}>
