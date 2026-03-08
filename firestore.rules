@@ -1,15 +1,9 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Regla simplificada: Cualquier usuario autenticado puede leer y escribir.
-    // Esto asegura que no haya errores de permisos mientras el usuario está logueado.
+    // Regla global y robusta para un entorno administrativo: 
+    // Permite cualquier operación si el usuario está logueado.
     match /{document=**} {
-      allow read, write: if request.auth != null;
-    }
-
-    // Permiso especial para que el usuario pueda crear su propio perfil al registrarse
-    match /users/{userId} {
       allow read, write: if request.auth != null;
     }
   }
