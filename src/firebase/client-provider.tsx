@@ -11,6 +11,8 @@ interface FirebaseClientProviderProps {
   children: ReactNode;
 }
 
+const LOADING_MESSAGE = "Sincronizando acceso...";
+
 export function FirebaseClientProvider({ children }: FirebaseClientProviderProps) {
   const firebaseServices = useMemo(() => {
     return initializeFirebase();
@@ -46,13 +48,13 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
     }
   }, [firebaseServices.auth, pathname, router, mounted]);
 
-  // Evitamos discrepancias de hidratación asegurando un renderizado estable
+  // Evitamos discrepancias de hidratación asegurando un renderizado estable e idéntico al del servidor
   if (!mounted || isInitializing) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <RefreshCw className="h-10 w-10 animate-spin text-primary" />
         <p className="text-muted-foreground animate-pulse font-medium">
-          Sincronizando acceso...
+          {LOADING_MESSAGE}
         </p>
       </div>
     );
