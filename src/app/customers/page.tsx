@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -108,11 +109,11 @@ export default function CustomersPage() {
     if (val.length >= 3) {
       setIsSearchingAddress(true)
       try {
-        const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(val)}&limit=5&lang=es`)
+        // Usamos Nominatim con filtro por Argentina para mayor precisión
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(val + ', Argentina')}&limit=5&addressdetails=1&countrycodes=ar`)
         const data = await res.json()
-        const features = data.features || []
-        setAddressSuggestions(features)
-        if (features.length === 0) setShowNoResults(true)
+        setAddressSuggestions(data || [])
+        if (!data || data.length === 0) setShowNoResults(true)
       } catch (e) {
         console.error("Error fetching address:", e)
       } finally {
@@ -123,16 +124,16 @@ export default function CustomersPage() {
     }
   }
 
-  const selectAddress = (feature: any) => {
-    const p = feature.properties
-    const street = p.name || ""
-    const num = p.housenumber ? ` ${p.housenumber}` : ""
-    const city = p.city || p.town || p.village || ""
-    const state = p.state || ""
+  const selectAddress = (s: any) => {
+    const addr = s.address;
+    const street = addr.road || addr.pedestrian || addr.suburb || addr.neighbourhood || "";
+    const num = addr.house_number ? ` ${addr.house_number}` : "";
+    const city = addr.city || addr.town || addr.village || addr.municipality || "";
+    const state = addr.state || "";
     
     setFormData({
       ...formData,
-      direccion: `${street}${num}`,
+      direccion: `${street}${num}`.trim(),
       localidad: city,
       provincia: state
     })
@@ -609,10 +610,10 @@ export default function CustomersPage() {
                             <MapPin className="h-5 w-5 mt-0.5 text-primary/40 group-hover:text-primary shrink-0" />
                             <div>
                               <p className="font-bold text-foreground group-hover:text-primary transition-colors">
-                                {s.properties.name} {s.properties.housenumber || ""}
+                                {s.display_name.split(',')[0]}
                               </p>
                               <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium mt-0.5">
-                                {s.properties.city || s.properties.town || ""}, {s.properties.state || ""}, {s.properties.country || ""}
+                                {s.display_name.split(',').slice(1, 4).join(',')}
                               </p>
                             </div>
                           </div>
