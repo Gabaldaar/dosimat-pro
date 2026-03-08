@@ -499,7 +499,11 @@ export default function AccountsPage() {
                 <Select value={transferFormData.fromId} onValueChange={(v) => setTransferFormData({...transferFormData, fromId: v})}>
                   <SelectTrigger><SelectValue placeholder="Origen..." /></SelectTrigger>
                   <SelectContent>
-                    {accounts?.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>)}
+                    {accounts?.map((a: any) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name} - {a.currency === 'USD' ? 'u$s' : '$'}{Number(a.initialBalance || 0).toLocaleString('es-AR')}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -508,7 +512,11 @@ export default function AccountsPage() {
                 <Select value={transferFormData.toId} onValueChange={(v) => setTransferFormData({...transferFormData, toId: v})}>
                   <SelectTrigger><SelectValue placeholder="Destino..." /></SelectTrigger>
                   <SelectContent>
-                    {accounts?.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>)}
+                    {accounts?.map((a: any) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name} - {a.currency === 'USD' ? 'u$s' : '$'}{Number(a.initialBalance || 0).toLocaleString('es-AR')}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
