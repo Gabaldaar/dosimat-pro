@@ -32,7 +32,7 @@ export default function TeamPage() {
   const { user: currentUser } = useUser()
   
   const usersQuery = useMemoFirebase(() => collection(db, 'users'), [db])
-  const { data: team = [], isLoading } = useCollection(usersQuery)
+  const { data: team, isLoading } = useCollection(usersQuery)
 
   const handleUpdateRole = (userId: string, newRole: string) => {
     updateDocumentNonBlocking(doc(db, 'users', userId), { role: newRole })
@@ -62,7 +62,7 @@ export default function TeamPage() {
         <div className="grid grid-cols-1 gap-4">
           {isLoading ? (
             <p className="text-center py-10 text-muted-foreground">Cargando equipo...</p>
-          ) : team.length === 0 ? (
+          ) : !team || team.length === 0 ? (
             <Card className="p-12 text-center border-dashed">
               <Users className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
               <h3 className="text-lg font-semibold">No hay usuarios registrados</h3>
@@ -75,11 +75,11 @@ export default function TeamPage() {
                   <div className="flex items-center gap-4">
                     <Avatar className="h-12 w-12 border-2 border-primary/10">
                       <AvatarImage src={`https://picsum.photos/seed/${member.id}/100/100`} />
-                      <AvatarFallback>{member.name[0]}</AvatarFallback>
+                      <AvatarFallback>{member.name ? member.name[0] : member.email[0]}</AvatarFallback>
                     </Avatar>
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="font-bold">{member.name}</h3>
+                        <h3 className="font-bold">{member.name || 'Usuario sin nombre'}</h3>
                         <Badge variant={member.role === 'Admin' ? 'default' : 'secondary'} className="text-[10px]">
                           {member.role === 'Admin' ? <ShieldCheck className="h-3 w-3 mr-1" /> : <UserCircle className="h-3 w-3 mr-1" />}
                           {member.role}
@@ -91,7 +91,7 @@ export default function TeamPage() {
 
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={() => handleUpdateRole(member.id, 'Admin')}>
