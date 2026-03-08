@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -16,7 +16,8 @@ import {
   ArrowRightLeft,
   Save,
   DollarSign,
-  History
+  History,
+  Tag
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -46,6 +47,13 @@ interface FinancialAccount {
   status: 'active' | 'inactive';
 }
 
+interface ExpenseCategory {
+  id: string;
+  name: string;
+  totalSpent: number;
+  currency: 'ARS' | 'USD';
+}
+
 const initialAccounts: FinancialAccount[] = [
   { id: '1', name: "Caja Efectivo ARS", type: "Cash", balance: 145000, currency: "ARS", status: "active" },
   { id: '2', name: "Banco Galicia", type: "Bank", balance: 850300, currency: "ARS", status: "active" },
@@ -53,10 +61,17 @@ const initialAccounts: FinancialAccount[] = [
   { id: '4', name: "Mercado Pago", type: "Digital", balance: -2500, currency: "ARS", status: "active" },
 ]
 
+const initialExpenseCategories: ExpenseCategory[] = [
+  { id: 'e1', name: "Insumos Químicos", totalSpent: 120400, currency: 'ARS' },
+  { id: 'e2', name: "Combustible / Viáticos", totalSpent: 45000, currency: 'ARS' },
+  { id: 'e3', name: "Publicidad y Marketing", totalSpent: 12000, currency: 'ARS' },
+]
+
 export default function AccountsPage() {
   const { toast } = useToast()
   const [mounted, setMounted] = useState(false)
   const [accounts, setAccounts] = useState<FinancialAccount[]>(initialAccounts)
+  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>(initialExpenseCategories)
   
   // Dialog States
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false)
@@ -64,10 +79,13 @@ export default function AccountsPage() {
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false)
   
   // Form States
-  const [editingAccount, setEditingAccount] = useState<FinancialAccount | null>(null)
-  const [selectedAccount, setSelectedAccount] = useState<FinancialAccount | null>(null)
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null)
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [txType, setTxType] = useState<'income' | 'expense'>('income')
   
+  const editingAccount = useMemo(() => accounts.find(a => a.id === editingAccountId), [accounts, editingAccountId])
+  const selectedAccount = useMemo(() => accounts.find(a => a.id === selectedAccountId), [accounts, selectedAccountId])
+
   const [accountFormData, setAccountFormData] = useState<Omit<FinancialAccount, 'id'>>({
     name: "",
     type: "Cash",
@@ -93,7 +111,7 @@ export default function AccountsPage() {
 
   const handleOpenAccountDialog = (account?: FinancialAccount) => {
     if (account) {
-      setEditingAccount(account)
+      setEditingAccountId(account.id)
       setAccountFormData({
         name: account.name,
         type: account.type,
@@ -102,7 +120,7 @@ export default function AccountsPage() {
         status: account.status
       })
     } else {
-      setEditingAccount(null)
+      setEditingAccountId(null)
       setAccountFormData({
         name: "",
         type: "Cash",
@@ -120,23 +138,30 @@ export default function AccountsPage() {
       return
     }
 
-    if (editingAccount) {
-      setAccounts(prev => prev.map(a => a.id === editingAccount.id ? { ...a, ...accountFormData } : a))
-      toast({ title: "Cuenta actualizada", description: "Los cambios se guardaron correctamente." })
+    const isEdit = !!editingAccountId;
+
+    if (isEdit) {
+      setAccounts(prev => prev.map(a => a.id === editingAccountId ? { ...a, ...accountFormData } : a))
     } else {
       const newAccount: FinancialAccount = {
         ...accountFormData,
         id: Math.random().toString(36).substr(2, 9)
       }
       setAccounts(prev => [...prev, newAccount])
-      toast({ title: "Cuenta creada", description: "La cuenta financiera ha sido agregada." })
     }
+
+    // Close and reset BEFORE toast to avoid focus issues
     setIsAccountDialogOpen(false)
-    setEditingAccount(null)
+    setEditingAccountId(null)
+
+    toast({ 
+      title: isEdit ? "Cuenta actualizada" : "Cuenta creada", 
+      description: isEdit ? "Los cambios se guardaron correctamente." : "La cuenta financiera ha sido agregada." 
+    })
   }
 
   const handleOpenTxDialog = (account: FinancialAccount, type: 'income' | 'expense') => {
-    setSelectedAccount(account)
+    setSelectedAccountId(account.id)
     setTxType(type)
     setTxFormData({ amount: 0, description: "" })
     setIsTxDialogOpen(true)
@@ -147,17 +172,18 @@ export default function AccountsPage() {
 
     const multiplier = txType === 'income' ? 1 : -1
     setAccounts(prev => prev.map(a => 
-      a.id === selectedAccount.id 
+      a.id === selectedAccountId 
         ? { ...a, balance: a.balance + (txFormData.amount * multiplier) } 
         : a
     ))
+
+    setIsTxDialogOpen(false)
+    setSelectedAccountId(null)
 
     toast({ 
       title: txType === 'income' ? "Ingreso registrado" : "Gasto registrado", 
       description: `Se procesó el movimiento en ${selectedAccount.name}` 
     })
-    setIsTxDialogOpen(false)
-    setSelectedAccount(null)
   }
 
   const handleTransfer = () => {
@@ -181,9 +207,10 @@ export default function AccountsPage() {
       return a
     }))
 
-    toast({ title: "Transferencia exitosa", description: "El dinero ha sido movido correctamente." })
     setIsTransferDialogOpen(false)
     setTransferFormData({ fromId: "", toId: "", amount: 0 })
+
+    toast({ title: "Transferencia exitosa", description: "El dinero ha sido movido correctamente." })
   }
 
   return (
@@ -308,22 +335,22 @@ export default function AccountsPage() {
           <div className="space-y-4">
             <Card className="glass-card">
               <CardHeader>
-                <CardTitle className="text-lg">Cuentas de Gastos</CardTitle>
-                <CardDescription>Gastos operativos del mes</CardDescription>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Tag className="h-5 w-5 text-primary" />
+                  Cuentas de Gastos
+                </CardTitle>
+                <CardDescription>Gastos operativos acumulados</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex justify-between items-center p-2 rounded bg-muted/20">
-                  <span className="text-sm">Insumos Químicos</span>
-                  <span className="font-bold text-rose-600">$120.400</span>
-                </div>
-                <div className="flex justify-between items-center p-2 rounded bg-muted/20">
-                  <span className="text-sm">Combustible / Viáticos</span>
-                  <span className="font-bold text-rose-600">$45.000</span>
-                </div>
-                <div className="flex justify-between items-center p-2 rounded bg-muted/20">
-                  <span className="text-sm">Publicidad y Marketing</span>
-                  <span className="font-bold text-rose-600">$12.000</span>
-                </div>
+                {expenseCategories.map(cat => (
+                  <div key={cat.id} className="flex justify-between items-center p-2 rounded bg-muted/20">
+                    <span className="text-sm">{cat.name}</span>
+                    <span className="font-bold text-rose-600">
+                      {cat.currency === 'USD' ? 'u$s' : '$'}
+                      {mounted ? cat.totalSpent.toLocaleString() : cat.totalSpent}
+                    </span>
+                  </div>
+                ))}
               </CardContent>
               <CardFooter className="pt-0">
                 <Button variant="outline" size="sm" className="w-full text-xs font-bold">ADMINISTRAR CATEGORÍAS</Button>
@@ -346,7 +373,7 @@ export default function AccountsPage() {
       <Dialog open={isAccountDialogOpen} onOpenChange={setIsAccountDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>{editingAccount ? "Editar Cuenta" : "Nueva Cuenta"}</DialogTitle>
+            <DialogTitle>{editingAccountId ? "Editar Cuenta" : "Nueva Cuenta"}</DialogTitle>
             <DialogDescription>
               Configura los detalles de tu cuenta financiera o caja.
             </DialogDescription>

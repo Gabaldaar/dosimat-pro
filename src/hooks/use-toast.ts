@@ -133,7 +133,9 @@ let memoryState: State = { toasts: [] }
 
 function dispatch(action: Action) {
   memoryState = reducer(memoryState, action)
-  listeners.forEach((listener) => {
+  // Copy listeners to avoid issues if a listener modifies the array (e.g. unmounting)
+  const currentListeners = [...listeners]
+  currentListeners.forEach((listener) => {
     listener(memoryState)
   })
 }
@@ -180,7 +182,7 @@ function useToast() {
         listeners.splice(index, 1)
       }
     }
-  }, []) // Fix: Removed 'state' dependency to prevent infinite loops
+  }, [])
 
   return {
     ...state,
