@@ -6,7 +6,6 @@ import { initializeFirebase } from '@/firebase';
 import { usePathname, useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
 
 interface FirebaseClientProviderProps {
   children: ReactNode;
@@ -29,8 +28,8 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
   useEffect(() => {
     if (!mounted) return;
 
-    if (firebaseServices.auth && firebaseServices.firestore) {
-      const unsubscribe = onAuthStateChanged(firebaseServices.auth, async (user) => {
+    if (firebaseServices.auth) {
+      const unsubscribe = onAuthStateChanged(firebaseServices.auth, (user) => {
         if (!user) {
           setIsInitializing(false);
           if (pathname !== '/login') {
@@ -38,23 +37,16 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
           }
           return;
         }
-
-        try {
-          const userDoc = await getDoc(doc(firebaseServices.firestore, 'users', user.uid));
-          if (userDoc.exists() && pathname === '/login') {
-            router.replace('/');
-          }
-        } catch (error) {
-          console.warn("Aviso: Sincronizando perfil de usuario...");
-        } finally {
-          setIsInitializing(false);
+        setIsInitializing(false);
+        if (pathname === '/login') {
+          router.replace('/');
         }
       });
       return () => unsubscribe();
     }
-  }, [firebaseServices.auth, firebaseServices.firestore, pathname, router, mounted]);
+  }, [firebaseServices.auth, pathname, router, mounted]);
 
-  // Pantalla de carga unificada con texto estable para evitar errores de hidratación
+  // Evitamos discrepancias de hidratación asegurando un renderizado estable
   if (!mounted || isInitializing) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
