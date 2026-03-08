@@ -1,7 +1,6 @@
-
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useMemo } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -20,8 +19,7 @@ import {
   History,
   Tag,
   FileText,
-  Trash2,
-  X
+  Trash2
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -42,47 +40,21 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
-
-interface FinancialAccount {
-  id: string;
-  name: string;
-  type: 'Cash' | 'Bank' | 'Digital';
-  balance: number;
-  currency: 'ARS' | 'USD';
-  status: 'active' | 'inactive';
-}
-
-interface ExpenseCategory {
-  id: string;
-  name: string;
-  totalSpent: number;
-  currency: 'ARS' | 'USD';
-}
-
-const STORAGE_KEY_ACCOUNTS = 'dosimat_pro_v1_accounts'
-const STORAGE_KEY_EXPENSES = 'dosimat_pro_v1_expenses'
-
-const defaultAccounts: FinancialAccount[] = [
-  { id: '1', name: "Caja Efectivo ARS", type: "Cash", balance: 145000, currency: "ARS", status: "active" },
-  { id: '2', name: "Banco Galicia", type: "Bank", balance: 850300, currency: "ARS", status: "active" },
-  { id: '3', name: "Caja Efectivo USD", type: "Cash", balance: 2450, currency: "USD", status: "active" },
-  { id: '4', name: "Mercado Pago", type: "Digital", balance: 12000, currency: "ARS", status: "active" },
-]
-
-const defaultExpenses: ExpenseCategory[] = [
-  { id: 'e1', name: "Insumos Químicos", totalSpent: 0, currency: 'ARS' },
-  { id: 'e2', name: "Combustible / Viáticos", totalSpent: 0, currency: 'ARS' },
-  { id: 'e3', name: "Publicidad y Marketing", totalSpent: 0, currency: 'ARS' },
-  { id: 'e4', name: "Sueldos y Comisiones", totalSpent: 0, currency: 'ARS' },
-  { id: 'e5', name: "Gastos Varios", totalSpent: 0, currency: 'ARS' },
-]
+import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, setDocumentNonBlocking, addDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase"
+import { collection, doc } from "firebase/firestore"
 
 export default function AccountsPage() {
   const { toast } = useToast()
-  const [mounted, setMounted] = useState(false)
-  const [isDataLoaded, setIsDataLoaded] = useState(false)
-  const [accounts, setAccounts] = useState<FinancialAccount[]>([])
-  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([])
+  const db = useFirestore()
+  
+  // Firestore Collections
+  const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
+  const categoriesQuery = useMemoFirebase(() => collection(db, 'expense_categories'), [db])
+  const txQuery = useMemoFirebase(() => collection(db, 'transactions'), [db])
+
+  const { data: accounts = [] } = useCollection(accountsQuery)
+  const { data: expenseCategories = [] } = useCollection(categoriesQuery)
+  const { data: recentTxs = [] } = useCollection(txQuery)
   
   // Dialog States
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false)
@@ -96,14 +68,13 @@ export default function AccountsPage() {
   const [txType, setTxType] = useState<'income' | 'expense'>('income')
   const [newCategoryName, setNewCategoryName] = useState("")
   
-  const selectedAccount = useMemo(() => accounts.find(a => a.id === selectedAccountId), [accounts, selectedAccountId])
+  const selectedAccount = useMemo(() => accounts?.find(a => a.id === selectedAccountId), [accounts, selectedAccountId])
 
-  const [accountFormData, setAccountFormData] = useState<Omit<FinancialAccount, 'id'>>({
+  const [accountFormData, setAccountFormData] = useState({
     name: "",
     type: "Cash",
-    balance: 0,
-    currency: "ARS",
-    status: "active"
+    initialBalance: 0,
+    currency: "ARS"
   })
 
   const [txFormData, setTxFormData] = useState({
@@ -118,53 +89,22 @@ export default function AccountsPage() {
     amount: 0
   })
 
-  // Load Initial Data once
-  useEffect(() => {
-    const savedAccounts = localStorage.getItem(STORAGE_KEY_ACCOUNTS)
-    const savedExpenses = localStorage.getItem(STORAGE_KEY_EXPENSES)
-    
-    if (savedAccounts) {
-      setAccounts(JSON.parse(savedAccounts))
-    } else {
-      setAccounts(defaultAccounts)
-    }
-    
-    if (savedExpenses) {
-      setExpenseCategories(JSON.parse(savedExpenses))
-    } else {
-      setExpenseCategories(defaultExpenses)
-    }
-    
-    setMounted(true)
-    setIsDataLoaded(true)
-  }, [])
-
-  // Sync Data to LocalStorage only if data has been loaded
-  useEffect(() => {
-    if (mounted && isDataLoaded) {
-      localStorage.setItem(STORAGE_KEY_ACCOUNTS, JSON.stringify(accounts))
-      localStorage.setItem(STORAGE_KEY_EXPENSES, JSON.stringify(expenseCategories))
-    }
-  }, [accounts, expenseCategories, mounted, isDataLoaded])
-
-  const handleOpenAccountDialog = (account?: FinancialAccount) => {
+  const handleOpenAccountDialog = (account?: any) => {
     if (account) {
       setEditingAccountId(account.id)
       setAccountFormData({
         name: account.name,
         type: account.type,
-        balance: account.balance,
-        currency: account.currency,
-        status: account.status
+        initialBalance: account.initialBalance || 0,
+        currency: account.currency
       })
     } else {
       setEditingAccountId(null)
       setAccountFormData({
         name: "",
         type: "Cash",
-        balance: 0,
-        currency: "ARS",
-        status: "active"
+        initialBalance: 0,
+        currency: "ARS"
       })
     }
     setIsAccountDialogOpen(true)
@@ -177,21 +117,17 @@ export default function AccountsPage() {
     }
 
     if (editingAccountId) {
-      setAccounts(prev => prev.map(a => a.id === editingAccountId ? { ...a, ...accountFormData } : a))
-      toast({ title: "Cuenta actualizada", description: "Los cambios se guardaron correctamente." })
+      updateDocumentNonBlocking(doc(db, 'financial_accounts', editingAccountId), accountFormData)
+      toast({ title: "Cuenta actualizada" })
     } else {
-      const newAccount: FinancialAccount = {
-        ...accountFormData,
-        id: Math.random().toString(36).substr(2, 9)
-      }
-      setAccounts(prev => [...prev, newAccount])
-      toast({ title: "Cuenta creada", description: "La cuenta financiera ha sido agregada." })
+      const id = Math.random().toString(36).substr(2, 9)
+      setDocumentNonBlocking(doc(db, 'financial_accounts', id), { ...accountFormData, id }, { merge: true })
+      toast({ title: "Cuenta creada" })
     }
-    
     setIsAccountDialogOpen(false)
   }
 
-  const handleOpenTxDialog = (account: FinancialAccount, type: 'income' | 'expense') => {
+  const handleOpenTxDialog = (account: any, type: 'income' | 'expense') => {
     setSelectedAccountId(account.id)
     setTxType(type)
     setTxFormData({ amount: 0, description: "", categoryId: "" })
@@ -201,80 +137,62 @@ export default function AccountsPage() {
   const handleProcessTx = () => {
     if (!selectedAccount || txFormData.amount <= 0) return
     
-    if (txType === 'expense' && !txFormData.categoryId) {
-      toast({ title: "Atención", description: "Selecciona una categoría para el gasto", variant: "destructive" })
-      return
-    }
-
     const multiplier = txType === 'income' ? 1 : -1
-    
-    // 1. Actualizar saldo de la cuenta financiera
-    setAccounts(prev => prev.map(a => 
-      a.id === selectedAccountId 
-        ? { ...a, balance: a.balance + (txFormData.amount * multiplier) } 
-        : a
-    ))
+    const newBalance = (selectedAccount.initialBalance || 0) + (txFormData.amount * multiplier)
 
-    // 2. Si es gasto, actualizar el total de la categoría
-    if (txType === 'expense') {
-      setExpenseCategories(prev => prev.map(cat => 
-        cat.id === txFormData.categoryId 
-          ? { ...cat, totalSpent: cat.totalSpent + txFormData.amount } 
-          : cat
-      ))
-    }
+    // Update account balance
+    updateDocumentNonBlocking(doc(db, 'financial_accounts', selectedAccount.id), {
+      initialBalance: newBalance
+    })
+
+    // Create transaction record
+    addDocumentNonBlocking(collection(db, 'transactions'), {
+      date: new Date().toISOString(),
+      type: txType === 'income' ? 'Adjustment' : 'Expense',
+      amount: txFormData.amount * multiplier,
+      currency: selectedAccount.currency,
+      description: txFormData.description,
+      financialAccountId: selectedAccount.id,
+      expenseCategoryId: txFormData.categoryId || null
+    })
 
     setIsTxDialogOpen(false)
-    toast({ 
-      title: txType === 'income' ? "Ingreso registrado" : "Gasto registrado", 
-      description: `Se procesó el movimiento en ${selectedAccount.name}` 
-    })
+    toast({ title: "Operación procesada" })
   }
 
   const handleTransfer = () => {
     const { fromId, toId, amount } = transferFormData
-    if (!fromId || !toId || amount <= 0) {
-      toast({ title: "Error", description: "Completa todos los campos", variant: "destructive" })
-      return
-    }
+    const fromAcc = accounts?.find(a => a.id === fromId)
+    const toAcc = accounts?.find(a => a.id === toId)
 
-    const fromAcc = accounts.find(a => a.id === fromId)
-    const toAcc = accounts.find(a => a.id === toId)
+    if (!fromAcc || !toAcc || amount <= 0) return
 
-    if (fromAcc?.currency !== toAcc?.currency) {
-      toast({ title: "Error", description: "Solo transferencias entre cuentas de la misma moneda", variant: "destructive" })
-      return
-    }
+    updateDocumentNonBlocking(doc(db, 'financial_accounts', fromId), { initialBalance: fromAcc.initialBalance - amount })
+    updateDocumentNonBlocking(doc(db, 'financial_accounts', toId), { initialBalance: toAcc.initialBalance + amount })
 
-    setAccounts(prev => prev.map(a => {
-      if (a.id === fromId) return { ...a, balance: a.balance - amount }
-      if (a.id === toId) return { ...a, balance: a.balance + amount }
-      return a
-    }))
-    
+    addDocumentNonBlocking(collection(db, 'transactions'), {
+      date: new Date().toISOString(),
+      type: 'FinancialTransferOut',
+      amount: -amount,
+      currency: fromAcc.currency,
+      financialAccountId: fromId,
+      description: `Transferencia a ${toAcc.name}`
+    })
+
     setIsTransferDialogOpen(false)
-    toast({ title: "Transferencia exitosa", description: "Movimiento realizado con éxito." })
+    toast({ title: "Transferencia completada" })
   }
 
   const handleAddCategory = () => {
     if (!newCategoryName) return
-    const newCat: ExpenseCategory = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: newCategoryName,
-      totalSpent: 0,
-      currency: 'ARS'
-    }
-    setExpenseCategories(prev => [...prev, newCat])
+    const id = Math.random().toString(36).substr(2, 9)
+    setDocumentNonBlocking(doc(db, 'expense_categories', id), { id, name: newCategoryName }, { merge: true })
     setNewCategoryName("")
-    toast({ title: "Categoría agregada", description: "El rubro de gasto ha sido creado." })
   }
 
   const handleDeleteCategory = (id: string) => {
-    setExpenseCategories(prev => prev.filter(c => c.id !== id))
-    toast({ title: "Categoría eliminada", description: "El rubro de gasto ha sido removido." })
+    deleteDocumentNonBlocking(doc(db, 'expense_categories', id))
   }
-
-  if (!mounted) return null;
 
   return (
     <div className="flex min-h-screen">
@@ -284,7 +202,7 @@ export default function AccountsPage() {
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-headline font-bold text-primary">Cuentas Financieras</h1>
-            <p className="text-muted-foreground">Estado de saldos y cajas en tiempo real.</p>
+            <p className="text-muted-foreground">Estado de saldos y cajas en tiempo real (Firestore).</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setIsTransferDialogOpen(true)}>
@@ -297,13 +215,8 @@ export default function AccountsPage() {
         </header>
 
         <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {accounts.map((account) => (
-            <Card key={account.id} className={`glass-card relative overflow-hidden transition-all hover:shadow-md ${account.balance < 0 ? 'border-destructive/30' : ''}`}>
-              {account.balance < 0 && (
-                <div className="absolute top-0 right-0 p-2">
-                  <Badge variant="destructive" className="animate-pulse text-[10px]">Saldo Negativo</Badge>
-                </div>
-              )}
+          {accounts?.map((account: any) => (
+            <Card key={account.id} className="glass-card">
               <CardHeader className="pb-2">
                 <div className="flex items-start justify-between">
                   <div className={`p-2 rounded-lg ${
@@ -315,40 +228,26 @@ export default function AccountsPage() {
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleOpenAccountDialog(account)}>Editar Cuenta</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleOpenAccountDialog(account)}>Editar</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
                 <CardTitle className="text-base mt-2">{account.name}</CardTitle>
-                <CardDescription className="text-xs uppercase font-bold tracking-tighter">{account.currency}</CardDescription>
+                <CardDescription className="text-xs font-bold">{account.currency}</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex items-baseline gap-1">
-                  <span className={`text-2xl font-bold ${account.balance < 0 ? 'text-destructive' : ''}`}>
-                    {account.currency === 'USD' ? 'u$s' : '$'}
-                    {account.balance.toLocaleString('es-AR')}
-                  </span>
+                <div className="text-2xl font-bold">
+                  {account.currency === 'USD' ? 'u$s' : '$'}
+                  {(account.initialBalance || 0).toLocaleString('es-AR')}
                 </div>
                 <div className="mt-4 flex gap-2">
-                  <Button 
-                    size="sm" 
-                    variant="ghost" 
-                    className="flex-1 h-8 text-[10px] font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                    onClick={() => handleOpenTxDialog(account, 'income')}
-                  >
+                  <Button size="sm" variant="ghost" className="flex-1 bg-emerald-50 text-emerald-700" onClick={() => handleOpenTxDialog(account, 'income')}>
                     <Plus className="h-3 w-3 mr-1" /> INGRESO
                   </Button>
-                  <Button 
-                    size="sm" 
-                    variant="ghost" 
-                    className="flex-1 h-8 text-[10px] font-bold bg-rose-50 text-rose-700 hover:bg-rose-100"
-                    onClick={() => handleOpenTxDialog(account, 'expense')}
-                  >
+                  <Button size="sm" variant="ghost" className="flex-1 bg-rose-50 text-rose-700" onClick={() => handleOpenTxDialog(account, 'expense')}>
                     <ArrowDownLeft className="h-3 w-3 mr-1" /> GASTO
                   </Button>
                 </div>
@@ -359,31 +258,22 @@ export default function AccountsPage() {
 
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="lg:col-span-2 glass-card">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Últimos Movimientos</CardTitle>
-                <CardDescription>Resumen de transacciones recientes</CardDescription>
-              </div>
-              <Button variant="ghost" size="sm" className="text-xs font-bold">VER TODO</Button>
-            </CardHeader>
+            <CardHeader><CardTitle>Últimos Movimientos</CardTitle></CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {[
-                  { desc: "Ingreso Manual / Venta", amount: "+$12.500", account: "Caja Efectivo ARS", type: "income" },
-                  { desc: "Gasto de Insumos", amount: "-$45.000", account: "Banco Galicia", type: "expense" },
-                ].map((move, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/30 transition-colors border-b last:border-0">
+                {recentTxs?.slice(0, 5).map((move: any) => (
+                  <div key={move.id} className="flex items-center justify-between p-3 border-b">
                     <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-full ${move.type === 'income' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                        {move.type === 'income' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownLeft className="h-4 w-4" />}
+                      <div className={`p-2 rounded-full ${move.amount > 0 ? 'bg-emerald-100' : 'bg-rose-100'}`}>
+                        {move.amount > 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownLeft className="h-4 w-4" />}
                       </div>
                       <div>
-                        <p className="text-sm font-semibold">{move.desc}</p>
-                        <p className="text-xs text-muted-foreground">{move.account}</p>
+                        <p className="text-sm font-semibold">{move.description || move.type}</p>
+                        <p className="text-xs text-muted-foreground">{new Date(move.date).toLocaleDateString()}</p>
                       </div>
                     </div>
-                    <span className={`font-bold ${move.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {move.amount}
+                    <span className={`font-bold ${move.amount > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {move.currency === 'USD' ? 'u$s' : '$'}{Math.abs(move.amount).toLocaleString()}
                     </span>
                   </div>
                 ))}
@@ -391,76 +281,47 @@ export default function AccountsPage() {
             </CardContent>
           </Card>
 
-          <div className="space-y-4">
-            <Card className="glass-card">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Tag className="h-5 w-5 text-primary" />
-                  Cuentas de Gastos
-                </CardTitle>
-                <CardDescription>Egresos acumulados por rubro</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {expenseCategories.map(cat => (
-                  <div key={cat.id} className="flex justify-between items-center p-2 rounded bg-muted/20">
-                    <span className="text-sm">{cat.name}</span>
-                    <span className="font-bold text-rose-600">
-                      {cat.currency === 'USD' ? 'u$s' : '$'}
-                      {cat.totalSpent.toLocaleString('es-AR')}
-                    </span>
-                  </div>
-                ))}
-              </CardContent>
-              <CardFooter className="pt-0">
-                <Button variant="outline" size="sm" className="w-full text-xs font-bold" onClick={() => setIsCategoryManagerOpen(true)}>
-                  ADMINISTRAR CATEGORÍAS
-                </Button>
-              </CardFooter>
-            </Card>
-            
-            <div className="p-4 bg-primary/10 rounded-xl border border-primary/20">
-              <h4 className="font-bold text-primary mb-1 flex items-center gap-2">
-                <History className="h-4 w-4" /> Resumen Financiero
-              </h4>
-              <p className="text-xs text-primary/80 leading-relaxed">
-                Los saldos reflejan el efectivo en mano y en bancos. Los gastos se acumulan en sus respectivas categorías para reportes mensuales.
-              </p>
-            </div>
-          </div>
+          <Card className="glass-card">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2"><Tag className="h-5 w-5" /> Categorías</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {expenseCategories?.map((cat: any) => (
+                <div key={cat.id} className="flex justify-between items-center p-2 rounded bg-muted/20">
+                  <span className="text-sm">{cat.name}</span>
+                </div>
+              ))}
+            </CardContent>
+            <CardFooter>
+              <Button variant="outline" size="sm" className="w-full" onClick={() => setIsCategoryManagerOpen(true)}>ADMINISTRAR</Button>
+            </CardFooter>
+          </Card>
         </section>
       </main>
 
       {/* Account Dialog */}
       <Dialog open={isAccountDialogOpen} onOpenChange={setIsAccountDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>{editingAccountId ? "Editar Cuenta" : "Nueva Cuenta"}</DialogTitle>
-            <DialogDescription>Configura los detalles de tu cuenta financiera.</DialogDescription>
-          </DialogHeader>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{editingAccountId ? "Editar Cuenta" : "Nueva Cuenta"}</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Nombre de la Cuenta</Label>
-              <Input 
-                id="name" 
-                value={accountFormData.name}
-                onChange={(e) => setAccountFormData({...accountFormData, name: e.target.value})}
-              />
+              <Label>Nombre</Label>
+              <Input value={accountFormData.name} onChange={(e) => setAccountFormData({...accountFormData, name: e.target.value})} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Tipo</Label>
-                <Select value={accountFormData.type} onValueChange={(v: any) => setAccountFormData({...accountFormData, type: v})}>
+                <Select value={accountFormData.type} onValueChange={(v) => setAccountFormData({...accountFormData, type: v})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Cash">Efectivo</SelectItem>
                     <SelectItem value="Bank">Banco</SelectItem>
-                    <SelectItem value="Digital">Digital</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Moneda</Label>
-                <Select value={accountFormData.currency} onValueChange={(v: any) => setAccountFormData({...accountFormData, currency: v})}>
+                <Select value={accountFormData.currency} onValueChange={(v) => setAccountFormData({...accountFormData, currency: v})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ARS">ARS</SelectItem>
@@ -470,164 +331,32 @@ export default function AccountsPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="balance">Saldo Inicial</Label>
-              <Input 
-                id="balance" 
-                type="number" 
-                value={accountFormData.balance}
-                onChange={(e) => setAccountFormData({...accountFormData, balance: Number(e.target.value)})}
-              />
+              <Label>Saldo Inicial / Actual</Label>
+              <Input type="number" value={accountFormData.initialBalance} onChange={(e) => setAccountFormData({...accountFormData, initialBalance: Number(e.target.value)})} />
             </div>
           </div>
-          <DialogFooter>
-            <Button onClick={handleSaveAccount} className="w-full">
-              <Save className="mr-2 h-4 w-4" /> Guardar
-            </Button>
-          </DialogFooter>
+          <DialogFooter><Button onClick={handleSaveAccount} className="w-full">Guardar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Transaction Dialog */}
-      <Dialog open={isTxDialogOpen} onOpenChange={setIsTxDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Registrar {txType === 'income' ? 'Ingreso' : 'Gasto'}</DialogTitle>
-            <DialogDescription>En: {selectedAccount?.name}</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <Label>Monto ({selectedAccount?.currency})</Label>
-              <div className="relative">
-                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  type="number" 
-                  className="pl-10 font-bold"
-                  value={txFormData.amount}
-                  onChange={(e) => setTxFormData({...txFormData, amount: Number(e.target.value)})}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Descripción / Concepto</Label>
-              <div className="relative">
-                <FileText className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  placeholder="Ej: Pago de abono, Compra químicos..."
-                  className="pl-10"
-                  value={txFormData.description}
-                  onChange={(e) => setTxFormData({...txFormData, description: e.target.value})}
-                />
-              </div>
-            </div>
-
-            {txType === 'expense' && (
-              <div className="space-y-2">
-                <Label>Categoría de Gasto</Label>
-                <Select value={txFormData.categoryId} onValueChange={(v) => setTxFormData({...txFormData, categoryId: v})}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar rubro" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {expenseCategories.map(cat => (
-                      <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button onClick={handleProcessTx} className={`w-full ${txType === 'income' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'}`}>
-              Confirmar Registro
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Transfer Dialog */}
-      <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Transferencia entre Cuentas</DialogTitle>
-            <DialogDescription>Mueve dinero entre tus cajas o bancos.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <Label>Desde (Origen)</Label>
-              <Select value={transferFormData.fromId} onValueChange={(v) => setTransferFormData({...transferFormData, fromId: v})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {accounts.map(a => <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Hacia (Destino)</Label>
-              <Select value={transferFormData.toId} onValueChange={(v) => setTransferFormData({...transferFormData, toId: v})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {accounts.map(a => <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Monto a transferir</Label>
-              <Input 
-                type="number" 
-                value={transferFormData.amount}
-                onChange={(e) => setTransferFormData({...transferFormData, amount: Number(e.target.value)})}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={handleTransfer} className="w-full">Procesar Transferencia</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Category Manager Dialog */}
+      {/* Category Manager */}
       <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Administrar Categorías</DialogTitle>
-            <DialogDescription>Define los rubros de gastos de tu negocio.</DialogDescription>
-          </DialogHeader>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Categorías de Gasto</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="flex gap-2">
-              <Input 
-                placeholder="Nueva categoría..." 
-                value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
-              />
-              <Button size="icon" onClick={handleAddCategory}>
-                <Plus className="h-4 w-4" />
-              </Button>
+              <Input placeholder="Nueva categoría..." value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} />
+              <Button size="icon" onClick={handleAddCategory}><Plus className="h-4 w-4" /></Button>
             </div>
-            <ScrollArea className="h-[250px] pr-4">
-              <div className="space-y-2">
-                {expenseCategories.map(cat => (
-                  <div key={cat.id} className="flex items-center justify-between p-2 rounded border bg-muted/10">
-                    <span className="text-sm font-medium">{cat.name}</span>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-8 w-8 text-destructive"
-                      onClick={() => handleDeleteCategory(cat.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
+            <ScrollArea className="h-[200px]">
+              {expenseCategories?.map((cat: any) => (
+                <div key={cat.id} className="flex items-center justify-between p-2 border-b">
+                  <span>{cat.name}</span>
+                  <Button variant="ghost" size="icon" onClick={() => handleDeleteCategory(cat.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                </div>
+              ))}
             </ScrollArea>
           </div>
-          <DialogFooter>
-            <Button variant="secondary" onClick={() => setIsCategoryManagerOpen(false)} className="w-full">
-              Cerrar
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
