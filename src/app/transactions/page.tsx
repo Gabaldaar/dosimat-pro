@@ -40,7 +40,7 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu"
-import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase"
+import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase"
 import { collection, doc } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 
@@ -50,10 +50,6 @@ const txTypeMap: Record<string, { label: string, icon: any, color: string, descr
   service: { label: "Técnico", icon: Wrench, color: "text-indigo-600 bg-indigo-50", description: "Servicios técnicos, reparaciones o visitas de mantenimiento." },
   adjustment: { label: "Interno", icon: Settings2, color: "text-slate-600 bg-slate-50", description: "Ajustes manuales de saldo o correcciones administrativas." },
   cobro: { label: "Cobro", icon: Receipt, color: "text-emerald-600 bg-emerald-50", description: "Registro de pago recibido del cliente para cancelar deuda." },
-  FinancialTransferOut: { label: "Transferencia (Salida)", icon: ArrowRightLeft, color: "text-amber-600 bg-amber-50", description: "" },
-  FinancialTransferIn: { label: "Transferencia (Entrada)", icon: ArrowRightLeft, color: "text-emerald-600 bg-emerald-50", description: "" },
-  Adjustment: { label: "Ajuste de Saldo", icon: RefreshCw, color: "text-slate-600 bg-slate-50", description: "" },
-  Expense: { label: "Gasto Manual", icon: ArrowDownLeft, color: "text-rose-600 bg-rose-50", description: "" },
 }
 
 export default function TransactionsPage() {
@@ -62,10 +58,8 @@ export default function TransactionsPage() {
   const [mainView, setMainView] = useState("register")
   const [activeTab, setActiveTab] = useState("sale")
   
-  // Edit state
   const [editingTx, setEditingTx] = useState<any | null>(null)
 
-  // Filtros Historial
   const [filterCustomer, setFilterCustomer] = useState("all")
   const [filterAccount, setFilterAccount] = useState("all")
   const [filterStartDate, setFilterStartDate] = useState("")
@@ -96,8 +90,8 @@ export default function TransactionsPage() {
     const item = catalog?.find((i: any) => i.id === itemId)
     if (!item) return
     
-    const defaultCurrency = item.priceARS > 0 ? 'ARS' : 'USD'
-    const defaultPrice = item.priceARS > 0 ? item.priceARS : item.priceUSD
+    const defaultCurrency = (item.priceARS || 0) > 0 ? 'ARS' : 'USD'
+    const defaultPrice = (item.priceARS || 0) > 0 ? item.priceARS : item.priceUSD
 
     setSelectedItems(prev => [...prev, { 
       itemId: item.id, 
@@ -110,7 +104,7 @@ export default function TransactionsPage() {
 
   const updateItem = (index: number, field: string, value: any) => {
     const newItems = [...selectedItems]
-    newItems[index] = { ...newItems[index], [field]: value }
+    newItems[index] = { ...newItems[index], [field]: field === 'currency' ? value : Number(value) }
     setSelectedItems(newItems)
   }
 
@@ -138,13 +132,11 @@ export default function TransactionsPage() {
       setCobroCurrency(tx.currency)
       setCobroAccountId(tx.financialAccountId || "pending")
     } else {
-      // Restore items exactly as saved
       if (tx.items && tx.items.length > 0) {
         setSelectedItems(tx.items)
       } else {
-        // Fallback for old transactions
         setSelectedItems([{
-          name: tx.description || txTypeMap[tx.type]?.label || "Ajuste",
+          name: tx.description || txTypeMap[tx.type]?.label || "Ítem",
           qty: 1,
           price: Math.abs(tx.amount),
           currency: tx.currency,
@@ -153,27 +145,26 @@ export default function TransactionsPage() {
       }
       setDestinationAccounts({ [tx.currency]: tx.financialAccountId || "pending" })
     }
-    
     setMainView("register")
   }
 
   const handleDeleteTx = (tx: any) => {
+    if (!tx || !tx.id) return;
     if (!confirm("¿Eliminar esta operación? Esto revertirá los saldos automáticamente.")) return
 
     const client = customers?.find(c => c.id === tx.clientId)
     const acc = accounts?.find(a => a.id === tx.financialAccountId)
     
-    // Reverse balance logic
     if (tx.type === 'cobro') {
-      if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) - tx.amount })
+      if (acc) setDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) - tx.amount }, { merge: true })
       const balanceField = tx.currency === 'ARS' ? 'saldoActual' : 'saldoUSD'
-      if (client) updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) - tx.amount })
+      if (client) setDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) - tx.amount }, { merge: true })
     } else {
       if (acc) {
-        updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) - tx.amount })
+        setDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) - tx.amount }, { merge: true })
       } else {
         const balanceField = tx.currency === 'ARS' ? 'saldoActual' : 'saldoUSD'
-        if (client) updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) + tx.amount })
+        if (client) setDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) + tx.amount }, { merge: true })
       }
     }
 
@@ -191,108 +182,74 @@ export default function TransactionsPage() {
     if (!client) return
 
     if (editingTx) {
-      const newAmount = activeTab === 'cobro' ? cobroAmount : cartTotals[cobroCurrency as 'ARS' | 'USD'] || (selectedItems.length > 0 ? selectedItems.reduce((acc, item) => acc + (item.price * item.qty), 0) : 0)
-      const newCurrency = activeTab === 'cobro' ? cobroCurrency : (selectedItems[0]?.currency || "ARS")
-      const newAccId = activeTab === 'cobro' ? cobroAccountId : destinationAccounts[newCurrency]
-      
-      const oldAmount = editingTx.amount
-      const diff = newAmount - oldAmount
-
-      const updatedData = {
-        date: new Date(operationDate).toISOString(),
-        clientId: selectedCustomerId,
-        type: activeTab,
-        amount: newAmount,
-        currency: newCurrency,
-        description: txDescription || `Actualizado: ${txTypeMap[activeTab].label}`,
-        financialAccountId: newAccId === "pending" ? null : newAccId,
-        items: activeTab === 'cobro' ? null : selectedItems
-      }
-
-      updateDocumentNonBlocking(doc(db, 'transactions', editingTx.id), updatedData)
-
-      if (activeTab === 'cobro') {
-        const acc = accounts?.find(a => a.id === newAccId)
-        if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) + diff })
-        const balanceField = newCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'
-        updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) + diff })
-      } else {
-        const acc = accounts?.find(a => a.id === newAccId)
-        if (acc) {
-          updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) + diff })
-        } else {
-          const balanceField = newCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'
-          updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) - diff })
-        }
-      }
-
-      toast({ title: "Operación actualizada correctamente" })
-      setEditingTx(null)
-    } else {
-      if (activeTab === 'cobro') {
-        if (cobroAmount <= 0) return
-        
-        const txData = {
-          id: Math.random().toString(36).substr(2, 9),
-          date: new Date(operationDate).toISOString(),
-          clientId: selectedCustomerId,
-          type: 'cobro',
-          amount: cobroAmount,
-          currency: cobroCurrency,
-          description: txDescription || `Cobro de saldo - ${cobroCurrency}`,
-          financialAccountId: cobroAccountId === "pending" ? null : cobroAccountId
-        }
-
-        addDocumentNonBlocking(collection(db, 'transactions'), txData)
-        
-        const acc = accounts?.find(a => a.id === cobroAccountId)
-        if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) + cobroAmount })
-        
-        const balanceField = cobroCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'
-        updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) + cobroAmount })
-
-        toast({ title: "Cobro registrado correctamente" })
-      } else {
-        if (selectedItems.length === 0) return
-
-        ['ARS', 'USD'].forEach(curr => {
-          const total = cartTotals[curr as 'ARS' | 'USD']
-          const itemsOfCurrency = selectedItems.filter(item => item.currency === curr)
-
-          if (total > 0) {
-            const accId = destinationAccounts[curr]
-            const isPending = !accId || accId === "pending"
-            
-            const txData = {
-              id: Math.random().toString(36).substr(2, 9),
-              date: new Date(operationDate).toISOString(),
-              clientId: selectedCustomerId,
-              type: activeTab,
-              amount: total,
-              currency: curr,
-              description: txDescription || `Operación ${txTypeMap[activeTab].label} - ${curr}`,
-              financialAccountId: isPending ? null : accId,
-              items: itemsOfCurrency
-            }
-
-            addDocumentNonBlocking(collection(db, 'transactions'), txData)
-
-            if (!isPending) {
-              const acc = accounts?.find(a => a.id === accId)
-              if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) + total })
-            } else {
-              const balanceField = curr === 'ARS' ? 'saldoActual' : 'saldoUSD'
-              updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) - total })
-            }
-          }
-        })
-        toast({ title: "Operación registrada" })
-      }
+      handleDeleteTx(editingTx);
+      setEditingTx(null);
     }
 
-    setSelectedItems([])
-    setTxDescription("")
-    setMainView("history")
+    if (activeTab === 'cobro') {
+      if (cobroAmount <= 0) return
+      
+      const txId = Math.random().toString(36).substr(2, 9)
+      const txData = {
+        id: txId,
+        date: new Date(operationDate).toISOString(),
+        clientId: selectedCustomerId,
+        type: 'cobro',
+        amount: Number(cobroAmount),
+        currency: cobroCurrency,
+        description: txDescription || `Cobro de saldo - ${cobroCurrency}`,
+        financialAccountId: cobroAccountId === "pending" ? null : cobroAccountId
+      }
+
+      setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
+      
+      const acc = accounts?.find(a => a.id === cobroAccountId)
+      if (acc) setDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) + Number(cobroAmount) }, { merge: true })
+      
+      const balanceField = cobroCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'
+      setDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) + Number(cobroAmount) }, { merge: true })
+
+      toast({ title: "Cobro registrado correctamente" })
+    } else {
+      if (selectedItems.length === 0) return
+
+      ['ARS', 'USD'].forEach(curr => {
+        const total = cartTotals[curr as 'ARS' | 'USD']
+        const itemsOfCurrency = selectedItems.filter(item => item.currency === curr)
+
+        if (total > 0) {
+          const txId = Math.random().toString(36).substr(2, 9)
+          const accId = destinationAccounts[curr]
+          const isPending = !accId || accId === "pending"
+          
+          const txData = {
+            id: txId,
+            date: new Date(operationDate).toISOString(),
+            clientId: selectedCustomerId,
+            type: activeTab,
+            amount: Number(total),
+            currency: curr,
+            description: txDescription || `Operación ${txTypeMap[activeTab].label} - ${curr}`,
+            financialAccountId: isPending ? null : accId,
+            items: itemsOfCurrency
+          }
+
+          setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
+
+          if (!isPending) {
+            const acc = accounts?.find(a => a.id === accId)
+            if (acc) setDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) + Number(total) }, { merge: true })
+          } else {
+            const balanceField = curr === 'ARS' ? 'saldoActual' : 'saldoUSD'
+            setDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) - Number(total) }, { merge: true })
+          }
+        }
+      })
+      toast({ title: "Operación registrada" })
+    }
+
+    resetRegisterForm();
+    setMainView("history");
   }
 
   const resetRegisterForm = () => {
@@ -331,16 +288,16 @@ export default function TransactionsPage() {
   }, [filteredTransactions])
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-background">
       <Sidebar className="hidden md:flex w-64 fixed inset-y-0" />
-      <main className="flex-1 md:ml-64 p-4 md:p-8 space-y-6">
+      <main className="flex-1 md:ml-64 p-4 md:p-8 space-y-6 pb-20 md:pb-8">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <h1 className="text-3xl font-bold text-primary font-headline">
             {editingTx ? "Editar Operación" : "Operaciones Cloud"}
           </h1>
           <Tabs value={mainView} onValueChange={(v) => { if(v === "register" && !editingTx) resetRegisterForm(); setMainView(v); }}>
             <TabsList>
-              <TabsTrigger value="register">{editingTx ? "Editando" : "Nueva"}</TabsTrigger>
+              <TabsTrigger value="register">{editingTx ? "Modificando" : "Nueva"}</TabsTrigger>
               <TabsTrigger value="history">Historial</TabsTrigger>
             </TabsList>
           </Tabs>
@@ -380,7 +337,7 @@ export default function TransactionsPage() {
                       <SelectContent>
                         {customers?.map((c: any) => (
                           <SelectItem key={c.id} value={c.id}>
-                            {c.apellido}, {c.nombre} (ARS: ${Number(c.saldoActual || 0).toLocaleString('es-AR')})
+                            {c.apellido}, {c.nombre}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -465,7 +422,7 @@ export default function TransactionsPage() {
                         </TableHeader>
                         <TableBody>
                           {selectedItems.length === 0 ? (
-                            <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-12 italic">El carrito está vacío. Agrega ítems para continuar.</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-12 italic">El carrito está vacío.</TableCell></TableRow>
                           ) : (
                             selectedItems.map((item, i) => (
                               <TableRow key={i} className="hover:bg-muted/10">
@@ -549,11 +506,6 @@ export default function TransactionsPage() {
                     CANCELAR EDICIÓN
                   </Button>
                 )}
-                <div className="p-3 bg-muted/20 rounded-lg">
-                  <p className="text-[10px] text-muted-foreground italic leading-tight">
-                    * Al usar "A CUENTA", el monto se restará del saldo disponible del cliente. Las ventas directas a cajas/bancos actualizan el saldo de la cuenta elegida.
-                  </p>
-                </div>
               </CardContent>
             </Card>
           </div>
@@ -610,7 +562,7 @@ export default function TransactionsPage() {
                    </Select>
                  </div>
                  <div className="space-y-1">
-                   <Label className="text-xs">Tipo de Movimiento</Label>
+                   <Label className="text-xs">Movimiento</Label>
                    <Select value={filterOpType} onValueChange={setFilterOpType}>
                      <SelectTrigger className="w-[120px] h-9"><SelectValue /></SelectTrigger>
                      <SelectContent>
@@ -639,7 +591,7 @@ export default function TransactionsPage() {
                 {loadingTx ? (
                   <div className="p-12 text-center text-muted-foreground animate-pulse">Sincronizando operaciones...</div>
                 ) : filteredTransactions.length === 0 ? (
-                  <div className="p-12 text-center text-muted-foreground italic">No se encontraron registros para estos filtros.</div>
+                  <div className="p-12 text-center text-muted-foreground italic">No se encontraron registros.</div>
                 ) : (
                   <Table>
                     <TableHeader className="bg-muted/30">
@@ -672,8 +624,8 @@ export default function TransactionsPage() {
                                 <span className="text-xs font-bold uppercase tracking-tighter">{typeInfo.label}</span>
                               </div>
                             </TableCell>
-                            <TableCell className="text-[11px] max-w-[250px] truncate italic text-muted-foreground group-hover:text-foreground transition-colors">
-                              {itemsCount > 0 ? `${itemsCount} ítem(s): ${tx.items.map((i: any) => `${i.qty}x ${i.name}`).join(', ')}` : tx.description}
+                            <TableCell className="text-[11px] max-w-[250px] truncate italic text-muted-foreground">
+                              {itemsCount > 0 ? tx.items.map((i: any) => `${i.qty}x ${i.name}`).join(', ') : tx.description}
                             </TableCell>
                             <TableCell className={cn("text-right font-black text-sm", isIncome ? "text-emerald-600" : "text-rose-600")}>
                               {tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}
