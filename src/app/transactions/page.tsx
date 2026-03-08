@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -61,6 +60,8 @@ const txTypeMap: Record<string, { label: string, icon: any, color: string, descr
   service: { label: "Técnico", icon: Wrench, color: "text-indigo-600 bg-indigo-50", description: "Servicios técnicos, reparaciones o visitas de mantenimiento." },
   adjustment: { label: "Interno", icon: Settings2, color: "text-slate-600 bg-slate-50", description: "Ajustes manuales de saldo o correcciones administrativas." },
   cobro: { label: "Cobro", icon: Receipt, color: "text-emerald-600 bg-emerald-50", description: "Registro de pago recibido del cliente para cancelar deuda." },
+  FinancialTransferIn: { label: "Transferencia (Entrada)", icon: ArrowRightLeft, color: "text-emerald-600 bg-emerald-50", description: "Ingreso por transferencia entre cuentas." },
+  FinancialTransferOut: { label: "Transferencia (Salida)", icon: ArrowRightLeft, color: "text-amber-600 bg-amber-50", description: "Egreso por transferencia entre cuentas." },
 }
 
 export default function TransactionsPage() {
@@ -350,7 +351,7 @@ export default function TransactionsPage() {
       <main className="flex-1 md:ml-64 p-4 md:p-8 space-y-6 pb-20 md:pb-8">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <h1 className="text-3xl font-bold text-primary font-headline">
-            {editingTx ? "Editar Operación" : "Operaciones Cloud"}
+            {editingTx ? "Editar Operación" : "Operaciones"}
           </h1>
           <Tabs value={mainView} onValueChange={(v) => { if(v === "register" && !editingTx) resetRegisterForm(); setMainView(v); }}>
             <TabsList>
