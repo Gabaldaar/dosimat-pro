@@ -55,8 +55,9 @@ interface ExpenseCategory {
   currency: 'ARS' | 'USD';
 }
 
-const ACCOUNTS_STORAGE_KEY = 'dosimat_pro_accounts_final'
-const EXPENSES_STORAGE_KEY = 'dosimat_pro_expenses_final'
+// Claves únicas para evitar que se pisen los datos con cada actualización de código
+const STORAGE_KEY_ACCOUNTS = 'dosimat_pro_v1_accounts'
+const STORAGE_KEY_EXPENSES = 'dosimat_pro_v1_expenses'
 
 const defaultAccounts: FinancialAccount[] = [
   { id: '1', name: "Caja Efectivo ARS", type: "Cash", balance: 145000, currency: "ARS", status: "active" },
@@ -110,8 +111,8 @@ export default function AccountsPage() {
 
   // Load data once on mount
   useEffect(() => {
-    const savedAccounts = localStorage.getItem(ACCOUNTS_STORAGE_KEY)
-    const savedExpenses = localStorage.getItem(EXPENSES_STORAGE_KEY)
+    const savedAccounts = localStorage.getItem(STORAGE_KEY_ACCOUNTS)
+    const savedExpenses = localStorage.getItem(STORAGE_KEY_EXPENSES)
     
     if (savedAccounts) {
       setAccounts(JSON.parse(savedAccounts))
@@ -127,11 +128,11 @@ export default function AccountsPage() {
     setMounted(true)
   }, [])
 
-  // Save data whenever it changes (only after mount)
+  // Save data whenever it changes
   useEffect(() => {
     if (mounted) {
-      localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts))
-      localStorage.setItem(EXPENSES_STORAGE_KEY, JSON.stringify(expenseCategories))
+      localStorage.setItem(STORAGE_KEY_ACCOUNTS, JSON.stringify(accounts))
+      localStorage.setItem(STORAGE_KEY_EXPENSES, JSON.stringify(expenseCategories))
     }
   }, [accounts, expenseCategories, mounted])
 
@@ -164,24 +165,20 @@ export default function AccountsPage() {
       return
     }
 
-    // Close dialog FIRST to avoid Radix UI focus/lock hang
-    setIsAccountDialogOpen(false)
-
-    // Delay state update slightly to ensure dialog closing animation doesn't fight with re-render
-    setTimeout(() => {
-      if (editingAccountId) {
-        setAccounts(prev => prev.map(a => a.id === editingAccountId ? { ...a, ...accountFormData } : a))
-        toast({ title: "Cuenta actualizada", description: "Los cambios se guardaron correctamente." })
-      } else {
-        const newAccount: FinancialAccount = {
-          ...accountFormData,
-          id: Math.random().toString(36).substr(2, 9)
-        }
-        setAccounts(prev => [...prev, newAccount])
-        toast({ title: "Cuenta creada", description: "La cuenta financiera ha sido agregada." })
+    if (editingAccountId) {
+      setAccounts(prev => prev.map(a => a.id === editingAccountId ? { ...a, ...accountFormData } : a))
+      toast({ title: "Cuenta actualizada", description: "Los cambios se guardaron correctamente." })
+    } else {
+      const newAccount: FinancialAccount = {
+        ...accountFormData,
+        id: Math.random().toString(36).substr(2, 9)
       }
-      setEditingAccountId(null)
-    }, 100)
+      setAccounts(prev => [...prev, newAccount])
+      toast({ title: "Cuenta creada", description: "La cuenta financiera ha sido agregada." })
+    }
+    
+    setIsAccountDialogOpen(false)
+    setEditingAccountId(null)
   }
 
   const handleOpenTxDialog = (account: FinancialAccount, type: 'income' | 'expense') => {
@@ -194,22 +191,19 @@ export default function AccountsPage() {
   const handleProcessTx = () => {
     if (!selectedAccount || txFormData.amount <= 0) return
 
-    setIsTxDialogOpen(false)
-    
-    setTimeout(() => {
-      const multiplier = txType === 'income' ? 1 : -1
-      setAccounts(prev => prev.map(a => 
-        a.id === selectedAccountId 
-          ? { ...a, balance: a.balance + (txFormData.amount * multiplier) } 
-          : a
-      ))
+    const multiplier = txType === 'income' ? 1 : -1
+    setAccounts(prev => prev.map(a => 
+      a.id === selectedAccountId 
+        ? { ...a, balance: a.balance + (txFormData.amount * multiplier) } 
+        : a
+    ))
 
-      setSelectedAccountId(null)
-      toast({ 
-        title: txType === 'income' ? "Ingreso registrado" : "Gasto registrado", 
-        description: `Se procesó el movimiento en ${selectedAccount.name}` 
-      })
-    }, 100)
+    setIsTxDialogOpen(false)
+    setSelectedAccountId(null)
+    toast({ 
+      title: txType === 'income' ? "Ingreso registrado" : "Gasto registrado", 
+      description: `Se procesó el movimiento en ${selectedAccount.name}` 
+    })
   }
 
   const handleTransfer = () => {
@@ -227,17 +221,15 @@ export default function AccountsPage() {
       return
     }
 
+    setAccounts(prev => prev.map(a => {
+      if (a.id === fromId) return { ...a, balance: a.balance - amount }
+      if (a.id === toId) return { ...a, balance: a.balance + amount }
+      return a
+    }))
+    
     setIsTransferDialogOpen(false)
-
-    setTimeout(() => {
-      setAccounts(prev => prev.map(a => {
-        if (a.id === fromId) return { ...a, balance: a.balance - amount }
-        if (a.id === toId) return { ...a, balance: a.balance + amount }
-        return a
-      }))
-      setTransferFormData({ fromId: "", toId: "", amount: 0 })
-      toast({ title: "Transferencia exitosa", description: "Movimiento realizado con éxito." })
-    }, 100)
+    setTransferFormData({ fromId: "", toId: "", amount: 0 })
+    toast({ title: "Transferencia exitosa", description: "Movimiento realizado con éxito." })
   }
 
   if (!mounted) return null;
@@ -267,7 +259,7 @@ export default function AccountsPage() {
             <Card key={account.id} className={`glass-card relative overflow-hidden transition-all hover:shadow-md ${account.balance < 0 ? 'border-destructive/30' : ''}`}>
               {account.balance < 0 && (
                 <div className="absolute top-0 right-0 p-2">
-                  <Badge variant="destructive" className="animate-pulse">Saldo Negativo</Badge>
+                  <Badge variant="destructive" className="animate-pulse text-[10px]">Saldo Negativo</Badge>
                 </div>
               )}
               <CardHeader className="pb-2">
