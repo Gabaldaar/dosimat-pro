@@ -33,7 +33,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/tabs"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
@@ -65,42 +65,49 @@ export default function CustomersPage() {
   
   const [addressSuggestions, setAddressSuggestions] = useState<any[]>([])
   const [isSearchingAddress, setIsSearchingAddress] = useState(false)
+  const [isGoogleReady, setIsGoogleReady] = useState(false)
   
   const autocompleteService = useRef<any>(null)
   const placesService = useRef<any>(null)
 
+  // Carga robusta de Google Maps API
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-    if (!apiKey) return;
+    if (!apiKey) {
+      console.warn("Google Maps API Key no encontrada en .env");
+      return;
+    }
 
-    const loadGoogleMaps = () => {
-      if (!window.google) {
-        const scriptId = 'google-maps-script';
-        if (document.getElementById(scriptId)) return;
-        
+    const initServices = () => {
+      if (window.google?.maps?.places) {
+        try {
+          autocompleteService.current = new window.google.maps.places.AutocompleteService();
+          const dummyDiv = document.createElement('div');
+          placesService.current = new window.google.maps.places.PlacesService(dummyDiv);
+          setIsGoogleReady(true);
+        } catch (e) {
+          console.error("Error al inicializar servicios de Google:", e);
+        }
+      }
+    };
+
+    if (window.google?.maps?.places) {
+      initServices();
+    } else {
+      const scriptId = 'google-maps-script';
+      if (!document.getElementById(scriptId)) {
         const script = document.createElement('script');
         script.id = scriptId;
         script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
         script.async = true;
         script.defer = true;
-        script.onload = () => {
-          if (window.google?.maps?.places) {
-            autocompleteService.current = new window.google.maps.places.AutocompleteService();
-            const dummyDiv = document.createElement('div');
-            placesService.current = new window.google.maps.places.PlacesService(dummyDiv);
-          }
-        };
+        script.onload = initServices;
         document.head.appendChild(script);
-      } else if (!autocompleteService.current && window.google?.maps?.places) {
-        autocompleteService.current = new window.google.maps.places.AutocompleteService();
-        const dummyDiv = document.createElement('div');
-        placesService.current = new window.google.maps.places.PlacesService(dummyDiv);
       }
-    };
-
-    loadGoogleMaps();
+    }
   }, []);
 
+  // Solución para desbloqueo del puntero en diálogos
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -142,6 +149,7 @@ export default function CustomersPage() {
 
   const handleAddressSearch = async (val: string) => {
     setFormData({ ...formData, direccion: val })
+    
     if (val.length >= 3 && autocompleteService.current) {
       setIsSearchingAddress(true)
       autocompleteService.current.getPlacePredictions({
@@ -182,12 +190,12 @@ export default function CustomersPage() {
           if (c.types.includes('administrative_area_level_1')) state = c.long_name;
         });
 
-        setFormData({
-          ...formData,
-          direccion: `${street} ${number}`.trim(),
+        setFormData(prev => ({
+          ...prev,
+          direccion: `${street} ${number}`.trim() || prediction.description,
           localidad: city,
           provincia: state
-        })
+        }))
         setAddressSuggestions([])
       }
     })
@@ -626,8 +634,9 @@ export default function CustomersPage() {
                   <Input 
                     value={formData.direccion} 
                     onChange={(e) => handleAddressSearch(e.target.value)} 
-                    placeholder="Escribe para buscar..." 
+                    placeholder={isGoogleReady ? "Escribe para buscar..." : "Cargando mapas..."} 
                     className="pl-10 h-11 border-primary/20 focus:border-primary shadow-sm"
+                    disabled={!isGoogleReady}
                   />
                   {isSearchingAddress && (
                     <div className="absolute right-3 top-3">
