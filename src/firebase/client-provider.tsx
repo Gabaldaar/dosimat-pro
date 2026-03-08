@@ -12,9 +12,9 @@ interface FirebaseClientProviderProps {
 }
 
 /**
- * Mensaje de carga constante para evitar discrepancias de hidratación entre servidor y cliente.
+ * Mensaje de carga constante sincronizado con el servidor para evitar errores de hidratación.
  */
-const LOADING_MESSAGE = "Sincronizando acceso...";
+const LOADING_MESSAGE = "Validando acceso...";
 
 export function FirebaseClientProvider({ children }: FirebaseClientProviderProps) {
   const firebaseServices = useMemo(() => {

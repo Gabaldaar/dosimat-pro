@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import Link from "next/link"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -21,13 +22,7 @@ import {
   Map, 
   Box,
   FilterX,
-  History,
-  Receipt,
-  ShoppingBag,
-  Droplet,
-  Wrench,
-  Settings2,
-  ArrowRightLeft
+  History
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -42,13 +37,8 @@ import { collection, doc, query, where, orderBy } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 
 const txTypeMap: Record<string, { label: string, icon: any, color: string }> = {
-  sale: { label: "Venta", icon: ShoppingBag, color: "text-blue-600 bg-blue-50" },
-  refill: { label: "Reposición", icon: Droplet, color: "text-cyan-600 bg-cyan-50" },
-  service: { label: "Técnico", icon: Wrench, color: "text-indigo-600 bg-indigo-50" },
-  adjustment: { label: "Interno", icon: Settings2, color: "text-slate-600 bg-slate-50" },
-  cobro: { label: "Cobro", icon: Receipt, color: "text-emerald-600 bg-emerald-50" },
-  FinancialTransferIn: { label: "Transferencia (Entrada)", icon: ArrowRightLeft, color: "text-emerald-600 bg-emerald-50" },
-  FinancialTransferOut: { label: "Transferencia (Salida)", icon: ArrowRightLeft, color: "text-amber-600 bg-amber-50" },
+  sale: { label: "Venta", icon: History, color: "text-blue-600 bg-blue-50" },
+  refill: { label: "Reposición", icon: Droplets, color: "text-cyan-600 bg-cyan-50" },
 }
 
 export default function CustomersPage() {
@@ -319,6 +309,17 @@ export default function CustomersPage() {
                           >
                             <Map className="h-3 w-3" /> Cómo llegar
                           </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="h-8 gap-2 hover:bg-primary/5 hover:text-primary hover:border-primary/30" 
+                            asChild 
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Link href={`/transactions?clientId=${customer.id}`}>
+                              <History className="h-3 w-3" /> Ver Historial
+                            </Link>
+                          </Button>
                           {customer.telefono && (
                             <Button variant="outline" size="sm" className="h-8 gap-2" asChild onClick={(e) => e.stopPropagation()}>
                               <a href={`tel:${customer.telefono}`}><PhoneCall className="h-3 w-3" /> Llamar</a>
@@ -466,7 +467,7 @@ export default function CustomersPage() {
                       <TableRow><TableCell colSpan={3} className="text-center py-12 text-muted-foreground italic">Sin movimientos registrados.</TableCell></TableRow>
                     ) : (
                       clientTransactions.map((tx: any) => {
-                        const typeInfo = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
+                        const typeInfo = txTypeMap[tx.type] || { label: tx.type, icon: History, color: "text-slate-600 bg-slate-50" };
                         const Icon = typeInfo.icon;
                         const isIncome = tx.amount > 0 || tx.type === 'cobro';
                         return (

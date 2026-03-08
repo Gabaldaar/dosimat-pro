@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -64,9 +65,12 @@ const txTypeMap: Record<string, { label: string, icon: any, color: string, descr
   FinancialTransferOut: { label: "Transferencia (Salida)", icon: ArrowRightLeft, color: "text-amber-600 bg-amber-50", description: "Egreso por transferencia entre cuentas." },
 }
 
-export default function TransactionsPage() {
+function TransactionsContent() {
   const { toast } = useToast()
   const db = useFirestore()
+  const searchParams = useSearchParams()
+  const clientIdParam = searchParams.get('clientId')
+
   const [mainView, setMainView] = useState("register")
   const [activeTab, setActiveTab] = useState("sale")
   
@@ -78,8 +82,8 @@ export default function TransactionsPage() {
   const [filterAccount, setFilterAccount] = useState("all")
   const [filterStartDate, setFilterStartDate] = useState("")
   const [filterEndDate, setFilterEndDate] = useState("")
-  const [filterOpType, setFilterOpType] = useState("all") // Income/Expense
-  const [filterCategory, setFilterCategory] = useState("all") // Sale/Refill/etc
+  const [filterOpType, setFilterOpType] = useState("all") 
+  const [filterCategory, setFilterCategory] = useState("all") 
 
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
@@ -101,18 +105,13 @@ export default function TransactionsPage() {
   const [cobroAccountId, setCobroAccountId] = useState("pending")
   const [txDescription, setTxDescription] = useState("")
 
-  // SOLUCIÓN TÉCNICA DEFINITIVA: Observador de mutaciones para forzar desbloqueo del puntero
+  // Efecto para manejar el filtrado automático desde URL
   useEffect(() => {
-    const observer = new MutationObserver(() => {
-      if (document.body.style.pointerEvents === 'none') {
-        if (!txToDelete) {
-          document.body.style.pointerEvents = 'auto';
-        }
-      }
-    });
-    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
-    return () => observer.disconnect();
-  }, [txToDelete]);
+    if (clientIdParam) {
+      setFilterCustomer(clientIdParam)
+      setMainView("history")
+    }
+  }, [clientIdParam])
 
   const handleAddItem = (itemId: string) => {
     const item = catalog?.find((i: any) => i.id === itemId)
@@ -214,7 +213,6 @@ export default function TransactionsPage() {
     revertTxBalances(txToDelete)
     deleteDocumentNonBlocking(doc(db, 'transactions', txToDelete.id))
     setTxToDelete(null)
-    setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100)
     toast({ title: "Operación eliminada" })
   }
 
@@ -727,10 +725,7 @@ export default function TransactionsPage() {
         )}
 
         <AlertDialog open={!!txToDelete} onOpenChange={(o) => {
-          if(!o) {
-            setTxToDelete(null);
-            setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
-          }
+          if(!o) setTxToDelete(null);
         }}>
           <AlertDialogContent className="glass-card">
             <AlertDialogHeader>
@@ -752,5 +747,13 @@ export default function TransactionsPage() {
       </main>
       <MobileNav />
     </div>
+  )
+}
+
+export default function TransactionsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Cargando...</div>}>
+      <TransactionsContent />
+    </Suspense>
   )
 }
