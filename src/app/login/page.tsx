@@ -5,7 +5,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useFirebase, setDocumentNonBlocking } from "@/firebase"
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth"
-import { doc } from "firebase/firestore"
+import { doc, getDoc } from "firebase/firestore"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -32,12 +32,13 @@ export default function LoginPage() {
       if (isLogin) {
         await signInWithEmailAndPassword(auth, email, password)
         toast({ title: "Bienvenido", description: "Iniciando sesión..." })
+        router.push("/")
       } else {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password)
         const user = userCredential.user
         
         // Al registrarse, creamos el perfil del usuario.
-        // Importante: Hacemos que el primer registro sea 'Admin' para que puedas gestionar la app.
+        // Hacemos que el usuario sea Admin por defecto si es el primero (o simplemente lo seteamos así para esta fase)
         setDocumentNonBlocking(doc(firestore, 'users', user.uid), {
           id: user.uid,
           name: name || email.split('@')[0],
@@ -45,13 +46,19 @@ export default function LoginPage() {
           role: 'Admin' 
         }, { merge: true })
         
-        toast({ title: "Cuenta creada", description: "Tu perfil de Administrador ha sido registrado." })
+        toast({ title: "Cuenta creada", description: "Has sido registrado como Administrador." })
+        router.push("/")
       }
-      router.push("/")
     } catch (error: any) {
+      console.error("Auth error:", error)
+      let message = "Verifica tus credenciales"
+      if (error.code === 'auth/user-not-found') message = "Usuario no encontrado"
+      if (error.code === 'auth/wrong-password') message = "Contraseña incorrecta"
+      if (error.code === 'auth/email-already-in-use') message = "El email ya está registrado"
+      
       toast({ 
-        title: "Error de autenticación", 
-        description: error.message.includes("auth/user-not-found") ? "Usuario no encontrado" : "Verifica tus credenciales", 
+        title: "Error de acceso", 
+        description: message,
         variant: "destructive" 
       })
     } finally {
@@ -61,16 +68,16 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md glass-card border-primary/20">
+      <Card className="w-full max-w-md glass-card border-primary/20 shadow-2xl">
         <CardHeader className="text-center space-y-1">
           <div className="flex justify-center mb-4">
-            <div className="bg-primary p-3 rounded-2xl shadow-lg shadow-primary/20">
+            <div className="bg-primary p-3 rounded-2xl shadow-lg shadow-primary/20 animate-bounce">
               <Droplets className="h-8 w-8 text-white" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold font-headline">Dosimat Pro</CardTitle>
-          <CardDescription>
-            {isLogin ? "Ingresa tus credenciales para continuar" : "Crea tu cuenta de Administrador"}
+          <CardTitle className="text-3xl font-bold font-headline tracking-tight">Dosimat Pro</CardTitle>
+          <CardDescription className="text-muted-foreground">
+            {isLogin ? "Ingresa tus credenciales para continuar" : "Crea tu cuenta de administrador"}
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleAuth}>
@@ -110,14 +117,14 @@ export default function LoginPage() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full font-bold" disabled={isLoading}>
-              {isLoading && <RefreshCw className="h-4 w-4 animate-spin mr-2" />}
+            <Button type="submit" className="w-full font-bold h-12" disabled={isLoading}>
+              {isLoading ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
               {isLogin ? "Iniciar Sesión" : "Registrarse como Admin"}
             </Button>
             <Button 
               type="button" 
               variant="link" 
-              className="text-xs" 
+              className="text-sm text-primary" 
               onClick={() => setIsLogin(!isLogin)}
             >
               {isLogin ? "¿No tienes cuenta? Regístrate aquí" : "¿Ya tienes cuenta? Ingresa aquí"}
