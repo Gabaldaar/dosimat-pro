@@ -60,14 +60,17 @@ export default function AccountsPage() {
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false)
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false)
   
-  // SOLUCIÓN DEFINITIVA: Desbloqueo forzado del puntero al cerrar cualquier diálogo
+  // SOLUCIÓN TÉCNICA DEFINITIVA: Observador de mutaciones para forzar desbloqueo del puntero
   useEffect(() => {
-    if (!isAccountDialogOpen && !isTxDialogOpen && !isTransferDialogOpen && !isCategoryManagerOpen) {
-      const timeout = setTimeout(() => {
-        document.body.style.pointerEvents = 'auto';
-      }, 100);
-      return () => clearTimeout(timeout);
-    }
+    const observer = new MutationObserver(() => {
+      if (document.body.style.pointerEvents === 'none') {
+        if (!isAccountDialogOpen && !isTxDialogOpen && !isTransferDialogOpen && !isCategoryManagerOpen) {
+          document.body.style.pointerEvents = 'auto';
+        }
+      }
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+    return () => observer.disconnect();
   }, [isAccountDialogOpen, isTxDialogOpen, isTransferDialogOpen, isCategoryManagerOpen]);
 
   // Form States
@@ -129,9 +132,11 @@ export default function AccountsPage() {
     }
 
     const id = editingAccountId || Math.random().toString(36).substring(2, 11)
-    setDocumentNonBlocking(doc(db, 'financial_accounts', id), { ...accountFormData, id }, { merge: true })
     
+    // Cerramos primero el diálogo para evitar conflictos de renderizado
     setIsAccountDialogOpen(false)
+    
+    setDocumentNonBlocking(doc(db, 'financial_accounts', id), { ...accountFormData, id }, { merge: true })
     toast({ title: editingAccountId ? "Cuenta actualizada" : "Cuenta creada" })
   }
 
@@ -149,6 +154,8 @@ export default function AccountsPage() {
     const currentBalance = Number(selectedAccount.initialBalance || 0)
     const newBalance = currentBalance + (Number(txFormData.amount) * multiplier)
 
+    setIsTxDialogOpen(false)
+
     updateDocumentNonBlocking(doc(db, 'financial_accounts', selectedAccount.id), {
       initialBalance: newBalance
     })
@@ -163,7 +170,6 @@ export default function AccountsPage() {
       expenseCategoryId: txFormData.categoryId || null
     })
 
-    setIsTxDialogOpen(false)
     toast({ title: "Operación procesada" })
   }
 
@@ -173,6 +179,8 @@ export default function AccountsPage() {
     const toAcc = accounts?.find(a => a.id === toId)
 
     if (!fromAcc || !toAcc || amount <= 0) return
+
+    setIsTransferDialogOpen(false)
 
     updateDocumentNonBlocking(doc(db, 'financial_accounts', fromId), { initialBalance: Number(fromAcc.initialBalance || 0) - Number(amount) })
     updateDocumentNonBlocking(doc(db, 'financial_accounts', toId), { initialBalance: Number(toAcc.initialBalance || 0) + Number(amount) })
@@ -186,7 +194,6 @@ export default function AccountsPage() {
       description: `Transferencia a ${toAcc.name}`
     })
 
-    setIsTransferDialogOpen(false)
     toast({ title: "Transferencia completada" })
   }
 
@@ -325,7 +332,10 @@ export default function AccountsPage() {
           </Card>
         </section>
 
-        <Dialog open={isAccountDialogOpen} onOpenChange={setIsAccountDialogOpen}>
+        <Dialog open={isAccountDialogOpen} onOpenChange={(o) => {
+          setIsAccountDialogOpen(o);
+          if(!o) setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
+        }}>
           <DialogContent>
             <DialogHeader><DialogTitle>{editingAccountId ? "Editar Cuenta" : "Nueva Cuenta"}</DialogTitle></DialogHeader>
             <div className="grid gap-4 py-4">
@@ -364,7 +374,10 @@ export default function AccountsPage() {
           </DialogContent>
         </Dialog>
 
-        <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
+        <Dialog open={isCategoryManagerOpen} onOpenChange={(o) => {
+          setIsCategoryManagerOpen(o);
+          if(!o) setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
+        }}>
           <DialogContent>
             <DialogHeader><DialogTitle>Administrar Rubros</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
@@ -388,7 +401,10 @@ export default function AccountsPage() {
           </DialogContent>
         </Dialog>
 
-        <Dialog open={isTxDialogOpen} onOpenChange={setIsTxDialogOpen}>
+        <Dialog open={isTxDialogOpen} onOpenChange={(o) => {
+          setIsTxDialogOpen(o);
+          if(!o) setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
+        }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle className={txType === 'income' ? 'text-emerald-600' : 'text-rose-600'}>
@@ -424,7 +440,10 @@ export default function AccountsPage() {
           </DialogContent>
         </Dialog>
 
-        <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
+        <Dialog open={isTransferDialogOpen} onOpenChange={(o) => {
+          setIsTransferDialogOpen(o);
+          if(!o) setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
+        }}>
           <DialogContent>
             <DialogHeader><DialogTitle>Transferencia entre Cuentas</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">

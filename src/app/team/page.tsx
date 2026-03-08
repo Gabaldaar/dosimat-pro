@@ -34,13 +34,16 @@ export default function TeamPage() {
   const usersQuery = useMemoFirebase(() => collection(db, 'users'), [db])
   const { data: team, isLoading } = useCollection(usersQuery)
 
-  // Desbloqueo forzado del puntero
+  // SOLUCIÓN TÉCNICA DEFINITIVA: Observador de mutaciones para forzar desbloqueo del puntero
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      document.body.style.pointerEvents = 'auto';
-    }, 100);
-    return () => clearTimeout(timeout);
-  }, [team, isLoading]);
+    const observer = new MutationObserver(() => {
+      if (document.body.style.pointerEvents === 'none') {
+        document.body.style.pointerEvents = 'auto';
+      }
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+    return () => observer.disconnect();
+  }, []);
 
   const handleUpdateRole = (userId: string, newRole: string) => {
     updateDocumentNonBlocking(doc(db, 'users', userId), { role: newRole })
