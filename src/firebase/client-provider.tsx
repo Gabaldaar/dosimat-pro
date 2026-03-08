@@ -12,7 +12,7 @@ interface FirebaseClientProviderProps {
 }
 
 // Mensaje unificado para evitar errores de hidratación entre servidor y cliente
-const LOADING_MESSAGE = "Sincronizando acceso...";
+const LOADING_MESSAGE = "Validando acceso...";
 
 export function FirebaseClientProvider({ children }: FirebaseClientProviderProps) {
   const firebaseServices = useMemo(() => {
@@ -20,7 +20,11 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
   }, []); 
 
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = pathnameFromNext();
+  function pathnameFromNext() {
+    try { return usePathname(); } catch { return null; }
+  }
+  
   const [isInitializing, setIsInitializing] = useState(true);
   const [mounted, setMounted] = useState(false);
 
@@ -49,7 +53,7 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
     }
   }, [firebaseServices.auth, pathname, router, mounted]);
 
-  // Si no está montado (SSR) o está inicializando, mostramos la pantalla de carga con el texto exacto del servidor
+  // Si no está montado (SSR) o está inicializando, mostramos la pantalla de carga con el texto exacto
   if (!mounted || isInitializing) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
