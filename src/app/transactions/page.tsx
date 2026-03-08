@@ -15,11 +15,12 @@ import {
   ShoppingCart, 
   ArrowRightLeft,
   Calendar,
-  DollarSign,
   Plus,
   Trash2,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  CreditCard,
+  Banknote
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -70,10 +71,15 @@ export default function TransactionsPage() {
 
   // Transaction state
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("")
-  const [selectedAccountId, setSelectedAccountId] = useState<string>("")
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([])
   const [currentAddItem, setCurrentAddItem] = useState<string>("")
+
+  // Destino por moneda: { ARS: accountId, USD: accountId }
+  const [destinationAccounts, setDestinationAccounts] = useState<Record<string, string>>({
+    ARS: "",
+    USD: ""
+  })
 
   useEffect(() => {
     const savedCatalog = localStorage.getItem(STORAGE_KEYS.CATALOG)
@@ -121,24 +127,40 @@ export default function TransactionsPage() {
     }, { ARS: 0, USD: 0 })
   }, [selectedItems])
 
+  const currenciesInCart = useMemo(() => {
+    const set = new Set(selectedItems.map(i => i.currency));
+    return Array.from(set);
+  }, [selectedItems]);
+
   const handleSaveTransaction = () => {
-    if (!selectedCustomerId || selectedItems.length === 0 || !selectedAccountId) {
+    if (!selectedCustomerId || selectedItems.length === 0) {
       toast({
         title: "Error",
-        description: "Completa el cliente, selecciona al menos un ítem y elige una cuenta de destino.",
+        description: "Completa el cliente y selecciona al menos un ítem.",
         variant: "destructive"
       })
       return
     }
 
+    // Validar que se hayan elegido cuentas para todas las monedas presentes
+    const missingAccounts = currenciesInCart.filter(curr => !destinationAccounts[curr]);
+    if (missingAccounts.length > 0) {
+      toast({
+        title: "Atención",
+        description: `Debes seleccionar una cuenta de destino para: ${missingAccounts.join(', ')}`,
+        variant: "destructive"
+      })
+      return;
+    }
+
     toast({
       title: "¡Éxito!",
-      description: "La transacción ha sido registrada y el saldo del cliente actualizado.",
+      description: "La transacción ha sido registrada, los saldos de cuentas actualizados y el cliente notificado.",
     })
     
     // Reset form
     setSelectedCustomerId("")
-    setSelectedAccountId("")
+    setDestinationAccounts({ ARS: "", USD: "" })
     setSelectedItems([])
   }
 
@@ -151,7 +173,7 @@ export default function TransactionsPage() {
       <main className="flex-1 md:ml-64 pb-20 md:pb-8 p-4 md:p-8 space-y-6">
         <header>
           <h1 className="text-3xl font-headline font-bold text-primary">Nueva Operación</h1>
-          <p className="text-muted-foreground">Registra ventas, servicios o reposiciones de forma rápida.</p>
+          <p className="text-muted-foreground">Ventas y servicios integrados con tu catálogo real.</p>
         </header>
 
         <Tabs defaultValue="sale" className="w-full" onValueChange={setActiveTab}>
@@ -174,9 +196,9 @@ export default function TransactionsPage() {
             <Card className="lg:col-span-2 glass-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  Detalles de la Operación
+                  Detalles del Comprobante
                 </CardTitle>
-                <CardDescription>Selecciona cliente e ítems del catálogo.</CardDescription>
+                <CardDescription>Usa tu catálogo y clientes reales.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -184,7 +206,7 @@ export default function TransactionsPage() {
                     <Label>Cliente</Label>
                     <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar cliente" />
+                        <SelectValue placeholder="Buscar cliente..." />
                       </SelectTrigger>
                       <SelectContent>
                         {customers.map(c => (
@@ -195,38 +217,37 @@ export default function TransactionsPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>Fecha</Label>
-                    <div className="relative">
-                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input type="date" className="pl-10" value={date} onChange={(e) => setDate(e.target.value)} />
-                    </div>
+                    <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
                   </div>
                 </div>
 
                 <div className="space-y-4">
-                  <div className="flex flex-col md:flex-row gap-4 items-end">
-                    <div className="flex-1 space-y-2 w-full">
-                      <Label>Agregar Producto / Servicio</Label>
-                      <Select value={currentAddItem} onValueChange={handleAddItem}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Buscar en el catálogo..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {catalog.map(item => (
+                  <div className="space-y-2">
+                    <Label>Agregar Producto / Servicio de Catálogo</Label>
+                    <Select value={currentAddItem} onValueChange={handleAddItem}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar ítem..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {catalog.length > 0 ? (
+                          catalog.map(item => (
                             <SelectItem key={item.id} value={item.id}>
                               {item.name} ({item.currency === 'USD' ? 'u$s' : '$'}{item.price.toLocaleString('es-AR')})
                             </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                          ))
+                        ) : (
+                          <SelectItem value="none" disabled>No hay ítems en catálogo</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="border rounded-lg overflow-hidden">
                     <Table>
                       <TableHeader className="bg-muted/50">
                         <TableRow>
-                          <TableHead className="w-[40%]">Concepto</TableHead>
-                          <TableHead className="text-center">Cant.</TableHead>
+                          <TableHead>Concepto</TableHead>
+                          <TableHead className="text-center w-20">Cant.</TableHead>
                           <TableHead className="text-right">Precio Un.</TableHead>
                           <TableHead className="text-right">Subtotal</TableHead>
                           <TableHead className="w-[50px]"></TableHead>
@@ -235,32 +256,32 @@ export default function TransactionsPage() {
                       <TableBody>
                         {selectedItems.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={5} className="text-center py-8 text-muted-foreground italic">
-                              No hay ítems agregados. Usa el buscador arriba.
+                            <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
+                              El carrito está vacío. Agrega ítems desde tu catálogo.
                             </TableCell>
                           </TableRow>
                         ) : (
                           selectedItems.map((item, index) => (
                             <TableRow key={index}>
-                              <TableCell className="font-medium text-xs md:text-sm">{item.name}</TableCell>
-                              <TableCell className="text-center">
+                              <TableCell className="font-medium text-xs md:text-sm">
+                                {item.name}
+                                <div className="text-[10px] text-muted-foreground uppercase">{item.currency}</div>
+                              </TableCell>
+                              <TableCell>
                                 <Input 
                                   type="number" 
-                                  className="w-16 h-8 text-center mx-auto" 
+                                  className="h-8 text-center" 
                                   value={item.qty} 
                                   onChange={(e) => handleUpdateItem(index, 'qty', Number(e.target.value))}
                                 />
                               </TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex items-center justify-end gap-1">
-                                  <span className="text-[10px] font-bold text-muted-foreground">{item.currency}</span>
-                                  <Input 
-                                    type="number" 
-                                    className="w-24 h-8 text-right font-bold" 
-                                    value={item.price} 
-                                    onChange={(e) => handleUpdateItem(index, 'price', Number(e.target.value))}
-                                  />
-                                </div>
+                              <TableCell>
+                                <Input 
+                                  type="number" 
+                                  className="h-8 text-right font-bold" 
+                                  value={item.price} 
+                                  onChange={(e) => handleUpdateItem(index, 'price', Number(e.target.value))}
+                                />
                               </TableCell>
                               <TableCell className="text-right font-bold">
                                 {item.currency === 'USD' ? 'u$s' : '$'}
@@ -278,60 +299,101 @@ export default function TransactionsPage() {
                     </Table>
                   </div>
                 </div>
-
-                <div className="space-y-2">
-                  <Label>Ingresar dinero en:</Label>
-                  <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar cuenta financiera" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {accounts.map(acc => (
-                        <SelectItem key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
               </CardContent>
-              <div className="p-6 pt-0 border-t mt-6 flex gap-4">
-                <Button className="flex-1 h-12 text-lg font-bold shadow-lg shadow-primary/30" onClick={handleSaveTransaction}>
-                  Registrar Operación
-                </Button>
-                <Button variant="outline" className="h-12 px-6" onClick={() => setSelectedItems([])}>Limpiar</Button>
-              </div>
             </Card>
 
             <div className="space-y-6">
-              <Card className="glass-card border-primary/20 shadow-lg">
-                <CardHeader className="bg-primary/5">
-                  <CardTitle className="text-lg">Resumen de Venta</CardTitle>
+              <Card className="glass-card border-primary/20 shadow-xl overflow-hidden">
+                <CardHeader className="bg-primary/5 pb-4">
+                  <CardTitle className="text-lg">Resumen y Liquidación</CardTitle>
                 </CardHeader>
-                <CardContent className="pt-6 space-y-4">
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Total en Pesos</p>
-                    <p className="text-3xl font-bold text-primary">${totals.ARS.toLocaleString('es-AR')}</p>
+                <CardContent className="pt-6 space-y-6">
+                  {/* Totales */}
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className={`p-3 rounded-lg border ${totals.ARS > 0 ? 'bg-primary/5 border-primary/20' : 'bg-muted/10 opacity-50'}`}>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Total en Pesos</p>
+                      <p className="text-2xl font-bold text-primary">${totals.ARS.toLocaleString('es-AR')}</p>
+                    </div>
+                    <div className={`p-3 rounded-lg border ${totals.USD > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-muted/10 opacity-50'}`}>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Total en Dólares</p>
+                      <p className="text-2xl font-bold text-emerald-600">u$s {totals.USD.toLocaleString('es-AR')}</p>
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Total en Dólares</p>
-                    <p className="text-2xl font-bold text-emerald-600">u$s {totals.USD.toLocaleString('es-AR')}</p>
-                  </div>
-                  <div className="h-px bg-border w-full my-4" />
-                  <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg text-xs">
-                    <AlertCircle className="h-4 w-4 text-primary shrink-0" />
-                    <p className="leading-tight">
-                      Esta acción actualizará el saldo del cliente y el balance de la cuenta seleccionada.
-                    </p>
+
+                  <div className="h-px bg-border" />
+
+                  {/* Asignación de Cuentas */}
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Ingresar Dinero en:</h4>
+                    
+                    {currenciesInCart.includes('ARS') && (
+                      <div className="space-y-2">
+                        <Label className="text-[10px] flex items-center gap-1">
+                          <Banknote className="h-3 w-3" /> CUENTA PARA ARS
+                        </Label>
+                        <Select 
+                          value={destinationAccounts.ARS} 
+                          onValueChange={(v) => setDestinationAccounts(prev => ({...prev, ARS: v}))}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Elegir caja/banco ARS" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {accounts.filter(a => a.currency === 'ARS').map(acc => (
+                              <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {currenciesInCart.includes('USD') && (
+                      <div className="space-y-2">
+                        <Label className="text-[10px] flex items-center gap-1">
+                          <CreditCard className="h-3 w-3" /> CUENTA PARA USD
+                        </Label>
+                        <Select 
+                          value={destinationAccounts.USD} 
+                          onValueChange={(v) => setDestinationAccounts(prev => ({...prev, USD: v}))}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Elegir caja/banco USD" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {accounts.filter(a => a.currency === 'USD').map(acc => (
+                              <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {currenciesInCart.length === 0 && (
+                      <p className="text-xs italic text-muted-foreground text-center py-4 bg-muted/20 rounded">
+                        Agrega ítems para elegir destino de fondos.
+                      </p>
+                    )}
                   </div>
                 </CardContent>
+                <div className="p-4 bg-muted/30 border-t">
+                  <Button 
+                    className="w-full h-12 text-lg font-bold shadow-lg" 
+                    onClick={handleSaveTransaction}
+                    disabled={selectedItems.length === 0 || !selectedCustomerId}
+                  >
+                    Registrar y Cobrar
+                  </Button>
+                </div>
               </Card>
 
-              <div className="p-6 bg-accent/10 rounded-xl border border-accent/20">
-                <h4 className="font-bold text-primary mb-2 flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4" /> Registro Rápido
-                </h4>
-                <p className="text-xs text-muted-foreground leading-relaxed italic">
-                  "El precio unitario editado aquí solo afecta a este registro. No cambia el precio base definido en tu Catálogo."
-                </p>
+              <div className="p-5 bg-amber-50 rounded-xl border border-amber-200 flex gap-3">
+                <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-amber-800">Nota de Precios</p>
+                  <p className="text-[10px] text-amber-700 leading-relaxed italic">
+                    Modificar el precio unitario en la tabla NO altera los precios base de tu catálogo. Solo aplica a esta venta puntual.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
