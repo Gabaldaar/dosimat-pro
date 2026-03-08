@@ -40,7 +40,6 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
         }
 
         try {
-          // Verificamos el perfil pero no bloqueamos si el documento tarda en aparecer
           const userDoc = await getDoc(doc(firebaseServices.firestore, 'users', user.uid));
           if (userDoc.exists() && pathname === '/login') {
             router.replace('/');
@@ -55,15 +54,13 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
     }
   }, [firebaseServices.auth, firebaseServices.firestore, pathname, router, mounted]);
 
-  // Texto constante para evitar errores de hidratación entre servidor y cliente
-  const loadingMessage = "Sincronizando acceso...";
-
+  // Pantalla de carga unificada para evitar errores de hidratación
   if (!mounted || isInitializing) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <RefreshCw className="h-10 w-10 animate-spin text-primary" />
         <p className="text-muted-foreground animate-pulse font-medium">
-          {loadingMessage}
+          Validando acceso...
         </p>
       </div>
     );
