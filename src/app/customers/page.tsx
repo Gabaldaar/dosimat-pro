@@ -27,7 +27,8 @@ import {
   RefreshCw,
   Calculator,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
+  Mail
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -104,7 +105,7 @@ export default function CustomersPage() {
   const handleAddressSearch = async (val: string) => {
     setFormData({ ...formData, direccion: val })
     setShowNoResults(false)
-    if (val.length > 4) {
+    if (val.length > 3) {
       setIsSearchingAddress(true)
       try {
         const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(val)}&limit=5&lang=es`)
@@ -142,8 +143,10 @@ export default function CustomersPage() {
   const filteredCustomers = useMemo(() => {
     if (!customers) return []
     return customers.filter((c: any) => {
-      const searchMatch = `${c.nombre} ${c.apellido}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (c.cuit_dni && c.cuit_dni.includes(searchTerm))
+      const fullName = `${c.nombre || ""} ${c.apellido || ""}`.toLowerCase();
+      const searchMatch = fullName.includes(searchTerm.toLowerCase()) ||
+                          (c.cuit_dni && c.cuit_dni.includes(searchTerm)) ||
+                          (c.mail && c.mail.toLowerCase().includes(searchTerm.toLowerCase()));
       if (!searchMatch) return false
       
       const saldoARS = Number(c.saldoActual || 0)
@@ -254,7 +257,7 @@ export default function CustomersPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
               <input 
-                placeholder="Buscar por nombre, apellido o CUIT/DNI..." 
+                placeholder="Buscar por nombre, apellido, email o CUIT/DNI..." 
                 className="w-full pl-10 h-11 bg-white/50 backdrop-blur-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20" 
                 value={searchTerm} 
                 onChange={(e) => setSearchTerm(e.target.value)} 
@@ -409,6 +412,12 @@ export default function CustomersPage() {
                           <MapPin className="h-4 w-4 shrink-0 text-primary/60" />
                           <span className="truncate">{customer.direccion}, {customer.localidad}</span>
                         </div>
+                        {customer.mail && (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Mail className="h-3 w-3 shrink-0 text-primary/60" />
+                            <span className="truncate">{customer.mail}</span>
+                          </div>
+                        )}
                         <div className="flex flex-wrap gap-2 mt-4">
                           <Button 
                             variant="secondary" 
@@ -474,7 +483,7 @@ export default function CustomersPage() {
         setIsDialogOpen(o);
         if(!o) setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
       }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold flex items-center gap-2">
               <User className="h-6 w-6 text-primary" />
@@ -510,6 +519,13 @@ export default function CustomersPage() {
                   <Input value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: e.target.value})} placeholder="+54 9 11 ..." />
                 </div>
               </div>
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input value={formData.mail} onChange={(e) => setFormData({...formData, mail: e.target.value})} placeholder="cliente@ejemplo.com" className="pl-10" />
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2 font-bold"><Banknote className="h-3 w-3 text-primary" /> Saldo ARS ($)</Label>
@@ -536,55 +552,61 @@ export default function CustomersPage() {
                     <p className="text-[10px] text-amber-600 uppercase tracking-widest font-black">Propiedad de la empresa</p>
                   </div>
                   <Switch 
-                    checked={formData.equipoInstalado.enComodato} 
+                    checked={formData.equipoInstalado?.enComodato} 
                     onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v}})} 
                   />
                 </div>
               </div>
             </TabsContent>
 
-            <TabsContent value="address" className="space-y-4 py-4 relative">
+            <TabsContent value="address" className="space-y-4 py-4">
               <div className="space-y-2 relative">
-                <Label className="flex items-center gap-2">Dirección (Escribir para autocompletar)</Label>
+                <Label className="flex items-center gap-2 font-bold text-primary">Dirección (Búsqueda inteligente)</Label>
                 <div className="relative">
+                  <MapPin className="absolute left-3 top-3 h-4 w-4 text-primary" />
                   <Input 
                     value={formData.direccion} 
                     onChange={(e) => handleAddressSearch(e.target.value)} 
-                    placeholder="Av. Principal 123" 
-                    className="pr-10"
+                    placeholder="Ej: Av. del Libertador 123" 
+                    className="pl-10 h-11 border-primary/20 focus:border-primary shadow-sm"
                   />
                   {isSearchingAddress && (
-                    <div className="absolute right-3 top-2.5">
-                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    <div className="absolute right-3 top-3">
+                      <Loader2 className="h-5 w-5 animate-spin text-primary" />
                     </div>
                   )}
                 </div>
                 
-                {/* Sugerencias de dirección con mayor visibilidad */}
+                {/* Sugerencias de dirección con mayor prioridad visual */}
                 {(addressSuggestions.length > 0 || showNoResults) && (
-                  <Card className="absolute z-[100] w-full mt-1 bg-white shadow-2xl border-2 border-primary/20 max-h-60 overflow-auto animate-in fade-in slide-in-from-top-2">
-                    <CardContent className="p-0">
-                      {showNoResults ? (
-                        <div className="p-4 text-center text-sm text-muted-foreground italic">No se encontraron resultados</div>
-                      ) : (
-                        addressSuggestions.map((s, i) => (
+                  <div className="absolute z-[999] w-full mt-1 bg-white shadow-2xl border-2 border-primary/20 rounded-xl overflow-hidden animate-in fade-in slide-in-from-top-2">
+                    {showNoResults ? (
+                      <div className="p-4 text-center text-sm text-muted-foreground italic flex flex-col items-center gap-2">
+                        <MapPin className="h-6 w-6 opacity-20" />
+                        No se encontraron resultados
+                      </div>
+                    ) : (
+                      <div className="divide-y">
+                        {addressSuggestions.map((s, i) => (
                           <div 
                             key={i} 
-                            className="p-3 hover:bg-primary/10 cursor-pointer text-sm border-b last:border-0 transition-colors flex items-start gap-3"
+                            className="p-4 hover:bg-primary/5 cursor-pointer text-sm transition-colors flex items-start gap-3 group"
                             onClick={() => selectAddress(s)}
                           >
-                            <MapPin className="h-4 w-4 mt-0.5 text-primary shrink-0" />
+                            <MapPin className="h-5 w-5 mt-0.5 text-primary/40 group-hover:text-primary shrink-0" />
                             <div>
-                              <p className="font-bold text-primary">{s.properties.name} {s.properties.housenumber || ""}</p>
-                              <p className="text-[10px] text-muted-foreground uppercase">
+                              <p className="font-bold text-foreground group-hover:text-primary transition-colors">
+                                {s.properties.name} {s.properties.housenumber || ""}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium mt-0.5">
                                 {s.properties.city || s.properties.town || ""}, {s.properties.state || ""}, {s.properties.country || ""}
                               </p>
                             </div>
                           </div>
-                        ))
-                      )}
-                    </CardContent>
-                  </Card>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -620,7 +642,7 @@ export default function CustomersPage() {
                   <p className="text-[10px] text-amber-600 uppercase tracking-widest font-black">Propiedad de la empresa</p>
                 </div>
                 <Switch 
-                  checked={formData.equipoInstalado.enComodato} 
+                  checked={formData.equipoInstalado?.enComodato} 
                   onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v}})} 
                 />
               </div>
@@ -636,7 +658,7 @@ export default function CustomersPage() {
               setIsDialogOpen(false);
               setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
             }} className="font-bold">Cancelar</Button>
-            <Button onClick={handleSave} className="px-8 font-bold"><CheckCircle2 className="mr-2 h-4 w-4" /> Guardar Cambios</Button>
+            <Button onClick={handleSave} className="px-8 font-bold shadow-lg shadow-primary/20"><CheckCircle2 className="mr-2 h-4 w-4" /> Guardar Cambios</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
