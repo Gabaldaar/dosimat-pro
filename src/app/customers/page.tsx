@@ -70,27 +70,36 @@ export default function CustomersPage() {
   const autocompleteService = useRef<any>(null)
   const placesService = useRef<any>(null)
 
-  // Cargar Google Maps Script si no existe
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
     if (!apiKey) return;
 
-    if (!window.google) {
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
-      script.async = true;
-      script.defer = true;
-      script.onload = () => {
+    const loadGoogleMaps = () => {
+      if (!window.google) {
+        const scriptId = 'google-maps-script';
+        if (document.getElementById(scriptId)) return;
+        
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+        script.async = true;
+        script.defer = true;
+        script.onload = () => {
+          if (window.google?.maps?.places) {
+            autocompleteService.current = new window.google.maps.places.AutocompleteService();
+            const dummyDiv = document.createElement('div');
+            placesService.current = new window.google.maps.places.PlacesService(dummyDiv);
+          }
+        };
+        document.head.appendChild(script);
+      } else if (!autocompleteService.current && window.google?.maps?.places) {
         autocompleteService.current = new window.google.maps.places.AutocompleteService();
         const dummyDiv = document.createElement('div');
         placesService.current = new window.google.maps.places.PlacesService(dummyDiv);
-      };
-      document.head.appendChild(script);
-    } else if (!autocompleteService.current) {
-      autocompleteService.current = new window.google.maps.places.AutocompleteService();
-      const dummyDiv = document.createElement('div');
-      placesService.current = new window.google.maps.places.PlacesService(dummyDiv);
-    }
+      }
+    };
+
+    loadGoogleMaps();
   }, []);
 
   useEffect(() => {
