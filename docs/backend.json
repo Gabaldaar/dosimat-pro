@@ -4,30 +4,30 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "User",
       "type": "object",
-      "description": "Represents a user account within the system, used for authentication, authorization, and tracking actions. Assumes an external authentication system manages sensitive credentials.",
+      "description": "Represents an internal user or employee of the ChloriTrack Pro application, primarily for managing access roles and notification recipients. This entity does NOT store authentication credentials.",
       "properties": {
         "id": {
           "type": "string",
           "description": "Unique identifier for the User entity."
         },
-        "email": {
-          "type": "string",
-          "description": "Email address of the user, used for login and notifications.",
-          "format": "email"
-        },
         "name": {
           "type": "string",
-          "description": "Display name of the user."
+          "description": "The full name of the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "The email address of the user, used for identification within the application.",
+          "format": "email"
         },
         "role": {
           "type": "string",
-          "description": "Assigned role determining the user's permissions and access level within the application (e.g., 'admin', 'operator')."
+          "description": "The role assigned to the user, determining their permissions and access to specific functionalities (e.g., 'Admin', 'Employee')."
         }
       },
       "required": [
         "id",
-        "email",
         "name",
+        "email",
         "role"
       ]
     },
@@ -35,129 +35,363 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Client",
       "type": "object",
-      "description": "Manages detailed information for each customer, including contact details, pool/equipment specifications, and financial status.",
+      "description": "Represents a client of ChloriTrack Pro, storing their contact information and general details.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the Client entity. Can be automatically generated or a custom ID like CUIT/DNI."
+          "description": "Unique identifier for the Client entity."
         },
-        "apellido": {
+        "name": {
           "type": "string",
-          "description": "Last name of the client."
+          "description": "The full name or company name of the client."
         },
-        "nombre": {
+        "email": {
           "type": "string",
-          "description": "First name of the client."
-        },
-        "telefono": {
-          "type": "string",
-          "description": "Primary contact phone number for the client."
-        },
-        "direccion": {
-          "type": "string",
-          "description": "Street address of the client or service location."
-        },
-        "localidad": {
-          "type": "string",
-          "description": "City or locality of the client."
-        },
-        "provincia": {
-          "type": "string",
-          "description": "Province or state of the client."
-        },
-        "pais": {
-          "type": "string",
-          "description": "Country of the client."
-        },
-        "mail": {
-          "type": "string",
-          "description": "Email address of the client for communication and notifications.",
+          "description": "The primary email address of the client.",
           "format": "email"
         },
-        "cuitDni": {
+        "phone": {
           "type": "string",
-          "description": "Client's national identification number (CUIT or DNI) for legal or fiscal purposes."
+          "description": "The primary phone number of the client."
         },
-        "observaciones": {
+        "address": {
           "type": "string",
-          "description": "Long-form text field for any additional notes or observations about the client."
+          "description": "The main physical address of the client."
         },
-        "medidasPileta": {
+        "notes": {
           "type": "string",
-          "description": "Description of the pool's dimensions or measurements (e.g., '8x4x1.5m')."
-        },
-        "volumen": {
-          "type": "number",
-          "description": "Estimated or calculated volume of the pool in cubic meters or liters."
-        },
-        "dosisCloro": {
-          "type": "string",
-          "description": "Recommended or typical chlorine dose for the client's pool."
-        },
-        "cantidadBidones": {
-          "type": "number",
-          "description": "Number of chlorine drums/containers typically supplied or needed for the client's pool."
-        },
-        "modeloEquipo": {
-          "type": "string",
-          "description": "Model of the main pool equipment installed at the client's location (e.g., pump, filter)."
-        },
-        "enComodato": {
-          "type": "boolean",
-          "description": "Indicates if the main equipment is provided to the client on a consignment or loan basis."
-        },
-        "esClienteReposicion": {
-          "type": "boolean",
-          "description": "Flag indicating if the client is part of the regular chlorine replenishment service."
-        },
-        "saldoActual": {
-          "type": "number",
-          "description": "The client's current outstanding balance or credit amount. This field is typically calculated but stored for quick access and real-time monitoring."
-        },
-        "fechaUltimaReposicion": {
-          "type": "string",
-          "description": "Date and time of the client's last chlorine replenishment, used for scheduling and reminders.",
-          "format": "date-time"
-        },
-        "creadoPorId": {
-          "type": "string",
-          "description": "Reference to the User who initially created this client record. (Relationship: User 1:N Client)"
-        },
-        "fechaCreacion": {
-          "type": "string",
-          "description": "Date and time when the client record was created.",
-          "format": "date-time"
-        },
-        "ultimaModificacionPorId": {
-          "type": "string",
-          "description": "Reference to the User who last modified this client record. (Relationship: User 1:N Client)"
-        },
-        "fechaUltimaModificacion": {
-          "type": "string",
-          "description": "Date and time when the client record was last modified.",
-          "format": "date-time"
+          "description": "Any additional notes or specific information about the client."
         }
       },
       "required": [
         "id",
-        "apellido",
-        "nombre",
-        "telefono",
-        "direccion",
-        "localidad",
-        "provincia",
-        "pais",
-        "mail",
-        "cuitDni",
-        "volumen",
-        "dosisCloro",
-        "cantidadBidones",
-        "enComodato",
-        "esClienteReposicion",
-        "saldoActual",
-        "fechaUltimaReposicion",
-        "creadoPorId",
-        "fechaCreacion"
+        "name"
+      ]
+    },
+    "Pool": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Pool",
+      "type": "object",
+      "description": "Represents a specific swimming pool or equipment managed for a client, including its details and maintenance history.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Pool entity."
+        },
+        "clientId": {
+          "type": "string",
+          "description": "Reference to Client. (Relationship: Client 1:N Pool)"
+        },
+        "name": {
+          "type": "string",
+          "description": "A descriptive name or identifier for the pool (e.g., 'Main Pool', 'Guest House Pool')."
+        },
+        "address": {
+          "type": "string",
+          "description": "The specific physical address where the pool is located, if different from the client's main address."
+        },
+        "type": {
+          "type": "string",
+          "description": "The type or category of the pool (e.g., 'Residential', 'Commercial')."
+        },
+        "size": {
+          "type": "string",
+          "description": "Physical dimensions of the pool (e.g., '10x5m')."
+        },
+        "volume": {
+          "type": "number",
+          "description": "The estimated water volume of the pool in cubic meters or liters."
+        },
+        "lastChlorineReplenishmentDate": {
+          "type": "string",
+          "description": "The date of the last recorded chlorine replenishment for this pool.",
+          "format": "date-time"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Any specific notes about the pool, its equipment, or maintenance."
+        }
+      },
+      "required": [
+        "id",
+        "clientId",
+        "name",
+        "type",
+        "volume",
+        "lastChlorineReplenishmentDate"
+      ]
+    },
+    "ProductOrService": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ProductOrService",
+      "type": "object",
+      "description": "Defines an item in the catalog, which can be either a physical product (like chlorine) or a service (like technical visit).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the ProductOrService entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the product or service."
+        },
+        "description": {
+          "type": "string",
+          "description": "A detailed description of the product or service."
+        },
+        "priceARS": {
+          "type": "number",
+          "description": "The standard price of the product or service in Argentine Pesos (ARS)."
+        },
+        "priceUSD": {
+          "type": "number",
+          "description": "The standard price of the product or service in US Dollars (USD)."
+        },
+        "isService": {
+          "type": "boolean",
+          "description": "A flag indicating whether this item is a service (true) or a physical product (false)."
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "URL to an image representing the product or service.",
+          "format": "uri"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "priceARS",
+        "priceUSD",
+        "isService"
+      ]
+    },
+    "FinancialAccount": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "FinancialAccount",
+      "type": "object",
+      "description": "Represents a financial account (e.g., bank account, cash box) used by the business to track funds.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the FinancialAccount entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "A descriptive name for the financial account (e.g., 'Caja Principal', 'Banco Galicia ARS')."
+        },
+        "type": {
+          "type": "string",
+          "description": "The type of financial account (e.g., 'Cash', 'Bank Account', 'Savings Account')."
+        },
+        "currency": {
+          "type": "string",
+          "description": "The primary currency of the financial account (e.g., 'ARS', 'USD')."
+        },
+        "initialBalance": {
+          "type": "number",
+          "description": "The initial balance recorded for this account when it was created in the system."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "type",
+        "currency",
+        "initialBalance"
+      ]
+    },
+    "ExpenseCategory": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ExpenseCategory",
+      "type": "object",
+      "description": "Categorizes business expenses for better financial tracking and reporting.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the ExpenseCategory entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the expense category (e.g., 'Utilities', 'Supplies', 'Salaries')."
+        },
+        "description": {
+          "type": "string",
+          "description": "A brief description of what this category includes."
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "Transaction": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Transaction",
+      "type": "object",
+      "description": "Records all financial movements within the application, including sales, expenses, client payments, and transfers.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Transaction entity."
+        },
+        "date": {
+          "type": "string",
+          "description": "The date and time when the transaction occurred.",
+          "format": "date-time"
+        },
+        "type": {
+          "type": "string",
+          "description": "The specific type of transaction (e.g., 'Sale', 'Service', 'ClientPayment', 'Expense', 'FinancialTransferOut', 'FinancialTransferIn', 'FinancialAdjustment')."
+        },
+        "description": {
+          "type": "string",
+          "description": "A brief description of the transaction."
+        },
+        "amount": {
+          "type": "number",
+          "description": "The monetary value of the transaction. Positive for income/deposits, negative for expenses/withdrawals (or handled by 'type')."
+        },
+        "currency": {
+          "type": "string",
+          "description": "The currency of the transaction amount (e.g., 'ARS', 'USD')."
+        },
+        "financialAccountId": {
+          "type": "string",
+          "description": "Reference to FinancialAccount. The primary financial account affected by this transaction. (Relationship: FinancialAccount 1:N Transaction)"
+        },
+        "clientId": {
+          "type": "string",
+          "description": "Optional reference to Client. Applicable if the transaction is client-related (e.g., a sale or client payment). (Relationship: Client 1:N Transaction)"
+        },
+        "productOrServiceIds": {
+          "type": "array",
+          "description": "Optional references to ProductOrService. An array of IDs for products or services included in this transaction (e.g., for a sale or service delivery). (Relationship: ProductOrService N:N Transaction)",
+          "items": {
+            "type": "string"
+          }
+        },
+        "expenseCategoryId": {
+          "type": "string",
+          "description": "Optional reference to ExpenseCategory. Applicable if the transaction is categorized as an expense. (Relationship: ExpenseCategory 1:N Transaction)"
+        },
+        "relatedTransactionId": {
+          "type": "string",
+          "description": "Optional reference to another Transaction. Used to link two parts of a financial transfer (e.g., a 'FinancialTransferOut' transaction linked to its corresponding 'FinancialTransferIn')."
+        }
+      },
+      "required": [
+        "id",
+        "date",
+        "type",
+        "amount",
+        "currency",
+        "financialAccountId"
+      ]
+    },
+    "Notification": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Notification",
+      "type": "object",
+      "description": "Stores details of individual notifications sent or scheduled by the system, often generated based on NotificationRules.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Notification entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to User. The ID of the internal user designated to receive this notification. (Relationship: User 1:N Notification)"
+        },
+        "clientId": {
+          "type": "string",
+          "description": "Optional reference to Client. The ID of the client related to this notification, if applicable (e.g., overdue payment notification). (Relationship: Client 1:N Notification)"
+        },
+        "poolId": {
+          "type": "string",
+          "description": "Optional reference to Pool. The ID of the pool related to this notification, if applicable (e.g., chlorine replenishment reminder). (Relationship: Pool 1:N Notification)"
+        },
+        "type": {
+          "type": "string",
+          "description": "The type of notification (e.g., 'OverduePayment', 'ChlorineReplenishmentDue', 'CustomMessage')."
+        },
+        "message": {
+          "type": "string",
+          "description": "The full content of the notification message."
+        },
+        "scheduledDateTime": {
+          "type": "string",
+          "description": "The date and time when the notification was scheduled to be sent.",
+          "format": "date-time"
+        },
+        "sentDateTime": {
+          "type": "string",
+          "description": "The date and time when the notification was actually sent.",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the notification (e.g., 'Pending', 'Sent', 'Failed', 'Dismissed')."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "type",
+        "message",
+        "scheduledDateTime",
+        "status"
+      ]
+    },
+    "NotificationRule": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "NotificationRule",
+      "type": "object",
+      "description": "Defines rules for automated notification generation, specifying conditions, message templates, and recipients.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the NotificationRule entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "A descriptive name for the notification rule."
+        },
+        "description": {
+          "type": "string",
+          "description": "A detailed description of what this notification rule does."
+        },
+        "eventType": {
+          "type": "string",
+          "description": "The type of event that triggers this rule (e.g., 'OverduePayment', 'PoolReplenishmentDue')."
+        },
+        "triggerOffsetDays": {
+          "type": "number",
+          "description": "The number of days offset from the event date when the notification should be triggered (e.g., -5 for 5 days before, 0 for on the day, 7 for 7 days after)."
+        },
+        "messageTemplate": {
+          "type": "string",
+          "description": "A template string for the notification message, which can include placeholders for dynamic data."
+        },
+        "recipientUserIds": {
+          "type": "array",
+          "description": "References to Users. An array of IDs for internal users who should receive notifications generated by this rule. (Relationship: User N:N NotificationRule)",
+          "items": {
+            "type": "string"
+          }
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "A flag indicating whether this notification rule is currently active (true) or disabled (false)."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "eventType",
+        "triggerOffsetDays",
+        "messageTemplate",
+        "recipientUserIds",
+        "isActive"
       ]
     }
   },
@@ -176,37 +410,27 @@
           "schema": {
             "$ref": "#/backend/entities/User"
           },
-          "description": "Stores user profile information, accessible by the user themselves and administrators. This path also implicitly serves as a base for authorization by 'request.auth.uid'."
-        }
-      },
-      {
-        "path": "/roles_admin/{userId}",
-        "definition": {
-          "entityName": "RoleAdmin",
-          "schema": {
-            "$ref": "#/backend/entities/RoleAdmin"
-          },
-          "description": "Marker collection to identify users with 'admin' privileges. The existence of a document for a specific userId grants admin access. This follows the DBAC 'Existence over Content' principle.",
+          "description": "Stores internal user profiles and assigned roles. 'userId' corresponds to 'request.auth.uid'. Access is restricted to the owner and administrators.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user who has the 'admin' role."
+              "description": "The unique identifier of the user (Firebase Authentication UID)."
             }
           ]
         }
       },
       {
-        "path": "/roles_operator/{userId}",
+        "path": "/admin_roles/{adminUid}",
         "definition": {
-          "entityName": "RoleOperator",
+          "entityName": "User",
           "schema": {
-            "$ref": "#/backend/entities/RoleOperator"
+            "$ref": "#/backend/entities/User"
           },
-          "description": "Marker collection to identify users with 'operator' privileges. The existence of a document for a specific userId grants operator access. This follows the DBAC 'Existence over Content' principle.",
+          "description": "Dedicated collection for explicit administrative role assignment. Existence of a document at this path for a given UID signifies admin privileges for enhanced security rule checks (DBAC 'Existence over Content' principle).",
           "params": [
             {
-              "name": "userId",
-              "description": "The unique identifier of the user who has the 'operator' role."
+              "name": "adminUid",
+              "description": "The unique identifier of the user who has administrative privileges."
             }
           ]
         }
@@ -218,59 +442,79 @@
           "schema": {
             "$ref": "#/backend/entities/Client"
           },
-          "description": "Stores detailed information for each customer. Access is controlled by 'admin' or 'operator' roles. Includes denormalized 'saldoActual' and 'fechaUltimaReposicion' for quick lookup and efficient security rules for notifications/reports. 'creadoPorId' and 'ultimaModificacionPorId' are for auditability.",
+          "description": "Stores client contact information and details. Accessible by internal employees based on their roles.",
           "params": [
             {
               "name": "clientId",
-              "description": "The unique identifier for the client, which can be custom (e.g., CUIT/DNI) or auto-generated."
+              "description": "The unique identifier of the client."
             }
           ]
         }
       },
       {
-        "path": "/products/{productId}",
+        "path": "/clients/{clientId}/pools/{poolId}",
         "definition": {
-          "entityName": "Product",
+          "entityName": "Pool",
           "schema": {
-            "$ref": "#/backend/entities/Product"
+            "$ref": "#/backend/entities/Pool"
           },
-          "description": "Manages details of products offered. Admins can create/update/delete products, while operators and admins can read them. This collection adheres to homogeneous security posture.",
+          "description": "Stores details for swimming pools or equipment managed for a specific client. Includes denormalized 'clientId' for authorization independence.",
           "params": [
             {
-              "name": "productId",
-              "description": "The unique identifier for a product."
+              "name": "clientId",
+              "description": "The unique identifier of the parent client."
+            },
+            {
+              "name": "poolId",
+              "description": "The unique identifier of the pool."
             }
           ]
         }
       },
       {
-        "path": "/services/{serviceId}",
+        "path": "/products_services/{productServiceId}",
         "definition": {
-          "entityName": "Service",
+          "entityName": "ProductOrService",
           "schema": {
-            "$ref": "#/backend/entities/Service"
+            "$ref": "#/backend/entities/ProductOrService"
           },
-          "description": "Manages details of services offered. Admins can create/update/delete services, while operators and admins can read them. This collection adheres to homogeneous security posture.",
+          "description": "Stores the global catalog of products and services. Access for management is restricted to administrators.",
           "params": [
             {
-              "name": "serviceId",
-              "description": "The unique identifier for a service."
+              "name": "productServiceId",
+              "description": "The unique identifier of the product or service."
             }
           ]
         }
       },
       {
-        "path": "/financial_accounts/{accountId}",
+        "path": "/financial_accounts/{financialAccountId}",
         "definition": {
           "entityName": "FinancialAccount",
           "schema": {
             "$ref": "#/backend/entities/FinancialAccount"
           },
-          "description": "Manages various financial accounts (e.g., bank, cash). Admins can create/update/delete, operators and admins can read/update balances. Homogeneous security posture.",
+          "description": "Stores the business's financial accounts. Management is restricted to authorized internal users.",
           "params": [
             {
-              "name": "accountId",
-              "description": "The unique identifier for a financial account."
+              "name": "financialAccountId",
+              "description": "The unique identifier of the financial account."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/expense_categories/{expenseCategoryId}",
+        "definition": {
+          "entityName": "ExpenseCategory",
+          "schema": {
+            "$ref": "#/backend/entities/ExpenseCategory"
+          },
+          "description": "Stores predefined categories for business expenses. Management is restricted to authorized internal users.",
+          "params": [
+            {
+              "name": "expenseCategoryId",
+              "description": "The unique identifier of the expense category."
             }
           ]
         }
@@ -282,16 +526,52 @@
           "schema": {
             "$ref": "#/backend/entities/Transaction"
           },
-          "description": "Records all business transactions (sales, payments, services, etc.). Operators and Admins can create and read transactions. Includes references to 'clientId', 'productId/serviceId', 'financialAccountId', and 'creadoPorId' for linking and auditability. Homogeneous security posture.",
+          "description": "Records all financial movements. Includes denormalized 'financialAccountId', 'clientId', 'productOrServiceIds', and 'expenseCategoryId' for authorization independence. Access is restricted by user roles.",
           "params": [
             {
               "name": "transactionId",
-              "description": "The unique identifier for a transaction record."
+              "description": "The unique identifier of the transaction."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/notifications/{notificationId}",
+        "definition": {
+          "entityName": "Notification",
+          "schema": {
+            "$ref": "#/backend/entities/Notification"
+          },
+          "description": "Stores individual notifications specific to a user. Includes denormalized 'userId', 'clientId', and 'poolId' for authorization independence. Access is restricted to the owning user and administrators.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user who is the recipient of the notification."
+            },
+            {
+              "name": "notificationId",
+              "description": "The unique identifier of the notification."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/notification_rules/{notificationRuleId}",
+        "definition": {
+          "entityName": "NotificationRule",
+          "schema": {
+            "$ref": "#/backend/entities/NotificationRule"
+          },
+          "description": "Defines rules for automated notification generation. Management is restricted to administrators.",
+          "params": [
+            {
+              "name": "notificationRuleId",
+              "description": "The unique identifier of the notification rule."
             }
           ]
         }
       }
     ],
-    "reasoning": "The Firestore data structure for ChloriTrack Pro is designed to prioritize authorization independence, clear access modeling, and efficient query capabilities, adhering strictly to the provided core design principles and strategy mandates. \n\n**Authorization Independence (CRITICAL):**\nThis design achieves authorization independence by avoiding any hierarchical authorization dependencies that would require `get()` calls in security rules. Instead, authorization is primarily based on two mechanisms:\n1.  **Path-Based Ownership for Users:** The `/users/{userId}` path ensures that a user's own profile data is directly accessible via their `request.auth.uid`, making authorization trivial (`request.auth.uid == userId`).\n2.  **Role-Based Access Control (DBAC) via Existence Checks:** For application-wide data (clients, products, financial accounts, transactions), access is granted based on the existence of a marker document in dedicated role collections, specifically `/roles_admin/{userId}` and `/roles_operator/{userId}`. For example, to allow an operator to read clients, the rule would be `allow read: if exists(/databases/$(database)/documents/roles_operator/$(request.auth.uid));`. This completely eliminates the need to traverse the database hierarchy or fetch parent documents to determine access rights, ensuring atomic operations and simplifying rule logic.\n\nFields like `creadoPorId` and `ultimaModificacionPorId` in documents like `Client` are included for auditability and tracking, not as primary authorization mechanisms. The `Client` entity also includes denormalized `saldoActual` and `fechaUltimaReposicion` to facilitate quick lookups for financial monitoring and notification features without requiring complex aggregations or `get()` calls, adhering to the Invariants principle.\n\n**QAPs (Rules are not Filters):**\nThis structure enables secure `list` operations by implementing **Structural Segregation (Homogeneous Security Posture)**. All documents within a given collection (e.g., `/clients`, `/products`, `/financial_accounts`, `/transactions`) share the same security requirements. There are no mixed-security-posture documents within a single collection (e.g., public and private clients mixed). This allows Firestore security rules to grant `list` access based on simple, efficient conditions (like checking the user's role via an `exists()` function), guaranteeing that only authorized documents are returned without requiring Firestore to filter results after retrieving them. For example, an operator can `list` all clients because all clients in the `/clients` collection are intended to be visible to operators.\n\n**Access Modeling:**\n*   **Private Data:** User profiles are private to the user at `/users/{userId}`.\n*   **Global Roles:** Implemented using marker documents at `/roles_admin/{userId}` and `/roles_operator/{userId}` for efficient DBAC.\n*   **Company-Wide Data (Collaborative/Shared by Roles):** Clients, products, services, financial accounts, and transactions are stored in top-level collections (`/clients`, `/products`, etc.) and are accessible based on the authenticated user's role (admin or operator). No `members` map is needed within these documents because access is not per-document-collaboration but rather a role-based capability to access the entire collection."
+    "reasoning": "This Firestore structure is designed to be secure, scalable, and debuggable, adhering strictly to the core design principles and strategy mandates. The primary goal is to ensure Authorization Independence, allowing security rules to be simple, robust, and free from performance-impacting `get()` calls.\n\n**Authorization Independence (Denormalization Strategy):**\nWe achieve authorization independence by strategically denormalizing relevant IDs into subcollection documents or related top-level documents. This eliminates the need for security rules to perform `get()` operations on parent or related documents to determine access rights.\n*   **Pools:** Each `Pool` document in `/clients/{clientId}/pools/{poolId}` explicitly includes its `clientId`. This allows rules for pools to directly verify `resource.data.clientId == clientId` (where `{clientId}` is the wildcard in the path) without fetching the parent `Client` document.\n*   **Transactions:** Each `Transaction` document in `/transactions/{transactionId}` includes `financialAccountId`, `clientId`, `productOrServiceIds` (array), and `expenseCategoryId`. Rules can check these fields directly on the `Transaction` document to ensure proper access based on associated entities, without any `get()` calls.\n*   **Notifications:** Each `Notification` document in `/users/{userId}/notifications/{notificationId}` contains its `userId`, `clientId`, and `poolId`. This enables rules to assert `resource.data.userId == request.auth.uid` for personal notifications and allows for direct checks against related client or pool IDs from the notification document itself.\n\n**QAPs (Query as a Proxy for Security) via Structural Segregation and Path-Based Ownership:**\nQuerying as a Proxy for Security is fundamental to this design, ensuring that `list` operations remain secure and efficient. This is achieved through:\n*   **Structural Segregation:** Collections are designed such that all documents within a given collection share a homogeneous security posture. For example, `/clients` contains all client data, which can be listed by authorized internal employees. There's no mixing of public and private client data in the same collection.\n*   **Path-Based Ownership:** For user-specific data, such as `Notifications`, we use the `/users/{userId}/notifications/{notificationId}` path. This structure inherently filters data by the authenticated user's ID (`request.auth.uid`). When a user queries `notifications`, they can only query within their own `/users/{request.auth.uid}/notifications` path. The security rule can then simply verify `request.auth.uid == userId` (where `userId` is the wildcard in the path), guaranteeing that users can only list their own notifications. This makes the query itself a secure filter.\n*   **Global Collections with Role-Based Access:** Collections like `/products_services`, `/financial_accounts`, `/expense_categories`, and `/notification_rules` are top-level. Access to these is strictly controlled by the user's role, which is verified through the `User.role` field on their profile and, for critical admin actions, by the existence of their UID in the `/admin_roles/{adminUid}` collection. This ensures that only users with the appropriate internal roles (e.g., 'Admin', 'Employee') can perform `list` operations on these collections, maintaining security and enabling QAPs.\n\n**DBAC (Database Access Control) with Global Roles:**\nRoles are stored directly in the database. The `User.role` field is present on each user's document. Additionally, for clear, robust, and atomic checks for administrative privileges, a separate `/admin_roles/{adminUid}` collection is used. An admin's presence in this collection signifies their highest-level access, allowing security rules to perform a simple `exists(/databases/$(database)/documents/admin_roles/$(request.auth.uid))` check without relying on `get()` calls to the primary user profile, thereby bolstering security for critical operations.\n\nThis structure inherently supports access from different devices and locations through Firestore's cloud-based nature and real-time synchronization capabilities, directly addressing the user's implicit question."
   }
 }
