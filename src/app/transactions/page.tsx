@@ -59,7 +59,6 @@ export default function TransactionsPage() {
     const item = catalog?.find((i: any) => i.id === itemId)
     if (!item) return
     
-    // Default currency based on where the price is defined, but can be changed
     const defaultCurrency = item.priceARS > 0 ? 'ARS' : 'USD'
     const defaultPrice = item.priceARS > 0 ? item.priceARS : item.priceUSD
 
@@ -125,7 +124,6 @@ export default function TransactionsPage() {
     } else {
       if (selectedItems.length === 0) return
 
-      // Registrar por cada moneda del carrito
       ['ARS', 'USD'].forEach(curr => {
         const total = cartTotals[curr as 'ARS' | 'USD']
         if (total > 0) {
@@ -149,7 +147,6 @@ export default function TransactionsPage() {
             const acc = accounts?.find(a => a.id === accId)
             if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) + total })
           } else {
-            // "A Cuenta" -> El saldo del cliente baja (debe dinero)
             const balanceField = curr === 'ARS' ? 'saldoActual' : 'saldoUSD'
             updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) - total })
           }
@@ -286,41 +283,19 @@ export default function TransactionsPage() {
                             selectedItems.map((item, i) => (
                               <TableRow key={i}>
                                 <TableCell className="font-medium">{item.name}</TableCell>
-                                <TableCell>
-                                  <Input 
-                                    type="number" 
-                                    value={item.qty} 
-                                    className="h-8"
-                                    onChange={(e) => updateItem(i, 'qty', e.target.value)} 
-                                  />
-                                </TableCell>
-                                <TableCell>
-                                  <Input 
-                                    type="number" 
-                                    value={item.price} 
-                                    className="h-8"
-                                    onChange={(e) => updateItem(i, 'price', e.target.value)} 
-                                  />
-                                </TableCell>
+                                <TableCell><Input type="number" value={item.qty} className="h-8" onChange={(e) => updateItem(i, 'qty', e.target.value)} /></TableCell>
+                                <TableCell><Input type="number" value={item.price} className="h-8" onChange={(e) => updateItem(i, 'price', e.target.value)} /></TableCell>
                                 <TableCell>
                                   <Select value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)}>
-                                    <SelectTrigger className="h-8">
-                                      <SelectValue />
-                                    </SelectTrigger>
+                                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="ARS">$</SelectItem>
                                       <SelectItem value="USD">u$s</SelectItem>
                                     </SelectContent>
                                   </Select>
                                 </TableCell>
-                                <TableCell className="text-right font-bold">
-                                  {item.currency === 'ARS' ? '$' : 'u$s'} {((Number(item.price) || 0) * (Number(item.qty) || 0)).toLocaleString()}
-                                </TableCell>
-                                <TableCell>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeItem(i)}>
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </TableCell>
+                                <TableCell className="text-right font-bold">{item.currency === 'ARS' ? '$' : 'u$s'} {((Number(item.price) || 0) * (Number(item.qty) || 0)).toLocaleString()}</TableCell>
+                                <TableCell><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeItem(i)}><Trash2 className="h-4 w-4" /></Button></TableCell>
                               </TableRow>
                             ))
                           )}
@@ -417,7 +392,7 @@ export default function TransactionsPage() {
                   <div className="p-12 text-center text-muted-foreground italic">No hay transacciones registradas.</div>
                 ) : (
                   <Table>
-                    <TableHeader><TableRow><TableHead>Fecha</TableHead> <TableHead>Cliente</TableHead><TableHead>Tipo</TableHead><TableHead>Descripción</TableHead><TableHead className="text-right">Monto</TableHead></TableRow></TableHeader>
+                    <TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Cliente</TableHead><TableHead>Tipo</TableHead><TableHead>Descripción</TableHead><TableHead className="text-right">Monto</TableHead></TableRow></TableHeader>
                     <TableBody>
                       {filteredTransactions.map((tx: any) => {
                         const customer = customers?.find(c => c.id === tx.clientId);
@@ -428,9 +403,7 @@ export default function TransactionsPage() {
                             <TableCell className="font-medium">{customer ? `${customer.apellido}, ${customer.nombre}` : 'N/A'}</TableCell>
                             <TableCell><Badge variant="outline" className="text-[10px] uppercase">{tx.type}</Badge></TableCell>
                             <TableCell className="text-[11px] max-w-[200px] truncate">{tx.description}</TableCell>
-                            <TableCell className={cn("text-right font-black", isCobro ? "text-emerald-600" : "text-foreground")}>
-                              {tx.currency === 'ARS' ? '$' : 'u$s'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}
-                            </TableCell>
+                            <TableCell className={cn("text-right font-black", isCobro ? "text-emerald-600" : "text-foreground")}>{tx.currency === 'ARS' ? '$' : 'u$s'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}</TableCell>
                           </TableRow>
                         )
                       })}
