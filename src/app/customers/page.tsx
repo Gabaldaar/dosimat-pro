@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -14,7 +15,6 @@ import {
   MapPin, 
   ChevronRight, 
   PhoneCall, 
-  Mail, 
   User, 
   Info, 
   Droplets, 
@@ -29,19 +29,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from "@/firebase"
-import { collection, doc, query, where, orderBy } from "firebase/firestore"
+import { collection, doc } from "firebase/firestore"
 import { cn } from "@/lib/utils"
-
-const txTypeMap: Record<string, { label: string, icon: any, color: string }> = {
-  sale: { label: "Venta", icon: History, color: "text-blue-600 bg-blue-50" },
-  refill: { label: "Reposición", icon: Droplets, color: "text-cyan-600 bg-cyan-50" },
-  service: { label: "Servicio", icon: Box, color: "text-indigo-600 bg-indigo-50" },
-  cobro: { label: "Cobro", icon: Box, color: "text-emerald-600 bg-emerald-50" },
-}
 
 export default function CustomersPage() {
   const { toast } = useToast()
@@ -59,7 +50,7 @@ export default function CustomersPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<any>(null)
   
-  // SOLUCIÓN TÉCNICA DEFINITIVA: Observador de mutaciones para forzar desbloqueo del puntero del ratón
+  // SOLUCIÓN TÉCNICA: Asegurar que el puntero del ratón se desbloquee siempre
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -98,18 +89,6 @@ export default function CustomersPage() {
   }
 
   const [formData, setFormData] = useState(defaultFormData)
-
-  // Query de historial para el cliente seleccionado
-  const txQuery = useMemoFirebase(() => {
-    if (!editingCustomer?.id) return null
-    return query(
-      collection(db, 'transactions'),
-      where('clientId', '==', editingCustomer.id),
-      orderBy('date', 'desc')
-    )
-  }, [db, editingCustomer?.id])
-  
-  const { data: clientTransactions, isLoading: loadingHistory } = useCollection(txQuery)
 
   const filteredCustomers = useMemo(() => {
     if (!customers) return []
@@ -221,35 +200,8 @@ export default function CustomersPage() {
               />
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <Select value={filterBalance} onValueChange={setFilterBalance}>
-                <SelectTrigger className="h-11 bg-white/50"><SelectValue placeholder="Saldo" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos los saldos</SelectItem>
-                  <SelectItem value="debt">Deudores</SelectItem>
-                  <SelectItem value="credit">A favor</SelectItem>
-                </SelectContent>
-              </Select>
-              
-              <Select value={filterType} onValueChange={setFilterType}>
-                <SelectTrigger className="h-11 bg-white/50"><SelectValue placeholder="Tipo" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos los tipos</SelectItem>
-                  <SelectItem value="reposicion">Reposición</SelectItem>
-                  <SelectItem value="ocasional">Ocasional</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={filterComodato} onValueChange={setFilterComodato}>
-                <SelectTrigger className="h-11 bg-white/50"><SelectValue placeholder="Equipo" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos los equipos</SelectItem>
-                  <SelectItem value="comodato">En Comodato</SelectItem>
-                  <SelectItem value="propio">Equipo Propio</SelectItem>
-                </SelectContent>
-              </Select>
-
               <Button variant="outline" className="h-11" onClick={resetFilters}>
-                <FilterX className="h-4 w-4 mr-2" /> Limpiar
+                <FilterX className="h-4 w-4 mr-2" /> Limpiar Filtros
               </Button>
             </div>
           </div>
@@ -289,11 +241,6 @@ export default function CustomersPage() {
                             <Badge variant={customer.esClienteReposicion ? "default" : "secondary"} className="text-[10px]">
                               {customer.esClienteReposicion ? 'REPOSICIÓN' : 'OCASIONAL'}
                             </Badge>
-                            {customer.equipoInstalado?.enComodato && (
-                              <Badge variant="outline" className="text-[10px] border-amber-200 bg-amber-50 text-amber-700">
-                                <Box className="h-2 w-2 mr-1" /> COMODATO
-                              </Badge>
-                            )}
                           </div>
                         </div>
                         <div className="text-right space-y-1">
@@ -302,12 +249,6 @@ export default function CustomersPage() {
                             (customer.saldoActual || 0) < 0 ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
                           )}>
                             ARS: ${(customer.saldoActual || 0).toLocaleString('es-AR')}
-                          </div>
-                          <div className={cn(
-                            "text-[10px] font-black px-2 py-0.5 rounded border uppercase",
-                            (customer.saldoUSD || 0) < 0 ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
-                          )}>
-                            USD: u$s{(customer.saldoUSD || 0).toLocaleString('es-AR')}
                           </div>
                         </div>
                       </div>
@@ -336,11 +277,6 @@ export default function CustomersPage() {
                               <History className="h-3 w-3" /> Ver Historial
                             </Link>
                           </Button>
-                          {customer.telefono && (
-                            <Button variant="outline" size="sm" className="h-8 gap-2" asChild onClick={(e) => e.stopPropagation()}>
-                              <a href={`tel:${customer.telefono}`}><PhoneCall className="h-3 w-3" /> Llamar</a>
-                            </Button>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -364,7 +300,7 @@ export default function CustomersPage() {
         setIsDialogOpen(o);
         if(!o) setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
       }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold flex items-center gap-2">
               <User className="h-6 w-6 text-primary" />
@@ -373,11 +309,10 @@ export default function CustomersPage() {
           </DialogHeader>
           
           <Tabs defaultValue="general" className="w-full mt-4">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="general"><Info className="h-4 w-4 mr-2" /> General</TabsTrigger>
               <TabsTrigger value="address"><MapPin className="h-4 w-4 mr-2" /> Ubicación</TabsTrigger>
               <TabsTrigger value="equipment"><Droplets className="h-4 w-4 mr-2" /> Equipo</TabsTrigger>
-              <TabsTrigger value="history" disabled={!editingCustomer}><History className="h-4 w-4 mr-2" /> Historial</TabsTrigger>
             </TabsList>
 
             <TabsContent value="general" className="space-y-4 py-4">
@@ -455,60 +390,6 @@ export default function CustomersPage() {
               <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20 mt-6">
                 <Label>En Comodato</Label>
                 <Switch checked={formData.equipoInstalado.enComodato} onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v}})} />
-              </div>
-            </TabsContent>
-
-            <TabsContent value="history" className="py-4 space-y-4">
-              <div className="grid grid-cols-2 gap-2">
-                <Card className="p-3 bg-rose-50 border-rose-100 shadow-none">
-                  <p className="text-[10px] font-black text-rose-700 uppercase tracking-widest">Saldo ARS</p>
-                  <p className="text-xl font-black text-rose-700 leading-tight">${(formData.saldoActual || 0).toLocaleString('es-AR')}</p>
-                </Card>
-                <Card className="p-3 bg-emerald-50 border-emerald-100 shadow-none">
-                  <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Saldo USD</p>
-                  <p className="text-xl font-black text-emerald-700 leading-tight">u$s{(formData.saldoUSD || 0).toLocaleString('es-AR')}</p>
-                </Card>
-              </div>
-
-              <div className="border rounded-xl overflow-hidden bg-white">
-                <Table>
-                  <TableHeader className="bg-muted/30">
-                    <TableRow>
-                      <TableHead className="text-[10px] font-bold uppercase">Fecha</TableHead>
-                      <TableHead className="text-[10px] font-bold uppercase">Operación</TableHead>
-                      <TableHead className="text-[10px] font-bold uppercase text-right">Monto</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loadingHistory ? (
-                      <TableRow><TableCell colSpan={3} className="text-center py-12 animate-pulse text-muted-foreground">Sincronizando historial...</TableCell></TableRow>
-                    ) : !clientTransactions || clientTransactions.length === 0 ? (
-                      <TableRow><TableCell colSpan={3} className="text-center py-12 text-muted-foreground italic">Sin movimientos registrados.</TableCell></TableRow>
-                    ) : (
-                      clientTransactions.map((tx: any) => {
-                        const typeInfo = txTypeMap[tx.type] || { label: tx.type, icon: History, color: "text-slate-600 bg-slate-50" };
-                        const Icon = typeInfo.icon;
-                        const isIncome = tx.amount > 0 || tx.type === 'cobro';
-                        return (
-                          <TableRow key={tx.id} className="text-[11px] group hover:bg-muted/5">
-                            <TableCell className="font-medium">{new Date(tx.date).toLocaleDateString('es-AR')}</TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <div className={cn("p-1 rounded-full", typeInfo.color)}>
-                                  <Icon className="h-3 w-3" />
-                                </div>
-                                <span className="font-bold truncate max-w-[120px]">{typeInfo.label}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className={cn("text-right font-black", isIncome ? "text-emerald-600" : "text-rose-600")}>
-                              {tx.currency === 'USD' ? 'u$s' : '$'}{Math.abs(tx.amount || 0).toLocaleString('es-AR')}
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })
-                    )}
-                  </TableBody>
-                </Table>
               </div>
             </TabsContent>
           </Tabs>

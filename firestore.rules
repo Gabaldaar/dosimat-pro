@@ -1,7 +1,8 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Permitir acceso total a cualquier usuario autenticado en todas las colecciones
+    // Permitir acceso total a cualquier usuario autenticado
     match /{document=**} {
       allow read, write: if request.auth != null;
     }

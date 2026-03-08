@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useMemo, useEffect, useState, type ReactNode } from 'react';
@@ -12,7 +13,7 @@ interface FirebaseClientProviderProps {
 }
 
 /**
- * Mensaje de carga constante sincronizado para evitar errores de hidratación de Next.js.
+ * Mensaje de carga sincronizado para evitar errores de hidratación.
  */
 const LOADING_MESSAGE = "Validando acceso...";
 
