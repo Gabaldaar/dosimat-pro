@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -26,7 +25,8 @@ import {
   Banknote,
   PlusCircle,
   RefreshCw,
-  Calculator
+  Calculator,
+  Loader2
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -55,6 +55,11 @@ export default function CustomersPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<any>(null)
   
+  // Autocomplete Address State
+  const [addressSuggestions, setAddressSuggestions] = useState<any[]>([])
+  const [isSearchingAddress, setIsSearchingAddress] = useState(false)
+
+  // SOLUCIÓN TÉCNICA DEFINITIVA: Observador de mutaciones para forzar desbloqueo del puntero
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -94,6 +99,40 @@ export default function CustomersPage() {
 
   const [formData, setFormData] = useState(defaultFormData)
 
+  const handleAddressSearch = async (val: string) => {
+    setFormData({ ...formData, direccion: val })
+    if (val.length > 4) {
+      setIsSearchingAddress(true)
+      try {
+        const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(val)}&limit=5&lang=es`)
+        const data = await res.json()
+        setAddressSuggestions(data.features || [])
+      } catch (e) {
+        console.error("Error fetching address:", e)
+      } finally {
+        setIsSearchingAddress(false)
+      }
+    } else {
+      setAddressSuggestions([])
+    }
+  }
+
+  const selectAddress = (feature: any) => {
+    const p = feature.properties
+    const street = p.name || ""
+    const num = p.housenumber ? ` ${p.housenumber}` : ""
+    const city = p.city || p.town || p.village || ""
+    const state = p.state || ""
+    
+    setFormData({
+      ...formData,
+      direccion: `${street}${num}`,
+      localidad: city,
+      provincia: state
+    })
+    setAddressSuggestions([])
+  }
+
   const filteredCustomers = useMemo(() => {
     if (!customers) return []
     return customers.filter((c: any) => {
@@ -118,7 +157,6 @@ export default function CustomersPage() {
     })
   }, [customers, searchTerm, filterBalance, filterComodato, filterReposicion])
 
-  // Cálculo de totales filtrados
   const filteredTotals = useMemo(() => {
     return filteredCustomers.reduce((acc, c) => {
       acc.ars += Number(c.saldoActual || 0)
@@ -149,6 +187,7 @@ export default function CustomersPage() {
       setEditingCustomer(null)
       setFormData(defaultFormData)
     }
+    setAddressSuggestions([])
     setIsDialogOpen(true)
   }
 
@@ -261,7 +300,6 @@ export default function CustomersPage() {
           </div>
         </section>
 
-        {/* Panel de Totales Filtrados */}
         {!isLoading && customers && customers.length > 0 && (
           <section className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
             <Card className="glass-card bg-primary/5 border-l-4 border-l-primary overflow-hidden relative">
@@ -485,9 +523,39 @@ export default function CustomersPage() {
             </TabsContent>
 
             <TabsContent value="address" className="space-y-4 py-4">
-              <div className="space-y-2">
+              <div className="space-y-2 relative">
                 <Label>Dirección</Label>
-                <Input value={formData.direccion} onChange={(e) => setFormData({...formData, direccion: e.target.value})} placeholder="Av. Principal 123" />
+                <div className="relative">
+                  <Input 
+                    value={formData.direccion} 
+                    onChange={(e) => handleAddressSearch(e.target.value)} 
+                    placeholder="Av. Principal 123" 
+                    className="pr-10"
+                  />
+                  {isSearchingAddress && (
+                    <div className="absolute right-3 top-2.5">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
+                {addressSuggestions.length > 0 && (
+                  <Card className="absolute z-[100] w-full mt-1 bg-white shadow-xl max-h-60 overflow-auto border-primary/20">
+                    <CardContent className="p-0">
+                      {addressSuggestions.map((s, i) => (
+                        <div 
+                          key={i} 
+                          className="p-3 hover:bg-primary/5 cursor-pointer text-sm border-b last:border-0 transition-colors"
+                          onClick={() => selectAddress(s)}
+                        >
+                          <p className="font-bold text-primary">{s.properties.name} {s.properties.housenumber || ""}</p>
+                          <p className="text-[10px] text-muted-foreground uppercase">
+                            {s.properties.city || s.properties.town || ""}, {s.properties.state || ""}, {s.properties.country || ""}
+                          </p>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">

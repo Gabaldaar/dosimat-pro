@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useMemo, useEffect, useState, type ReactNode } from 'react';
@@ -14,6 +13,7 @@ interface FirebaseClientProviderProps {
 
 /**
  * Mensaje de carga sincronizado para evitar errores de hidratación.
+ * El servidor y el cliente DEBEN renderizar exactamente el mismo texto.
  */
 const LOADING_MESSAGE = "Sincronizando acceso...";
 
@@ -53,7 +53,7 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
     }
   }, [firebaseServices.auth, pathname, router, mounted]);
 
-  // Si no ha montado o está validando auth, mostramos pantalla de carga consistente con el servidor
+  // Durante la hidratación (mounted=false) o validación, mostramos el mismo mensaje
   if (!mounted || isInitializing) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
