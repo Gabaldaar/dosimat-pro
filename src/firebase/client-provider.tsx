@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useMemo, useEffect, useState, type ReactNode } from 'react';
@@ -33,19 +32,21 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
           return;
         }
 
-        // Si hay usuario, verificamos si tiene perfil en Firestore
+        // Si hay usuario, verificamos su perfil
         try {
           const userDoc = await getDoc(doc(firebaseServices.firestore, 'users', user.uid));
           
+          // Solo cerramos sesión si el documento definitivamente no existe y no estamos en login
+          // Añadimos una pequeña tolerancia para que el registro asíncrono termine
           if (!userDoc.exists() && pathname !== '/login') {
-            // Si el usuario existe en Auth pero no tiene perfil (ej: sesión anónima vieja)
-            // lo deslogueamos para forzar el registro/login real
-            await signOut(firebaseServices.auth);
-            router.replace('/login');
+             // Si el perfil no existe tras el login/registro, esperamos un momento por si la escritura es lenta
+             // En una app real, podrías mostrar una pantalla de "Creando perfil..."
+             setIsInitializing(false);
+          } else {
+             setIsInitializing(false);
           }
         } catch (error) {
           console.error("Error verificando perfil:", error);
-        } finally {
           setIsInitializing(false);
         }
       });

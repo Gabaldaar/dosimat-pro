@@ -10,6 +10,7 @@ service cloud.firestore {
     // Función: el usuario es administrador (requiere perfil con rol Admin)
     function isAdmin() {
       return isAnyUser() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin';
     }
 
@@ -51,8 +52,10 @@ service cloud.firestore {
     }
 
     // Reglas para Transacciones
-    match /transactions/{id} {
-      allow read, create: if isAnyUser();
+    // Se permite lectura total (get y list) a cualquier usuario autenticado
+    match /transactions/{txId} {
+      allow get, list: if isAnyUser();
+      allow create: if isAnyUser();
       allow update, delete: if isAdmin();
     }
 
