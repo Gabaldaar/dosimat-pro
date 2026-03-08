@@ -90,7 +90,7 @@ export default function AccountsPage() {
     amount: 0
   })
 
-  // Handlers robustos para evitar bloqueos
+  // Handlers para gestionar el estado de los diálogos de forma estable
   const handleOpenAccountDialog = useCallback((account?: any) => {
     if (account) {
       setEditingAccountId(account.id)
@@ -114,11 +114,7 @@ export default function AccountsPage() {
 
   const handleCloseAccountDialog = useCallback((open: boolean) => {
     setIsAccountDialogOpen(open)
-    if (!open) {
-      // Limpiamos estados al cerrar para evitar cuelgues de renderizado
-      setEditingAccountId(null)
-      setAccountFormData({ name: "", type: "Cash", initialBalance: 0, currency: "ARS" })
-    }
+    // No limpiamos los datos inmediatamente para permitir que la animación de cierre termine
   }, [])
 
   const handleSaveAccount = () => {
@@ -130,7 +126,7 @@ export default function AccountsPage() {
     const id = editingAccountId || Math.random().toString(36).substring(2, 11)
     setDocumentNonBlocking(doc(db, 'financial_accounts', id), { ...accountFormData, id }, { merge: true })
     
-    handleCloseAccountDialog(false)
+    setIsAccountDialogOpen(false)
     toast({ title: editingAccountId ? "Cuenta actualizada" : "Cuenta creada" })
   }
 
@@ -324,8 +320,8 @@ export default function AccountsPage() {
           </Card>
         </section>
 
-        {/* DIALOGS - USANDO KEYS ÚNICAS PARA FORZAR RESET DE ESTADO RADIX */}
-        <Dialog key={`acc-dialog-${isAccountDialogOpen}`} open={isAccountDialogOpen} onOpenChange={handleCloseAccountDialog}>
+        {/* DIALOGS - ELIMINADAS LAS KEYS DINÁMICAS PARA EVITAR BLOQUEOS DE SCROLL */}
+        <Dialog open={isAccountDialogOpen} onOpenChange={handleCloseAccountDialog}>
           <DialogContent>
             <DialogHeader><DialogTitle>{editingAccountId ? "Editar Cuenta" : "Nueva Cuenta"}</DialogTitle></DialogHeader>
             <div className="grid gap-4 py-4">
@@ -364,7 +360,7 @@ export default function AccountsPage() {
           </DialogContent>
         </Dialog>
 
-        <Dialog key={`cat-dialog-${isCategoryManagerOpen}`} open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
+        <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
           <DialogContent>
             <DialogHeader><DialogTitle>Administrar Rubros</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
@@ -388,7 +384,7 @@ export default function AccountsPage() {
           </DialogContent>
         </Dialog>
 
-        <Dialog key={`tx-dialog-${isTxDialogOpen}`} open={isTxDialogOpen} onOpenChange={setIsTxDialogOpen}>
+        <Dialog open={isTxDialogOpen} onOpenChange={setIsTxDialogOpen}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle className={txType === 'income' ? 'text-emerald-600' : 'text-rose-600'}>
@@ -424,7 +420,7 @@ export default function AccountsPage() {
           </DialogContent>
         </Dialog>
 
-        <Dialog key={`transfer-dialog-${isTransferDialogOpen}`} open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
+        <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
           <DialogContent>
             <DialogHeader><DialogTitle>Transferencia entre Cuentas</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
