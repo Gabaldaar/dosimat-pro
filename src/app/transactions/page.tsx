@@ -9,7 +9,13 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ShoppingCart, Droplets, Wrench, RefreshCw, Trash2, ClipboardCheck, Search, Filter, Calendar as CalendarIcon, Wallet } from "lucide-react"
+import { 
+  User, 
+  ClipboardCheck, 
+  Calendar as CalendarIcon, 
+  Wallet, 
+  FilterX 
+} from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
