@@ -17,7 +17,8 @@ import {
   Tag,
   Trash2,
   RefreshCw,
-  Loader2
+  Loader2,
+  TrendingUp
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -78,6 +79,7 @@ export default function AccountsPage() {
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [txType, setTxType] = useState<'income' | 'expense'>('income')
   const [newCategoryName, setNewCategoryName] = useState("")
+  const [exchangeRate, setExchangeRate] = useState(1)
   
   const selectedAccount = useMemo(() => {
     if (!accounts || !selectedAccountId) return null
@@ -102,6 +104,23 @@ export default function AccountsPage() {
     toId: "",
     amount: 0
   })
+
+  const fromAcc = useMemo(() => accounts?.find(a => a.id === transferFormData.fromId), [accounts, transferFormData.fromId]);
+  const toAcc = useMemo(() => accounts?.find(a => a.id === transferFormData.toId), [accounts, transferFormData.toId]);
+
+  // Fetch Exchange Rate when multi-currency transfer is detected
+  useEffect(() => {
+    if (isTransferDialogOpen && fromAcc && toAcc && fromAcc.currency !== toAcc.currency) {
+      fetch('https://dolarapi.com/v1/dolares/oficial')
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.venta) {
+            setExchangeRate(data.venta);
+          }
+        })
+        .catch(err => console.error("Error fetching rate:", err));
+    }
+  }, [isTransferDialogOpen, fromAcc, toAcc]);
 
   // Handlers
   const handleOpenAccountDialog = (account?: any) => {
@@ -174,23 +193,40 @@ export default function AccountsPage() {
 
   const handleTransfer = () => {
     const { fromId, toId, amount } = transferFormData
-    const fromAcc = accounts?.find(a => a.id === fromId)
-    const toAcc = accounts?.find(a => a.id === toId)
-
     if (!fromAcc || !toAcc || amount <= 0) return
 
     setIsTransferDialogOpen(false)
 
-    updateDocumentNonBlocking(doc(db, 'financial_accounts', fromId), { initialBalance: Number(fromAcc.initialBalance || 0) - Number(amount) })
-    updateDocumentNonBlocking(doc(db, 'financial_accounts', toId), { initialBalance: Number(toAcc.initialBalance || 0) + Number(amount) })
+    let finalAmountTo = Number(amount);
+    if (fromAcc.currency !== toAcc.currency) {
+      if (fromAcc.currency === 'ARS' && toAcc.currency === 'USD') {
+        finalAmountTo = Number(amount) / exchangeRate;
+      } else if (fromAcc.currency === 'USD' && toAcc.currency === 'ARS') {
+        finalAmountTo = Number(amount) * exchangeRate;
+      }
+    }
 
+    updateDocumentNonBlocking(doc(db, 'financial_accounts', fromId), { initialBalance: Number(fromAcc.initialBalance || 0) - Number(amount) })
+    updateDocumentNonBlocking(doc(db, 'financial_accounts', toId), { initialBalance: Number(toAcc.initialBalance || 0) + finalAmountTo })
+
+    // Registrar salida
     addDocumentNonBlocking(collection(db, 'transactions'), {
       date: new Date().toISOString(),
       type: 'FinancialTransferOut',
       amount: -Number(amount),
       currency: fromAcc.currency,
       financialAccountId: fromId,
-      description: `Transferencia a ${toAcc.name}`
+      description: `Transferencia a ${toAcc.name} (${toAcc.currency})`
+    })
+
+    // Registrar entrada
+    addDocumentNonBlocking(collection(db, 'transactions'), {
+      date: new Date().toISOString(),
+      type: 'FinancialTransferIn',
+      amount: finalAmountTo,
+      currency: toAcc.currency,
+      financialAccountId: toId,
+      description: `Transferencia desde ${fromAcc.name} (${fromAcc.currency})`
     })
 
     toast({ title: "Transferencia completada" })
@@ -202,6 +238,12 @@ export default function AccountsPage() {
     setDocumentNonBlocking(doc(db, 'expense_categories', id), { id, name: newCategoryName }, { merge: true })
     setNewCategoryName("")
   }
+
+  const calculatedReceipt = useMemo(() => {
+    if (!fromAcc || !toAcc || fromAcc.currency === toAcc.currency) return null;
+    if (fromAcc.currency === 'ARS') return Number(transferFormData.amount) / exchangeRate;
+    return Number(transferFormData.amount) * exchangeRate;
+  }, [fromAcc, toAcc, transferFormData.amount, exchangeRate]);
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -453,7 +495,7 @@ export default function AccountsPage() {
             <DialogHeader><DialogTitle>Transferencia entre Cuentas</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label>Desde Cuenta</Label>
+                <Label>Desde Cuenta (Sale)</Label>
                 <Select value={transferFormData.fromId} onValueChange={(v) => setTransferFormData({...transferFormData, fromId: v})}>
                   <SelectTrigger><SelectValue placeholder="Origen..." /></SelectTrigger>
                   <SelectContent>
@@ -462,7 +504,7 @@ export default function AccountsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Hacia Cuenta</Label>
+                <Label>Hacia Cuenta (Entra)</Label>
                 <Select value={transferFormData.toId} onValueChange={(v) => setTransferFormData({...transferFormData, toId: v})}>
                   <SelectTrigger><SelectValue placeholder="Destino..." /></SelectTrigger>
                   <SelectContent>
@@ -471,10 +513,42 @@ export default function AccountsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Monto a transferir</Label>
+                <Label>Monto a transferir (en moneda de origen)</Label>
                 <Input type="number" value={transferFormData.amount} onChange={(e) => setTransferFormData({...transferFormData, amount: Number(e.target.value)})} />
               </div>
-              <p className="text-[10px] text-muted-foreground italic">Nota: El saldo se ajustará en ambas cuentas según el monto ingresado.</p>
+
+              {fromAcc && toAcc && fromAcc.currency !== toAcc.currency && (
+                <div className="space-y-3 p-4 bg-primary/5 rounded-xl border border-primary/10">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-1">
+                      <TrendingUp className="h-3 w-3" /> Cotización USD Oficial (Venta)
+                    </Label>
+                  </div>
+                  <div className="flex gap-3 items-center">
+                    <Input 
+                      type="number" 
+                      value={exchangeRate} 
+                      onChange={(e) => setExchangeRate(Number(e.target.value))}
+                      className="h-10 font-bold border-primary/20 bg-white"
+                    />
+                    <div className="text-[10px] font-medium text-muted-foreground leading-tight">
+                      1 USD = <span className="font-bold text-foreground">{exchangeRate} ARS</span>
+                    </div>
+                  </div>
+                  {calculatedReceipt !== null && (
+                    <div className="pt-2 border-t border-primary/10">
+                      <p className="text-[11px] font-medium text-primary">
+                        Se acreditarán: <span className="font-black text-sm">
+                          {toAcc.currency === 'USD' ? 'u$s' : '$'}
+                          {calculatedReceipt.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span> en {toAcc.name}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              <p className="text-[10px] text-muted-foreground italic">Nota: El sistema ajustará los saldos automáticamente y registrará ambos movimientos en el historial.</p>
             </div>
             <DialogFooter><Button onClick={handleTransfer} className="w-full font-bold">Confirmar Transferencia</Button></DialogFooter>
           </DialogContent>
