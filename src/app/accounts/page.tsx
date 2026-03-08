@@ -55,8 +55,8 @@ interface ExpenseCategory {
   currency: 'ARS' | 'USD';
 }
 
-const STORAGE_KEY = 'dosimat_pro_accounts'
-const EXPENSE_KEY = 'dosimat_pro_expense_categories'
+const STORAGE_KEY = 'dosimat_pro_accounts_v2'
+const EXPENSE_KEY = 'dosimat_pro_expense_categories_v2'
 
 const initialAccounts: FinancialAccount[] = [
   { id: '1', name: "Caja Efectivo ARS", type: "Cash", balance: 145000, currency: "ARS", status: "active" },
@@ -87,7 +87,6 @@ export default function AccountsPage() {
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [txType, setTxType] = useState<'income' | 'expense'>('income')
   
-  const editingAccount = useMemo(() => accounts.find(a => a.id === editingAccountId), [accounts, editingAccountId])
   const selectedAccount = useMemo(() => accounts.find(a => a.id === selectedAccountId), [accounts, selectedAccountId])
 
   const [accountFormData, setAccountFormData] = useState<Omit<FinancialAccount, 'id'>>({
@@ -128,8 +127,10 @@ export default function AccountsPage() {
   }, [])
 
   useEffect(() => {
-    if (mounted) {
+    if (mounted && accounts.length > 0) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts))
+    }
+    if (mounted && expenseCategories.length > 0) {
       localStorage.setItem(EXPENSE_KEY, JSON.stringify(expenseCategories))
     }
   }, [accounts, expenseCategories, mounted])
@@ -176,14 +177,16 @@ export default function AccountsPage() {
     }
 
     setIsAccountDialogOpen(false)
-    setEditingAccountId(null)
-
+    
+    // Mostramos el toast después de cerrar para evitar conflictos de UI
     setTimeout(() => {
       toast({ 
         title: isEdit ? "Cuenta actualizada" : "Cuenta creada", 
         description: isEdit ? "Los cambios se guardaron correctamente." : "La cuenta financiera ha sido agregada." 
       })
-    }, 100)
+      // Limpiamos el ID de edición después de que el diálogo se haya cerrado por completo
+      setEditingAccountId(null)
+    }, 200)
   }
 
   const handleOpenTxDialog = (account: FinancialAccount, type: 'income' | 'expense') => {
@@ -204,12 +207,14 @@ export default function AccountsPage() {
     ))
 
     setIsTxDialogOpen(false)
-    setSelectedAccountId(null)
-
-    toast({ 
-      title: txType === 'income' ? "Ingreso registrado" : "Gasto registrado", 
-      description: `Se procesó el movimiento en ${selectedAccount.name}` 
-    })
+    
+    setTimeout(() => {
+      toast({ 
+        title: txType === 'income' ? "Ingreso registrado" : "Gasto registrado", 
+        description: `Se procesó el movimiento en ${selectedAccount.name}` 
+      })
+      setSelectedAccountId(null)
+    }, 200)
   }
 
   const handleTransfer = () => {
@@ -239,9 +244,11 @@ export default function AccountsPage() {
     }))
 
     setIsTransferDialogOpen(false)
-    setTransferFormData({ fromId: "", toId: "", amount: 0 })
 
-    toast({ title: "Transferencia exitosa", description: "El dinero ha sido movido correctamente." })
+    setTimeout(() => {
+      toast({ title: "Transferencia exitosa", description: "El dinero ha sido movido correctamente." })
+      setTransferFormData({ fromId: "", toId: "", amount: 0 })
+    }, 200)
   }
 
   return (
