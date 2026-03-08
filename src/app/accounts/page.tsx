@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useCallback } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -44,19 +44,23 @@ export default function AccountsPage() {
   const { toast } = useToast()
   const db = useFirestore()
   
+  // Queries estables
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
   const categoriesQuery = useMemoFirebase(() => collection(db, 'expense_categories'), [db])
   const txQuery = useMemoFirebase(() => query(collection(db, 'transactions'), orderBy('date', 'desc'), limit(15)), [db])
 
+  // Data streams
   const { data: accounts, isLoading: loadingAccounts } = useCollection(accountsQuery)
   const { data: expenseCategories } = useCollection(categoriesQuery)
   const { data: recentTxs } = useCollection(txQuery)
   
+  // Dialog visibility states
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false)
   const [isTxDialogOpen, setIsTxDialogOpen] = useState(false)
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false)
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false)
   
+  // Logic states
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [txType, setTxType] = useState<'income' | 'expense'>('income')
@@ -86,7 +90,8 @@ export default function AccountsPage() {
     amount: 0
   })
 
-  const handleOpenAccountDialog = (account?: any) => {
+  // Handlers robustos para evitar bloqueos
+  const handleOpenAccountDialog = useCallback((account?: any) => {
     if (account) {
       setEditingAccountId(account.id)
       setAccountFormData({
@@ -105,7 +110,16 @@ export default function AccountsPage() {
       })
     }
     setIsAccountDialogOpen(true)
-  }
+  }, [])
+
+  const handleCloseAccountDialog = useCallback((open: boolean) => {
+    setIsAccountDialogOpen(open)
+    if (!open) {
+      // Limpiamos estados al cerrar para evitar cuelgues de renderizado
+      setEditingAccountId(null)
+      setAccountFormData({ name: "", type: "Cash", initialBalance: 0, currency: "ARS" })
+    }
+  }, [])
 
   const handleSaveAccount = () => {
     if (!accountFormData.name) {
@@ -116,9 +130,8 @@ export default function AccountsPage() {
     const id = editingAccountId || Math.random().toString(36).substring(2, 11)
     setDocumentNonBlocking(doc(db, 'financial_accounts', id), { ...accountFormData, id }, { merge: true })
     
-    setIsAccountDialogOpen(false)
+    handleCloseAccountDialog(false)
     toast({ title: editingAccountId ? "Cuenta actualizada" : "Cuenta creada" })
-    setEditingAccountId(null)
   }
 
   const handleOpenTxDialog = (account: any, type: 'income' | 'expense') => {
@@ -163,8 +176,6 @@ export default function AccountsPage() {
     updateDocumentNonBlocking(doc(db, 'financial_accounts', fromId), { initialBalance: Number(fromAcc.initialBalance || 0) - Number(amount) })
     updateDocumentNonBlocking(doc(db, 'financial_accounts', toId), { initialBalance: Number(toAcc.initialBalance || 0) + Number(amount) })
 
-    const transferId = Math.random().toString(36).substring(2, 11)
-    
     addDocumentNonBlocking(collection(db, 'transactions'), {
       date: new Date().toISOString(),
       type: 'FinancialTransferOut',
@@ -183,10 +194,6 @@ export default function AccountsPage() {
     const id = Math.random().toString(36).substring(2, 11)
     setDocumentNonBlocking(doc(db, 'expense_categories', id), { id, name: newCategoryName }, { merge: true })
     setNewCategoryName("")
-  }
-
-  const handleDeleteCategory = (id: string) => {
-    deleteDocumentNonBlocking(doc(db, 'expense_categories', id))
   }
 
   return (
@@ -317,8 +324,8 @@ export default function AccountsPage() {
           </Card>
         </section>
 
-        {/* DIALOGS MOVIDOS FUERA DE LOS BLOQUES CONDICIONALES PARA ESTABILIDAD */}
-        <Dialog open={isAccountDialogOpen} onOpenChange={setIsAccountDialogOpen}>
+        {/* DIALOGS - USANDO KEYS ÚNICAS PARA FORZAR RESET DE ESTADO RADIX */}
+        <Dialog key={`acc-dialog-${isAccountDialogOpen}`} open={isAccountDialogOpen} onOpenChange={handleCloseAccountDialog}>
           <DialogContent>
             <DialogHeader><DialogTitle>{editingAccountId ? "Editar Cuenta" : "Nueva Cuenta"}</DialogTitle></DialogHeader>
             <div className="grid gap-4 py-4">
@@ -357,7 +364,7 @@ export default function AccountsPage() {
           </DialogContent>
         </Dialog>
 
-        <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
+        <Dialog key={`cat-dialog-${isCategoryManagerOpen}`} open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
           <DialogContent>
             <DialogHeader><DialogTitle>Administrar Rubros</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
@@ -370,7 +377,7 @@ export default function AccountsPage() {
                   {expenseCategories?.map((cat: any) => (
                     <div key={cat.id} className="flex items-center justify-between p-3 rounded-lg border bg-muted/5">
                       <span className="text-sm font-medium">{cat.name}</span>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeleteCategory(cat.id)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => deleteDocumentNonBlocking(doc(db, 'expense_categories', cat.id))}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -381,7 +388,7 @@ export default function AccountsPage() {
           </DialogContent>
         </Dialog>
 
-        <Dialog open={isTxDialogOpen} onOpenChange={setIsTxDialogOpen}>
+        <Dialog key={`tx-dialog-${isTxDialogOpen}`} open={isTxDialogOpen} onOpenChange={setIsTxDialogOpen}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle className={txType === 'income' ? 'text-emerald-600' : 'text-rose-600'}>
@@ -417,7 +424,7 @@ export default function AccountsPage() {
           </DialogContent>
         </Dialog>
 
-        <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
+        <Dialog key={`transfer-dialog-${isTransferDialogOpen}`} open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
           <DialogContent>
             <DialogHeader><DialogTitle>Transferencia entre Cuentas</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
