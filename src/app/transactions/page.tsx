@@ -24,7 +24,8 @@ import {
   MinusCircle,
   RefreshCw,
   TrendingUp,
-  Banknote
+  Banknote,
+  CalendarDays
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -51,9 +52,12 @@ export default function TransactionsPage() {
   const [mainView, setMainView] = useState("register")
   const [activeTab, setActiveTab] = useState("sale")
   
+  // Filtros Historial
   const [filterCustomer, setFilterCustomer] = useState("all")
   const [filterAccount, setFilterAccount] = useState("all")
-  const [filterMonth, setFilterMonth] = useState("all")
+  const [filterStartDate, setFilterStartDate] = useState("")
+  const [filterEndDate, setFilterEndDate] = useState("")
+  const [filterOpType, setFilterOpType] = useState("all") // all, income, expense
 
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
@@ -183,10 +187,18 @@ export default function TransactionsPage() {
     return transactions.filter((tx: any) => {
       const matchCustomer = filterCustomer === "all" || tx.clientId === filterCustomer
       const matchAccount = filterAccount === "all" || (filterAccount === "null" ? !tx.financialAccountId : tx.financialAccountId === filterAccount)
-      const matchMonth = filterMonth === "all" || tx.date.startsWith(filterMonth)
-      return matchCustomer && matchAccount && matchMonth
+      
+      const txDateStr = tx.date.split('T')[0]
+      const matchStart = !filterStartDate || txDateStr >= filterStartDate
+      const matchEnd = !filterEndDate || txDateStr <= filterEndDate
+
+      let matchType = true
+      if (filterOpType === 'income') matchType = tx.amount > 0 || tx.type === 'cobro'
+      if (filterOpType === 'expense') matchType = tx.amount < 0 && tx.type !== 'cobro'
+
+      return matchCustomer && matchAccount && matchStart && matchEnd && matchType
     }).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  }, [transactions, filterCustomer, filterAccount, filterMonth])
+  }, [transactions, filterCustomer, filterAccount, filterStartDate, filterEndDate, filterOpType])
 
   const filteredTotals = useMemo(() => {
     return filteredTransactions.reduce((acc, tx) => {
@@ -195,18 +207,6 @@ export default function TransactionsPage() {
       return acc
     }, { ARS: 0, USD: 0 })
   }, [filteredTransactions])
-
-  const monthsOptions = useMemo(() => {
-    const options = []
-    const now = new Date()
-    for (let i = 0; i < 12; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const value = d.toISOString().substring(0, 7)
-      const label = d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
-      options.push({ value, label: label.charAt(0).toUpperCase() + label.slice(1) })
-    }
-    return options
-  }, [])
 
   return (
     <div className="flex min-h-screen">
@@ -424,7 +424,7 @@ export default function TransactionsPage() {
                  <div className="space-y-1">
                    <Label className="text-xs">Cliente</Label>
                    <Select value={filterCustomer} onValueChange={setFilterCustomer}>
-                     <SelectTrigger className="w-[200px] h-9"><SelectValue /></SelectTrigger>
+                     <SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger>
                      <SelectContent>
                        <SelectItem value="all">Todos</SelectItem>
                        {customers?.map((c: any) => (
@@ -436,7 +436,7 @@ export default function TransactionsPage() {
                  <div className="space-y-1">
                    <Label className="text-xs">Cuenta Financiera</Label>
                    <Select value={filterAccount} onValueChange={setFilterAccount}>
-                     <SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger>
+                     <SelectTrigger className="w-[160px] h-9"><SelectValue /></SelectTrigger>
                      <SelectContent>
                        <SelectItem value="all">Todas</SelectItem>
                        <SelectItem value="null">A Cuenta (Pendiente)</SelectItem>
@@ -445,18 +445,25 @@ export default function TransactionsPage() {
                    </Select>
                  </div>
                  <div className="space-y-1">
-                   <Label className="text-xs">Mes / Periodo</Label>
-                   <Select value={filterMonth} onValueChange={setFilterMonth}>
-                     <SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger>
+                   <Label className="text-xs">Tipo</Label>
+                   <Select value={filterOpType} onValueChange={setFilterOpType}>
+                     <SelectTrigger className="w-[120px] h-9"><SelectValue /></SelectTrigger>
                      <SelectContent>
-                       <SelectItem value="all">Todos los tiempos</SelectItem>
-                       {monthsOptions.map((opt) => (
-                         <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                       ))}
+                       <SelectItem value="all">Todas</SelectItem>
+                       <SelectItem value="income">Ingresos</SelectItem>
+                       <SelectItem value="expense">Egresos</SelectItem>
                      </SelectContent>
                    </Select>
                  </div>
-                 <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => { setFilterCustomer("all"); setFilterAccount("all"); setFilterMonth("all"); }}>
+                 <div className="space-y-1">
+                   <Label className="text-xs">Desde</Label>
+                   <Input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="w-[140px] h-9" />
+                 </div>
+                 <div className="space-y-1">
+                   <Label className="text-xs">Hasta</Label>
+                   <Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="w-[140px] h-9" />
+                 </div>
+                 <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => { setFilterCustomer("all"); setFilterAccount("all"); setFilterStartDate(""); setFilterEndDate(""); setFilterOpType("all"); }}>
                    <FilterX className="h-4 w-4" />
                  </Button>
               </CardContent>
