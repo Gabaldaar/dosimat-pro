@@ -18,8 +18,7 @@ import {
   RefreshCw,
   Loader2,
   TrendingUp,
-  PlusCircle,
-  MinusCircle
+  AlertTriangle
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -34,6 +33,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -74,19 +83,20 @@ export default function AccountsPage() {
   const [isTxDialogOpen, setIsTxDialogOpen] = useState(false)
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false)
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false)
+  const [accountToDelete, setAccountToDelete] = useState<any | null>(null)
   
   // SOLUCIÓN TÉCNICA DEFINITIVA: Observador de mutaciones para forzar desbloqueo del puntero
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        if (!isAccountDialogOpen && !isTxDialogOpen && !isTransferDialogOpen && !isCategoryManagerOpen) {
+        if (!isAccountDialogOpen && !isTxDialogOpen && !isTransferDialogOpen && !isCategoryManagerOpen && !accountToDelete) {
           document.body.style.pointerEvents = 'auto';
         }
       }
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isAccountDialogOpen, isTxDialogOpen, isTransferDialogOpen, isCategoryManagerOpen]);
+  }, [isAccountDialogOpen, isTxDialogOpen, isTransferDialogOpen, isCategoryManagerOpen, accountToDelete]);
 
   // Form States
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null)
@@ -170,6 +180,14 @@ export default function AccountsPage() {
     
     setDocumentNonBlocking(doc(db, 'financial_accounts', id), { ...accountFormData, id }, { merge: true })
     toast({ title: editingAccountId ? "Cuenta actualizada" : "Cuenta creada" })
+  }
+
+  const confirmDeleteAccount = () => {
+    if (!accountToDelete) return
+    deleteDocumentNonBlocking(doc(db, 'financial_accounts', accountToDelete.id))
+    setAccountToDelete(null)
+    setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100)
+    toast({ title: "Cuenta eliminada" })
   }
 
   const handleOpenTxDialog = (account: any, type: 'income' | 'expense') => {
@@ -304,7 +322,10 @@ export default function AccountsPage() {
                           <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"><MoreVertical className="h-4 w-4" /></Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleOpenAccountDialog(account)}>Editar parámetros</DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => handleOpenAccountDialog(account)}>Editar parámetros</DropdownMenuItem>
+                          <DropdownMenuItem className="text-destructive" onSelect={() => setAccountToDelete(account)}>
+                            <Trash2 className="mr-2 h-4 w-4" /> Eliminar cuenta
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
@@ -437,6 +458,30 @@ export default function AccountsPage() {
             <DialogFooter><Button onClick={handleSaveAccount} className="w-full font-bold">Guardar Cambios</Button></DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <AlertDialog open={!!accountToDelete} onOpenChange={(o) => {
+          if(!o) {
+            setAccountToDelete(null);
+            setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
+          }
+        }}>
+          <AlertDialogContent className="glass-card">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
+                <AlertTriangle className="h-5 w-5" /> ¿Confirmar eliminación?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                ¿Estás seguro de que deseas eliminar la cuenta <strong>{accountToDelete?.name}</strong>? Esta acción no se puede deshacer y el historial de movimientos de esta cuenta dejará de estar vinculado.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="font-bold">Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeleteAccount} className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-bold">
+                Eliminar Cuenta
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <Dialog open={isCategoryManagerOpen} onOpenChange={(o) => {
           setIsCategoryManagerOpen(o);

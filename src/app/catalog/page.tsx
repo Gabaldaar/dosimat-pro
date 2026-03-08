@@ -5,7 +5,7 @@ import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Search, Edit, Trash2, MoreVertical, Save, DollarSign, Loader2, Package } from "lucide-react"
+import { Plus, Search, Edit, Trash2, MoreVertical, Loader2, Package, AlertTriangle } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { 
   DropdownMenu, 
@@ -21,10 +21,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
-import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase"
+import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase"
 import { collection, doc } from "firebase/firestore"
 
 export default function CatalogPage() {
@@ -36,6 +45,7 @@ export default function CatalogPage() {
   const { data: items, isLoading } = useCollection(catalogQuery)
   
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [itemToDelete, setItemToDelete] = useState<any | null>(null)
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     name: "",
@@ -49,14 +59,14 @@ export default function CatalogPage() {
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        if (!isDialogOpen) {
+        if (!isDialogOpen && !itemToDelete) {
           document.body.style.pointerEvents = 'auto';
         }
       }
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isDialogOpen]);
+  }, [isDialogOpen, itemToDelete]);
 
   const filteredItems = useMemo(() => {
     if (!items) return []
@@ -93,8 +103,11 @@ export default function CatalogPage() {
     toast({ title: editingItemId ? "Item actualizado" : "Item creado" })
   }
 
-  const handleDelete = (id: string) => {
-    deleteDocumentNonBlocking(doc(db, 'products_services', id))
+  const confirmDelete = () => {
+    if (!itemToDelete) return
+    deleteDocumentNonBlocking(doc(db, 'products_services', itemToDelete.id))
+    setItemToDelete(null)
+    setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100)
     toast({ title: "Item eliminado" })
   }
 
@@ -149,10 +162,10 @@ export default function CatalogPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleOpenDialog(item)}>
+                        <DropdownMenuItem onSelect={() => handleOpenDialog(item)}>
                           <Edit className="mr-2 h-4 w-4" /> Editar
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(item.id)}>
+                        <DropdownMenuItem className="text-destructive" onSelect={() => setItemToDelete(item)}>
                           <Trash2 className="mr-2 h-4 w-4" /> Eliminar
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -232,6 +245,31 @@ export default function CatalogPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!itemToDelete} onOpenChange={(o) => {
+        if(!o) {
+          setItemToDelete(null);
+          setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
+        }
+      }}>
+        <AlertDialogContent className="glass-card">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
+              <AlertTriangle className="h-5 w-5" /> ¿Confirmar eliminación?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Estás seguro de que deseas eliminar <strong>{itemToDelete?.name}</strong> del catálogo? Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="font-bold">Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-bold">
+              Eliminar Definitivamente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <MobileNav />
     </div>
   )
