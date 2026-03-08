@@ -7,7 +7,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Función: El usuario tiene rol de Administrador (con verificación de existencia)
+    // Función: El usuario tiene rol de Administrador
     function isAdmin() {
       return isAuthenticated() && 
              exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
@@ -36,9 +36,9 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
-    // Transacciones - Acceso explícito para lectura y creación
+    // Transacciones
     match /transactions/{txId} {
-      allow get, list, create: if isAuthenticated();
+      allow read, create: if isAuthenticated();
       allow update, delete: if isAdmin();
     }
 

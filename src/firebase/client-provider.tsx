@@ -11,8 +11,8 @@ interface FirebaseClientProviderProps {
   children: ReactNode;
 }
 
-// Mensaje unificado para evitar errores de hidratación entre servidor y cliente
-const LOADING_MESSAGE = "Validando acceso...";
+// Mensaje unificado para evitar errores de hidratación. Debe coincidir exactamente con el servidor.
+const LOADING_MESSAGE = "Sincronizando acceso...";
 
 export function FirebaseClientProvider({ children }: FirebaseClientProviderProps) {
   const firebaseServices = useMemo(() => {
@@ -53,7 +53,7 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
     }
   }, [firebaseServices.auth, pathname, router, mounted]);
 
-  // Si no está montado (SSR) o está inicializando, mostramos la pantalla de carga con el texto exacto
+  // Si no está montado (SSR) o está inicializando auth, mostramos la pantalla de carga
   if (!mounted || isInitializing) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
