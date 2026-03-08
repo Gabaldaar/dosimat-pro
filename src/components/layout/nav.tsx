@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react"
@@ -41,13 +40,17 @@ export function Sidebar({ className }: { className?: string }) {
   const { auth, firestore, user } = useFirebase()
   const router = useRouter()
 
-  // Obtenemos el perfil real del usuario desde Firestore
+  // Obtenemos el perfil real del usuario desde Firestore de forma segura
   const userDocRef = useMemoFirebase(() => user ? doc(firestore, 'users', user.uid) : null, [user, firestore])
   const { data: userData } = useDoc(userDocRef)
   
   const handleLogout = async () => {
-    await signOut(auth)
-    router.push("/login")
+    try {
+      await signOut(auth)
+      router.push("/login")
+    } catch (error) {
+      console.error("Error signing out:", error)
+    }
   }
 
   return (

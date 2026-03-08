@@ -1,60 +1,58 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Función para verificar si el usuario tiene un perfil registrado
-    function isAuthenticated() {
-      return request.auth != null && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    // Función básica: el usuario está logueado en Firebase Auth
+    function isAnyUser() {
+      return request.auth != null;
     }
 
-    // Función para verificar si el usuario es administrador
+    // Función: el usuario es administrador (requiere perfil con rol Admin)
     function isAdmin() {
-      return isAuthenticated() && 
+      return isAnyUser() && 
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin';
     }
 
     // Reglas para perfiles de usuario
     match /users/{userId} {
-      allow read: if request.auth != null;
+      allow read: if isAnyUser();
       allow write: if request.auth.uid == userId || isAdmin();
     }
 
     // Reglas para Roles Administrativos (Colección explícita de seguridad)
     match /admin_roles/{adminUid} {
-      allow read: if isAuthenticated();
+      allow read: if isAnyUser();
       allow write: if isAdmin();
     }
 
     // Reglas para Clientes
     match /clients/{clientId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isAnyUser();
       match /pools/{poolId} {
-        allow read, write: if isAuthenticated();
+        allow read, write: if isAnyUser();
       }
     }
 
     // Reglas para Catálogo (Lectura todos, Escritura solo Admin)
     match /products_services/{id} {
-      allow read: if isAuthenticated();
+      allow read: if isAnyUser();
       allow write: if isAdmin();
     }
 
-    // Reglas para Finanzas y Cuentas (Lectura Empleados, Escritura Admin)
+    // Reglas para Finanzas y Cuentas
     match /financial_accounts/{id} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin() || (isAuthenticated() && request.method == 'update'); 
-      // Permitimos update a empleados para que puedan impactar saldos tras una venta
+      allow read: if isAnyUser();
+      allow write: if isAdmin() || (isAnyUser() && request.method == 'update'); 
     }
 
     match /expense_categories/{id} {
-      allow read: if isAuthenticated();
+      allow read: if isAnyUser();
       allow write: if isAdmin();
     }
 
     // Reglas para Transacciones
     match /transactions/{id} {
-      allow read, create: if isAuthenticated();
+      allow read, create: if isAnyUser();
       allow update, delete: if isAdmin();
     }
 
@@ -65,7 +63,7 @@ service cloud.firestore {
     }
     
     match /notification_rules/{id} {
-      allow read: if isAuthenticated();
+      allow read: if isAnyUser();
       allow write: if isAdmin();
     }
   }
