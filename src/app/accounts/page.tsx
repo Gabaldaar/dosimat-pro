@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
@@ -16,7 +15,6 @@ import {
   MoreVertical,
   ArrowRightLeft,
   Save,
-  Trash2,
   DollarSign,
   History
 } from "lucide-react"
@@ -38,7 +36,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
-import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface FinancialAccount {
   id: string;
@@ -124,17 +121,18 @@ export default function AccountsPage() {
     }
 
     if (editingAccount) {
-      setAccounts(accounts.map(a => a.id === editingAccount.id ? { ...a, ...accountFormData } : a))
+      setAccounts(prev => prev.map(a => a.id === editingAccount.id ? { ...a, ...accountFormData } : a))
       toast({ title: "Cuenta actualizada", description: "Los cambios se guardaron correctamente." })
     } else {
       const newAccount: FinancialAccount = {
         ...accountFormData,
         id: Math.random().toString(36).substr(2, 9)
       }
-      setAccounts([...accounts, newAccount])
+      setAccounts(prev => [...prev, newAccount])
       toast({ title: "Cuenta creada", description: "La cuenta financiera ha sido agregada." })
     }
     setIsAccountDialogOpen(false)
+    setEditingAccount(null)
   }
 
   const handleOpenTxDialog = (account: FinancialAccount, type: 'income' | 'expense') => {
@@ -148,7 +146,7 @@ export default function AccountsPage() {
     if (!selectedAccount || txFormData.amount <= 0) return
 
     const multiplier = txType === 'income' ? 1 : -1
-    setAccounts(accounts.map(a => 
+    setAccounts(prev => prev.map(a => 
       a.id === selectedAccount.id 
         ? { ...a, balance: a.balance + (txFormData.amount * multiplier) } 
         : a
@@ -159,6 +157,7 @@ export default function AccountsPage() {
       description: `Se procesó el movimiento en ${selectedAccount.name}` 
     })
     setIsTxDialogOpen(false)
+    setSelectedAccount(null)
   }
 
   const handleTransfer = () => {
@@ -176,7 +175,7 @@ export default function AccountsPage() {
       return
     }
 
-    setAccounts(accounts.map(a => {
+    setAccounts(prev => prev.map(a => {
       if (a.id === fromId) return { ...a, balance: a.balance - amount }
       if (a.id === toId) return { ...a, balance: a.balance + amount }
       return a
@@ -184,6 +183,7 @@ export default function AccountsPage() {
 
     toast({ title: "Transferencia exitosa", description: "El dinero ha sido movido correctamente." })
     setIsTransferDialogOpen(false)
+    setTransferFormData({ fromId: "", toId: "", amount: 0 })
   }
 
   return (
