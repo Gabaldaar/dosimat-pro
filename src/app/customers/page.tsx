@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect, useRef } from "react"
@@ -42,7 +43,7 @@ import { collection, doc } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 
 declare global {
-  interface Window {
+  interface window {
     google: any;
   }
 }
@@ -70,13 +71,10 @@ export default function CustomersPage() {
   const autocompleteService = useRef<any>(null)
   const placesService = useRef<any>(null)
 
-  // Carga robusta de Google Maps API
+  // Inicialización de Google Maps
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-    if (!apiKey) {
-      console.warn("Google Maps API Key no encontrada en .env");
-      return;
-    }
+    if (!apiKey) return;
 
     const initServices = () => {
       if (window.google?.maps?.places) {
@@ -103,14 +101,11 @@ export default function CustomersPage() {
         script.defer = true;
         script.onload = initServices;
         document.head.appendChild(script);
-      } else {
-        // Si el script ya existe pero los servicios no están listos
-        initServices();
       }
     }
   }, []);
 
-  // Solución para desbloqueo del puntero en diálogos
+  // Solución para desbloqueo del puntero
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -639,7 +634,6 @@ export default function CustomersPage() {
                     onChange={(e) => handleAddressSearch(e.target.value)} 
                     placeholder={isGoogleReady ? "Escribe para buscar..." : "Cargando mapas..."} 
                     className="pl-10 h-11 border-primary/20 focus:border-primary shadow-sm"
-                    disabled={!isGoogleReady}
                   />
                   {isSearchingAddress && (
                     <div className="absolute right-3 top-3">
