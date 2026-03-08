@@ -13,7 +13,7 @@ import {
   Droplets, 
   Wrench, 
   ShoppingCart, 
-  ArrowRightLeft,
+  RefreshCw,
   Trash2,
   AlertCircle,
   CreditCard,
@@ -29,6 +29,7 @@ interface CatalogItem {
   category: string;
   price: number;
   currency: 'ARS' | 'USD';
+  stock: number | null;
 }
 
 interface Customer {
@@ -96,7 +97,7 @@ export default function TransactionsPage() {
     if (activeTab === "sale") return catalog;
     if (activeTab === "refill") return catalog.filter(i => i.category === "Químicos");
     if (activeTab === "service") return catalog.filter(i => i.category === "Servicios" || i.category === "Equipos" || i.category === "Repuestos");
-    if (activeTab === "transfer") return catalog; 
+    if (activeTab === "adjustment") return catalog.filter(i => i.stock !== null); // Solo productos con stock para ajustes
     return catalog;
   }, [catalog, activeTab]);
 
@@ -104,7 +105,7 @@ export default function TransactionsPage() {
     switch (activeTab) {
       case "refill": return { title: "Nueva Reposición", desc: "Registro de entrega de químicos.", icon: Droplets };
       case "service": return { title: "Servicio Técnico", desc: "Mantenimiento o reparación de equipos.", icon: Wrench };
-      case "transfer": return { title: "Movimiento Interno", desc: "Uso interno de materiales o ajustes.", icon: ArrowRightLeft };
+      case "adjustment": return { title: "Ajuste de Stock", desc: "Registro de mermas, roturas o consumo propio.", icon: RefreshCw };
       default: return { title: "Nueva Venta", desc: "Venta directa de productos o servicios.", icon: ShoppingCart };
     }
   }, [activeTab]);
@@ -120,7 +121,7 @@ export default function TransactionsPage() {
         itemId: item.id,
         name: item.name,
         qty: 1,
-        price: item.price,
+        price: activeTab === 'adjustment' ? 0 : item.price, // Precio 0 por defecto si es ajuste
         currency: item.currency
       }
     ])
@@ -145,8 +146,11 @@ export default function TransactionsPage() {
   }, [selectedItems])
 
   const currenciesInCart = useMemo(() => {
-    const set = new Set(selectedItems.map(i => i.currency));
-    return Array.from(set);
+    // Solo requerimos cuenta de destino si hay un monto mayor a 0
+    const currencies = selectedItems
+      .filter(i => (i.price * i.qty) > 0)
+      .map(i => i.currency);
+    return Array.from(new Set(currencies));
   }, [selectedItems]);
 
   const handleSaveTransaction = () => {
@@ -170,8 +174,8 @@ export default function TransactionsPage() {
     }
 
     toast({
-      title: "Transacción Registrada",
-      description: `Se ha procesado la ${tabInfo.title.toLowerCase()} exitosamente.`,
+      title: "Operación Registrada",
+      description: `Se ha procesado el registro de ${tabInfo.title.toLowerCase()} exitosamente.`,
     })
     
     // Reset form
@@ -191,10 +195,13 @@ export default function TransactionsPage() {
       <main className="flex-1 md:ml-64 pb-20 md:pb-8 p-4 md:p-8 space-y-6">
         <header>
           <h1 className="text-3xl font-headline font-bold text-primary">Operaciones</h1>
-          <p className="text-muted-foreground">Gestión integrada de ventas, servicios y reposiciones.</p>
+          <p className="text-muted-foreground">Gestión integrada de ventas, servicios y stock.</p>
         </header>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={activeTab} onValueChange={(v) => {
+          setActiveTab(v);
+          setSelectedItems([]); // Limpiar items al cambiar de tipo de operacion para evitar errores
+        }} className="w-full">
           <TabsList className="grid grid-cols-2 md:grid-cols-4 h-auto p-1 bg-white border mb-6">
             <TabsTrigger value="sale" className="data-[state=active]:bg-primary data-[state=active]:text-white py-3">
               <ShoppingCart className="h-4 w-4 mr-2" /> Venta
@@ -205,8 +212,8 @@ export default function TransactionsPage() {
             <TabsTrigger value="service" className="data-[state=active]:bg-primary data-[state=active]:text-white py-3">
               <Wrench className="h-4 w-4 mr-2" /> Técnico
             </TabsTrigger>
-            <TabsTrigger value="transfer" className="data-[state=active]:bg-primary data-[state=active]:text-white py-3">
-              <ArrowRightLeft className="h-4 w-4 mr-2" /> Interno
+            <TabsTrigger value="adjustment" className="data-[state=active]:bg-primary data-[state=active]:text-white py-3">
+              <RefreshCw className="h-4 w-4 mr-2" /> Ajuste Stock
             </TabsTrigger>
           </TabsList>
 
@@ -226,10 +233,12 @@ export default function TransactionsPage() {
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Seleccionar Cliente</Label>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      {activeTab === 'adjustment' ? 'Responsable / Ubicación' : 'Seleccionar Cliente'}
+                    </Label>
                     <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
                       <SelectTrigger className="bg-white">
-                        <SelectValue placeholder="Buscar cliente..." />
+                        <SelectValue placeholder="Buscar..." />
                       </SelectTrigger>
                       <SelectContent>
                         {customers.map(c => (
@@ -247,7 +256,7 @@ export default function TransactionsPage() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      Agregar del Catálogo ({activeTab === 'sale' ? 'Todo' : activeTab})
+                      {activeTab === 'adjustment' ? 'Elegir Producto para Ajustar' : `Agregar del Catálogo (${activeTab})`}
                     </Label>
                     <Select value={currentAddItem} onValueChange={handleAddItem}>
                       <SelectTrigger className="bg-white border-primary/20 hover:border-primary transition-colors">
@@ -257,11 +266,11 @@ export default function TransactionsPage() {
                         {filteredCatalog.length > 0 ? (
                           filteredCatalog.map(item => (
                             <SelectItem key={item.id} value={item.id}>
-                              [{item.category}] {item.name} - {item.currency === 'USD' ? 'u$s' : '$'}{item.price.toLocaleString('es-AR')}
+                              [{item.category}] {item.name} {item.stock !== null ? `(Stock: ${item.stock})` : ''} - {item.currency === 'USD' ? 'u$s' : '$'}{item.price.toLocaleString('es-AR')}
                             </SelectItem>
                           ))
                         ) : (
-                          <SelectItem value="none" disabled>No hay ítems para esta categoría</SelectItem>
+                          <SelectItem value="none" disabled>No hay ítems disponibles</SelectItem>
                         )}
                       </SelectContent>
                     </Select>
@@ -284,7 +293,7 @@ export default function TransactionsPage() {
                             <TableCell colSpan={5} className="text-center py-16 text-muted-foreground">
                               <div className="flex flex-col items-center gap-2 opacity-40">
                                 <ClipboardCheck className="h-10 w-10" />
-                                <p className="text-sm font-medium">Usa el catálogo para agregar ítems al comprobante</p>
+                                <p className="text-sm font-medium">Usa el buscador superior para agregar ítems</p>
                               </div>
                             </TableCell>
                           </TableRow>
@@ -338,7 +347,7 @@ export default function TransactionsPage() {
                 <CardHeader className="bg-primary/5 pb-4">
                   <CardTitle className="text-base flex items-center gap-2">
                     <ClipboardCheck className="h-4 w-4 text-primary" />
-                    Resumen de Liquidación
+                    Resumen de Operación
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-6 flex-1">
@@ -356,17 +365,17 @@ export default function TransactionsPage() {
 
                   <div className="h-px bg-border" />
 
-                  {/* Asignación de Cuentas */}
+                  {/* Asignación de Cuentas (Solo si hay dinero involucrado) */}
                   <div className="space-y-4">
                     <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                       <div className="h-1 w-4 bg-primary rounded-full" /> 
-                      Destino de Fondos
+                      Liquidación Financiera
                     </h4>
                     
                     {currenciesInCart.includes('ARS') && (
                       <div className="space-y-2 animate-in fade-in slide-in-from-right-2 duration-300">
                         <Label className="text-[10px] font-bold flex items-center gap-1 text-primary">
-                          <Banknote className="h-3 w-3" /> CAJA/BANCO PARA PESOS
+                          <Banknote className="h-3 w-3" /> CUENTA DESTINO PESOS
                         </Label>
                         <Select 
                           value={destinationAccounts.ARS} 
@@ -387,7 +396,7 @@ export default function TransactionsPage() {
                     {currenciesInCart.includes('USD') && (
                       <div className="space-y-2 animate-in fade-in slide-in-from-right-2 duration-300">
                         <Label className="text-[10px] font-bold flex items-center gap-1 text-emerald-600">
-                          <CreditCard className="h-3 w-3" /> CAJA PARA DÓLARES
+                          <CreditCard className="h-3 w-3" /> CUENTA DESTINO DÓLARES
                         </Label>
                         <Select 
                           value={destinationAccounts.USD} 
@@ -405,10 +414,21 @@ export default function TransactionsPage() {
                       </div>
                     )}
 
-                    {currenciesInCart.length === 0 && (
+                    {currenciesInCart.length === 0 && selectedItems.length > 0 && (
+                      <div className="text-center py-8 bg-emerald-50/50 rounded-xl border border-dashed border-emerald-200">
+                        <p className="text-[10px] font-bold text-emerald-700 uppercase">
+                          Operación sin impacto monetario
+                        </p>
+                        <p className="text-[9px] text-emerald-600 mt-1 italic">
+                          Solo se registrará el movimiento de stock / servicio.
+                        </p>
+                      </div>
+                    )}
+
+                    {selectedItems.length === 0 && (
                       <div className="text-center py-8 bg-muted/20 rounded-xl border border-dashed border-muted-foreground/20">
                         <p className="text-[10px] font-medium text-muted-foreground">
-                          Agrega ítems para habilitar la liquidación
+                          Agrega ítems para habilitar el cierre
                         </p>
                       </div>
                     )}
@@ -420,7 +440,7 @@ export default function TransactionsPage() {
                     onClick={handleSaveTransaction}
                     disabled={selectedItems.length === 0 || !selectedCustomerId}
                   >
-                    CONFIRMAR Y COBRAR
+                    {activeTab === 'adjustment' ? 'REGISTRAR AJUSTE' : 'CONFIRMAR OPERACIÓN'}
                   </Button>
                 </div>
               </Card>
