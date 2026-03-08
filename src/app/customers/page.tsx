@@ -70,7 +70,7 @@ export default function CustomersPage() {
   const autocompleteService = useRef<any>(null)
   const placesService = useRef<any>(null)
 
-  // Inicialización robusta de Google Maps
+  // Inicialización de Google Maps
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
     if (!apiKey) {
@@ -79,7 +79,7 @@ export default function CustomersPage() {
     }
 
     const initServices = () => {
-      if (window.google?.maps?.places) {
+      if (window.google?.maps?.places && !autocompleteService.current) {
         try {
           autocompleteService.current = new window.google.maps.places.AutocompleteService();
           const dummyDiv = document.createElement('div');
@@ -153,7 +153,7 @@ export default function CustomersPage() {
     
     if (val.length >= 3 && autocompleteService.current) {
       setIsSearchingAddress(true);
-      console.log("Buscando en Google Places:", val);
+      console.log("Buscando dirección:", val);
       
       autocompleteService.current.getPlacePredictions({
         input: val,
@@ -161,11 +161,10 @@ export default function CustomersPage() {
         types: ['address']
       }, (predictions: any, status: any) => {
         setIsSearchingAddress(false);
-        console.log("Google Autocomplete Status:", status);
-        
         if (status === 'OK' && predictions) {
           setAddressSuggestions(predictions);
         } else {
+          console.log("Google Status:", status);
           setAddressSuggestions([]);
         }
       });
@@ -202,6 +201,7 @@ export default function CustomersPage() {
           provincia: state || prev.provincia
         }));
         setAddressSuggestions([]);
+        toast({ title: "Dirección seleccionada" });
       }
     });
   }
@@ -389,7 +389,6 @@ export default function CustomersPage() {
                     ${filteredTotals.ars.toLocaleString('es-AR')}
                   </h3>
                 </div>
-                <div className="text-[10px] text-muted-foreground font-bold uppercase text-right">Pesos Argentinos</div>
               </CardContent>
             </Card>
 
@@ -405,7 +404,6 @@ export default function CustomersPage() {
                     u$s {filteredTotals.usd.toLocaleString('es-AR')}
                   </h3>
                 </div>
-                <div className="text-[10px] text-muted-foreground font-bold uppercase text-right">Dólares Estadounidenses</div>
               </CardContent>
             </Card>
           </section>
@@ -462,18 +460,18 @@ export default function CustomersPage() {
                             "text-[10px] font-black px-2 py-0.5 rounded border uppercase flex items-center gap-1 justify-end",
                             (customer.saldoActual || 0) < 0 ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
                           )}>
-                            <Banknote className="h-3 w-3" /> ARS: ${(customer.saldoActual || 0).toLocaleString('es-AR')}
+                            <Banknote className="h-3 w-3" /> ${(customer.saldoActual || 0).toLocaleString('es-AR')}
                           </div>
                           <div className={cn(
                             "text-[10px] font-black px-2 py-0.5 rounded border uppercase flex items-center gap-1 justify-end",
                             (customer.saldoUSD || 0) < 0 ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
                           )}>
-                            <TrendingUp className="h-3 w-3" /> USD: u$s {(customer.saldoUSD || 0).toLocaleString('es-AR')}
+                            <TrendingUp className="h-3 w-3" /> u$s {(customer.saldoUSD || 0).toLocaleString('es-AR')}
                           </div>
                         </div>
                       </div>
-                      <div className="space-y-2 mt-3">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <div className="space-y-2 mt-3 text-sm text-muted-foreground flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
                           <MapPin className="h-4 w-4 shrink-0 text-primary/60" />
                           <span className="truncate">{customer.direccion}, {customer.localidad}</span>
                         </div>
@@ -489,48 +487,31 @@ export default function CustomersPage() {
                           <Button 
                             variant="outline" 
                             size="sm" 
-                            className="h-8 gap-2 font-bold hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
+                            className="h-8 gap-2 font-bold"
                             asChild
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <a href={`tel:${customer.telefono}`}>
-                              <PhoneCall className="h-3 w-3" /> Llamar
-                            </a>
+                            <a href={`tel:${customer.telefono}`}><PhoneCall className="h-3 w-3" /> Llamar</a>
                           </Button>
                           {customer.mail && (
                             <Button 
                               variant="outline" 
                               size="sm" 
-                              className="h-8 gap-2 font-bold hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200"
+                              className="h-8 gap-2 font-bold"
                               asChild
                               onClick={(e) => e.stopPropagation()}
                             >
-                              <a href={`mailto:${customer.mail}`}>
-                                <Mail className="h-3 w-3" /> Email
-                              </a>
+                              <a href={`mailto:${customer.mail}`}><Mail className="h-3 w-3" /> Email</a>
                             </Button>
                           )}
                           <Button 
                             variant="outline" 
                             size="sm" 
-                            className="h-8 gap-2 font-bold hover:bg-primary/5 hover:text-primary hover:border-primary/30" 
+                            className="h-8 gap-2 font-bold" 
                             asChild 
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <Link href={`/transactions?clientId=${customer.id}`}>
-                              <History className="h-3 w-3" /> Historial
-                            </Link>
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="h-8 gap-2 font-bold bg-primary/10 hover:bg-primary/20 text-primary border-primary/20" 
-                            asChild 
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Link href={`/transactions?clientId=${customer.id}&mode=new`}>
-                              <PlusCircle className="h-3 w-3" /> Operación
-                            </Link>
+                            <Link href={`/transactions?clientId=${customer.id}`}><History className="h-3 w-3" /> Historial</Link>
                           </Button>
                         </div>
                       </div>
@@ -565,9 +546,9 @@ export default function CustomersPage() {
           
           <Tabs defaultValue="general" className="w-full mt-4">
             <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="general" className="font-bold"><Info className="h-4 w-4 mr-2" /> General</TabsTrigger>
-              <TabsTrigger value="address" className="font-bold"><MapPin className="h-4 w-4 mr-2" /> Ubicación</TabsTrigger>
-              <TabsTrigger value="equipment" className="font-bold"><Droplets className="h-4 w-4 mr-2" /> Equipo</TabsTrigger>
+              <TabsTrigger value="general" className="font-bold">General</TabsTrigger>
+              <TabsTrigger value="address" className="font-bold">Ubicación</TabsTrigger>
+              <TabsTrigger value="equipment" className="font-bold">Equipo</TabsTrigger>
             </TabsList>
 
             <TabsContent value="general" className="space-y-4 py-4">
@@ -593,36 +574,25 @@ export default function CustomersPage() {
               </div>
               <div className="space-y-2">
                 <Label>Email</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input value={formData.mail} onChange={(e) => setFormData({...formData, mail: e.target.value})} placeholder="cliente@ejemplo.com" className="pl-10" />
-                </div>
+                <Input value={formData.mail} onChange={(e) => setFormData({...formData, mail: e.target.value})} placeholder="cliente@ejemplo.com" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2 font-bold"><Banknote className="h-3 w-3 text-primary" /> Saldo ARS ($)</Label>
+                  <Label className="font-bold">Saldo ARS ($)</Label>
                   <Input type="number" value={formData.saldoActual} onChange={(e) => setFormData({...formData, saldoActual: Number(e.target.value)})} className="bg-muted/10 font-bold" />
                 </div>
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2 font-bold"><TrendingUp className="h-3 w-3 text-emerald-600" /> Saldo USD (u$s)</Label>
+                  <Label className="font-bold text-emerald-600">Saldo USD (u$s)</Label>
                   <Input type="number" value={formData.saldoUSD} onChange={(e) => setFormData({...formData, saldoUSD: Number(e.target.value)})} className="bg-muted/10 font-bold" />
                 </div>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                 <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
-                  <div className="space-y-0.5">
-                    <Label className="font-bold">Cliente de Reposición</Label>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">Seguimiento de cloro habilitado</p>
-                  </div>
+                  <Label className="font-bold">Cliente de Reposición</Label>
                   <Switch checked={formData.esClienteReposicion} onCheckedChange={(v) => setFormData({...formData, esClienteReposicion: v})} />
                 </div>
-
                 <div className="flex items-center justify-between p-3 border rounded-lg bg-amber-50/50 border-amber-200">
-                  <div className="space-y-0.5">
-                    <Label className="font-bold text-amber-700">Equipo en Comodato</Label>
-                    <p className="text-[10px] text-amber-600 uppercase tracking-widest font-black">Propiedad de la empresa</p>
-                  </div>
+                  <Label className="font-bold text-amber-700">Equipo en Comodato</Label>
                   <Switch 
                     checked={formData.equipoInstalado?.enComodato} 
                     onCheckedChange={(v) => setFormData(prev => ({ ...prev, equipoInstalado: { ...prev.equipoInstalado, enComodato: v } }))} 
@@ -685,7 +655,7 @@ export default function CustomersPage() {
               </div>
               <div className="space-y-2">
                 <Label>Observaciones Internas</Label>
-                <Textarea value={formData.observaciones} onChange={(e) => setFormData({...formData, observaciones: e.target.value})} placeholder="Detalles sobre el acceso, perros, etc..." className="min-h-[100px]" />
+                <Textarea value={formData.observaciones} onChange={(e) => setFormData({...formData, observaciones: e.target.value})} placeholder="Detalles de acceso, perros, etc..." className="min-h-[100px]" />
               </div>
             </TabsContent>
 
@@ -700,16 +670,6 @@ export default function CustomersPage() {
                   <Input type="number" value={formData.equipoInstalado.volumen} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, volumen: Number(e.target.value)}}))} />
                 </div>
               </div>
-              <div className="flex items-center justify-between p-3 border rounded-lg bg-amber-50/50 border-amber-200 mt-6">
-                <div className="space-y-0.5">
-                  <Label className="font-bold text-amber-700">Equipo en Comodato</Label>
-                  <p className="text-[10px] text-amber-600 uppercase tracking-widest font-black">Propiedad de la empresa</p>
-                </div>
-                <Switch 
-                  checked={formData.equipoInstalado?.enComodato} 
-                  onCheckedChange={(v) => setFormData(prev => ({ ...prev, equipoInstalado: { ...prev.equipoInstalado, enComodato: v } }))} 
-                />
-              </div>
               <div className="space-y-2 mt-4">
                 <Label>Medidas y Dosis</Label>
                 <Input value={formData.equipoInstalado.medidasPileta} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, medidasPileta: e.target.value}}))} placeholder="Ej: 8x4 metros" />
@@ -718,10 +678,7 @@ export default function CustomersPage() {
           </Tabs>
 
           <DialogFooter className="mt-6 border-t pt-4">
-            <Button variant="outline" onClick={() => {
-              setIsDialogOpen(false);
-              setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
-            }} className="font-bold">Cancelar</Button>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="font-bold">Cancelar</Button>
             <Button onClick={handleSave} className="px-8 font-bold shadow-lg shadow-primary/20"><CheckCircle2 className="mr-2 h-4 w-4" /> Guardar Cambios</Button>
           </DialogFooter>
         </DialogContent>
