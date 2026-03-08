@@ -58,12 +58,10 @@ export default function CustomersPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<any>(null)
   
-  // Autocomplete Address State
   const [addressSuggestions, setAddressSuggestions] = useState<any[]>([])
   const [isSearchingAddress, setIsSearchingAddress] = useState(false)
   const [showNoResults, setShowNoResults] = useState(false)
 
-  // SOLUCIÓN TÉCNICA: Observador de mutaciones para forzar desbloqueo del puntero
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -109,7 +107,6 @@ export default function CustomersPage() {
     if (val.length >= 3) {
       setIsSearchingAddress(true)
       try {
-        // Usamos Nominatim con filtro por Argentina para mayor precisión
         const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(val + ', Argentina')}&limit=5&addressdetails=1&countrycodes=ar`)
         const data = await res.json()
         setAddressSuggestions(data || [])
