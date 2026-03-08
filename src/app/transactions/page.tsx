@@ -30,7 +30,8 @@ import {
   Settings2,
   Receipt,
   MoreVertical,
-  Edit
+  Edit,
+  AlertTriangle
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -40,6 +41,16 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase"
 import { collection, doc } from "firebase/firestore"
 import { cn } from "@/lib/utils"
@@ -59,6 +70,7 @@ export default function TransactionsPage() {
   const [activeTab, setActiveTab] = useState("sale")
   
   const [editingTx, setEditingTx] = useState<any | null>(null)
+  const [txToDelete, setTxToDelete] = useState<any | null>(null)
 
   const [filterCustomer, setFilterCustomer] = useState("all")
   const [filterAccount, setFilterAccount] = useState("all")
@@ -154,7 +166,6 @@ export default function TransactionsPage() {
     const amount = Number(tx.amount) || 0;
     
     if (tx.type === 'cobro') {
-      // Revertir Cobro: Restar de la caja, restar del saldo del cliente (volver a deuda)
       if (acc) {
         updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { 
           initialBalance: Number(acc.initialBalance || 0) - amount 
@@ -167,7 +178,6 @@ export default function TransactionsPage() {
         })
       }
     } else {
-      // Revertir Venta/Reposición/Servicio: Restar de la caja (si se pagó) o sumar al saldo del cliente (si quedó a cuenta)
       if (acc) {
         updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { 
           initialBalance: Number(acc.initialBalance || 0) - amount 
@@ -183,12 +193,11 @@ export default function TransactionsPage() {
     }
   }
 
-  const handleDeleteTx = (tx: any) => {
-    if (!tx || !tx.id) return;
-    if (!confirm("¿Eliminar esta operación? Esto revertirá los saldos automáticamente.")) return
-
-    revertTxBalances(tx);
-    deleteDocumentNonBlocking(doc(db, 'transactions', tx.id))
+  const confirmDeleteTx = () => {
+    if (!txToDelete || !txToDelete.id) return
+    revertTxBalances(txToDelete)
+    deleteDocumentNonBlocking(doc(db, 'transactions', txToDelete.id))
+    setTxToDelete(null)
     toast({ title: "Operación eliminada" })
   }
 
@@ -657,10 +666,10 @@ export default function TransactionsPage() {
                                   <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => handleEditTx(tx)}>
+                                  <DropdownMenuItem onSelect={() => handleEditTx(tx)}>
                                     <Edit className="h-4 w-4 mr-2" /> Editar
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteTx(tx)}>
+                                  <DropdownMenuItem className="text-destructive" onSelect={() => setTxToDelete(tx)}>
                                     <Trash2 className="h-4 w-4 mr-2" /> Eliminar
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
@@ -676,6 +685,25 @@ export default function TransactionsPage() {
             </Card>
           </div>
         )}
+
+        <AlertDialog open={!!txToDelete} onOpenChange={(o) => !o && setTxToDelete(null)}>
+          <AlertDialogContent className="glass-card">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
+                <AlertTriangle className="h-5 w-5" /> ¿Confirmar eliminación?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Esta acción es irreversible. Se revertirán automáticamente los saldos del cliente y la cuenta financiera asociada a esta operación.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="font-bold">Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeleteTx} className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-bold">
+                Eliminar Definitivamente
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </main>
       <MobileNav />
     </div>
