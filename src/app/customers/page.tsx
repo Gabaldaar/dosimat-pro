@@ -3,12 +3,26 @@
 
 import { useState, useMemo } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Search, Plus, MapPin, ChevronRight, Phone, Mail, User, Info, Settings, Droplets, Trash2 } from "lucide-react"
+import { 
+  Search, 
+  Plus, 
+  MapPin, 
+  ChevronRight, 
+  Phone, 
+  Mail, 
+  User, 
+  Info, 
+  Droplets, 
+  Trash2, 
+  Map, 
+  PhoneCall, 
+  ExternalLink 
+} from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
@@ -113,6 +127,11 @@ export default function CustomersPage() {
     }
   }
 
+  const handleOpenMaps = (address: string, city: string) => {
+    const query = encodeURIComponent(`${address}, ${city}, Argentina`)
+    window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank')
+  }
+
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar className="hidden md:flex w-64 fixed inset-y-0" />
@@ -169,17 +188,48 @@ export default function CustomersPage() {
                           {customer.esClienteReposicion ? 'REPOSICIÓN' : 'OCASIONAL'}
                         </Badge>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
-                        <p className="text-sm text-muted-foreground flex items-center gap-1">
-                          <MapPin className="h-3 w-3" /> {customer.localidad}, {customer.direccion}
-                        </p>
-                        <p className="text-sm text-muted-foreground flex items-center gap-1">
-                          <Phone className="h-3 w-3" /> {customer.telefono}
-                        </p>
+                      <div className="space-y-2 mt-3">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <MapPin className="h-4 w-4 shrink-0 text-primary/60" />
+                          <span className="truncate">{customer.direccion}, {customer.localidad}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2 mt-4">
+                          <Button 
+                            variant="secondary" 
+                            size="sm" 
+                            className="h-8 gap-2"
+                            onClick={(e) => { e.stopPropagation(); handleOpenMaps(customer.direccion, customer.localidad); }}
+                          >
+                            <Map className="h-3 w-3" /> Cómo llegar
+                          </Button>
+                          {customer.telefono && (
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="h-8 gap-2"
+                              asChild
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <a href={`tel:${customer.telefono}`}>
+                                <PhoneCall className="h-3 w-3" /> Llamar
+                              </a>
+                            </Button>
+                          )}
+                          {customer.mail && (
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="h-8 gap-2"
+                              asChild
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <a href={`mailto:${customer.mail}`}>
+                                <Mail className="h-3 w-3" /> Email
+                              </a>
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                      {customer.cuit_dni && (
-                        <p className="text-xs text-muted-foreground mt-2 font-mono">ID: {customer.cuit_dni}</p>
-                      )}
                     </div>
                     <div className="flex flex-col gap-2">
                       <Button variant="ghost" size="icon" className="text-muted-foreground group-hover:text-primary transition-colors">
@@ -253,7 +303,12 @@ export default function CustomersPage() {
             <TabsContent value="address" className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label>Dirección</Label>
-                <Input value={formData.direccion} onChange={(e) => setFormData({...formData, direccion: e.target.value})} placeholder="Av. Principal 123" />
+                <div className="flex gap-2">
+                  <Input value={formData.direccion} onChange={(e) => setFormData({...formData, direccion: e.target.value})} placeholder="Av. Principal 123" />
+                  <Button variant="outline" size="icon" onClick={() => handleOpenMaps(formData.direccion, formData.localidad)}>
+                    <Map className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
