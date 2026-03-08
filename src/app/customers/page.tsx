@@ -70,6 +70,7 @@ export default function CustomersPage() {
   const autocompleteService = useRef<any>(null)
   const placesService = useRef<any>(null)
 
+  // Carga robusta de Google Maps
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
     if (!apiKey) return;
@@ -103,6 +104,7 @@ export default function CustomersPage() {
     }
   }, []);
 
+  // Fix para evitar que el puntero quede bloqueado por diálogos de ShadCN
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
