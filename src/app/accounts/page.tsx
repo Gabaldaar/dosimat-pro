@@ -41,22 +41,19 @@ export default function AccountsPage() {
   const { toast } = useToast()
   const db = useFirestore()
   
-  // Firestore Collections - No seeding, just live data
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
   const categoriesQuery = useMemoFirebase(() => collection(db, 'expense_categories'), [db])
   const txQuery = useMemoFirebase(() => collection(db, 'transactions'), [db])
 
-  const { data: accounts = [], isLoading: loadingAccounts } = useCollection(accountsQuery)
-  const { data: expenseCategories = [] } = useCollection(categoriesQuery)
-  const { data: recentTxs = [] } = useCollection(txQuery)
+  const { data: accounts, isLoading: loadingAccounts } = useCollection(accountsQuery)
+  const { data: expenseCategories } = useCollection(categoriesQuery)
+  const { data: recentTxs } = useCollection(txQuery)
   
-  // Dialog States
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false)
   const [isTxDialogOpen, setIsTxDialogOpen] = useState(false)
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false)
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false)
   
-  // Form States
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [txType, setTxType] = useState<'income' | 'expense'>('income')
@@ -130,12 +127,10 @@ export default function AccountsPage() {
     const multiplier = txType === 'income' ? 1 : -1
     const newBalance = (selectedAccount.initialBalance || 0) + (txFormData.amount * multiplier)
 
-    // Update account balance
     updateDocumentNonBlocking(doc(db, 'financial_accounts', selectedAccount.id), {
       initialBalance: newBalance
     })
 
-    // Create transaction record
     addDocumentNonBlocking(collection(db, 'transactions'), {
       date: new Date().toISOString(),
       type: txType === 'income' ? 'Adjustment' : 'Expense',
@@ -208,7 +203,7 @@ export default function AccountsPage() {
           <div className="flex items-center justify-center h-32">
             <p className="text-muted-foreground">Cargando cuentas...</p>
           </div>
-        ) : accounts.length === 0 ? (
+        ) : !accounts || accounts.length === 0 ? (
           <Card className="p-12 text-center border-dashed">
             <Wallet className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
             <h3 className="text-lg font-semibold">No hay cuentas registradas</h3>
@@ -264,7 +259,7 @@ export default function AccountsPage() {
             <CardHeader><CardTitle>Últimos Movimientos</CardTitle></CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {recentTxs.length === 0 ? (
+                {!recentTxs || recentTxs.length === 0 ? (
                   <p className="text-sm text-center text-muted-foreground py-8">No hay transacciones registradas.</p>
                 ) : (
                   recentTxs.slice(0, 5).map((move: any) => (
@@ -293,7 +288,7 @@ export default function AccountsPage() {
               <CardTitle className="text-lg flex items-center gap-2"><Tag className="h-5 w-5" /> Categorías</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {expenseCategories.map((cat: any) => (
+              {expenseCategories?.map((cat: any) => (
                 <div key={cat.id} className="flex justify-between items-center p-2 rounded bg-muted/20">
                   <span className="text-sm">{cat.name}</span>
                 </div>
@@ -306,7 +301,6 @@ export default function AccountsPage() {
         </section>
       </main>
 
-      {/* Account Dialog */}
       <Dialog open={isAccountDialogOpen} onOpenChange={setIsAccountDialogOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>{editingAccountId ? "Editar Cuenta" : "Nueva Cuenta"}</DialogTitle></DialogHeader>
@@ -346,7 +340,6 @@ export default function AccountsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Category Manager */}
       <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Categorías de Gasto</DialogTitle></DialogHeader>
@@ -356,7 +349,7 @@ export default function AccountsPage() {
               <Button size="icon" onClick={handleAddCategory}><Plus className="h-4 w-4" /></Button>
             </div>
             <ScrollArea className="h-[200px]">
-              {expenseCategories.map((cat: any) => (
+              {expenseCategories?.map((cat: any) => (
                 <div key={cat.id} className="flex items-center justify-between p-2 border-b">
                   <span>{cat.name}</span>
                   <Button variant="ghost" size="icon" onClick={() => handleDeleteCategory(cat.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
@@ -367,7 +360,6 @@ export default function AccountsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Transaction Dialog */}
       <Dialog open={isTxDialogOpen} onOpenChange={setIsTxDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -384,7 +376,7 @@ export default function AccountsPage() {
                 <Select value={txFormData.categoryId} onValueChange={(v) => setTxFormData({...txFormData, categoryId: v})}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar rubro..." /></SelectTrigger>
                   <SelectContent>
-                    {expenseCategories.map((cat: any) => (
+                    {expenseCategories?.map((cat: any) => (
                       <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                     ))}
                   </SelectContent>

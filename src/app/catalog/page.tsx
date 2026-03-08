@@ -33,7 +33,7 @@ export default function CatalogPage() {
   const [searchTerm, setSearchTerm] = useState("")
   
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
-  const { data: items = [] } = useCollection(catalogQuery)
+  const { data: items, isLoading } = useCollection(catalogQuery)
   
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
@@ -46,7 +46,8 @@ export default function CatalogPage() {
   })
 
   const filteredItems = useMemo(() => {
-    return items?.filter((item: any) => 
+    if (!items) return []
+    return items.filter((item: any) => 
       item.name.toLowerCase().includes(searchTerm.toLowerCase())
     )
   }, [items, searchTerm])
@@ -86,7 +87,7 @@ export default function CatalogPage() {
       <Sidebar className="hidden md:flex w-64 fixed inset-y-0" />
       <main className="flex-1 md:ml-64 p-4 md:p-8 space-y-6">
         <header className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-primary">Catálogo Firestore</h1>
+          <h1 className="text-3xl font-bold text-primary">Catálogo Cloud</h1>
           <Button onClick={() => handleOpenDialog()}><Plus className="mr-2 h-4 w-4" /> Nuevo</Button>
         </header>
 
@@ -95,31 +96,41 @@ export default function CatalogPage() {
           <Input placeholder="Buscar..." className="pl-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
         </div>
 
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {filteredItems?.map((item: any) => (
-            <Card key={item.id} className="glass-card">
-              <CardHeader className="pb-2">
-                <div className="flex justify-between">
-                  <Badge variant="secondary">{item.isService ? 'Servicio' : 'Producto'}</Badge>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      <DropdownMenuItem onClick={() => handleOpenDialog(item)}>Editar</DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(item.id)}>Eliminar</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-                <CardTitle className="text-lg mt-2">{item.name}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-1">
-                  <p className="text-xl font-bold">${item.priceARS.toLocaleString()} ARS</p>
-                  <p className="text-sm text-muted-foreground">u$s {item.priceUSD.toLocaleString()} USD</p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </section>
+        {isLoading ? (
+          <div className="flex items-center justify-center h-32">
+            <p className="text-muted-foreground">Cargando catálogo...</p>
+          </div>
+        ) : filteredItems.length === 0 ? (
+          <div className="text-center py-12 border-2 border-dashed rounded-xl">
+             <p className="text-muted-foreground">No se encontraron productos o servicios.</p>
+          </div>
+        ) : (
+          <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {filteredItems.map((item: any) => (
+              <Card key={item.id} className="glass-card">
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between">
+                    <Badge variant="secondary">{item.isService ? 'Servicio' : 'Producto'}</Badge>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem onClick={() => handleOpenDialog(item)}>Editar</DropdownMenuItem>
+                        <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(item.id)}>Eliminar</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  <CardTitle className="text-lg mt-2">{item.name}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-1">
+                    <p className="text-xl font-bold">${(item.priceARS || 0).toLocaleString()} ARS</p>
+                    <p className="text-sm text-muted-foreground">u$s {(item.priceUSD || 0).toLocaleString()} USD</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </section>
+        )}
       </main>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
