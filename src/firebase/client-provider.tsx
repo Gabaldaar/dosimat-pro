@@ -13,6 +13,7 @@ interface FirebaseClientProviderProps {
 
 /**
  * Mensaje de carga sincronizado para evitar errores de hidratación.
+ * Debe ser exactamente el mismo en el servidor y en el cliente.
  */
 const LOADING_MESSAGE = "Validando acceso...";
 

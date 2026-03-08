@@ -23,7 +23,8 @@ import {
   FilterX,
   TrendingUp,
   Banknote,
-  PlusCircle
+  PlusCircle,
+  AlertCircle
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -96,8 +97,16 @@ export default function CustomersPage() {
                           (c.cuit_dni && c.cuit_dni.includes(searchTerm))
       
       if (!searchMatch) return false
-      if (filterBalance === 'debt' && (c.saldoActual || 0) >= 0 && (c.saldoUSD || 0) >= 0) return false
-      if (filterBalance === 'credit' && (c.saldoActual || 0) <= 0 && (c.saldoUSD || 0) <= 0) return false
+      
+      const saldoARS = Number(c.saldoActual || 0)
+      const saldoUSD = Number(c.saldoUSD || 0)
+
+      if (filterBalance === 'debt') {
+        if (saldoARS >= 0 && saldoUSD >= 0) return false
+      }
+      if (filterBalance === 'credit') {
+        if (saldoARS <= 0 && saldoUSD <= 0) return false
+      }
 
       return true
     })
@@ -188,8 +197,34 @@ export default function CustomersPage() {
                 onChange={(e) => setSearchTerm(e.target.value)} 
               />
             </div>
+            <div className="flex bg-muted/30 p-1 rounded-lg border">
+              <Button 
+                variant={filterBalance === 'all' ? 'secondary' : 'ghost'} 
+                size="sm" 
+                className="px-4 font-bold text-[10px] uppercase tracking-wider"
+                onClick={() => setFilterBalance('all')}
+              >
+                Todos
+              </Button>
+              <Button 
+                variant={filterBalance === 'debt' ? 'secondary' : 'ghost'} 
+                size="sm" 
+                className={cn("px-4 font-bold text-[10px] uppercase tracking-wider", filterBalance === 'debt' && "text-rose-600")}
+                onClick={() => setFilterBalance('debt')}
+              >
+                Deudores
+              </Button>
+              <Button 
+                variant={filterBalance === 'credit' ? 'secondary' : 'ghost'} 
+                size="sm" 
+                className={cn("px-4 font-bold text-[10px] uppercase tracking-wider", filterBalance === 'credit' && "text-emerald-600")}
+                onClick={() => setFilterBalance('credit')}
+              >
+                A Favor
+              </Button>
+            </div>
             <Button variant="outline" className="h-11 font-bold" onClick={resetFilters}>
-              <FilterX className="h-4 w-4 mr-2" /> Limpiar Filtros
+              <FilterX className="h-4 w-4 mr-2" /> Limpiar
             </Button>
           </div>
         </section>
