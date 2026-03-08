@@ -1,7 +1,7 @@
 'use server';
 /**
  * @fileOverview This file implements a Genkit flow for generating personalized notification messages
- * for ChloriTrack Pro customers based on specific events.
+ * for Dosimat Pro customers based on specific events.
  *
  * - generatePersonalizedNotification - A function that handles the personalized notification generation process.
  * - GenerateNotificationInput - The input type for the generatePersonalizedNotification function.
@@ -32,7 +32,7 @@ const notificationPrompt = ai.definePrompt({
   name: 'generateNotificationPrompt',
   input: {schema: GenerateNotificationInputSchema},
   output: {schema: GenerateNotificationOutputSchema},
-  prompt: `You are an AI assistant for ChloriTrack Pro, a pool maintenance management system. Your task is to generate personalized and effective notification messages for customers based on specific events.
+  prompt: `You are an AI assistant for Dosimat Pro, a pool maintenance management system. Your task is to generate personalized and effective notification messages for customers based on specific events.
 
 The tone should be friendly, helpful, and encourage prompt action.
 

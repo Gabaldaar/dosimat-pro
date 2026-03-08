@@ -39,7 +39,7 @@ export function Sidebar({ className }: { className?: string }) {
         <div className="bg-primary p-2 rounded-lg">
           <Droplets className="h-6 w-6 text-white" />
         </div>
-        <span className="font-headline font-bold text-xl tracking-tight text-primary">ChloriTrack<span className="text-accent-foreground font-medium">Pro</span></span>
+        <span className="font-headline font-bold text-xl tracking-tight text-primary">Dosimat<span className="text-accent-foreground font-medium">Pro</span></span>
       </div>
       
       <nav className="flex-1 px-4 py-2 space-y-1">

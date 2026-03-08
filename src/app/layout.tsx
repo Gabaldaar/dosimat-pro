@@ -3,7 +3,7 @@ import './globals.css';
 import {Toaster} from '@/components/ui/toaster';
 
 export const metadata: Metadata = {
-  title: 'ChloriTrack Pro | Pool Management',
+  title: 'Dosimat Pro | Pool Management',
   description: 'Smart pool maintenance and financial management system',
 };
 

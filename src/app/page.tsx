@@ -41,14 +41,13 @@ const chartConfig = {
 export default function Dashboard() {
   return (
     <div className="flex min-h-screen">
-      {/* Sidebar - Desktop */}
       <Sidebar className="hidden md:flex w-64 fixed inset-y-0" />
       
       <main className="flex-1 md:ml-64 pb-20 md:pb-8 p-4 md:p-8 space-y-8">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-headline font-bold text-primary">Dashboard</h1>
-            <p className="text-muted-foreground">Resumen financiero y de operaciones del día.</p>
+            <p className="text-muted-foreground">Resumen financiero y de operaciones de Dosimat Pro.</p>
           </div>
           <div className="flex gap-2">
             <Button className="shadow-lg rounded-full px-6">
@@ -57,7 +56,6 @@ export default function Dashboard() {
           </div>
         </header>
 
-        {/* Financial Highlights */}
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="glass-card">
             <CardContent className="pt-6">
@@ -128,7 +126,6 @@ export default function Dashboard() {
           </Card>
         </section>
 
-        {/* Charts & Details */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <Card className="lg:col-span-2 glass-card">
             <CardHeader>
