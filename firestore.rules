@@ -7,20 +7,21 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Función: El usuario tiene rol de Administrador en su perfil
+    // Función: El usuario tiene rol de Administrador
+    // Se usa exists() para evitar errores si el documento no se ha creado aún
     function isAdmin() {
       return isAuthenticated() && 
              exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin';
     }
 
-    // Perfiles de usuario: Lectura para todos los autenticados, escritura solo dueño o admin
+    // Perfiles de usuario
     match /users/{userId} {
       allow read: if isAuthenticated();
       allow write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
     }
 
-    // Clientes: Acceso total para personal autenticado
+    // Clientes
     match /clients/{clientId} {
       allow read, write: if isAuthenticated();
       match /pools/{poolId} {
@@ -28,31 +29,30 @@ service cloud.firestore {
       }
     }
 
-    // Catálogo: Lectura para todos, escritura solo Admin
+    // Catálogo
     match /products_services/{id} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
 
-    // Cuentas Financieras: Lectura para todos, escritura para Admin o actualizaciones de saldo
+    // Cuentas Financieras
     match /financial_accounts/{id} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated(); // Simplificado para permitir actualizaciones de saldo desde operaciones
+      allow write: if isAuthenticated();
     }
 
-    // Categorías de Gasto: Lectura para todos, escritura solo Admin
-    match /expense_categories/{id} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-
-    // Transacciones: Lectura y creación para todos los autenticados, edición/borrado solo Admin
+    // Transacciones - Se permite lectura total (get y list) para usuarios autenticados
     match /transactions/{txId} {
       allow read, create: if isAuthenticated();
       allow update, delete: if isAdmin();
     }
 
-    // Notificaciones y reglas
+    // Categorías y otros
+    match /expense_categories/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
     match /notification_rules/{id} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();

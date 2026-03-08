@@ -32,16 +32,15 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
           return;
         }
 
-        // Verificamos el perfil pero no bloqueamos si no se encuentra inmediatamente
+        // Intentamos cargar el perfil, pero no bloqueamos la app si falla o no existe aún
         try {
           const userDoc = await getDoc(doc(firebaseServices.firestore, 'users', user.uid));
-          // Si estamos en login y el usuario ya tiene perfil, lo mandamos al home
           if (userDoc.exists() && pathname === '/login') {
             router.replace('/');
           }
         } catch (error) {
-          // Si hay error de permisos aquí, es probable que las reglas se estén actualizando
-          console.warn("Error inicial verificando perfil:", error);
+          // Error de permisos silencioso durante la inicialización
+          console.warn("Aviso: El perfil del usuario aún no es accesible.");
         } finally {
           setIsInitializing(false);
         }
@@ -54,7 +53,7 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <RefreshCw className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-muted-foreground animate-pulse font-medium">Validando acceso...</p>
+        <p className="text-muted-foreground animate-pulse font-medium">Sincronizando acceso...</p>
       </div>
     );
   }
