@@ -5,7 +5,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useFirebase, setDocumentNonBlocking } from "@/firebase"
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth"
-import { doc, getDoc } from "firebase/firestore"
+import { doc } from "firebase/firestore"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -38,7 +38,7 @@ export default function LoginPage() {
         const user = userCredential.user
         
         // Al registrarse, creamos el perfil del usuario.
-        // Hacemos que el usuario sea Admin por defecto si es el primero (o simplemente lo seteamos así para esta fase)
+        // Hacemos que el usuario sea Admin por defecto para esta fase de configuración inicial
         setDocumentNonBlocking(doc(firestore, 'users', user.uid), {
           id: user.uid,
           name: name || email.split('@')[0],
@@ -51,10 +51,19 @@ export default function LoginPage() {
       }
     } catch (error: any) {
       console.error("Auth error:", error)
-      let message = "Verifica tus credenciales"
-      if (error.code === 'auth/user-not-found') message = "Usuario no encontrado"
-      if (error.code === 'auth/wrong-password') message = "Contraseña incorrecta"
-      if (error.code === 'auth/email-already-in-use') message = "El email ya está registrado"
+      let message = "Verifica tus datos o regístrate si no tienes cuenta."
+      
+      if (error.code === 'auth/invalid-credential') {
+        message = "Email o contraseña incorrectos. Si es tu primera vez, haz clic en 'Registrate aquí'."
+      } else if (error.code === 'auth/user-not-found') {
+        message = "Usuario no encontrado. Por favor, regístrate."
+      } else if (error.code === 'auth/wrong-password') {
+        message = "Contraseña incorrecta."
+      } else if (error.code === 'auth/email-already-in-use') {
+        message = "Este email ya está en uso. Intenta iniciar sesión."
+      } else if (error.code === 'auth/weak-password') {
+        message = "La contraseña debe tener al menos 6 caracteres."
+      }
       
       toast({ 
         title: "Error de acceso", 
@@ -71,7 +80,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-md glass-card border-primary/20 shadow-2xl">
         <CardHeader className="text-center space-y-1">
           <div className="flex justify-center mb-4">
-            <div className="bg-primary p-3 rounded-2xl shadow-lg shadow-primary/20 animate-bounce">
+            <div className="bg-primary p-3 rounded-2xl shadow-lg shadow-primary/20">
               <Droplets className="h-8 w-8 text-white" />
             </div>
           </div>
