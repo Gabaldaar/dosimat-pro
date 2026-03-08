@@ -11,7 +11,8 @@ interface FirebaseClientProviderProps {
   children: ReactNode;
 }
 
-const LOADING_MESSAGE = "Sincronizando acceso...";
+// Sincronizado con el renderizado del servidor para evitar errores de hidratación
+const LOADING_MESSAGE = "Validando acceso...";
 
 export function FirebaseClientProvider({ children }: FirebaseClientProviderProps) {
   const firebaseServices = useMemo(() => {

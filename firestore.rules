@@ -36,9 +36,9 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
-    // Transacciones - Acceso directo por autenticación para evitar errores de permisos
+    // Transacciones - Se permite listado explícito para evitar errores de permisos en el historial
     match /transactions/{txId} {
-      allow read, create: if request.auth != null;
+      allow get, list, create: if request.auth != null;
       allow update, delete: if isAdmin();
     }
 
