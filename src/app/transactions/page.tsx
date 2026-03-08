@@ -15,7 +15,9 @@ import {
   Calendar as CalendarIcon, 
   Wallet, 
   FilterX,
-  Plus
+  Plus,
+  Trash2,
+  ChevronRight
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -31,8 +33,8 @@ export default function TransactionsPage() {
   const [activeTab, setActiveTab] = useState("sale")
   
   const [filterCustomer, setFilterCustomer] = useState("all")
-  const [filterMonth, setFilterMonth] = useState("all")
   const [filterAccount, setFilterAccount] = useState("all")
+  const [filterMonth, setFilterMonth] = useState("all")
 
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
@@ -56,18 +58,34 @@ export default function TransactionsPage() {
   const handleAddItem = (itemId: string) => {
     const item = catalog?.find((i: any) => i.id === itemId)
     if (!item) return
+    
+    // Default currency based on where the price is defined, but can be changed
+    const defaultCurrency = item.priceARS > 0 ? 'ARS' : 'USD'
+    const defaultPrice = item.priceARS > 0 ? item.priceARS : item.priceUSD
+
     setSelectedItems(prev => [...prev, { 
       itemId: item.id, 
       name: item.name, 
       qty: 1, 
-      price: item.priceARS > 0 ? item.priceARS : item.priceUSD, 
-      currency: item.priceARS > 0 ? 'ARS' : 'USD' 
+      price: defaultPrice, 
+      currency: defaultCurrency 
     }])
+  }
+
+  const updateItem = (index: number, field: string, value: any) => {
+    const newItems = [...selectedItems]
+    newItems[index] = { ...newItems[index], [field]: value }
+    setSelectedItems(newItems)
+  }
+
+  const removeItem = (index: number) => {
+    setSelectedItems(prev => prev.filter((_, i) => i !== index))
   }
 
   const cartTotals = useMemo(() => {
     return selectedItems.reduce((acc, item) => {
-      acc[item.currency] = (acc[item.currency] || 0) + (item.price * item.qty)
+      const amount = (Number(item.price) || 0) * (Number(item.qty) || 0)
+      acc[item.currency as 'ARS' | 'USD'] = (acc[item.currency as 'ARS' | 'USD'] || 0) + amount
       return acc
     }, { ARS: 0, USD: 0 })
   }, [selectedItems])
@@ -78,7 +96,6 @@ export default function TransactionsPage() {
       return
     }
 
-    const txId = Math.random().toString(36).substr(2, 9)
     const client = customers?.find(c => c.id === selectedCustomerId)
     if (!client) return
 
@@ -86,7 +103,7 @@ export default function TransactionsPage() {
       if (cobroAmount <= 0 || !cobroAccountId) return
       
       const txData = {
-        id: txId,
+        id: Math.random().toString(36).substr(2, 9),
         date: new Date(operationDate).toISOString(),
         clientId: selectedCustomerId,
         type: 'cobro',
@@ -149,7 +166,7 @@ export default function TransactionsPage() {
     if (!transactions) return []
     return transactions.filter((tx: any) => {
       const matchCustomer = filterCustomer === "all" || tx.clientId === filterCustomer
-      const matchAccount = filterAccount === "all" || tx.financialAccountId === filterAccount
+      const matchAccount = filterAccount === "all" || (filterAccount === "null" ? !tx.financialAccountId : tx.financialAccountId === filterAccount)
       const matchMonth = filterMonth === "all" || tx.date.startsWith(filterMonth)
       return matchCustomer && matchAccount && matchMonth
     }).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -241,25 +258,75 @@ export default function TransactionsPage() {
                       <Label>Agregar Ítems al Carrito</Label>
                       <Select onValueChange={handleAddItem}>
                         <SelectTrigger><SelectValue placeholder="Buscar producto o servicio..." /></SelectTrigger>
-                        <SelectContent>{catalog?.map((i: any) => <SelectItem key={i.id} value={i.id}>{i.name} ({i.priceARS > 0 ? '$' : 'u$s'})</SelectItem>)}</SelectContent>
+                        <SelectContent>
+                          {catalog?.map((i: any) => (
+                            <SelectItem key={i.id} value={i.id}>
+                              {i.name} (Ref: {i.priceARS > 0 ? '$' : 'u$s'})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
                       </Select>
                     </div>
-                    <Table>
-                      <TableHeader><TableRow><TableHead>Ítem</TableHead><TableHead>Cant</TableHead><TableHead className="text-right">Precio</TableHead></TableRow></TableHeader>
-                      <TableBody>
-                        {selectedItems.length === 0 ? (
-                          <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-8 italic">El carrito está vacío</TableCell></TableRow>
-                        ) : (
-                          selectedItems.map((item, i) => (
-                            <TableRow key={i}>
-                              <TableCell>{item.name}</TableCell>
-                              <TableCell>{item.qty}</TableCell>
-                              <TableCell className="text-right">{item.currency === 'ARS' ? '$' : 'u$s'} {(item.price || 0).toLocaleString()}</TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
+                    <div className="border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Ítem</TableHead>
+                            <TableHead className="w-24">Cant.</TableHead>
+                            <TableHead className="w-32">Precio</TableHead>
+                            <TableHead className="w-24">Moneda</TableHead>
+                            <TableHead className="text-right">Subtotal</TableHead>
+                            <TableHead className="w-12"></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {selectedItems.length === 0 ? (
+                            <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8 italic">El carrito está vacío</TableCell></TableRow>
+                          ) : (
+                            selectedItems.map((item, i) => (
+                              <TableRow key={i}>
+                                <TableCell className="font-medium">{item.name}</TableCell>
+                                <TableCell>
+                                  <Input 
+                                    type="number" 
+                                    value={item.qty} 
+                                    className="h-8"
+                                    onChange={(e) => updateItem(i, 'qty', e.target.value)} 
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Input 
+                                    type="number" 
+                                    value={item.price} 
+                                    className="h-8"
+                                    onChange={(e) => updateItem(i, 'price', e.target.value)} 
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Select value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)}>
+                                    <SelectTrigger className="h-8">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="ARS">$</SelectItem>
+                                      <SelectItem value="USD">u$s</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </TableCell>
+                                <TableCell className="text-right font-bold">
+                                  {item.currency === 'ARS' ? '$' : 'u$s'} {((Number(item.price) || 0) * (Number(item.qty) || 0)).toLocaleString()}
+                                </TableCell>
+                                <TableCell>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeItem(i)}>
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
                 )}
               </CardContent>
