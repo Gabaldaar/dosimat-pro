@@ -25,7 +25,8 @@ import {
   TrendingUp,
   Banknote,
   PlusCircle,
-  RefreshCw
+  RefreshCw,
+  Calculator
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -54,7 +55,6 @@ export default function CustomersPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<any>(null)
   
-  // SOLUCIÓN TÉCNICA DEFINITIVA: Observador de mutaciones para forzar desbloqueo del puntero
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -97,23 +97,19 @@ export default function CustomersPage() {
   const filteredCustomers = useMemo(() => {
     if (!customers) return []
     return customers.filter((c: any) => {
-      // 1. Buscador
       const searchMatch = `${c.nombre} ${c.apellido}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (c.cuit_dni && c.cuit_dni.includes(searchTerm))
       if (!searchMatch) return false
       
-      // 2. Filtro de Saldo
       const saldoARS = Number(c.saldoActual || 0)
       const saldoUSD = Number(c.saldoUSD || 0)
       if (filterBalance === 'debt' && (saldoARS >= 0 && saldoUSD >= 0)) return false
       if (filterBalance === 'credit' && (saldoARS <= 0 && saldoUSD <= 0)) return false
 
-      // 3. Filtro de Comodato
       const isComodato = c.equipoInstalado?.enComodato === true
       if (filterComodato === 'yes' && !isComodato) return false
       if (filterComodato === 'no' && isComodato) return false
 
-      // 4. Filtro de Reposición
       const isRepo = c.esClienteReposicion === true
       if (filterReposicion === 'yes' && !isRepo) return false
       if (filterReposicion === 'no' && isRepo) return false
@@ -121,6 +117,15 @@ export default function CustomersPage() {
       return true
     })
   }, [customers, searchTerm, filterBalance, filterComodato, filterReposicion])
+
+  // Cálculo de totales filtrados
+  const filteredTotals = useMemo(() => {
+    return filteredCustomers.reduce((acc, c) => {
+      acc.ars += Number(c.saldoActual || 0)
+      acc.usd += Number(c.saldoUSD || 0)
+      return acc
+    }, { ars: 0, usd: 0 })
+  }, [filteredCustomers])
 
   const resetFilters = () => {
     setSearchTerm("")
@@ -190,8 +195,8 @@ export default function CustomersPage() {
       <main className="flex-1 md:ml-64 p-4 md:p-8 space-y-6">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-primary font-headline">Listado de Clientes</h1>
-            <p className="text-muted-foreground">Gestión de perfiles, equipos y cuentas corrientes.</p>
+            <h1 className="text-3xl font-bold text-primary font-headline">Clientes</h1>
+            <p className="text-muted-foreground">Gestión de perfiles y cuentas corrientes.</p>
           </div>
           <Button onClick={() => handleOpenDialog()} className="h-12 px-6 shadow-lg shadow-primary/20 font-bold">
             <Plus className="mr-2 h-5 w-5" /> Nuevo Cliente
@@ -249,12 +254,49 @@ export default function CustomersPage() {
 
               <div className="flex items-end">
                 <Button variant="outline" className="h-10 w-full font-bold" onClick={resetFilters}>
-                  <FilterX className="h-4 w-4 mr-2" /> Reset Filtros
+                  <FilterX className="h-4 w-4 mr-2" /> Limpiar
                 </Button>
               </div>
             </div>
           </div>
         </section>
+
+        {/* Panel de Totales Filtrados */}
+        {!isLoading && customers && customers.length > 0 && (
+          <section className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
+            <Card className="glass-card bg-primary/5 border-l-4 border-l-primary overflow-hidden relative">
+              <Calculator className="absolute right-4 top-1/2 -translate-y-1/2 h-12 w-12 text-primary/10 -rotate-12" />
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-black text-primary uppercase tracking-widest">Total Filtrado ARS</p>
+                  <h3 className={cn(
+                    "text-xl font-black mt-1",
+                    filteredTotals.ars < 0 ? "text-rose-600" : "text-emerald-600"
+                  )}>
+                    ${filteredTotals.ars.toLocaleString('es-AR')}
+                  </h3>
+                </div>
+                <div className="text-[10px] text-muted-foreground font-bold uppercase">Pesos Argentinos</div>
+              </CardContent>
+            </Card>
+
+            <Card className="glass-card bg-emerald-50/50 border-l-4 border-l-emerald-500 overflow-hidden relative">
+              <TrendingUp className="absolute right-4 top-1/2 -translate-y-1/2 h-12 w-12 text-emerald-500/10 -rotate-12" />
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Total Filtrado USD</p>
+                  <h3 className={cn(
+                    "text-xl font-black mt-1",
+                    filteredTotals.usd < 0 ? "text-rose-600" : "text-emerald-600"
+                  )}>
+                    u$s {filteredTotals.usd.toLocaleString('es-AR')}
+                  </h3>
+                </div>
+                <div className="text-[10px] text-muted-foreground font-bold uppercase">Dólares Estadounidenses</div>
+              </CardContent>
+            </Card>
+          </section>
+        )}
 
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-64 gap-2">
@@ -479,7 +521,10 @@ export default function CustomersPage() {
                   <Label className="font-bold text-amber-700">Equipo en Comodato</Label>
                   <p className="text-[10px] text-amber-600 uppercase tracking-widest font-black">Propiedad de la empresa</p>
                 </div>
-                <Switch checked={formData.equipoInstalado.enComodato} onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v}})} />
+                <Switch 
+                  checked={formData.equipoInstalado.enComodato} 
+                  onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v}})} 
+                />
               </div>
               <div className="space-y-2 mt-4">
                 <Label>Medidas y Dosis</Label>
