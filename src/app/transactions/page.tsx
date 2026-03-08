@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo } from "react"
@@ -30,12 +31,20 @@ import {
   Droplet,
   Wrench,
   Settings2,
-  Receipt
+  Receipt,
+  MoreVertical,
+  Edit
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase"
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu"
+import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase"
 import { collection, doc } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 
@@ -57,6 +66,9 @@ export default function TransactionsPage() {
   const [mainView, setMainView] = useState("register")
   const [activeTab, setActiveTab] = useState("sale")
   
+  // Edit state
+  const [editingTx, setEditingTx] = useState<any | null>(null)
+
   // Filtros Historial
   const [filterCustomer, setFilterCustomer] = useState("all")
   const [filterAccount, setFilterAccount] = useState("all")
@@ -82,6 +94,7 @@ export default function TransactionsPage() {
   const [cobroAmount, setCobroAmount] = useState(0)
   const [cobroCurrency, setCobroCurrency] = useState("ARS")
   const [cobroAccountId, setCobroAccountId] = useState("")
+  const [txDescription, setTxDescription] = useState("")
 
   const handleAddItem = (itemId: string) => {
     const item = catalog?.find((i: any) => i.id === itemId)
@@ -117,6 +130,62 @@ export default function TransactionsPage() {
     }, { ARS: 0, USD: 0 })
   }, [selectedItems])
 
+  const handleEditTx = (tx: any) => {
+    setEditingTx(tx)
+    setSelectedCustomerId(tx.clientId)
+    setOperationDate(tx.date.split('T')[0])
+    setActiveTab(tx.type)
+    setTxDescription(tx.description || "")
+
+    if (tx.type === 'cobro') {
+      setCobroAmount(Math.abs(tx.amount))
+      setCobroCurrency(tx.currency)
+      setCobroAccountId(tx.financialAccountId || "pending")
+    } else {
+      // In edit mode for sales/services, we load it as a single amount adjustment 
+      // since we don't store line items explicitly in the current schema
+      setSelectedItems([{
+        name: tx.description || txTypeMap[tx.type]?.label || "Ajuste",
+        qty: 1,
+        price: Math.abs(tx.amount),
+        currency: tx.currency,
+        itemId: "manual"
+      }])
+      setDestinationAccounts({ [tx.currency]: tx.financialAccountId || "pending" })
+    }
+    
+    setMainView("register")
+  }
+
+  const handleDeleteTx = (tx: any) => {
+    if (!confirm("¿Eliminar esta operación? Esto revertirá los saldos automáticamente.")) return
+
+    const client = customers?.find(c => c.id === tx.clientId)
+    const acc = accounts?.find(a => a.id === tx.financialAccountId)
+    
+    // Reverse balance logic
+    if (tx.type === 'cobro') {
+      // It was an income (+ amount) to account and (+ amount) to client balance? 
+      // Wait, current cobro logic: 
+      // Account gets +amount. 
+      // Client saldo gets +amount (reduces debt if balance is negative).
+      if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) - tx.amount })
+      const balanceField = tx.currency === 'ARS' ? 'saldoActual' : 'saldoUSD'
+      if (client) updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) - tx.amount })
+    } else {
+      // It was a sale/service (- amount for client if pending, or + amount for account if paid)
+      if (acc) {
+        updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) - tx.amount })
+      } else {
+        const balanceField = tx.currency === 'ARS' ? 'saldoActual' : 'saldoUSD'
+        if (client) updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) + tx.amount })
+      }
+    }
+
+    deleteDocumentNonBlocking(doc(db, 'transactions', tx.id))
+    toast({ title: "Operación eliminada y saldos revertidos" })
+  }
+
   const handleSaveTransaction = () => {
     if (!selectedCustomerId) {
       toast({ title: "Error", description: "Selecciona un cliente", variant: "destructive" })
@@ -126,65 +195,118 @@ export default function TransactionsPage() {
     const client = customers?.find(c => c.id === selectedCustomerId)
     if (!client) return
 
-    if (activeTab === 'cobro') {
-      if (cobroAmount <= 0 || !cobroAccountId) return
+    if (editingTx) {
+      // Update existing
+      const newAmount = activeTab === 'cobro' ? cobroAmount : cartTotals[cobroCurrency as 'ARS' | 'USD'] || (selectedItems[0]?.price * selectedItems[0]?.qty)
+      const newCurrency = activeTab === 'cobro' ? cobroCurrency : (selectedItems[0]?.currency || "ARS")
+      const newAccId = activeTab === 'cobro' ? cobroAccountId : destinationAccounts[newCurrency]
       
-      const txData = {
-        id: Math.random().toString(36).substr(2, 9),
+      // Calculate diff for balance adjustment
+      const oldAmount = editingTx.amount
+      const diff = newAmount - oldAmount
+
+      const updatedData = {
         date: new Date(operationDate).toISOString(),
         clientId: selectedCustomerId,
-        type: 'cobro',
-        amount: cobroAmount,
-        currency: cobroCurrency,
-        description: `Cobro de saldo - ${cobroCurrency}`,
-        financialAccountId: cobroAccountId
+        type: activeTab,
+        amount: newAmount,
+        currency: newCurrency,
+        description: txDescription || `Actualizado: ${txTypeMap[activeTab].label}`,
+        financialAccountId: newAccId === "pending" ? null : newAccId
       }
 
-      addDocumentNonBlocking(collection(db, 'transactions'), txData)
-      
-      const acc = accounts?.find(a => a.id === cobroAccountId)
-      if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) + cobroAmount })
-      
-      const balanceField = cobroCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'
-      updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) + cobroAmount })
+      updateDocumentNonBlocking(doc(db, 'transactions', editingTx.id), updatedData)
 
-      toast({ title: "Cobro registrado correctamente" })
-    } else {
-      if (selectedItems.length === 0) return
-
-      ['ARS', 'USD'].forEach(curr => {
-        const total = cartTotals[curr as 'ARS' | 'USD']
-        if (total > 0) {
-          const accId = destinationAccounts[curr]
-          const isPending = !accId || accId === "pending"
-          
-          const txData = {
-            id: Math.random().toString(36).substr(2, 9),
-            date: new Date(operationDate).toISOString(),
-            clientId: selectedCustomerId,
-            type: activeTab,
-            amount: total,
-            currency: curr,
-            description: `Operación ${txTypeMap[activeTab].label} - ${curr}`,
-            financialAccountId: isPending ? null : accId
-          }
-
-          addDocumentNonBlocking(collection(db, 'transactions'), txData)
-
-          if (!isPending) {
-            const acc = accounts?.find(a => a.id === accId)
-            if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) + total })
-          } else {
-            const balanceField = curr === 'ARS' ? 'saldoActual' : 'saldoUSD'
-            updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) - total })
-          }
+      // Adjust balances
+      if (activeTab === 'cobro') {
+        const acc = accounts?.find(a => a.id === newAccId)
+        if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) + diff })
+        const balanceField = newCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'
+        updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) + diff })
+      } else {
+        const acc = accounts?.find(a => a.id === newAccId)
+        if (acc) {
+          updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) + diff })
+        } else {
+          const balanceField = newCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'
+          updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) - diff })
         }
-      })
-      toast({ title: "Operación registrada" })
+      }
+
+      toast({ title: "Operación actualizada correctamente" })
+      setEditingTx(null)
+    } else {
+      // New Transaction Logic (Same as before)
+      if (activeTab === 'cobro') {
+        if (cobroAmount <= 0 || !cobroAccountId) return
+        
+        const txData = {
+          id: Math.random().toString(36).substr(2, 9),
+          date: new Date(operationDate).toISOString(),
+          clientId: selectedCustomerId,
+          type: 'cobro',
+          amount: cobroAmount,
+          currency: cobroCurrency,
+          description: txDescription || `Cobro de saldo - ${cobroCurrency}`,
+          financialAccountId: cobroAccountId === "pending" ? null : cobroAccountId
+        }
+
+        addDocumentNonBlocking(collection(db, 'transactions'), txData)
+        
+        const acc = accounts?.find(a => a.id === cobroAccountId)
+        if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) + cobroAmount })
+        
+        const balanceField = cobroCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'
+        updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) + cobroAmount })
+
+        toast({ title: "Cobro registrado correctamente" })
+      } else {
+        if (selectedItems.length === 0) return
+
+        ['ARS', 'USD'].forEach(curr => {
+          const total = cartTotals[curr as 'ARS' | 'USD']
+          if (total > 0) {
+            const accId = destinationAccounts[curr]
+            const isPending = !accId || accId === "pending"
+            
+            const txData = {
+              id: Math.random().toString(36).substr(2, 9),
+              date: new Date(operationDate).toISOString(),
+              clientId: selectedCustomerId,
+              type: activeTab,
+              amount: total,
+              currency: curr,
+              description: txDescription || `Operación ${txTypeMap[activeTab].label} - ${curr}`,
+              financialAccountId: isPending ? null : accId
+            }
+
+            addDocumentNonBlocking(collection(db, 'transactions'), txData)
+
+            if (!isPending) {
+              const acc = accounts?.find(a => a.id === accId)
+              if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: (acc.initialBalance || 0) + total })
+            } else {
+              const balanceField = curr === 'ARS' ? 'saldoActual' : 'saldoUSD'
+              updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: (client[balanceField] || 0) - total })
+            }
+          }
+        })
+        toast({ title: "Operación registrada" })
+      }
     }
 
     setSelectedItems([])
+    setTxDescription("")
     setMainView("history")
+  }
+
+  const resetRegisterForm = () => {
+    setEditingTx(null)
+    setSelectedCustomerId("")
+    setSelectedItems([])
+    setTxDescription("")
+    setCobroAmount(0)
+    setOperationDate(new Date().toISOString().split('T')[0])
   }
 
   const filteredTransactions = useMemo(() => {
@@ -218,9 +340,14 @@ export default function TransactionsPage() {
       <Sidebar className="hidden md:flex w-64 fixed inset-y-0" />
       <main className="flex-1 md:ml-64 p-4 md:p-8 space-y-6">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <h1 className="text-3xl font-bold text-primary font-headline">Operaciones Cloud</h1>
-          <Tabs value={mainView} onValueChange={setMainView}>
-            <TabsList><TabsTrigger value="register">Nueva</TabsTrigger><TabsTrigger value="history">Historial</TabsTrigger></TabsList>
+          <h1 className="text-3xl font-bold text-primary font-headline">
+            {editingTx ? "Editar Operación" : "Operaciones Cloud"}
+          </h1>
+          <Tabs value={mainView} onValueChange={(v) => { if(v === "register" && !editingTx) resetRegisterForm(); setMainView(v); }}>
+            <TabsList>
+              <TabsTrigger value="register">{editingTx ? "Editando" : "Nueva"}</TabsTrigger>
+              <TabsTrigger value="history">Historial</TabsTrigger>
+            </TabsList>
           </Tabs>
         </header>
 
@@ -232,26 +359,28 @@ export default function TransactionsPage() {
                    <div className="space-y-1">
                      <CardTitle className="text-xl flex items-center gap-2">
                        {activeTab === 'cobro' ? <Receipt className="h-5 w-5 text-emerald-600" /> : <PlusCircle className="h-5 w-5 text-primary" />}
-                       {txTypeMap[activeTab].label}
+                       {txTypeMap[activeTab]?.label || activeTab}
                      </CardTitle>
-                     <p className="text-xs text-muted-foreground">{txTypeMap[activeTab].description}</p>
+                     <p className="text-xs text-muted-foreground">{txTypeMap[activeTab]?.description}</p>
                    </div>
-                   <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
-                     <TabsList className="grid grid-cols-5 w-full">
-                        <TabsTrigger value="sale">Venta</TabsTrigger>
-                        <TabsTrigger value="refill">Repo</TabsTrigger>
-                        <TabsTrigger value="service">Técnico</TabsTrigger>
-                        <TabsTrigger value="cobro">Cobro</TabsTrigger>
-                        <TabsTrigger value="adjustment">Interno</TabsTrigger>
-                     </TabsList>
-                   </Tabs>
+                   {!editingTx && (
+                    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
+                      <TabsList className="grid grid-cols-5 w-full">
+                          <TabsTrigger value="sale">Venta</TabsTrigger>
+                          <TabsTrigger value="refill">Repo</TabsTrigger>
+                          <TabsTrigger value="service">Técnico</TabsTrigger>
+                          <TabsTrigger value="cobro">Cobro</TabsTrigger>
+                          <TabsTrigger value="adjustment">Interno</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                   )}
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-muted/20 rounded-xl">
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2 text-primary font-bold"><User className="h-4 w-4" /> Cliente</Label>
-                    <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
+                    <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId} disabled={!!editingTx}>
                       <SelectTrigger className="bg-white"><SelectValue placeholder="Buscar cliente..." /></SelectTrigger>
                       <SelectContent>
                         {customers?.map((c: any) => (
@@ -268,6 +397,16 @@ export default function TransactionsPage() {
                   </div>
                 </div>
 
+                <div className="space-y-2">
+                  <Label className="font-bold">Descripción / Notas</Label>
+                  <Input 
+                    placeholder="Detalles adicionales de la operación..." 
+                    value={txDescription} 
+                    onChange={(e) => setTxDescription(e.target.value)} 
+                    className="bg-white"
+                  />
+                </div>
+
                 {activeTab === 'cobro' ? (
                   <div className="p-6 bg-emerald-50 border border-emerald-100 rounded-xl space-y-4 animate-in slide-in-from-top-2 duration-300">
                     <h3 className="font-bold text-emerald-800 flex items-center gap-2"><Wallet className="h-4 w-4" /> Registrar Pago de Cliente</h3>
@@ -278,7 +417,7 @@ export default function TransactionsPage() {
                       </div>
                       <div className="space-y-2">
                         <Label>Moneda</Label>
-                        <Select value={cobroCurrency} onValueChange={setCobroCurrency}>
+                        <Select value={cobroCurrency} onValueChange={setCobroCurrency} disabled={!!editingTx}>
                           <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="ARS">Pesos ($)</SelectItem>
@@ -291,6 +430,7 @@ export default function TransactionsPage() {
                         <Select value={cobroAccountId} onValueChange={setCobroAccountId}>
                           <SelectTrigger className="bg-white"><SelectValue placeholder="Caja/Banco..." /></SelectTrigger>
                           <SelectContent>
+                            <SelectItem value="pending">A CUENTA (Deuda del cliente)</SelectItem>
                             {accounts?.filter(a => a.currency === cobroCurrency).map(a => (
                               <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
                             ))}
@@ -301,19 +441,21 @@ export default function TransactionsPage() {
                   </div>
                 ) : (
                   <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-300">
-                    <div className="space-y-2">
-                      <Label className="font-bold">Agregar ítems a la {txTypeMap[activeTab].label}</Label>
-                      <Select onValueChange={handleAddItem}>
-                        <SelectTrigger className="h-11"><SelectValue placeholder="Seleccionar producto o servicio..." /></SelectTrigger>
-                        <SelectContent>
-                          {catalog?.map((i: any) => (
-                            <SelectItem key={i.id} value={i.id}>
-                              {i.name} ({i.priceARS > 0 ? '$' : 'u$s'})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {!editingTx && (
+                      <div className="space-y-2">
+                        <Label className="font-bold">Agregar ítems a la {txTypeMap[activeTab]?.label}</Label>
+                        <Select onValueChange={handleAddItem}>
+                          <SelectTrigger className="h-11"><SelectValue placeholder="Seleccionar producto o servicio..." /></SelectTrigger>
+                          <SelectContent>
+                            {catalog?.map((i: any) => (
+                              <SelectItem key={i.id} value={i.id}>
+                                {i.name} ({i.priceARS > 0 ? '$' : 'u$s'})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                     <div className="border rounded-xl overflow-hidden shadow-sm">
                       <Table>
                         <TableHeader className="bg-muted/30">
@@ -323,7 +465,7 @@ export default function TransactionsPage() {
                             <TableHead className="w-32 font-bold text-center">Precio</TableHead>
                             <TableHead className="w-24 font-bold text-center">Moneda</TableHead>
                             <TableHead className="text-right font-bold">Subtotal</TableHead>
-                            <TableHead className="w-12"></TableHead>
+                            {!editingTx && <TableHead className="w-12"></TableHead>}
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -336,7 +478,7 @@ export default function TransactionsPage() {
                                 <TableCell><Input type="number" value={item.qty} className="h-8 text-center" onChange={(e) => updateItem(i, 'qty', e.target.value)} /></TableCell>
                                 <TableCell><Input type="number" value={item.price} className="h-8 text-center" onChange={(e) => updateItem(i, 'price', e.target.value)} /></TableCell>
                                 <TableCell>
-                                  <Select value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)}>
+                                  <Select value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)} disabled={!!editingTx}>
                                     <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="ARS">$</SelectItem>
@@ -345,7 +487,7 @@ export default function TransactionsPage() {
                                   </Select>
                                 </TableCell>
                                 <TableCell className="text-right font-black text-sm">{item.currency === 'ARS' ? '$' : 'u$s'} {((Number(item.price) || 0) * (Number(item.qty) || 0)).toLocaleString('es-AR')}</TableCell>
-                                <TableCell><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeItem(i)}><Trash2 className="h-4 w-4" /></Button></TableCell>
+                                {!editingTx && <TableCell><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeItem(i)}><Trash2 className="h-4 w-4" /></Button></TableCell>}
                               </TableRow>
                             ))
                           )}
@@ -405,8 +547,13 @@ export default function TransactionsPage() {
                   disabled={(activeTab !== 'cobro' && selectedItems.length === 0) || (activeTab === 'cobro' && cobroAmount <= 0) || !selectedCustomerId} 
                   onClick={handleSaveTransaction}
                 >
-                  {activeTab === 'cobro' ? 'REGISTRAR PAGO RECIBIDO' : `GUARDAR ${txTypeMap[activeTab].label.toUpperCase()}`}
+                  {editingTx ? 'GUARDAR CAMBIOS' : (activeTab === 'cobro' ? 'REGISTRAR PAGO RECIBIDO' : `GUARDAR ${txTypeMap[activeTab]?.label.toUpperCase()}`)}
                 </Button>
+                {editingTx && (
+                  <Button variant="outline" className="w-full" onClick={() => { resetRegisterForm(); setMainView("history"); }}>
+                    CANCELAR EDICIÓN
+                  </Button>
+                )}
                 <div className="p-3 bg-muted/20 rounded-lg">
                   <p className="text-[10px] text-muted-foreground italic leading-tight">
                     * Al usar "A CUENTA", el monto se restará del saldo disponible del cliente. Las ventas directas a cajas/bancos actualizan el saldo de la cuenta elegida.
@@ -507,6 +654,7 @@ export default function TransactionsPage() {
                         <TableHead className="font-bold">Categoría</TableHead>
                         <TableHead className="font-bold">Detalle</TableHead>
                         <TableHead className="text-right font-bold">Monto</TableHead>
+                        <TableHead className="w-12"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -531,6 +679,21 @@ export default function TransactionsPage() {
                             <TableCell className="text-[11px] max-w-[250px] truncate italic text-muted-foreground group-hover:text-foreground transition-colors">{tx.description}</TableCell>
                             <TableCell className={cn("text-right font-black text-sm", isIncome ? "text-emerald-600" : "text-rose-600")}>
                               {tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}
+                            </TableCell>
+                            <TableCell>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => handleEditTx(tx)}>
+                                    <Edit className="h-4 w-4 mr-2" /> Editar
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteTx(tx)}>
+                                    <Trash2 className="h-4 w-4 mr-2" /> Eliminar
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </TableCell>
                           </TableRow>
                         )
