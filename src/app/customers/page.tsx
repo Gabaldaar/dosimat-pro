@@ -141,7 +141,7 @@ export default function CustomersPage() {
       <main className="flex-1 md:ml-64 p-4 md:p-8 space-y-6">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-primary font-headline">Maestro de Clientes</h1>
+            <h1 className="text-3xl font-bold text-primary font-headline">Listado de Clientes</h1>
             <p className="text-muted-foreground">Gestión centralizada de perfiles y equipos instalados.</p>
           </div>
           <Button onClick={() => handleOpenDialog()} className="h-12 px-6 shadow-lg shadow-primary/20">

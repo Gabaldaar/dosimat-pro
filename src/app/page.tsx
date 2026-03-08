@@ -197,7 +197,7 @@ export default function Dashboard() {
                       <p className="text-sm text-center py-4 italic text-muted-foreground">Sin clientes registrados.</p>
                     )}
                     <Link href="/customers" className="block text-center text-xs font-bold text-primary hover:underline mt-2">
-                      Ver maestro de clientes
+                      Ver listado de clientes
                     </Link>
                   </CardContent>
                 </Card>
