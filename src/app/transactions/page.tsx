@@ -72,11 +72,13 @@ export default function TransactionsPage() {
   const [editingTx, setEditingTx] = useState<any | null>(null)
   const [txToDelete, setTxToDelete] = useState<any | null>(null)
 
+  // Filters State
   const [filterCustomer, setFilterCustomer] = useState("all")
   const [filterAccount, setFilterAccount] = useState("all")
   const [filterStartDate, setFilterStartDate] = useState("")
   const [filterEndDate, setFilterEndDate] = useState("")
-  const [filterOpType, setFilterOpType] = useState("all") 
+  const [filterOpType, setFilterOpType] = useState("all") // Income/Expense
+  const [filterCategory, setFilterCategory] = useState("all") // Sale/Refill/etc
 
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
@@ -305,6 +307,15 @@ export default function TransactionsPage() {
     setOperationDate(new Date().toISOString().split('T')[0])
   }
 
+  const resetFilters = () => {
+    setFilterCustomer("all")
+    setFilterAccount("all")
+    setFilterStartDate("")
+    setFilterEndDate("")
+    setFilterOpType("all")
+    setFilterCategory("all")
+  }
+
   const filteredTransactions = useMemo(() => {
     if (!transactions) return []
     return transactions.filter((tx: any) => {
@@ -319,9 +330,11 @@ export default function TransactionsPage() {
       if (filterOpType === 'income') matchType = tx.amount > 0 || tx.type === 'cobro'
       if (filterOpType === 'expense') matchType = tx.amount < 0 && tx.type !== 'cobro'
 
-      return matchCustomer && matchAccount && matchStart && matchEnd && matchType
+      const matchCategory = filterCategory === "all" || tx.type === filterCategory
+
+      return matchCustomer && matchAccount && matchStart && matchEnd && matchType && matchCategory
     }).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  }, [transactions, filterCustomer, filterAccount, filterStartDate, filterEndDate, filterOpType])
+  }, [transactions, filterCustomer, filterAccount, filterStartDate, filterEndDate, filterOpType, filterCategory])
 
   const filteredTotals = useMemo(() => {
     return filteredTransactions.reduce((acc, tx) => {
@@ -595,13 +608,14 @@ export default function TransactionsPage() {
                    </Select>
                  </div>
                  <div className="space-y-1">
-                   <Label className="text-xs">Forma de Pago / Cuenta</Label>
-                   <Select value={filterAccount} onValueChange={setFilterAccount}>
-                     <SelectTrigger className="w-[160px] h-9"><SelectValue /></SelectTrigger>
+                   <Label className="text-xs">Categoría</Label>
+                   <Select value={filterCategory} onValueChange={setFilterCategory}>
+                     <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
                      <SelectContent>
                        <SelectItem value="all">Todas</SelectItem>
-                       <SelectItem value="null">A Cuenta (Pendiente)</SelectItem>
-                       {accounts?.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                       {Object.entries(txTypeMap).map(([key, info]) => (
+                         <SelectItem key={key} value={key}>{info.label}</SelectItem>
+                       ))}
                      </SelectContent>
                    </Select>
                  </div>
@@ -610,9 +624,20 @@ export default function TransactionsPage() {
                    <Select value={filterOpType} onValueChange={setFilterOpType}>
                      <SelectTrigger className="w-[120px] h-9"><SelectValue /></SelectTrigger>
                      <SelectContent>
-                       <SelectItem value="all">Todos</SelectItem>
-                       <SelectItem value="income">Ingresos (+)</SelectItem>
-                       <SelectItem value="expense">Egresos (-)</SelectItem>
+                       <SelectItem value="all">Flujo (Ing/Egr)</SelectItem>
+                       <SelectItem value="income">Solo Ingresos (+)</SelectItem>
+                       <SelectItem value="expense">Solo Egresos (-)</SelectItem>
+                     </SelectContent>
+                   </Select>
+                 </div>
+                 <div className="space-y-1">
+                   <Label className="text-xs">Forma de Pago</Label>
+                   <Select value={filterAccount} onValueChange={setFilterAccount}>
+                     <SelectTrigger className="w-[160px] h-9"><SelectValue /></SelectTrigger>
+                     <SelectContent>
+                       <SelectItem value="all">Cuentas/Cajas</SelectItem>
+                       <SelectItem value="null">A Cuenta (Pendiente)</SelectItem>
+                       {accounts?.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
                      </SelectContent>
                    </Select>
                  </div>
@@ -624,7 +649,7 @@ export default function TransactionsPage() {
                    <Label className="text-xs">Hasta</Label>
                    <Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="w-[140px] h-9" />
                  </div>
-                 <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary" onClick={() => { setFilterCustomer("all"); setFilterAccount("all"); setFilterStartDate(""); setFilterEndDate(""); setFilterOpType("all"); }}>
+                 <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary" onClick={resetFilters}>
                    <FilterX className="h-4 w-4" />
                  </Button>
               </CardContent>
@@ -635,7 +660,7 @@ export default function TransactionsPage() {
                 {loadingTx ? (
                   <div className="p-12 text-center text-muted-foreground animate-pulse">Sincronizando operaciones...</div>
                 ) : filteredTransactions.length === 0 ? (
-                  <div className="p-12 text-center text-muted-foreground italic">No se encontraron registros.</div>
+                  <div className="p-12 text-center text-muted-foreground italic">No se encontraron registros con estos filtros.</div>
                 ) : (
                   <Table>
                     <TableHeader className="bg-muted/30">
