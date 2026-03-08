@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect, useRef } from "react"
@@ -43,7 +42,7 @@ import { collection, doc } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 
 declare global {
-  interface window {
+  interface Window {
     google: any;
   }
 }
@@ -71,10 +70,13 @@ export default function CustomersPage() {
   const autocompleteService = useRef<any>(null)
   const placesService = useRef<any>(null)
 
-  // Inicialización de Google Maps
+  // Carga e inicialización de Google Maps
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-    if (!apiKey) return;
+    if (!apiKey) {
+      console.warn("Google Maps API Key no encontrada en .env");
+      return;
+    }
 
     const initServices = () => {
       if (window.google?.maps?.places) {
@@ -105,7 +107,7 @@ export default function CustomersPage() {
     }
   }, []);
 
-  // Solución para desbloqueo del puntero
+  // Desbloqueo forzado del puntero (fix para diálogos de Shadcn)
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -146,24 +148,24 @@ export default function CustomersPage() {
   const [formData, setFormData] = useState(defaultFormData)
 
   const handleAddressSearch = async (val: string) => {
-    setFormData({ ...formData, direccion: val })
+    setFormData(prev => ({ ...prev, direccion: val }));
     
     if (val.length >= 3 && autocompleteService.current) {
-      setIsSearchingAddress(true)
+      setIsSearchingAddress(true);
       autocompleteService.current.getPlacePredictions({
         input: val,
         componentRestrictions: { country: 'ar' },
         types: ['address']
       }, (predictions: any, status: any) => {
-        setIsSearchingAddress(false)
+        setIsSearchingAddress(false);
         if (status === 'OK' && predictions) {
-          setAddressSuggestions(predictions)
+          setAddressSuggestions(predictions);
         } else {
-          setAddressSuggestions([])
+          setAddressSuggestions([]);
         }
-      })
+      });
     } else {
-      setAddressSuggestions([])
+      setAddressSuggestions([]);
     }
   }
 
@@ -191,12 +193,12 @@ export default function CustomersPage() {
         setFormData(prev => ({
           ...prev,
           direccion: `${street} ${number}`.trim() || prediction.description,
-          localidad: city,
-          provincia: state
-        }))
-        setAddressSuggestions([])
+          localidad: city || prev.localidad,
+          provincia: state || prev.provincia
+        }));
+        setAddressSuggestions([]);
       }
-    })
+    });
   }
 
   const filteredCustomers = useMemo(() => {
@@ -618,7 +620,7 @@ export default function CustomersPage() {
                   </div>
                   <Switch 
                     checked={formData.equipoInstalado?.enComodato} 
-                    onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v}})} 
+                    onCheckedChange={(v) => setFormData({ ...formData, equipoInstalado: { ...formData.equipoInstalado, enComodato: v } })} 
                   />
                 </div>
               </div>
@@ -700,7 +702,7 @@ export default function CustomersPage() {
                 </div>
                 <Switch 
                   checked={formData.equipoInstalado?.enComodato} 
-                  onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v}})} 
+                  onCheckedChange={(v) => setFormData({ ...formData, equipoInstalado: { ...formData.equipoInstalado, enComodato: v } })} 
                 />
               </div>
               <div className="space-y-2 mt-4">
