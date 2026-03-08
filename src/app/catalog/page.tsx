@@ -117,7 +117,7 @@ export default function CatalogPage() {
       <main className="flex-1 md:ml-64 p-4 md:p-8 space-y-6 pb-20 md:pb-8">
         <header className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-primary font-headline">Catálogo Cloud</h1>
+            <h1 className="text-3xl font-bold text-primary font-headline">Catálogo de Productos</h1>
             <p className="text-muted-foreground text-sm">Gestiona tus productos y servicios en tiempo real.</p>
           </div>
           <Button onClick={() => handleOpenDialog()} className="shadow-lg">
