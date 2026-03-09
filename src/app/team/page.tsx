@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,7 +11,9 @@ import {
   UserCircle, 
   MoreVertical,
   Trash2,
-  ShieldAlert
+  ShieldAlert,
+  UserPlus,
+  Info
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -19,6 +21,14 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter
+} from "@/components/ui/dialog"
 import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from "@/firebase"
 import { collection, doc } from "firebase/firestore"
 import { useToast } from "@/hooks/use-toast"
@@ -29,20 +39,22 @@ export default function TeamPage() {
   const { toast } = useToast()
   const db = useFirestore()
   const { user: currentUser } = useUser()
+  const [isInviteOpen, setIsInviteOpen] = useState(false)
   
   const usersQuery = useMemoFirebase(() => collection(db, 'users'), [db])
   const { data: team, isLoading } = useCollection(usersQuery)
 
-  // SOLUCIÓN TÉCNICA DEFINITIVA: Observador de mutaciones para forzar desbloqueo del puntero
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        document.body.style.pointerEvents = 'auto';
+        if (!isInviteOpen) {
+          document.body.style.pointerEvents = 'auto';
+        }
       }
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, []);
+  }, [isInviteOpen]);
 
   const handleUpdateRole = (userId: string, newRole: string) => {
     updateDocumentNonBlocking(doc(db, 'users', userId), { role: newRole })
@@ -54,8 +66,10 @@ export default function TeamPage() {
       toast({ title: "Error", description: "No puedes eliminar tu propio usuario", variant: "destructive" })
       return
     }
-    deleteDocumentNonBlocking(doc(db, 'users', userId))
-    toast({ title: "Usuario eliminado" })
+    if (confirm("¿Estás seguro de eliminar a este usuario del sistema?")) {
+      deleteDocumentNonBlocking(doc(db, 'users', userId))
+      toast({ title: "Usuario eliminado" })
+    }
   }
 
   return (
@@ -70,6 +84,9 @@ export default function TeamPage() {
               <p className="text-muted-foreground">Administra los usuarios habilitados y sus permisos.</p>
             </div>
           </div>
+          <Button onClick={() => setIsInviteOpen(true)} className="font-bold">
+            <UserPlus className="mr-2 h-4 w-4" /> Invitar Colaborador
+          </Button>
         </header>
 
         <div className="grid grid-cols-1 gap-4">
@@ -137,6 +154,39 @@ export default function TeamPage() {
             <p>• Solo usuarios registrados y presentes en esta lista tienen acceso a los datos de la nube.</p>
           </CardContent>
         </Card>
+
+        <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <UserPlus className="h-5 w-5 text-primary" /> ¿Cómo agregar un colaborador?
+              </DialogTitle>
+              <DialogDescription className="pt-4 space-y-4">
+                <div className="flex gap-3">
+                  <div className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center text-xs shrink-0">1</div>
+                  <p className="text-sm text-foreground">
+                    Pide a tu colaborador que abra la aplicación y haga clic en <b>"Registrate aquí"</b> en la pantalla de inicio.
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <div className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center text-xs shrink-0">2</div>
+                  <p className="text-sm text-foreground">
+                    Una vez que complete su registro, su nombre aparecerá automáticamente en esta lista de <b>Equipo</b>.
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <div className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center text-xs shrink-0">3</div>
+                  <p className="text-sm text-foreground">
+                    Desde esta pantalla, podrás cambiar su rol a <b>Admin</b> o mantenerlo como <b>Empleado</b> según lo necesites.
+                  </p>
+                </div>
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="mt-4">
+              <Button onClick={() => setIsInviteOpen(false)} className="w-full font-bold">Entendido</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </SidebarInset>
       <MobileNav />
     </div>
