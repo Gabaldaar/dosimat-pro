@@ -81,7 +81,7 @@ function TransactionsContent() {
   const clientIdParam = searchParams.get('clientId')
   const modeParam = searchParams.get('mode')
 
-  const [mainView, setMainView] = useState("register")
+  const [mainView, setMainView] = useState("history")
   const [activeTab, setActiveTab] = useState("sale")
   
   const [editingTx, setEditingTx] = useState<any | null>(null)
@@ -123,7 +123,6 @@ function TransactionsContent() {
   const [cobroAccountId, setCobroAccountId] = useState("pending")
   const [txDescription, setTxDescription] = useState("")
 
-  // Manejar el filtrado automático desde URL
   useEffect(() => {
     if (clientIdParam) {
       setFilterCustomer(clientIdParam)
@@ -136,7 +135,7 @@ function TransactionsContent() {
     }
   }, [clientIdParam, modeParam])
 
-  // Lógica de procesamiento de Email
+  // Lógica de procesamiento de Email con Marcadores
   useEffect(() => {
     if (selectedTxForEmail && selectedTemplateId && templates && customers) {
       const tpl = templates.find(t => t.id === selectedTemplateId)
@@ -148,7 +147,7 @@ function TransactionsContent() {
         
         const currencySymbol = selectedTxForEmail.currency === 'ARS' ? '$' : 'u$s';
         
-        // Generar lista de items formateada
+        // Generar lista de items formateada para el marcador global
         const listaItems = selectedTxForEmail.items?.map((i: any) => 
           `- ${i.qty} x ${i.name} (${currencySymbol}${i.price})`
         ).join('\n') || "N/A";
@@ -395,6 +394,7 @@ function TransactionsContent() {
     const client = customers?.find(c => c.id === selectedTxForEmail.clientId)
     if (!client?.mail || !processedEmail.subject || !processedEmail.body) return
 
+    // Utilizamos mailto para abrir el gestor predeterminado y permitir revisión final
     const mailtoLink = `mailto:${client.mail}?subject=${encodeURIComponent(processedEmail.subject)}&body=${encodeURIComponent(processedEmail.body)}`
     window.location.href = mailtoLink
     setIsEmailDialogOpen(false)
@@ -821,7 +821,7 @@ function TransactionsContent() {
               <DialogTitle className="flex items-center gap-2">
                 <Mail className="h-5 w-5 text-primary" /> Enviar Factura / Notificación
               </DialogTitle>
-              <DialogDescription>Selecciona una plantilla para enviar la información de la operación.</DialogDescription>
+              <DialogDescription>Selecciona una plantilla. Podrás revisar el mail en tu aplicación de correo antes de enviarlo.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
@@ -847,6 +847,12 @@ function TransactionsContent() {
                     <div className="text-xs whitespace-pre-wrap leading-relaxed italic text-slate-700">
                       {processedEmail.body || "Cargando cuerpo del mensaje..."}
                     </div>
+                  </div>
+                  <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                    <Eye className="h-4 w-4 text-blue-600" />
+                    <p className="text-[11px] text-blue-800">
+                      Al pulsar enviar, se abrirá tu gestor de correo para que puedas realizar la revisión final.
+                    </p>
                   </div>
                 </div>
               )}
