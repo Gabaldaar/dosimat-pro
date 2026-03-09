@@ -10,7 +10,6 @@ import {
   ArrowLeftRight, 
   Package, 
   Wallet, 
-  Bell, 
   Droplets,
   LogOut,
   Shield,
@@ -41,7 +40,6 @@ const navItems = [
   { href: "/catalog", label: "Catálogo", icon: Package },
   { href: "/templates", label: "Plantillas Mail", icon: FileText },
   { href: "/team", label: "Equipo", icon: Shield },
-  { href: "/notifications", label: "IA Notificaciones", icon: Bell },
 ]
 
 export function Sidebar({ className }: { className?: string }) {

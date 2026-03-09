@@ -1,4 +1,5 @@
+
 import { config } from 'dotenv';
 config();
 
-import '@/ai/flows/generate-personalized-notifications.ts';
+// Se han eliminado los flujos de IA de notificaciones a petición del usuario.
