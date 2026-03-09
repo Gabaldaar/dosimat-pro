@@ -136,7 +136,7 @@ function TransactionsContent() {
 
   // Lógica de procesamiento de Email con Marcadores
   useEffect(() => {
-    if (selectedTxForEmail && selectedTemplateId && templates && customers) {
+    if (selectedTxForEmail && selectedTemplateId && templates && customers && accounts) {
       const tpl = templates.find(t => t.id === selectedTemplateId)
       const client = customers.find(c => c.id === selectedTxForEmail.clientId)
       
@@ -159,6 +159,19 @@ function TransactionsContent() {
         
         const formattedBalance = `${currencySymbol} ${Math.abs(balanceValue).toLocaleString('es-AR')} ${balanceStatus}`;
 
+        // Lógica de Metodo_Pago basada en el tipo de caja
+        const acc = accounts.find(a => a.id === selectedTxForEmail.financialAccountId);
+        let metodoPago = "A Cuenta / Pendiente";
+        if (acc) {
+          if (acc.type === 'Bank') {
+            metodoPago = "Transferencia/Depósito bancario";
+          } else if (acc.type === 'Cash') {
+            metodoPago = "Efectivo";
+          } else {
+            metodoPago = acc.name || "Otro";
+          }
+        }
+
         const replacements: Record<string, string> = {
           "{{Apellido}}": client.apellido || "",
           "{{Nombre}}": client.nombre || "",
@@ -171,7 +184,8 @@ function TransactionsContent() {
           "{{Cantidad}}": selectedTxForEmail.items?.[0]?.qty?.toString() || "N/A",
           "{{Precio}}": selectedTxForEmail.items?.[0]?.price?.toString() || "N/A",
           "{{Subtotal}}": selectedTxForEmail.items?.[0] ? (selectedTxForEmail.items[0].qty * selectedTxForEmail.items[0].price).toLocaleString('es-AR') : "N/A",
-          "{{Saldo_Cuenta}}": formattedBalance
+          "{{Saldo_Cuenta}}": formattedBalance,
+          "{{Metodo_Pago}}": metodoPago
         }
 
         Object.entries(replacements).forEach(([marker, value]) => {
@@ -182,7 +196,7 @@ function TransactionsContent() {
         setProcessedEmail({ subject, body })
       }
     }
-  }, [selectedTxForEmail, selectedTemplateId, templates, customers])
+  }, [selectedTxForEmail, selectedTemplateId, templates, customers, accounts])
 
   const handleAddItem = (itemId: string) => {
     const item = catalog?.find((i: any) => i.id === itemId)
@@ -869,7 +883,7 @@ function TransactionsContent() {
                   </div>
                   <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 rounded-lg">
                     <Eye className="h-4 w-4 text-blue-600" />
-                    <p className="text-[11px] text-blue-800">
+                    <p className="text-blue-800 text-[11px]">
                       Al pulsar enviar, se abrirá tu gestor de correo para que puedas realizar la revisión final.
                     </p>
                   </div>
