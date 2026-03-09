@@ -3,6 +3,7 @@ import './globals.css';
 import {Toaster} from '@/components/ui/toaster';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { SidebarProvider } from '@/components/ui/sidebar';
+import { AuthGuard } from '@/components/auth/auth-guard';
 
 export const metadata: Metadata = {
   title: 'Dosimat Pro | Pool Management',
@@ -15,7 +16,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="es">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -23,10 +24,12 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased bg-background text-foreground min-h-screen">
         <FirebaseClientProvider>
-          <SidebarProvider defaultOpen={true}>
-            {children}
-            <Toaster />
-          </SidebarProvider>
+          <AuthGuard>
+            <SidebarProvider defaultOpen={true}>
+              {children}
+              <Toaster />
+            </SidebarProvider>
+          </AuthGuard>
         </FirebaseClientProvider>
       </body>
     </html>

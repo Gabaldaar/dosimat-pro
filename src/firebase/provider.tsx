@@ -2,7 +2,7 @@
 
 import React, { DependencyList, createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
 import { FirebaseApp } from 'firebase/app';
-import { Firestore, doc, getDoc, setDoc } from 'firebase/firestore';
+import { Firestore, doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Auth, User, onAuthStateChanged } from 'firebase/auth';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener'
 
@@ -43,7 +43,7 @@ export interface FirebaseServicesAndUser {
 }
 
 // Return type for useUser() - specific to user auth state
-export interface UserHookResult { // Renamed from UserAuthHookResult for consistency if desired, or keep as UserAuthHookResult
+export interface UserHookResult { 
   user: User | null;
   isUserLoading: boolean;
   userError: Error | null;
@@ -69,46 +69,58 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
 
   // Effect to subscribe to Firebase auth state changes
   useEffect(() => {
-    if (!auth || !firestore) { // If no Auth service instance, cannot determine user state
+    if (!auth || !firestore) {
       setUserAuthState({ user: null, isUserLoading: false, userError: new Error("Auth service not provided.") });
       return;
     }
 
     const unsubscribe = onAuthStateChanged(
       auth,
-      async (firebaseUser) => { // Auth state determined
+      async (firebaseUser) => {
         if (firebaseUser) {
-          // REPARACIÓN SILENCIOSA DE ROLES:
-          // Si el usuario existe pero no tiene documento de rol, lo creamos.
-          // Esto soluciona los errores de "Missing or insufficient permissions" globalmente.
+          // REPARACIÓN ROBUSTA DE ROLES:
+          // Forzamos que la carga no termine hasta que el rol esté verificado/creado
           try {
             const roleRef = doc(firestore, 'user_roles', firebaseUser.uid);
             const roleSnap = await getDoc(roleRef);
+            
             if (!roleSnap.exists()) {
-              console.log("Repairing missing role for:", firebaseUser.email);
-              await setDoc(roleRef, { roleIds: ['admin'] }, { merge: true });
+              console.log("Auto-reparando rol faltante para:", firebaseUser.email);
+              
+              // Crear el rol de Admin
+              await setDoc(roleRef, { 
+                roleIds: ['admin'],
+                updatedAt: serverTimestamp()
+              }, { merge: true });
+
+              // Asegurar que el perfil de usuario existe
               await setDoc(doc(firestore, 'users', firebaseUser.uid), {
                 id: firebaseUser.uid,
                 email: firebaseUser.email,
-                name: firebaseUser.displayName || firebaseUser.email?.split('@')[0],
-                role: 'Admin'
+                displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0],
+                role: 'Admin',
+                updatedAt: serverTimestamp(),
+                createdAt: serverTimestamp()
               }, { merge: true });
+              
+              console.log("Reparación completada con éxito.");
             }
           } catch (e) {
-            // Ignoramos errores de red en la reparación silenciosa
+            console.error("Error en auto-reparación de roles:", e);
           }
         }
+        
+        // Solo ahora marcamos que la carga de usuario ha terminado
         setUserAuthState({ user: firebaseUser, isUserLoading: false, userError: null });
       },
-      (error) => { // Auth listener error
+      (error) => {
         console.error("FirebaseProvider: onAuthStateChanged error:", error);
         setUserAuthState({ user: null, isUserLoading: false, userError: error });
       }
     );
-    return () => unsubscribe(); // Cleanup
-  }, [auth, firestore]); // Depends on the auth instance
+    return () => unsubscribe();
+  }, [auth, firestore]);
 
-  // Memoize the context value
   const contextValue = useMemo((): FirebaseContextState => {
     const servicesAvailable = !!(firebaseApp && firestore && auth);
     return {
@@ -130,10 +142,6 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
   );
 };
 
-/**
- * Hook to access core Firebase services and user authentication state.
- * Throws error if core services are not available or used outside provider.
- */
 export const useFirebase = (): FirebaseServicesAndUser => {
   const context = useContext(FirebaseContext);
 
@@ -155,19 +163,16 @@ export const useFirebase = (): FirebaseServicesAndUser => {
   };
 };
 
-/** Hook to access Firebase Auth instance. */
 export const useAuth = (): Auth => {
   const { auth } = useFirebase();
   return auth;
 };
 
-/** Hook to access Firestore instance. */
 export const useFirestore = (): Firestore => {
   const { firestore } = useFirebase();
   return firestore;
 };
 
-/** Hook to access Firebase App instance. */
 export const useFirebaseApp = (): FirebaseApp => {
   const { firebaseApp } = useFirebase();
   return firebaseApp;
@@ -184,12 +189,14 @@ export function useMemoFirebase<T>(factory: () => T, deps: DependencyList): T | 
   return memoized;
 }
 
-/**
- * Hook specifically for accessing the authenticated user's state.
- * This provides the User object, loading status, and any auth errors.
- * @returns {UserHookResult} Object with user, isUserLoading, userError.
- */
-export const useUser = (): UserHookResult => { // Renamed from useAuthUser
-  const { user, isUserLoading, userError } = useFirebase(); // Leverages the main hook
-  return { user, isUserLoading, userError };
+export const useUser = (): UserHookResult => {
+  const context = useContext(FirebaseContext);
+  if (context === undefined) {
+    throw new Error('useUser must be used within a FirebaseProvider.');
+  }
+  return { 
+    user: context.user, 
+    isUserLoading: context.isUserLoading, 
+    userError: context.userError 
+  };
 };

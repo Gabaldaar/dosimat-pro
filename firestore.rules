@@ -3,173 +3,87 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * CHLORITRACK PRO SECURITY RULES
-     * 
-     * Core Philosophy:
-     * This ruleset implements a robust Role-Based Access Control (RBAC) model 
-     * designed for professional pool maintenance management. It prioritizes 
-     * "Authorization Independence" by using a dedicated roles collection to 
-     * minimize rule complexity and maximize performance.
+     * DOSIMAT PRO - REGLAS DE SEGURIDAD OPTIMIZADAS
      */
 
-    // --- HELPER FUNCTIONS ---
+    // --- FUNCIONES HELPER ---
 
-    /** @description Checks if the request is from an authenticated user. */
     function isSignedIn() {
       return request.auth != null;
     }
 
-    /** @description Checks if the authenticated user matches the provided ID. */
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    /** @description Checks if a document exists and the user is the owner. Used for updates/deletes. */
-    function isExistingOwner(userId) {
-      return resource != null && isOwner(userId);
-    }
-
-    /** @description Retrieves the role data for the currently authenticated user. */
-    function getUserRoles() {
+    function getUserRoleData() {
       return get(/databases/$(database)/documents/user_roles/$(request.auth.uid)).data;
     }
 
-    /** @description Checks if the user has any of the specified roles. Handles non-existent docs gracefully. */
     function hasAnyRole(roles) {
       return isSignedIn() && 
              exists(/databases/$(database)/documents/user_roles/$(request.auth.uid)) &&
-             getUserRoles().roleIds.hasAny(roles);
+             getUserRoleData().roleIds.hasAny(roles);
     }
 
-    /** @description Convenience check for Administrator access. Supports common variations. */
     function isAdmin() {
-      return hasAnyRole(['admin', 'Admin', 'Administrator', 'ADMIN']);
+      return hasAnyRole(['admin', 'Admin', 'ADMIN']);
     }
 
-    /** @description Convenience check for Staff or Admin access. */
     function isStaff() {
-      return hasAnyRole(['staff', 'Staff', 'admin', 'Admin', 'Administrator', 'Employee', 'STAFF', 'ADMIN']);
+      return hasAnyRole(['staff', 'Staff', 'admin', 'Admin', 'ADMIN', 'Employee', 'STAFF']);
     }
 
-    // --- COLLECTION RULES ---
+    // --- REGLAS DE COLECCIÓN ---
 
-    /**
-     * @description Rules for user profile documents. Users can manage their own profiles.
-     */
     match /users/{userId} {
-      allow get: if isOwner(userId);
-      allow list: if isAdmin();
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId) || isAdmin();
+      allow get, create: if isOwner(userId);
+      allow list: if isStaff();
+      allow update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();
     }
 
-    /**
-     * @description Stores role assignments. Managed by Admins. 
-     * Initial creation allowed for owners to bootstrap the first admin.
-     */
     match /user_roles/{userId} {
-      allow get: if isOwner(userId) || isAdmin();
+      allow get, create: if isOwner(userId);
       allow list: if isAdmin();
-      allow create: if isOwner(userId) || isAdmin();
       allow update, delete: if isAdmin();
     }
 
-    /**
-     * @description Definitions of roles and permissions. Static reference data.
-     */
-    match /roles_definitions/{roleId} {
+    match /zones/{zoneId} {
       allow get, list: if isStaff();
-      allow create, update, delete: if isAdmin();
+      allow create, update, delete: if isStaff();
     }
 
-    /**
-     * @description Customer records containing contact and address info.
-     */
-    match /customers/{customerId} {
-      allow get, list: if isStaff();
-      allow create, update: if isStaff();
-      allow delete: if isAdmin();
-    }
-    
-    /**
-     * @description Internal app clients collection (used in current implementation).
-     */
     match /clients/{clientId} {
-      allow get, list: if isStaff();
-      allow create, update: if isStaff();
+      allow get, list, create, update: if isStaff();
       allow delete: if isAdmin();
     }
 
-    /**
-     * @description Technical details for customer pools.
-     */
-    match /pools/{poolId} {
-      allow get, list: if isStaff();
-      allow create: if isStaff() && request.resource.data.customerId != null;
-      allow update: if isStaff() && resource != null && (request.resource.data.customerId == resource.data.customerId || isAdmin());
-      allow delete: if isAdmin();
-    }
-
-    /**
-     * @description Catalog of products and services.
-     */
     match /products_services/{productId} {
-      allow get, list: if true;
+      allow get, list: if isStaff();
       allow create, update, delete: if isAdmin();
     }
 
-    /**
-     * @description Financial accounts (Cash boxes, Bank accounts).
-     */
     match /financial_accounts/{accountId} {
       allow get, list: if isStaff();
       allow create, update: if isStaff();
       allow delete: if isAdmin();
     }
 
-    /**
-     * @description Categories for business expenses.
-     */
     match /expense_categories/{categoryId} {
       allow get, list: if isStaff();
       allow create, update: if isStaff();
       allow delete: if isAdmin();
     }
 
-    /**
-     * @description Audit trail of all financial movements.
-     */
     match /transactions/{transactionId} {
-      allow get, list: if isStaff();
-      allow create: if isStaff() && request.resource.data.userId == request.auth.uid && (request.resource.data.type != 'FinancialAdjustment' || isAdmin());
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow get, list, create: if isStaff();
+      allow update, delete: if isAdmin();
     }
 
-    /**
-     * @description Templates for email notifications.
-     */
     match /email_templates/{templateId} {
       allow get, list: if isStaff();
       allow create, update, delete: if isAdmin();
-    }
-    
-    /**
-     * @description Zones geographical data.
-     */
-    match /zones/{zoneId} {
-      allow get, list: if isStaff();
-      allow create, update, delete: if isStaff();
-    }
-
-    /**
-     * @description Logs of sent notifications.
-     */
-    match /notification_logs/{logId} {
-      allow get, list: if isStaff();
-      allow create: if isStaff();
-      allow update, delete: if false;
     }
   }
 }
