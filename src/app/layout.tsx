@@ -2,6 +2,7 @@ import type {Metadata} from 'next';
 import './globals.css';
 import {Toaster} from '@/components/ui/toaster';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
+import { SidebarProvider } from '@/components/ui/sidebar';
 
 export const metadata: Metadata = {
   title: 'Dosimat Pro | Pool Management',
@@ -22,8 +23,10 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased bg-background text-foreground min-h-screen">
         <FirebaseClientProvider>
-          {children}
-          <Toaster />
+          <SidebarProvider defaultOpen={true}>
+            {children}
+            <Toaster />
+          </SidebarProvider>
         </FirebaseClientProvider>
       </body>
     </html>

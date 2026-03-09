@@ -2,13 +2,12 @@
 
 import { useMemo } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
   TrendingUp, 
   Users, 
   Wallet, 
   AlertCircle, 
-  ArrowRight,
   Droplet,
   Plus,
   Loader2,
@@ -21,6 +20,7 @@ import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid } from "recharts"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, query, orderBy, limit } from "firebase/firestore"
+import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 
 export default function Dashboard() {
   const db = useFirestore()
@@ -76,14 +76,17 @@ export default function Dashboard() {
   const isLoading = loadingAccounts || loadingTx || loadingClients
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar className="hidden md:flex w-64 fixed inset-y-0" />
+    <div className="flex min-h-screen bg-background w-full">
+      <Sidebar />
       
-      <main className="flex-1 md:ml-64 pb-20 md:pb-8 p-4 md:p-8 space-y-8">
+      <SidebarInset className="flex-1 w-full pb-20 md:pb-8 p-4 md:p-8 space-y-8 overflow-x-hidden">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-headline font-bold text-primary">Dashboard Administrativo</h1>
-            <p className="text-muted-foreground">Dosimat • Control financiero y operativo.</p>
+          <div className="flex items-center gap-4">
+            <SidebarTrigger className="hidden md:flex" />
+            <div>
+              <h1 className="text-3xl font-headline font-bold text-primary">Dashboard Administrativo</h1>
+              <p className="text-muted-foreground">Dosimat • Control financiero y operativo.</p>
+            </div>
           </div>
           <div className="flex gap-2">
             <Link href="/transactions">
@@ -222,7 +225,7 @@ export default function Dashboard() {
             </section>
           </>
         )}
-      </main>
+      </SidebarInset>
 
       <MobileNav />
     </div>

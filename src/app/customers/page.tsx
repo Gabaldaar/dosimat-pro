@@ -17,7 +17,6 @@ import {
   User, 
   Trash2, 
   Map, 
-  History,
   FilterX,
   TrendingUp,
   Banknote,
@@ -37,6 +36,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from "@/firebase"
 import { collection, doc } from "firebase/firestore"
 import { cn } from "@/lib/utils"
+import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 
 export default function CustomersPage() {
   const { toast } = useToast()
@@ -190,13 +190,16 @@ export default function CustomersPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar className="hidden md:flex w-64 fixed inset-y-0" />
-      <main className="flex-1 md:ml-64 p-4 md:p-8 space-y-6">
+    <div className="flex min-h-screen bg-background w-full">
+      <Sidebar />
+      <SidebarInset className="flex-1 w-full pb-20 md:pb-8 p-4 md:p-8 space-y-6 overflow-x-hidden">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-primary font-headline">Clientes</h1>
-            <p className="text-muted-foreground">Gestión de perfiles y cuentas corrientes.</p>
+          <div className="flex items-center gap-4">
+            <SidebarTrigger className="hidden md:flex" />
+            <div>
+              <h1 className="text-3xl font-bold text-primary font-headline">Clientes</h1>
+              <p className="text-muted-foreground">Gestión de perfiles y cuentas corrientes.</p>
+            </div>
           </div>
           <Button onClick={() => handleOpenDialog()} className="h-12 px-6 shadow-lg shadow-primary/20 font-bold">
             <Plus className="mr-2 h-5 w-5" /> Nuevo Cliente
@@ -404,122 +407,122 @@ export default function CustomersPage() {
             ))}
           </div>
         )}
-      </main>
 
-      <Dialog open={isDialogOpen} onOpenChange={(o) => {
-        setIsDialogOpen(o);
-        if(!o) setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
-      }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-              <User className="h-6 w-6 text-primary" />
-              {editingCustomer ? 'Perfil de Cliente' : 'Nuevo Cliente'}
-            </DialogTitle>
-          </DialogHeader>
-          
-          <Tabs defaultValue="general" className="w-full mt-4">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="general" className="font-bold">General</TabsTrigger>
-              <TabsTrigger value="address" className="font-bold">Ubicación</TabsTrigger>
-              <TabsTrigger value="equipment" className="font-bold">Equipo</TabsTrigger>
-            </TabsList>
+        <Dialog open={isDialogOpen} onOpenChange={(o) => {
+          setIsDialogOpen(o);
+          if(!o) setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
+        }}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+                <User className="h-6 w-6 text-primary" />
+                {editingCustomer ? 'Perfil de Cliente' : 'Nuevo Cliente'}
+              </DialogTitle>
+            </DialogHeader>
+            
+            <Tabs defaultValue="general" className="w-full mt-4">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="general" className="font-bold">General</TabsTrigger>
+                <TabsTrigger value="address" className="font-bold">Ubicación</TabsTrigger>
+                <TabsTrigger value="equipment" className="font-bold">Equipo</TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="general" className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Apellido</Label>
-                  <Input value={formData.apellido} onChange={(e) => setFormData({...formData, apellido: e.target.value})} placeholder="Pérez" />
+              <TabsContent value="general" className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Apellido</Label>
+                    <Input value={formData.apellido} onChange={(e) => setFormData({...formData, apellido: e.target.value})} placeholder="Pérez" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Nombre</Label>
+                    <Input value={formData.nombre} onChange={(e) => setFormData({...formData, nombre: e.target.value})} placeholder="Juan" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>CUIT / DNI</Label>
+                    <Input value={formData.cuit_dni} onChange={(e) => setFormData({...formData, cuit_dni: e.target.value})} placeholder="20-XXXXXXXX-X" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Teléfono</Label>
+                    <Input value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: e.target.value})} placeholder="+54 9 11 ..." />
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Nombre</Label>
-                  <Input value={formData.nombre} onChange={(e) => setFormData({...formData, nombre: e.target.value})} placeholder="Juan" />
+                  <Label>Email</Label>
+                  <Input value={formData.mail} onChange={(e) => setFormData({...formData, mail: e.target.value})} placeholder="cliente@ejemplo.com" />
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="font-bold">Saldo ARS ($)</Label>
+                    <Input type="number" value={formData.saldoActual} onChange={(e) => setFormData({...formData, saldoActual: Number(e.target.value)})} className="bg-muted/10 font-bold" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="font-bold text-emerald-600">Saldo USD (u$s)</Label>
+                    <Input type="number" value={formData.saldoUSD} onChange={(e) => setFormData({...formData, saldoUSD: Number(e.target.value)})} className="bg-muted/10 font-bold" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                  <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
+                    <Label className="font-bold">Cliente de Reposición</Label>
+                    <Switch checked={formData.esClienteReposicion} onCheckedChange={(v) => setFormData(prev => ({ ...prev, esClienteReposicion: v }))} />
+                  </div>
+                  <div className="flex items-center justify-between p-3 border rounded-lg bg-amber-50/50 border-amber-200">
+                    <Label className="font-bold text-amber-700">Equipo en Comodato</Label>
+                    <Switch 
+                      checked={formData.equipoInstalado?.enComodato} 
+                      onCheckedChange={(v) => setFormData(prev => ({ ...prev, equipoInstalado: { ...prev.equipoInstalado, enComodato: v } }))} 
+                    />
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="address" className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label>CUIT / DNI</Label>
-                  <Input value={formData.cuit_dni} onChange={(e) => setFormData({...formData, cuit_dni: e.target.value})} placeholder="20-XXXXXXXX-X" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Teléfono</Label>
-                  <Input value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: e.target.value})} placeholder="+54 9 11 ..." />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <Input value={formData.mail} onChange={(e) => setFormData({...formData, mail: e.target.value})} placeholder="cliente@ejemplo.com" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="font-bold">Saldo ARS ($)</Label>
-                  <Input type="number" value={formData.saldoActual} onChange={(e) => setFormData({...formData, saldoActual: Number(e.target.value)})} className="bg-muted/10 font-bold" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-bold text-emerald-600">Saldo USD (u$s)</Label>
-                  <Input type="number" value={formData.saldoUSD} onChange={(e) => setFormData({...formData, saldoUSD: Number(e.target.value)})} className="bg-muted/10 font-bold" />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
-                  <Label className="font-bold">Cliente de Reposición</Label>
-                  <Switch checked={formData.esClienteReposicion} onCheckedChange={(v) => setFormData(prev => ({ ...prev, esClienteReposicion: v }))} />
-                </div>
-                <div className="flex items-center justify-between p-3 border rounded-lg bg-amber-50/50 border-amber-200">
-                  <Label className="font-bold text-amber-700">Equipo en Comodato</Label>
-                  <Switch 
-                    checked={formData.equipoInstalado?.enComodato} 
-                    onCheckedChange={(v) => setFormData(prev => ({ ...prev, equipoInstalado: { ...prev.equipoInstalado, enComodato: v } }))} 
+                  <Label className="font-bold text-primary">Dirección</Label>
+                  <Input 
+                    value={formData.direccion} 
+                    onChange={(e) => setFormData({...formData, direccion: e.target.value})} 
+                    placeholder="Calle y altura" 
                   />
                 </div>
-              </div>
-            </TabsContent>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Localidad</Label>
+                    <Input value={formData.localidad} onChange={(e) => setFormData({...formData, localidad: e.target.value})} placeholder="Ej: Pilar" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Provincia</Label>
+                    <Input value={formData.provincia} onChange={(e) => setFormData({...formData, provincia: e.target.value})} placeholder="Buenos Aires" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Observaciones Internas</Label>
+                  <Textarea value={formData.observaciones} onChange={(e) => setFormData({...formData, observaciones: e.target.value})} placeholder="Detalles de acceso, perros, etc..." className="min-h-[100px]" />
+                </div>
+              </TabsContent>
 
-            <TabsContent value="address" className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label className="font-bold text-primary">Dirección</Label>
-                <Input 
-                  value={formData.direccion} 
-                  onChange={(e) => setFormData({...formData, direccion: e.target.value})} 
-                  placeholder="Calle y altura" 
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Localidad</Label>
-                  <Input value={formData.localidad} onChange={(e) => setFormData({...formData, localidad: e.target.value})} placeholder="Ej: Pilar" />
+              <TabsContent value="equipment" className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Modelo del Dosificador</Label>
+                    <Input value={formData.equipoInstalado.modeloEquipo} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, modeloEquipo: e.target.value}}))} placeholder="Ej: Dosimat G4" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Volumen de Piscina (Litros)</Label>
+                    <Input type="number" value={formData.equipoInstalado.volumen} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, volumen: Number(e.target.value)}}))} />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Provincia</Label>
-                  <Input value={formData.provincia} onChange={(e) => setFormData({...formData, provincia: e.target.value})} placeholder="Buenos Aires" />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Observaciones Internas</Label>
-                <Textarea value={formData.observaciones} onChange={(e) => setFormData({...formData, observaciones: e.target.value})} placeholder="Detalles de acceso, perros, etc..." className="min-h-[100px]" />
-              </div>
-            </TabsContent>
+              </TabsContent>
+            </Tabs>
 
-            <TabsContent value="equipment" className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Modelo del Dosificador</Label>
-                  <Input value={formData.equipoInstalado.modeloEquipo} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, modeloEquipo: e.target.value}}))} placeholder="Ej: Dosimat G4" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Volumen de Piscina (Litros)</Label>
-                  <Input type="number" value={formData.equipoInstalado.volumen} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, volumen: Number(e.target.value)}}))} />
-                </div>
-              </div>
-            </TabsContent>
-          </Tabs>
-
-          <DialogFooter className="mt-6 border-t pt-4">
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="font-bold">Cancelar</Button>
-            <Button onClick={handleSave} className="px-8 font-bold shadow-lg shadow-primary/20"><CheckCircle2 className="mr-2 h-4 w-4" /> Guardar Cambios</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter className="mt-6 border-t pt-4">
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="font-bold">Cancelar</Button>
+              <Button onClick={handleSave} className="px-8 font-bold shadow-lg shadow-primary/20"><CheckCircle2 className="mr-2 h-4 w-4" /> Guardar Cambios</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </SidebarInset>
       <MobileNav />
     </div>
   )

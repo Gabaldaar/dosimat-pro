@@ -15,13 +15,9 @@ import {
   Calendar as CalendarIcon, 
   Wallet, 
   FilterX,
-  Plus,
   Trash2,
-  ArrowUpRight,
-  ArrowDownLeft,
   ArrowRightLeft,
   PlusCircle,
-  RefreshCw,
   TrendingUp,
   Banknote,
   ShoppingBag,
@@ -54,6 +50,7 @@ import {
 import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase"
 import { collection, doc } from "firebase/firestore"
 import { cn } from "@/lib/utils"
+import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 
 const txTypeMap: Record<string, { label: string, icon: any, color: string, description: string }> = {
   sale: { label: "Venta", icon: ShoppingBag, color: "text-blue-600 bg-blue-50", description: "Venta general de productos, insumos o accesorios de piscina." },
@@ -350,13 +347,16 @@ function TransactionsContent() {
   }, [filteredTransactions])
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar className="hidden md:flex w-64 fixed inset-y-0" />
-      <main className="flex-1 md:ml-64 p-4 md:p-8 space-y-6 pb-20 md:pb-8">
+    <div className="flex min-h-screen bg-background w-full">
+      <Sidebar />
+      <SidebarInset className="flex-1 w-full p-4 md:p-8 space-y-6 pb-20 md:pb-8 overflow-x-hidden">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <h1 className="text-3xl font-bold text-primary font-headline">
-            {editingTx ? "Editar Operación" : "Operaciones"}
-          </h1>
+          <div className="flex items-center gap-4">
+            <SidebarTrigger className="hidden md:flex" />
+            <h1 className="text-3xl font-bold text-primary font-headline">
+              {editingTx ? "Editar Operación" : "Operaciones"}
+            </h1>
+          </div>
           <Tabs value={mainView} onValueChange={(v) => { if(v === "register" && !editingTx) resetRegisterForm(); setMainView(v); }}>
             <TabsList>
               <TabsTrigger value="register">{editingTx ? "Modificando" : "Nueva"}</TabsTrigger>
@@ -750,7 +750,7 @@ function TransactionsContent() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      </main>
+      </SidebarInset>
       <MobileNav />
     </div>
   )

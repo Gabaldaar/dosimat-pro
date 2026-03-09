@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react"
@@ -11,20 +10,26 @@ import {
   Package, 
   Wallet, 
   Bell, 
-  Settings,
-  Menu,
   Droplets,
   LogOut,
-  User,
   Shield
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useFirebase, useDoc, useMemoFirebase } from "@/firebase"
 import { signOut } from "firebase/auth"
 import { doc } from "firebase/firestore"
+import {
+  Sidebar as SidebarUI,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  useSidebar,
+} from "@/components/ui/sidebar"
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -40,8 +45,8 @@ export function Sidebar({ className }: { className?: string }) {
   const pathname = usePathname()
   const { auth, firestore, user } = useFirebase()
   const router = useRouter()
+  const { state } = useSidebar()
 
-  // Obtenemos el perfil real del usuario desde Firestore
   const userDocRef = useMemoFirebase(() => user ? doc(firestore, 'users', user.uid) : null, [user, firestore])
   const { data: userData, isLoading: isUserDocLoading } = useDoc(userDocRef)
   
@@ -55,59 +60,70 @@ export function Sidebar({ className }: { className?: string }) {
   }
 
   return (
-    <div className={cn("flex flex-col h-full bg-white border-r", className)}>
-      <div className="p-6 flex items-center gap-2">
-        <div className="bg-primary p-2 rounded-lg">
+    <SidebarUI collapsible="icon" className={cn("border-r", className)}>
+      <SidebarHeader className="p-4 flex flex-row items-center gap-2 overflow-hidden">
+        <div className="bg-primary p-2 rounded-lg shrink-0">
           <Droplets className="h-6 w-6 text-white" />
         </div>
-        <span className="font-headline font-bold text-xl tracking-tight text-primary">Dosimat<span className="text-accent-foreground font-medium">Pro</span></span>
-      </div>
+        {state === "expanded" && (
+          <span className="font-headline font-bold text-xl tracking-tight text-primary truncate">
+            Dosimat<span className="text-accent-foreground font-medium">Pro</span>
+          </span>
+        )}
+      </SidebarHeader>
       
-      <nav className="flex-1 px-4 py-2 space-y-1">
-        {navItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn(
-              "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all",
-              pathname === item.href 
-                ? "bg-primary text-primary-foreground shadow-sm" 
-                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-            )}
-          >
-            <item.icon className="h-4 w-4" />
-            {item.label}
-          </Link>
-        ))}
-      </nav>
+      <SidebarContent className="px-2">
+        <SidebarMenu>
+          {navItems.map((item) => (
+            <SidebarMenuItem key={item.href}>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname === item.href}
+                tooltip={item.label}
+              >
+                <Link href={item.href}>
+                  <item.icon className="h-4 w-4" />
+                  <span>{item.label}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      </SidebarContent>
 
-      <div className="p-4 border-t space-y-4">
+      <SidebarFooter className="p-4 border-t space-y-4">
         {user && (
-          <div className="flex items-center gap-3 px-3 py-2">
-            <Avatar className="h-8 w-8 border border-primary/20">
+          <div className="flex items-center gap-3 py-1">
+            <Avatar className="h-8 w-8 border border-primary/20 shrink-0">
               <AvatarImage src={`https://picsum.photos/seed/${user.uid}/100/100`} />
               <AvatarFallback>{user.email?.[0].toUpperCase() || 'U'}</AvatarFallback>
             </Avatar>
-            <div className="flex flex-col overflow-hidden">
-              <span className="text-sm font-semibold truncate">
-                {userData?.name || user.email?.split('@')[0] || 'Usuario'}
-              </span>
-              <span className="text-[10px] text-muted-foreground truncate uppercase font-bold tracking-tighter">
-                {isUserDocLoading ? 'Cargando...' : (userData?.role || 'Sin Rol')}
-              </span>
-            </div>
+            {state === "expanded" && (
+              <div className="flex flex-col overflow-hidden">
+                <span className="text-sm font-semibold truncate">
+                  {userData?.name || user.email?.split('@')[0] || 'Usuario'}
+                </span>
+                <span className="text-[10px] text-muted-foreground truncate uppercase font-bold tracking-tighter">
+                  {isUserDocLoading ? 'Cargando...' : (userData?.role || 'Sin Rol')}
+                </span>
+              </div>
+            )}
           </div>
         )}
         <Button 
           variant="ghost" 
-          className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+          className={cn(
+            "w-full text-destructive hover:text-destructive hover:bg-destructive/10",
+            state === "collapsed" ? "justify-center px-0" : "justify-start"
+          )}
           onClick={handleLogout}
+          title="Cerrar sesión"
         >
-          <LogOut className="mr-2 h-4 w-4" />
-          Cerrar sesión
+          <LogOut className={cn("h-4 w-4", state === "expanded" && "mr-2")} />
+          {state === "expanded" && <span>Cerrar sesión</span>}
         </Button>
-      </div>
-    </div>
+      </SidebarFooter>
+    </SidebarUI>
   )
 }
 
@@ -129,17 +145,6 @@ export function MobileNav() {
           <span className="text-[10px] font-medium">{item.label}</span>
         </Link>
       ))}
-      <Sheet>
-        <SheetTrigger asChild>
-          <button className="flex flex-col items-center gap-1 p-2 text-muted-foreground">
-            <Menu className="h-5 w-5" />
-            <span className="text-[10px] font-medium">Más</span>
-          </button>
-        </SheetTrigger>
-        <SheetContent side="left" className="p-0 w-64">
-          <Sidebar className="w-full border-none" />
-        </SheetContent>
-      </Sheet>
     </div>
   )
 }

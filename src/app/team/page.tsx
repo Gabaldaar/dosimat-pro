@@ -1,9 +1,8 @@
-
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { 
@@ -11,7 +10,6 @@ import {
   ShieldCheck, 
   UserCircle, 
   MoreVertical,
-  UserPlus,
   Trash2,
   ShieldAlert
 } from "lucide-react"
@@ -25,6 +23,7 @@ import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking
 import { collection, doc } from "firebase/firestore"
 import { useToast } from "@/hooks/use-toast"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 
 export default function TeamPage() {
   const { toast } = useToast()
@@ -60,13 +59,16 @@ export default function TeamPage() {
   }
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar className="hidden md:flex w-64 fixed inset-y-0" />
-      <main className="flex-1 md:ml-64 pb-20 md:pb-8 p-4 md:p-8 space-y-6">
+    <div className="flex min-h-screen w-full">
+      <Sidebar />
+      <SidebarInset className="flex-1 w-full pb-20 md:pb-8 p-4 md:p-8 space-y-6 overflow-x-hidden">
         <header className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-headline font-bold text-primary">Gestión de Equipo</h1>
-            <p className="text-muted-foreground">Administra los usuarios habilitados y sus permisos.</p>
+          <div className="flex items-center gap-4">
+            <SidebarTrigger className="hidden md:flex" />
+            <div>
+              <h1 className="text-3xl font-headline font-bold text-primary">Gestión de Equipo</h1>
+              <p className="text-muted-foreground">Administra los usuarios habilitados y sus permisos.</p>
+            </div>
           </div>
         </header>
 
@@ -135,7 +137,7 @@ export default function TeamPage() {
             <p>• Solo usuarios registrados y presentes en esta lista tienen acceso a los datos de la nube.</p>
           </CardContent>
         </Card>
-      </main>
+      </SidebarInset>
       <MobileNav />
     </div>
   )
