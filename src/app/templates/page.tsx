@@ -1,11 +1,10 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, Edit, Trash2, FileText, Info, Loader2 } from "lucide-react"
+import { Plus, Edit, Trash2, FileText, Info, Loader2, HelpCircle } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -14,6 +13,20 @@ import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, d
 import { collection, doc } from "firebase/firestore"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
+
+const AVAILABLE_MARKERS = [
+  "Apellido", 
+  "Nombre", 
+  "Fecha", 
+  "Descripción", 
+  "Detalle_Items", 
+  "Item", 
+  "Cantidad", 
+  "Precio", 
+  "Moneda", 
+  "Subtotal", 
+  "Total"
+]
 
 export default function TemplatesPage() {
   const { toast } = useToast()
@@ -30,7 +43,7 @@ export default function TemplatesPage() {
     body: ""
   })
 
-  // Evitar bloqueo de puntero
+  // Evitar bloqueo de puntero al cerrar diálogos
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -143,19 +156,7 @@ export default function TemplatesPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {[
-              "Apellido", 
-              "Nombre", 
-              "Fecha", 
-              "Descripción", 
-              "Detalle_Items", 
-              "Item", 
-              "Cantidad", 
-              "Precio", 
-              "Moneda", 
-              "Subtotal", 
-              "Total"
-            ].map(m => (
+            {AVAILABLE_MARKERS.map(m => (
               <div key={m} className="text-[10px] font-mono bg-white border border-blue-100 rounded px-2 py-1 flex justify-between">
                 <span className="text-blue-600">{"{{"}{m}{"}}"}</span>
               </div>
@@ -164,33 +165,51 @@ export default function TemplatesPage() {
         </Card>
 
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingTemplateId ? 'Editar Plantilla' : 'Nueva Plantilla'}</DialogTitle>
               <DialogDescription>Configura el contenido del mensaje y usa marcadores para datos dinámicos.</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="space-y-6 py-4">
               <div className="space-y-2">
-                <Label>Nombre Interno</Label>
-                <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Factura de Reposición" />
+                <Label className="font-bold">Nombre Interno de la Plantilla</Label>
+                <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Factura de Reposición Semanal" />
               </div>
+              
+              <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl space-y-3">
+                <div className="flex items-center gap-2 text-primary font-bold text-sm">
+                  <HelpCircle className="h-4 w-4" /> Guía de Marcadores
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-tight">
+                  Copia y pega estos códigos en el Asunto o Cuerpo para que se completen automáticamente con los datos del cliente y la operación.
+                </p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {AVAILABLE_MARKERS.map(m => (
+                    <span key={m} className="text-[10px] font-mono px-2 py-1 bg-white border rounded text-primary-foreground bg-primary/80 select-all cursor-copy">
+                      {"{{"}{m}{"}}"}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
               <div className="space-y-2">
-                <Label>Asunto del Mail</Label>
+                <Label className="font-bold">Asunto del Mail</Label>
                 <Input value={formData.subject} onChange={(e) => setFormData({...formData, subject: e.target.value})} placeholder="Hola {{Nombre}}, aquí tienes tu factura..." />
               </div>
+
               <div className="space-y-2">
-                <Label>Cuerpo del Mensaje</Label>
+                <Label className="font-bold">Cuerpo del Mensaje</Label>
                 <Textarea 
                   value={formData.body} 
                   onChange={(e) => setFormData({...formData, body: e.target.value})} 
-                  placeholder="Escribe el mensaje aquí. Usa {{Nombre}}, {{Detalle_Items}}, {{Total}}, etc..."
-                  className="min-h-[200px]"
+                  placeholder="Escribe el mensaje aquí. Puedes usar los marcadores de arriba como {{Nombre}}, {{Detalle_Items}}, {{Total}}, etc..."
+                  className="min-h-[250px] font-body"
                 />
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-              <Button onClick={handleSave} className="font-bold">Guardar Plantilla</Button>
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="font-bold">Cancelar</Button>
+              <Button onClick={handleSave} className="font-bold px-8 shadow-lg shadow-primary/20">Guardar Plantilla</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
