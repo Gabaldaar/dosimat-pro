@@ -76,9 +76,15 @@ export default function AccountsPage() {
 
   // Data
   const { data: accounts, isLoading: loadingAccounts } = useCollection(accountsQuery)
-  const { data: expenseCategories } = useCollection(categoriesQuery)
+  const { data: rawExpenseCategories } = useCollection(categoriesQuery)
   const { data: recentTxs } = useCollection(txQuery)
   
+  // Sorted Categories
+  const expenseCategories = useMemo(() => {
+    if (!rawExpenseCategories) return []
+    return [...rawExpenseCategories].sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+  }, [rawExpenseCategories])
+
   // Dialog States
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false)
   const [isTxDialogOpen, setIsTxDialogOpen] = useState(false)
