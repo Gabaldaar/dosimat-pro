@@ -1,10 +1,214 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Permitir acceso total a cualquier usuario autenticado en todas las colecciones principales
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+
+    /**
+     * CHLORITRACK PRO SECURITY RULES
+     * 
+     * Core Philosophy:
+     * This ruleset implements a robust Role-Based Access Control (RBAC) model 
+     * designed for professional pool maintenance management. It prioritizes 
+     * "Authorization Independence" by using a dedicated roles collection to 
+     * minimize rule complexity and maximize performance.
+     * 
+     * Data Structure:
+     * - /users/{userId}: Individual user profiles, owned by the user.
+     * - /user_roles/{userId}: Critical authorization metadata (Admin/Staff roles).
+     * - /customers, /pools, /transactions: Business operations data accessed by Staff.
+     * - /products, /roles_definitions: Reference data managed by Admins.
+     * 
+     * Key Security Decisions:
+     * - Role-Based Access: Most business entities (Customers, Pools, Transactions) 
+     *   require 'Staff' or 'Admin' roles for access.
+     * - Authorization Independence: Role checks are performed via the /user_roles 
+     *   collection, allowing for atomic permission evaluation.
+     * - Relational Integrity: On creation, documents like Transactions must 
+     *   correctly link to the authenticated user's ID.
+     * - Immutability: Relational links (like customerId on a Pool) are protected 
+     *   from modification after creation to ensure data consistency.
+     */
+
+    // --- HELPER FUNCTIONS ---
+
+    /** @description Checks if the request is from an authenticated user. */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /** @description Checks if the authenticated user matches the provided ID. */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /** @description Checks if a document exists and the user is the owner. Used for updates/deletes. */
+    function isExistingOwner(userId) {
+      return resource != null && isOwner(userId);
+    }
+
+    /** @description Retrieves the role data for the currently authenticated user. */
+    function getUserRoles() {
+      return get(/databases/$(database)/documents/user_roles/$(request.auth.uid)).data;
+    }
+
+    /** @description Checks if the user has any of the specified roles. */
+    function hasAnyRole(roles) {
+      return isSignedIn() && getUserRoles().roleIds.hasAny(roles);
+    }
+
+    /** @description Convenience check for Administrator access. */
+    function isAdmin() {
+      return hasAnyRole(['admin', 'Administrator']);
+    }
+
+    /** @description Convenience check for Staff or Admin access. */
+    function isStaff() {
+      return hasAnyRole(['staff', 'Staff', 'admin', 'Administrator']);
+    }
+
+    // --- COLLECTION RULES ---
+
+    /**
+     * @description Rules for user profile documents. Users can manage their own profiles.
+     * @path /users/{userId}
+     * @allow User 'abc' (get) their own doc.
+     * @deny User 'abc' (update) user 'xyz's doc.
+     * @principle Ownership-based access for private profile data.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if isAdmin();
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId) || isAdmin();
+    }
+
+    /**
+     * @description Stores role assignments. Read by owners for local UI logic; managed by Admins.
+     * @path /user_roles/{userId}
+     * @allow User 'abc' (get) their own roles.
+     * @deny User 'abc' (update) their own roles (must be Admin).
+     * @principle Separation of authorization metadata from profile data.
+     */
+    match /user_roles/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    /**
+     * @description Definitions of roles and permissions. Static reference data.
+     * @path /roles_definitions/{roleId}
+     * @allow Staff (list) all role definitions.
+     * @deny Staff (create) a new role definition.
+     * @principle Admin-only management of system-wide access definitions.
+     */
+    match /roles_definitions/{roleId} {
+      allow get, list: if isStaff();
+      allow create, update, delete: if isAdmin();
+    }
+
+    /**
+     * @description Customer records containing contact and address info.
+     * @path /customers/{customerId}
+     * @allow Staff (create) a new customer.
+     * @deny Unauthenticated user (get) any customer data.
+     * @principle Restricts client PII to authorized personnel only.
+     */
+    match /customers/{customerId} {
+      allow get, list: if isStaff();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    /**
+     * @description Technical details for customer pools.
+     * @path /pools/{poolId}
+     * @allow Staff (list) pools.
+     * @deny Staff (update) the customerId of an existing pool.
+     * @principle Enforces relational integrity through field immutability.
+     */
+    match /pools/{poolId} {
+      allow get, list: if isStaff();
+      allow create: if isStaff() && request.resource.data.customerId != null;
+      allow update: if isStaff() && resource != null && request.resource.data.customerId == resource.data.customerId;
+      allow delete: if isAdmin();
+    }
+
+    /**
+     * @description Catalog of products and services.
+     * @path /products/{productId}
+     * @allow Public (get) a product.
+     * @deny Staff (create) a product (restricted to Admin).
+     * @principle Public read access for marketing; Admin-only write for pricing control.
+     */
+    match /products/{productId} {
+      allow get, list: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    /**
+     * @description Financial accounts (Cash boxes, Bank accounts).
+     * @path /financial_accounts/{accountId}
+     * @allow Admin (update) account balance.
+     * @deny Staff (delete) a financial account.
+     * @principle High-security access for business financial nodes.
+     */
+    match /financial_accounts/{accountId} {
+      allow get, list: if isStaff();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    /**
+     * @description Categories for business expenses.
+     * @path /expense_categories/{categoryId}
+     * @allow Staff (list) categories.
+     * @deny Public (get) category names.
+     * @principle Internal business configuration access.
+     */
+    match /expense_categories/{categoryId} {
+      allow get, list: if isStaff();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    /**
+     * @description Audit trail of all financial movements.
+     * @path /transactions/{transactionId}
+     * @allow Staff (create) a sale linked to their UID.
+     * @deny Staff (create) a 'FinancialAdjustment' (Admin only).
+     * @principle Strict audit tracking and role-based transaction limits.
+     */
+    match /transactions/{transactionId} {
+      allow get, list: if isStaff();
+      allow create: if isStaff() && request.resource.data.userId == request.auth.uid && (request.resource.data.type != 'FinancialAdjustment' || isAdmin());
+      allow update: if isAdmin();
+      allow delete: if false; // Transactions are usually immutable for auditing.
+    }
+
+    /**
+     * @description Templates for automated notifications.
+     * @path /notification_templates/{templateId}
+     * @allow Staff (get) a template.
+     * @deny Staff (update) template content.
+     * @principle Centralized messaging controlled by administrators.
+     */
+    match /notification_templates/{templateId} {
+      allow get, list: if isStaff();
+      allow create, update, delete: if isAdmin();
+    }
+
+    /**
+     * @description Logs of sent notifications.
+     * @path /notification_logs/{logId}
+     * @allow Staff (list) notification history.
+     * @deny Anyone (update) or (delete) a log entry.
+     * @principle Immutable audit log for communications.
+     */
+    match /notification_logs/{logId} {
+      allow get, list: if isStaff();
+      allow create: if isStaff(); // Usually created by system or staff triggers
+      allow update, delete: if false;
     }
   }
 }
