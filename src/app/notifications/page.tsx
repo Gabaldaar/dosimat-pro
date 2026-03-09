@@ -11,12 +11,18 @@ import { Sparkles, Send, Copy, RefreshCw, MessageSquare } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { generatePersonalizedNotification, type GenerateNotificationOutput } from "@/ai/flows/generate-personalized-notifications"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
+import { useCollection, useMemoFirebase, useFirestore } from "@/firebase"
+import { collection } from "firebase/firestore"
 
 export default function NotificationsPage() {
   const { toast } = useToast()
+  const db = useFirestore()
   const [isLoading, setIsLoading] = useState(false)
   const [result, setResult] = useState<GenerateNotificationOutput | null>(null)
   
+  const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
+  const { data: customers } = useCollection(clientsQuery)
+
   const [formData, setFormData] = useState({
     customerName: "",
     eventType: "chlorineRefill" as const,
@@ -92,9 +98,14 @@ export default function NotificationsPage() {
                     <SelectValue placeholder="Selecciona un cliente" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Carlos Rodríguez">Carlos Rodríguez</SelectItem>
-                    <SelectItem value="Ana Martínez">Ana Martínez</SelectItem>
-                    <SelectItem value="Estancia La Paz">Estancia La Paz</SelectItem>
+                    {customers?.map((c: any) => (
+                      <SelectItem key={c.id} value={`${c.nombre} ${c.apellido}`}>
+                        {c.apellido}, {c.nombre}
+                      </SelectItem>
+                    ))}
+                    {!customers?.length && (
+                      <SelectItem value="Carlos Rodríguez">Carlos Rodríguez (Ejemplo)</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -144,14 +155,40 @@ export default function NotificationsPage() {
 
           <div className="space-y-6">
             {result ? (
-              <Card className="border-primary/30 shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
-                {/* Contenido del resultado IA omitido para brevedad */}
+              <Card className="border-primary/30 shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 bg-white">
+                <CardHeader className="bg-primary/5 border-b">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-primary" /> Sugerencia de la IA
+                    </CardTitle>
+                    <Button variant="ghost" size="sm" onClick={copyToClipboard} className="h-8 gap-2">
+                      <Copy className="h-3 w-3" /> Copiar
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-6 space-y-4">
+                  <div className="p-4 bg-muted/20 rounded-lg italic text-sm text-slate-700 whitespace-pre-wrap border">
+                    "{result.notificationMessage}"
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black text-primary uppercase tracking-widest">Acción Recomendada</p>
+                    <p className="text-sm font-semibold text-slate-900 bg-emerald-50 p-2 rounded border border-emerald-100 flex items-center gap-2">
+                      <Sparkles className="h-3 w-3 text-emerald-600" />
+                      {result.suggestedAction}
+                    </p>
+                  </div>
+                </CardContent>
+                <CardFooter className="bg-slate-50 border-t flex gap-2">
+                   <Button className="flex-1 font-bold" variant="outline" onClick={copyToClipboard}>
+                     Cerrar y Copiar
+                   </Button>
+                </CardFooter>
               </Card>
             ) : (
               <div className="h-full min-h-[300px] border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-muted-foreground p-8 text-center bg-white/50">
                 <Sparkles className="h-12 w-12 mb-4 opacity-20" />
                 <h3 className="text-lg font-semibold mb-2">IA Lista para Ayudar</h3>
-                <p className="text-sm max-w-[300px]">Completa los detalles a la izquierda para generar una comunicación profesional.</p>
+                <p className="text-sm max-w-[300px]">Completa los detalles a la izquierda para que la IA redacte una comunicación profesional para el cliente.</p>
               </div>
             )}
           </div>

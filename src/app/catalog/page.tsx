@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Plus, Search, Edit, Trash2, MoreVertical, Loader2, Package, AlertTriangle } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -56,7 +58,6 @@ export default function CatalogPage() {
     description: ""
   })
 
-  // SOLUCIÓN TÉCNICA DEFINITIVA: Observador de mutaciones para forzar desbloqueo del puntero
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -199,8 +200,56 @@ export default function CatalogPage() {
         setIsDialogOpen(o);
         if(!o) setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
       }}>
-        {/* Diálogo omitido para brevedad */}
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingItemId ? 'Editar Item' : 'Nuevo Item'}</DialogTitle>
+            <DialogDescription>Completa los datos del producto o servicio.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="name">Nombre</Label>
+              <Input id="name" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="priceARS">Precio ARS ($)</Label>
+                <Input id="priceARS" type="number" value={formData.priceARS} onChange={(e) => setFormData({...formData, priceARS: Number(e.target.value)})} />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="priceUSD">Precio USD (u$s)</Label>
+                <Input id="priceUSD" type="number" value={formData.priceUSD} onChange={(e) => setFormData({...formData, priceUSD: Number(e.target.value)})} />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch checked={formData.isService} onCheckedChange={(v) => setFormData({...formData, isService: v})} />
+              <Label>Es un servicio técnico</Label>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="description">Descripción (opcional)</Label>
+              <Textarea id="description" value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSave}>Guardar</Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!itemToDelete} onOpenChange={(o) => { if(!o) setItemToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se borrará permanentemente "{itemToDelete?.name}" del catálogo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground">Eliminar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <MobileNav />
     </div>
