@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -19,7 +20,8 @@ import {
   Loader2,
   TrendingUp,
   AlertTriangle,
-  Calculator
+  Calculator,
+  ExternalLink
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -69,6 +71,7 @@ const txTypeMap: Record<string, { label: string, icon: any, color: string }> = {
 export default function AccountsPage() {
   const { toast } = useToast()
   const db = useFirestore()
+  const router = useRouter()
   
   // Queries
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
@@ -355,24 +358,45 @@ export default function AccountsPage() {
               const bgColor = isUSD ? 'bg-emerald-100' : 'bg-blue-100';
 
               return (
-                <Card key={account.id} className={`glass-card overflow-hidden group border-l-4 ${isUSD ? 'border-l-emerald-500' : 'border-l-blue-500'}`}>
+                <Card 
+                  key={account.id} 
+                  className={`glass-card overflow-hidden group border-l-4 cursor-pointer hover:shadow-md transition-all ${isUSD ? 'border-l-emerald-500' : 'border-l-blue-500'}`}
+                  onClick={() => router.push(`/transactions?accountId=${account.id}`)}
+                >
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between">
                       <div className={`p-2 rounded-lg ${bgColor} ${themeColor}`}>
                         {account.type === 'Bank' ? <Building2 className="h-5 w-5" /> : 
                          account.type === 'Cash' ? <Banknote className="h-5 w-5" /> : <Wallet className="h-5 w-5" />}
                       </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"><MoreVertical className="h-4 w-4" /></Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onSelect={() => handleOpenAccountDialog(account)}>Editar parámetros</DropdownMenuItem>
-                          <DropdownMenuItem className="text-destructive" onSelect={() => setAccountToDelete(account)}>
-                            <Trash2 className="mr-2 h-4 w-4" /> Eliminar caja
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <div className="flex items-center gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-primary"
+                          title="Ver movimientos"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={() => handleOpenAccountDialog(account)}>Editar parámetros</DropdownMenuItem>
+                            <DropdownMenuItem className="text-destructive" onSelect={() => setAccountToDelete(account)}>
+                              <Trash2 className="mr-2 h-4 w-4" /> Eliminar caja
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
                     <CardTitle className="text-base mt-2 truncate">{account.name}</CardTitle>
                     <CardDescription className={`text-[10px] font-bold uppercase tracking-widest ${themeColor}`}>
@@ -385,10 +409,20 @@ export default function AccountsPage() {
                       {Number(account.initialBalance || 0).toLocaleString('es-AR')}
                     </div>
                     <div className="mt-4 flex gap-2">
-                      <Button size="sm" variant="outline" className="flex-1 text-[10px] h-8 hover:bg-emerald-50" onClick={() => handleOpenTxDialog(account, 'income')}>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="flex-1 text-[10px] h-8 hover:bg-emerald-50" 
+                        onClick={(e) => { e.stopPropagation(); handleOpenTxDialog(account, 'income'); }}
+                      >
                         INGRESO
                       </Button>
-                      <Button size="sm" variant="outline" className="flex-1 text-[10px] h-8 hover:bg-rose-50" onClick={() => handleOpenTxDialog(account, 'expense')}>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="flex-1 text-[10px] h-8 hover:bg-rose-50" 
+                        onClick={(e) => { e.stopPropagation(); handleOpenTxDialog(account, 'expense'); }}
+                      >
                         GASTO
                       </Button>
                     </div>

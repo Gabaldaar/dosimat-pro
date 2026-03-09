@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
@@ -80,6 +79,7 @@ function TransactionsContent() {
   const db = useFirestore()
   const searchParams = useSearchParams()
   const clientIdParam = searchParams.get('clientId')
+  const accountIdParam = searchParams.get('accountId')
   const modeParam = searchParams.get('mode')
 
   const [mainView, setMainView] = useState("history")
@@ -125,7 +125,6 @@ function TransactionsContent() {
   const [txDescription, setTxDescription] = useState("")
 
   // SOLUCIÓN TÉCNICA DEFINITIVA: Observador de mutaciones para forzar desbloqueo del puntero
-  // Esto evita que la app se "cuelgue" al cerrar diálogos o eliminar registros
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -152,7 +151,11 @@ function TransactionsContent() {
         setMainView("history")
       }
     }
-  }, [clientIdParam, modeParam])
+    if (accountIdParam) {
+      setFilterAccount(accountIdParam)
+      setMainView("history")
+    }
+  }, [clientIdParam, accountIdParam, modeParam])
 
   useEffect(() => {
     if (selectedTxForEmail && selectedTemplateId && templates && customers && accounts) {
@@ -315,7 +318,6 @@ function TransactionsContent() {
     revertTxBalances(txToDelete)
     deleteDocumentNonBlocking(doc(db, 'transactions', txToDelete.id))
     setTxToDelete(null)
-    // Forzamos desbloqueo extra tras un pequeño delay
     setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100)
     toast({ title: "Operación eliminada" })
   }
