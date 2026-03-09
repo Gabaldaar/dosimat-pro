@@ -37,15 +37,18 @@ export default function LoginPage() {
         const user = userCredential.user
         
         // Al registrarse, creamos el perfil del usuario.
-        // Hacemos que el usuario sea Admin por defecto para esta fase de configuración inicial
+        // El documento de 'users' es para la interfaz.
         setDocumentNonBlocking(doc(firestore, 'users', user.uid), {
           id: user.uid,
           name: name || email.split('@')[0],
           email: email,
-          role: 'Admin' 
+          role: 'Admin',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
         }, { merge: true })
 
-        // Creamos el registro de rol para que la seguridad de Firestore lo reconozca
+        // El documento de 'user_roles' es CRÍTICO para la seguridad de Firestore.
+        // Hacemos que los nuevos usuarios sean Admin por defecto para esta fase inicial.
         setDocumentNonBlocking(doc(firestore, 'user_roles', user.uid), {
           roleIds: ['admin']
         }, { merge: true })
@@ -58,15 +61,11 @@ export default function LoginPage() {
       let message = "Verifica tus datos o regístrate si no tienes cuenta."
       
       if (error.code === 'auth/invalid-credential') {
-        message = "Email o contraseña incorrectos. Si es tu primera vez, haz clic en 'Registrate aquí'."
+        message = "Email o contraseña incorrectos."
       } else if (error.code === 'auth/user-not-found') {
         message = "Usuario no encontrado. Por favor, regístrate."
-      } else if (error.code === 'auth/wrong-password') {
-        message = "Contraseña incorrecta."
       } else if (error.code === 'auth/email-already-in-use') {
-        message = "Este email ya está en uso. Intenta iniciar sesión."
-      } else if (error.code === 'auth/weak-password') {
-        message = "La contraseña debe tener al menos 6 caracteres."
+        message = "Este email ya está en uso."
       }
       
       toast({ 

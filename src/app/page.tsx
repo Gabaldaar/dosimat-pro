@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useEffect } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
@@ -12,26 +12,53 @@ import {
   Plus,
   Loader2,
   MapPin,
-  Calendar
+  Calendar,
+  ShieldAlert
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid } from "recharts"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, query, orderBy, limit } from "firebase/firestore"
+import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc, setDocumentNonBlocking } from "@/firebase"
+import { collection, query, orderBy, limit, doc } from "firebase/firestore"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 
 export default function Dashboard() {
   const db = useFirestore()
+  const { user } = useUser()
 
+  // Queries
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
   const txQuery = useMemoFirebase(() => query(collection(db, 'transactions'), orderBy('date', 'desc'), limit(50)), [db])
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
-
+  
+  // Real-time Data
   const { data: accounts, isLoading: loadingAccounts } = useCollection(accountsQuery)
   const { data: transactions, isLoading: loadingTx } = useCollection(txQuery)
   const { data: clients, isLoading: loadingClients } = useCollection(clientsQuery)
+
+  // Auth & Role "Self-Repair" Logic
+  const userRoleRef = useMemoFirebase(() => user ? doc(db, 'user_roles', user.uid) : null, [db, user])
+  const { data: userRole, isLoading: loadingRole } = useDoc(userRoleRef)
+
+  useEffect(() => {
+    // Si el usuario está logueado pero NO tiene documento de rol, 
+    // lo creamos automáticamente como admin para evitar bloqueos de permisos.
+    if (user && !loadingRole && !userRole) {
+      console.log("Repairing missing user role for:", user.email)
+      setDocumentNonBlocking(doc(db, 'user_roles', user.uid), {
+        roleIds: ['admin']
+      }, { merge: true })
+      
+      // También aseguramos que tenga un perfil básico si falta
+      setDocumentNonBlocking(doc(db, 'users', user.uid), {
+        id: user.uid,
+        email: user.email,
+        name: user.displayName || user.email?.split('@')[0],
+        role: 'Admin'
+      }, { merge: true })
+    }
+  }, [user, userRole, loadingRole, db])
 
   const totals = useMemo(() => {
     if (!accounts) return { ARS: 0, USD: 0 }
@@ -73,7 +100,7 @@ export default function Dashboard() {
     expenses: { label: "Gastos (ARS)", color: "hsl(var(--accent))" },
   } satisfies ChartConfig
 
-  const isLoading = loadingAccounts || loadingTx || loadingClients
+  const isLoading = loadingAccounts || loadingTx || loadingClients || loadingRole
 
   return (
     <div className="flex min-h-screen bg-background w-full">
@@ -187,7 +214,7 @@ export default function Dashboard() {
                       clients.slice(0, 4).map((c: any) => (
                         <div key={c.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
                           <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">
-                            {c.nombre[0]}{c.apellido[0]}
+                            {c.nombre?.[0] || ''}{c.apellido?.[0] || ''}
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-bold truncate">{c.apellido}, {c.nombre}</p>

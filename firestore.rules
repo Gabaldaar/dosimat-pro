@@ -41,14 +41,14 @@ service cloud.firestore {
              getUserRoles().roleIds.hasAny(roles);
     }
 
-    /** @description Convenience check for Administrator access. */
+    /** @description Convenience check for Administrator access. Supports common variations. */
     function isAdmin() {
-      return hasAnyRole(['admin', 'Admin', 'Administrator']);
+      return hasAnyRole(['admin', 'Admin', 'Administrator', 'ADMIN']);
     }
 
     /** @description Convenience check for Staff or Admin access. */
     function isStaff() {
-      return hasAnyRole(['staff', 'Staff', 'admin', 'Admin', 'Administrator', 'Employee']);
+      return hasAnyRole(['staff', 'Staff', 'admin', 'Admin', 'Administrator', 'Employee', 'STAFF', 'ADMIN']);
     }
 
     // --- COLLECTION RULES ---
