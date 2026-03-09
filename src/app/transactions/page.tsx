@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
@@ -124,7 +125,7 @@ function TransactionsContent() {
   const [cobroAccountId, setCobroAccountId] = useState("pending")
   const [txDescription, setTxDescription] = useState("")
 
-  // SOLUCIÓN TÉCNICA DEFINITIVA: Observador de mutaciones para forzar desbloqueo del puntero
+  // Observador de mutaciones para desbloquear la interfaz tras cerrar diálogos
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -964,3 +965,4 @@ export default function TransactionsPage() {
     </Suspense>
   )
 }
+    
