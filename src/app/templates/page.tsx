@@ -25,7 +25,8 @@ const AVAILABLE_MARKERS = [
   "Precio", 
   "Moneda", 
   "Subtotal", 
-  "Total"
+  "Total",
+  "Saldo_Cuenta"
 ]
 
 export default function TemplatesPage() {

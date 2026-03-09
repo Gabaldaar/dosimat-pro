@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
@@ -152,6 +151,14 @@ function TransactionsContent() {
           `- ${i.qty} x ${i.name} (${currencySymbol}${i.price})`
         ).join('\n') || "N/A";
 
+        // Lógica de Saldo_Cuenta con indicadores
+        const balanceValue = selectedTxForEmail.currency === 'ARS' ? (client.saldoActual || 0) : (client.saldoUSD || 0);
+        let balanceStatus = "(Sin Deuda)";
+        if (balanceValue > 0) balanceStatus = "(Acreedor)";
+        if (balanceValue < 0) balanceStatus = "(Deudor)";
+        
+        const formattedBalance = `${currencySymbol} ${Math.abs(balanceValue).toLocaleString('es-AR')} ${balanceStatus}`;
+
         const replacements: Record<string, string> = {
           "{{Apellido}}": client.apellido || "",
           "{{Nombre}}": client.nombre || "",
@@ -163,7 +170,8 @@ function TransactionsContent() {
           "{{Item}}": selectedTxForEmail.items?.[0]?.name || "N/A",
           "{{Cantidad}}": selectedTxForEmail.items?.[0]?.qty?.toString() || "N/A",
           "{{Precio}}": selectedTxForEmail.items?.[0]?.price?.toString() || "N/A",
-          "{{Subtotal}}": selectedTxForEmail.items?.[0] ? (selectedTxForEmail.items[0].qty * selectedTxForEmail.items[0].price).toLocaleString('es-AR') : "N/A"
+          "{{Subtotal}}": selectedTxForEmail.items?.[0] ? (selectedTxForEmail.items[0].qty * selectedTxForEmail.items[0].price).toLocaleString('es-AR') : "N/A",
+          "{{Saldo_Cuenta}}": formattedBalance
         }
 
         Object.entries(replacements).forEach(([marker, value]) => {
@@ -337,7 +345,7 @@ function TransactionsContent() {
             type: activeTab,
             amount: Number(total),
             currency: curr,
-            description: txDescription || `Operación ${txTypeMap[activeTab].label} - ${curr}`,
+            description: txDescription || `Operación ${txTypeMap[activeTab]?.label.toUpperCase()} - ${curr}`,
             financialAccountId: isPending ? null : accId,
             items: itemsOfCurrency
           }
