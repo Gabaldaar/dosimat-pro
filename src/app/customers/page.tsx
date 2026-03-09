@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -394,38 +393,42 @@ export default function CustomersPage() {
                           </Button>
                           <Button 
                             variant="secondary" 
-                            size="sm" 
-                            className="h-8 gap-2 font-bold"
+                            size="icon" 
+                            className="h-8 w-8"
                             onClick={(e) => { e.stopPropagation(); handleOpenMaps(customer.direccion, customer.localidad); }}
+                            title="Ver en Mapa"
                           >
-                            <Map className="h-3 w-3" /> Mapa
+                            <Map className="h-4 w-4" />
                           </Button>
                           <Button 
                             variant="outline" 
-                            size="sm" 
-                            className="h-8 gap-2 font-bold"
+                            size="icon" 
+                            className="h-8 w-8"
                             onClick={(e) => handleCopyClipboard(customer, e)}
+                            title="Copiar Datos"
                           >
-                            <Copy className="h-3 w-3" /> Copiar
+                            <Copy className="h-4 w-4" />
                           </Button>
                           <Button 
                             variant="outline" 
-                            size="sm" 
-                            className="h-8 gap-2 font-bold"
+                            size="icon" 
+                            className="h-8 w-8"
                             asChild
                             onClick={(e) => e.stopPropagation()}
+                            title="Llamar"
                           >
-                            <a href={`tel:${customer.telefono}`}><PhoneCall className="h-3 w-3" /> Llamar</a>
+                            <a href={`tel:${customer.telefono}`}><PhoneCall className="h-4 w-4" /></a>
                           </Button>
                           {customer.mail && (
                             <Button 
                               variant="outline" 
-                              size="sm" 
-                              className="h-8 gap-2 font-bold"
+                              size="icon" 
+                              className="h-8 w-8"
                               asChild
                               onClick={(e) => e.stopPropagation()}
+                              title="Enviar Email"
                             >
-                              <a href={`mailto:${customer.mail}`}><Mail className="h-3 w-3" /> Email</a>
+                              <a href={`mailto:${customer.mail}`}><Mail className="h-4 w-4" /></a>
                             </Button>
                           )}
                         </div>
