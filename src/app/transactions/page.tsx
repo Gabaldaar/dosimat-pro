@@ -787,22 +787,33 @@ function TransactionsContent() {
                               {tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}
                             </TableCell>
                             <TableCell>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onSelect={() => handleOpenEmailDialog(tx)}>
-                                    <Mail className="h-4 w-4 mr-2" /> Enviar Mail
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onSelect={() => handleEditTx(tx)}>
-                                    <Edit className="h-4 w-4 mr-2" /> Editar
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem className="text-destructive" onSelect={() => setTxToDelete(tx)}>
-                                    <Trash2 className="h-4 w-4 mr-2" /> Eliminar
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                              <div className="flex items-center gap-1 justify-end">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10" 
+                                  onClick={() => handleOpenEmailDialog(tx)}
+                                  title="Enviar Email"
+                                >
+                                  <Mail className="h-4 w-4" />
+                                </Button>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onSelect={() => handleOpenEmailDialog(tx)}>
+                                      <Mail className="h-4 w-4 mr-2" /> Enviar Mail
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={() => handleEditTx(tx)}>
+                                      <Edit className="h-4 w-4 mr-2" /> Editar
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem className="text-destructive" onSelect={() => setTxToDelete(tx)}>
+                                      <Trash2 className="h-4 w-4 mr-2" /> Eliminar
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
                             </TableCell>
                           </TableRow>
                         )
