@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -26,8 +27,9 @@ import {
   Mail,
   PlusCircle,
   Copy,
-  Info,
-  ArrowLeftRight
+  ArrowLeftRight,
+  Settings2,
+  MapPinned
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -40,6 +42,7 @@ import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, d
 import { collection, doc } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 export default function CustomersPage() {
   const { toast } = useToast()
@@ -50,24 +53,30 @@ export default function CustomersPage() {
   const [filterBalance, setFilterBalance] = useState("all") 
   const [filterComodato, setFilterComodato] = useState("all")
   const [filterReposicion, setFilterReposicion] = useState("all")
+  const [filterZone, setFilterZone] = useState("all")
   
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
+  const zonesQuery = useMemoFirebase(() => collection(db, 'zones'), [db])
+  
   const { data: customers, isLoading } = useCollection(clientsQuery)
+  const { data: zones, isLoading: isLoadingZones } = useCollection(zonesQuery)
   
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isZoneManagerOpen, setIsZoneManagerOpen] = useState(false)
+  const [newZoneName, setNewZoneName] = useState("")
   const [editingCustomer, setEditingCustomer] = useState<any>(null)
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        if (!isDialogOpen) {
+        if (!isDialogOpen && !isZoneManagerOpen) {
           document.body.style.pointerEvents = 'auto';
         }
       }
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isDialogOpen]);
+  }, [isDialogOpen, isZoneManagerOpen]);
 
   const defaultFormData = {
     apellido: "",
@@ -80,6 +89,7 @@ export default function CustomersPage() {
     mail: "",
     cuit_dni: "",
     observaciones: "",
+    zonaId: "",
     equipoInstalado: {
       medidasPileta: "",
       volumen: 0,
@@ -118,9 +128,11 @@ export default function CustomersPage() {
       if (filterReposicion === 'yes' && !isRepo) return false
       if (filterReposicion === 'no' && isRepo) return false
 
+      if (filterZone !== 'all' && c.zonaId !== filterZone) return false
+
       return true
     })
-  }, [customers, searchTerm, filterBalance, filterComodato, filterReposicion])
+  }, [customers, searchTerm, filterBalance, filterComodato, filterReposicion, filterZone])
 
   const filteredTotals = useMemo(() => {
     return filteredCustomers.reduce((acc, c) => {
@@ -135,6 +147,7 @@ export default function CustomersPage() {
     setFilterBalance("all")
     setFilterComodato("all")
     setFilterReposicion("all")
+    setFilterZone("all")
   }
 
   const handleOpenDialog = (customer?: any) => {
@@ -202,6 +215,21 @@ export default function CustomersPage() {
     })
   }
 
+  const handleAddZone = () => {
+    if (!newZoneName.trim()) return
+    const id = Math.random().toString(36).substring(2, 11)
+    setDocumentNonBlocking(doc(db, 'zones', id), { id, name: newZoneName }, { merge: true })
+    setNewZoneName("")
+    toast({ title: "Zona agregada" })
+  }
+
+  const handleDeleteZone = (id: string) => {
+    if (confirm("¿Eliminar esta zona?")) {
+      deleteDocumentNonBlocking(doc(db, 'zones', id))
+      toast({ title: "Zona eliminada" })
+    }
+  }
+
   return (
     <div className="flex min-h-screen bg-background w-full">
       <Sidebar />
@@ -214,9 +242,14 @@ export default function CustomersPage() {
               <p className="text-muted-foreground">Gestión de perfiles y cuentas corrientes.</p>
             </div>
           </div>
-          <Button onClick={() => handleOpenDialog()} className="h-12 px-6 shadow-lg shadow-primary/20 font-bold">
-            <Plus className="mr-2 h-5 w-5" /> Nuevo Cliente
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setIsZoneManagerOpen(true)}>
+              <MapPinned className="mr-2 h-4 w-4" /> Administrar Zonas
+            </Button>
+            <Button onClick={() => handleOpenDialog()} className="shadow-lg shadow-primary/20 font-bold">
+              <Plus className="mr-2 h-5 w-5" /> Nuevo Cliente
+            </Button>
+          </div>
         </header>
 
         <section className="space-y-4">
@@ -231,7 +264,7 @@ export default function CustomersPage() {
               />
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
               <div className="space-y-1">
                 <Label className="text-[10px] uppercase font-bold text-muted-foreground">Saldo</Label>
                 <Select value={filterBalance} onValueChange={setFilterBalance}>
@@ -240,6 +273,18 @@ export default function CustomersPage() {
                     <SelectItem value="all">Ver Todos</SelectItem>
                     <SelectItem value="debt" className="text-rose-600">Solo Deuda</SelectItem>
                     <SelectItem value="credit" className="text-emerald-600">Solo A Favor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Zona</Label>
+                <Select value={filterZone} onValueChange={setFilterZone}>
+                  <SelectTrigger className="h-10 bg-white/50"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas las Zonas</SelectItem>
+                    {zones?.map((z: any) => (
+                      <SelectItem key={z.id} value={z.id}>{z.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -316,136 +361,144 @@ export default function CustomersPage() {
           </Card>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            {filteredCustomers.map((customer: any) => (
-              <Card 
-                key={customer.id} 
-                className="glass-card hover:shadow-md transition-all cursor-pointer group relative overflow-hidden" 
-                onClick={() => handleOpenDialog(customer)}
-              >
-                <div className={cn(
-                  "absolute top-0 left-0 w-1 h-full",
-                  customer.equipoInstalado?.enComodato ? "bg-amber-500" : "bg-primary"
-                )} />
-                <CardContent className="p-6">
-                  <div className="flex items-start gap-4">
-                    <Avatar className="h-14 w-14 border-2 border-primary/10">
-                      <AvatarFallback className="bg-primary/5 text-primary font-bold text-xl uppercase">
-                        {customer.nombre?.[0]}{customer.apellido?.[0]}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <div className="flex flex-col gap-1">
-                          <h3 className="text-lg font-bold truncate">{customer.apellido}, {customer.nombre}</h3>
-                          <div className="flex gap-1 flex-wrap">
-                            <Badge variant={customer.esClienteReposicion ? "default" : "secondary"} className="text-[10px] font-bold">
-                              {customer.esClienteReposicion ? 'REPOSICIÓN' : 'OCASIONAL'}
-                            </Badge>
-                            {customer.equipoInstalado?.enComodato && (
-                              <Badge variant="outline" className="text-[10px] font-bold border-amber-500 text-amber-600 bg-amber-50">
-                                COMODATO
+            {filteredCustomers.map((customer: any) => {
+              const zone = zones?.find(z => z.id === customer.zonaId);
+              return (
+                <Card 
+                  key={customer.id} 
+                  className="glass-card hover:shadow-md transition-all cursor-pointer group relative overflow-hidden" 
+                  onClick={() => handleOpenDialog(customer)}
+                >
+                  <div className={cn(
+                    "absolute top-0 left-0 w-1 h-full",
+                    customer.equipoInstalado?.enComodato ? "bg-amber-500" : "bg-primary"
+                  )} />
+                  <CardContent className="p-6">
+                    <div className="flex items-start gap-4">
+                      <Avatar className="h-14 w-14 border-2 border-primary/10">
+                        <AvatarFallback className="bg-primary/5 text-primary font-bold text-xl uppercase">
+                          {customer.nombre?.[0]}{customer.apellido?.[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <div className="flex flex-col gap-1">
+                            <h3 className="text-lg font-bold truncate">{customer.apellido}, {customer.nombre}</h3>
+                            <div className="flex gap-1 flex-wrap">
+                              <Badge variant={customer.esClienteReposicion ? "default" : "secondary"} className="text-[10px] font-bold">
+                                {customer.esClienteReposicion ? 'REPOSICIÓN' : 'OCASIONAL'}
                               </Badge>
-                            )}
+                              {customer.equipoInstalado?.enComodato && (
+                                <Badge variant="outline" className="text-[10px] font-bold border-amber-500 text-amber-600 bg-amber-50">
+                                  COMODATO
+                                </Badge>
+                              )}
+                              {zone && (
+                                <Badge variant="outline" className="text-[10px] font-bold border-primary/30 text-primary bg-primary/5">
+                                  {zone.name}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right space-y-1">
+                            <div className={cn(
+                              "text-[10px] font-black px-2 py-0.5 rounded border uppercase flex items-center gap-1 justify-end",
+                              (customer.saldoActual || 0) < 0 ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                            )}>
+                              <Banknote className="h-3 w-3" /> ${(customer.saldoActual || 0).toLocaleString('es-AR')}
+                            </div>
+                            <div className={cn(
+                              "text-[10px] font-black px-2 py-0.5 rounded border uppercase flex items-center gap-1 justify-end",
+                              (customer.saldoUSD || 0) < 0 ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                            )}>
+                              <TrendingUp className="h-3 w-3" /> u$s {(customer.saldoUSD || 0).toLocaleString('es-AR')}
+                            </div>
                           </div>
                         </div>
-                        <div className="text-right space-y-1">
-                          <div className={cn(
-                            "text-[10px] font-black px-2 py-0.5 rounded border uppercase flex items-center gap-1 justify-end",
-                            (customer.saldoActual || 0) < 0 ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
-                          )}>
-                            <Banknote className="h-3 w-3" /> ${(customer.saldoActual || 0).toLocaleString('es-AR')}
+                        <div className="space-y-2 mt-3 text-sm text-muted-foreground flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <MapPin className="h-4 w-4 shrink-0 text-primary/60" />
+                            <span className="truncate">{customer.direccion}, {customer.localidad}</span>
                           </div>
-                          <div className={cn(
-                            "text-[10px] font-black px-2 py-0.5 rounded border uppercase flex items-center gap-1 justify-end",
-                            (customer.saldoUSD || 0) < 0 ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
-                          )}>
-                            <TrendingUp className="h-3 w-3" /> u$s {(customer.saldoUSD || 0).toLocaleString('es-AR')}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="space-y-2 mt-3 text-sm text-muted-foreground flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4 shrink-0 text-primary/60" />
-                          <span className="truncate">{customer.direccion}, {customer.localidad}</span>
-                        </div>
-                        <div className="flex flex-wrap gap-2 mt-4">
-                          <Button 
-                            variant="default" 
-                            size="sm" 
-                            className="h-8 gap-2 font-bold bg-primary text-primary-foreground"
-                            asChild
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Link href={`/transactions?clientId=${customer.id}&mode=new`}>
-                              <PlusCircle className="h-3.5 w-3.5" /> Nueva Operación
-                            </Link>
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="h-8 gap-2 font-bold"
-                            asChild
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Link href={`/transactions?clientId=${customer.id}`}>
-                              <ArrowLeftRight className="h-3.5 w-3.5" /> Historial
-                            </Link>
-                          </Button>
-                          <Button 
-                            variant="secondary" 
-                            size="icon" 
-                            className="h-8 w-8"
-                            onClick={(e) => { e.stopPropagation(); handleOpenMaps(customer.direccion, customer.localidad); }}
-                            title="Ver en Mapa"
-                          >
-                            <Map className="h-4 w-4" />
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="icon" 
-                            className="h-8 w-8"
-                            onClick={(e) => handleCopyClipboard(customer, e)}
-                            title="Copiar Datos"
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="icon" 
-                            className="h-8 w-8"
-                            asChild
-                            onClick={(e) => e.stopPropagation()}
-                            title="Llamar"
-                          >
-                            <a href={`tel:${customer.telefono}`}><PhoneCall className="h-4 w-4" /></a>
-                          </Button>
-                          {customer.mail && (
+                          <div className="flex flex-wrap gap-2 mt-4">
+                            <Button 
+                              variant="default" 
+                              size="sm" 
+                              className="h-8 gap-2 font-bold bg-primary text-primary-foreground"
+                              asChild
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Link href={`/transactions?clientId=${customer.id}&mode=new`}>
+                                <PlusCircle className="h-3.5 w-3.5" /> Nueva Operación
+                              </Link>
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="h-8 gap-2 font-bold"
+                              asChild
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Link href={`/transactions?clientId=${customer.id}`}>
+                                <ArrowLeftRight className="h-3.5 w-3.5" /> Historial
+                              </Link>
+                            </Button>
+                            <Button 
+                              variant="secondary" 
+                              size="icon" 
+                              className="h-8 w-8"
+                              onClick={(e) => { e.stopPropagation(); handleOpenMaps(customer.direccion, customer.localidad); }}
+                              title="Ver en Mapa"
+                            >
+                              <MapPinned className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="icon" 
+                              className="h-8 w-8"
+                              onClick={(e) => handleCopyClipboard(customer, e)}
+                              title="Copiar Datos"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
                             <Button 
                               variant="outline" 
                               size="icon" 
                               className="h-8 w-8"
                               asChild
                               onClick={(e) => e.stopPropagation()}
-                              title="Enviar Email"
+                              title="Llamar"
                             >
-                              <a href={`mailto:${customer.mail}`}><Mail className="h-4 w-4" /></a>
+                              <a href={`tel:${customer.telefono}`}><PhoneCall className="h-4 w-4" /></a>
                             </Button>
-                          )}
+                            {customer.mail && (
+                              <Button 
+                                variant="outline" 
+                                size="icon" 
+                                className="h-8 w-8"
+                                asChild
+                                onClick={(e) => e.stopPropagation()}
+                                title="Enviar Email"
+                              >
+                                <a href={`mailto:${customer.mail}`}><Mail className="h-4 w-4" /></a>
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
+                      <div className="flex flex-col gap-2">
+                        <Button variant="ghost" size="icon" className="text-muted-foreground group-hover:text-primary transition-colors">
+                          <ChevronRight className="h-5 w-5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="text-destructive opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => handleDelete(customer.id, e)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-2">
-                      <Button variant="ghost" size="icon" className="text-muted-foreground group-hover:text-primary transition-colors">
-                        <ChevronRight className="h-5 w-5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="text-destructive opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => handleDelete(customer.id, e)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
 
@@ -519,13 +572,26 @@ export default function CustomersPage() {
               </TabsContent>
 
               <TabsContent value="address" className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label className="font-bold text-primary">Dirección</Label>
-                  <Input 
-                    value={formData.direccion} 
-                    onChange={(e) => setFormData({...formData, direccion: e.target.value})} 
-                    placeholder="Calle y altura" 
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="font-bold text-primary">Dirección</Label>
+                    <Input 
+                      value={formData.direccion} 
+                      onChange={(e) => setFormData({...formData, direccion: e.target.value})} 
+                      placeholder="Calle y altura" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="font-bold text-primary">Zona</Label>
+                    <Select value={formData.zonaId} onValueChange={(v) => setFormData({...formData, zonaId: v})}>
+                      <SelectTrigger><SelectValue placeholder="Seleccionar zona..." /></SelectTrigger>
+                      <SelectContent>
+                        {zones?.map((z: any) => (
+                          <SelectItem key={z.id} value={z.id}>{z.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -579,6 +645,40 @@ export default function CustomersPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <Dialog open={isZoneManagerOpen} onOpenChange={setIsZoneManagerOpen}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Administrar Zonas Geográficas</DialogTitle></DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="flex gap-2">
+                <Input placeholder="Nueva zona (Ej: Pilar, Escobar, San Isidro...)" value={newZoneName} onChange={(e) => setNewZoneName(e.target.value)} />
+                <Button onClick={handleAddZone}><Plus className="h-4 w-4" /></Button>
+              </div>
+              <ScrollArea className="h-[250px] border rounded-md p-2">
+                {isLoadingZones ? (
+                  <p className="text-center py-4 text-xs text-muted-foreground">Cargando...</p>
+                ) : zones?.length === 0 ? (
+                  <p className="text-center py-4 text-xs text-muted-foreground italic">No hay zonas creadas.</p>
+                ) : (
+                  <div className="space-y-1">
+                    {zones?.map((z: any) => (
+                      <div key={z.id} className="flex justify-between items-center p-2 rounded hover:bg-muted/50 transition-colors border-b last:border-0">
+                        <span className="text-sm font-medium">{z.name}</span>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeleteZone(z.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setIsZoneManagerOpen(false)}>Cerrar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
       </SidebarInset>
       <MobileNav />
     </div>

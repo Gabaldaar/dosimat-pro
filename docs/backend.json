@@ -31,6 +31,7 @@
         "mail": { "type": "string", "format": "email" },
         "cuit_dni": { "type": "string" },
         "observaciones": { "type": "string" },
+        "zonaId": { "type": "string", "description": "Referencia a la zona geográfica del cliente." },
         "equipoInstalado": {
           "type": "object",
           "properties": {
@@ -116,6 +117,15 @@
         "body": { "type": "string" }
       },
       "required": ["id", "name", "subject", "body"]
+    },
+    "Zone": {
+      "title": "Zone",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "required": ["id", "name"]
     }
   },
   "auth": {
@@ -128,7 +138,8 @@
       { "path": "/products_services/{id}", "definition": { "entityName": "ProductOrService", "schema": { "$ref": "#/backend/entities/ProductOrService" } } },
       { "path": "/financial_accounts/{id}", "definition": { "entityName": "FinancialAccount", "schema": { "$ref": "#/backend/entities/FinancialAccount" } } },
       { "path": "/transactions/{id}", "definition": { "entityName": "Transaction", "schema": { "$ref": "#/backend/entities/Transaction" } } },
-      { "path": "/email_templates/{id}", "definition": { "entityName": "EmailTemplate", "schema": { "$ref": "#/backend/entities/EmailTemplate" } } }
+      { "path": "/email_templates/{id}", "definition": { "entityName": "EmailTemplate", "schema": { "$ref": "#/backend/entities/EmailTemplate" } } },
+      { "path": "/zones/{id}", "definition": { "entityName": "Zone", "schema": { "$ref": "#/backend/entities/Zone" } } }
     ]
   }
 }
