@@ -105,6 +105,17 @@
         }
       },
       "required": ["id", "date", "type", "amount", "currency"]
+    },
+    "EmailTemplate": {
+      "title": "EmailTemplate",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "subject": { "type": "string" },
+        "body": { "type": "string" }
+      },
+      "required": ["id", "name", "subject", "body"]
     }
   },
   "auth": {
@@ -116,7 +127,8 @@
       { "path": "/clients/{clientId}", "definition": { "entityName": "Client", "schema": { "$ref": "#/backend/entities/Client" }, "description": "Base de datos maestra de clientes." } },
       { "path": "/products_services/{id}", "definition": { "entityName": "ProductOrService", "schema": { "$ref": "#/backend/entities/ProductOrService" } } },
       { "path": "/financial_accounts/{id}", "definition": { "entityName": "FinancialAccount", "schema": { "$ref": "#/backend/entities/FinancialAccount" } } },
-      { "path": "/transactions/{id}", "definition": { "entityName": "Transaction", "schema": { "$ref": "#/backend/entities/Transaction" } } }
+      { "path": "/transactions/{id}", "definition": { "entityName": "Transaction", "schema": { "$ref": "#/backend/entities/Transaction" } } },
+      { "path": "/email_templates/{id}", "definition": { "entityName": "EmailTemplate", "schema": { "$ref": "#/backend/entities/EmailTemplate" } } }
     ]
   }
 }

@@ -1,9 +1,10 @@
+
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
@@ -27,7 +28,10 @@ import {
   Receipt,
   MoreVertical,
   Edit,
-  AlertTriangle
+  AlertTriangle,
+  Mail,
+  Send,
+  Eye
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -47,6 +51,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription
+} from "@/components/ui/dialog"
 import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase"
 import { collection, doc } from "firebase/firestore"
 import { cn } from "@/lib/utils"
@@ -75,6 +87,12 @@ function TransactionsContent() {
   const [editingTx, setEditingTx] = useState<any | null>(null)
   const [txToDelete, setTxToDelete] = useState<any | null>(null)
 
+  // Email States
+  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false)
+  const [selectedTxForEmail, setSelectedTxForEmail] = useState<any | null>(null)
+  const [selectedTemplateId, setSelectedTemplateId] = useState("")
+  const [processedEmail, setProcessedEmail] = useState({ subject: "", body: "" })
+
   // Filters State
   const [filterCustomer, setFilterCustomer] = useState("all")
   const [filterAccount, setFilterAccount] = useState("all")
@@ -87,11 +105,13 @@ function TransactionsContent() {
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
   const txQuery = useMemoFirebase(() => collection(db, 'transactions'), [db])
+  const templatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
 
   const { data: customers } = useCollection(clientsQuery)
   const { data: catalog } = useCollection(catalogQuery)
   const { data: accounts } = useCollection(accountsQuery)
   const { data: transactions, isLoading: loadingTx } = useCollection(txQuery)
+  const { data: templates } = useCollection(templatesQuery)
 
   const [selectedCustomerId, setSelectedCustomerId] = useState("")
   const [selectedItems, setSelectedItems] = useState<any[]>([])
@@ -115,6 +135,39 @@ function TransactionsContent() {
       }
     }
   }, [clientIdParam, modeParam])
+
+  // Lógica de procesamiento de Email
+  useEffect(() => {
+    if (selectedTxForEmail && selectedTemplateId && templates && customers) {
+      const tpl = templates.find(t => t.id === selectedTemplateId)
+      const client = customers.find(c => c.id === selectedTxForEmail.clientId)
+      
+      if (tpl && client) {
+        let subject = tpl.subject
+        let body = tpl.body
+        
+        const replacements: Record<string, string> = {
+          "{{Apellido}}": client.apellido || "",
+          "{{Nombre}}": client.nombre || "",
+          "{{Fecha}}": new Date(selectedTxForEmail.date).toLocaleDateString('es-AR'),
+          "{{Descripción}}": selectedTxForEmail.description || "",
+          "{{Total}}": `${selectedTxForEmail.currency === 'ARS' ? '$' : 'u$s'} ${Math.abs(selectedTxForEmail.amount).toLocaleString('es-AR')}`,
+          "{{Moneda}}": selectedTxForEmail.currency || "",
+          "{{Item}}": selectedTxForEmail.items?.[0]?.name || "N/A",
+          "{{Cantidad}}": selectedTxForEmail.items?.[0]?.qty?.toString() || "N/A",
+          "{{Precio}}": selectedTxForEmail.items?.[0]?.price?.toString() || "N/A",
+          "{{Subtotal}}": selectedTxForEmail.items?.[0] ? (selectedTxForEmail.items[0].qty * selectedTxForEmail.items[0].price).toLocaleString('es-AR') : "N/A"
+        }
+
+        Object.entries(replacements).forEach(([marker, value]) => {
+          subject = subject.replaceAll(marker, value)
+          body = body.replaceAll(marker, value)
+        })
+
+        setProcessedEmail({ subject, body })
+      }
+    }
+  }, [selectedTxForEmail, selectedTemplateId, templates, customers])
 
   const handleAddItem = (itemId: string) => {
     const item = catalog?.find((i: any) => i.id === itemId)
@@ -316,6 +369,27 @@ function TransactionsContent() {
     setFilterEndDate("")
     setFilterOpType("all")
     setFilterCategory("all")
+  }
+
+  const handleOpenEmailDialog = (tx: any) => {
+    const client = customers?.find(c => c.id === tx.clientId)
+    if (!client?.mail) {
+      toast({ title: "Sin Email", description: "El cliente no tiene un correo registrado.", variant: "destructive" })
+      return
+    }
+    setSelectedTxForEmail(tx)
+    setSelectedTemplateId("")
+    setProcessedEmail({ subject: "", body: "" })
+    setIsEmailDialogOpen(true)
+  }
+
+  const handleSendEmail = () => {
+    const client = customers?.find(c => c.id === selectedTxForEmail.clientId)
+    if (!client?.mail || !processedEmail.subject || !processedEmail.body) return
+
+    const mailtoLink = `mailto:${client.mail}?subject=${encodeURIComponent(processedEmail.subject)}&body=${encodeURIComponent(processedEmail.body)}`
+    window.location.href = mailtoLink
+    setIsEmailDialogOpen(false)
   }
 
   const filteredTransactions = useMemo(() => {
@@ -710,6 +784,9 @@ function TransactionsContent() {
                                   <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onSelect={() => handleOpenEmailDialog(tx)}>
+                                    <Mail className="h-4 w-4 mr-2" /> Enviar Mail
+                                  </DropdownMenuItem>
                                   <DropdownMenuItem onSelect={() => handleEditTx(tx)}>
                                     <Edit className="h-4 w-4 mr-2" /> Editar
                                   </DropdownMenuItem>
@@ -729,6 +806,55 @@ function TransactionsContent() {
             </Card>
           </div>
         )}
+
+        <Dialog open={isEmailDialogOpen} onOpenChange={setIsEmailDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Mail className="h-5 w-5 text-primary" /> Enviar Factura / Notificación
+              </DialogTitle>
+              <DialogDescription>Selecciona una plantilla para enviar la información de la operación.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Seleccionar Plantilla</Label>
+                <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                  <SelectTrigger><SelectValue placeholder="Elige un formato..." /></SelectTrigger>
+                  <SelectContent>
+                    {templates?.map((t: any) => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {selectedTemplateId && (
+                <div className="space-y-4 animate-in fade-in duration-300">
+                  <div className="p-3 bg-muted/50 rounded-lg border space-y-2">
+                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Vista Previa del Asunto</p>
+                    <p className="text-sm font-bold">{processedEmail.subject || "Cargando..."}</p>
+                  </div>
+                  <div className="p-4 bg-white rounded-lg border shadow-inner space-y-2">
+                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Vista Previa del Cuerpo</p>
+                    <div className="text-xs whitespace-pre-wrap leading-relaxed italic text-slate-700">
+                      {processedEmail.body || "Cargando cuerpo del mensaje..."}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEmailDialogOpen(false)}>Cancelar</Button>
+              <Button 
+                onClick={handleSendEmail} 
+                disabled={!selectedTemplateId} 
+                className="bg-primary font-bold shadow-lg shadow-primary/20"
+              >
+                <Send className="mr-2 h-4 w-4" /> Enviar al Cliente
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <AlertDialog open={!!txToDelete} onOpenChange={(o) => {
           if(!o) setTxToDelete(null);

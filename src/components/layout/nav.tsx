@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -12,7 +13,8 @@ import {
   Bell, 
   Droplets,
   LogOut,
-  Shield
+  Shield,
+  FileText
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -37,6 +39,7 @@ const navItems = [
   { href: "/transactions", label: "Operaciones", icon: ArrowLeftRight },
   { href: "/accounts", label: "Cajas", icon: Wallet },
   { href: "/catalog", label: "Catálogo", icon: Package },
+  { href: "/templates", label: "Plantillas Mail", icon: FileText },
   { href: "/team", label: "Equipo", icon: Shield },
   { href: "/notifications", label: "IA Notificaciones", icon: Bell },
 ]
