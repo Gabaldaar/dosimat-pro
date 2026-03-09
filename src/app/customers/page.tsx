@@ -25,7 +25,8 @@ import {
   CheckCircle2,
   Mail,
   PlusCircle,
-  Copy
+  Copy,
+  Info
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -339,6 +340,11 @@ export default function CustomersPage() {
                             <Badge variant={customer.esClienteReposicion ? "default" : "secondary"} className="text-[10px] font-bold">
                               {customer.esClienteReposicion ? 'REPOSICIÓN' : 'OCASIONAL'}
                             </Badge>
+                            {customer.equipoInstalado?.enComodato && (
+                              <Badge variant="outline" className="text-[10px] font-bold border-amber-500 text-amber-600 bg-amber-50">
+                                COMODATO
+                              </Badge>
+                            )}
                           </div>
                         </div>
                         <div className="text-right space-y-1">
@@ -530,6 +536,22 @@ export default function CustomersPage() {
                   <div className="space-y-2">
                     <Label>Volumen de Piscina (Litros)</Label>
                     <Input type="number" value={formData.equipoInstalado.volumen} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, volumen: Number(e.target.value)}}))} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Medidas de la Pileta</Label>
+                    <Input value={formData.equipoInstalado.medidasPileta} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, medidasPileta: e.target.value}}))} placeholder="Ej: 8x4 metros" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Dosis de Cloro (L/día)</Label>
+                    <Input value={formData.equipoInstalado.dosisCloro} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, dosisCloro: e.target.value}}))} placeholder="Ej: 2 Litros" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Cantidad de Bidones</Label>
+                    <Input type="number" value={formData.equipoInstalado.cantidadBidones} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, cantidadBidones: Number(e.target.value)}}))} />
                   </div>
                 </div>
               </TabsContent>
