@@ -29,7 +29,7 @@ import {
   DialogDescription,
   DialogFooter
 } from "@/components/ui/dialog"
-import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from "@/firebase"
+import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking, useUser } from "@/firebase"
 import { collection, doc } from "firebase/firestore"
 import { useToast } from "@/hooks/use-toast"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -57,7 +57,15 @@ export default function TeamPage() {
   }, [isInviteOpen]);
 
   const handleUpdateRole = (userId: string, newRole: string) => {
+    // Actualizamos perfil básico
     updateDocumentNonBlocking(doc(db, 'users', userId), { role: newRole })
+    
+    // Sincronizamos con el sistema de seguridad (user_roles)
+    const roleId = newRole.toLowerCase() === 'admin' ? 'admin' : 'staff';
+    setDocumentNonBlocking(doc(db, 'user_roles', userId), { 
+      roleIds: [roleId] 
+    }, { merge: true })
+
     toast({ title: "Rol actualizado", description: `Usuario ahora es ${newRole}` })
   }
 
@@ -68,6 +76,7 @@ export default function TeamPage() {
     }
     if (confirm("¿Estás seguro de eliminar a este usuario del sistema?")) {
       deleteDocumentNonBlocking(doc(db, 'users', userId))
+      deleteDocumentNonBlocking(doc(db, 'user_roles', userId))
       toast({ title: "Usuario eliminado" })
     }
   }
@@ -161,7 +170,6 @@ export default function TeamPage() {
               <DialogTitle className="flex items-center gap-2">
                 <UserPlus className="h-5 w-5 text-primary" /> ¿Cómo agregar un colaborador?
               </DialogTitle>
-              {/* Fix: Using asChild to allow div nesting inside DialogDescription (which is a p tag) */}
               <DialogDescription asChild>
                 <div className="pt-4 space-y-4">
                   <div className="flex gap-3">

@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState } from "react"
@@ -44,6 +43,11 @@ export default function LoginPage() {
           name: name || email.split('@')[0],
           email: email,
           role: 'Admin' 
+        }, { merge: true })
+
+        // Creamos el registro de rol para que la seguridad de Firestore lo reconozca
+        setDocumentNonBlocking(doc(firestore, 'user_roles', user.uid), {
+          roleIds: ['admin']
         }, { merge: true })
         
         toast({ title: "Cuenta creada", description: "Has sido registrado como Administrador." })
