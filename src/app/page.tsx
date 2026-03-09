@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useEffect } from "react"
+import { useMemo } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
@@ -12,20 +12,18 @@ import {
   Plus,
   Loader2,
   MapPin,
-  Calendar,
-  ShieldAlert
+  Calendar
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid } from "recharts"
-import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc, setDocumentNonBlocking } from "@/firebase"
-import { collection, query, orderBy, limit, doc } from "firebase/firestore"
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { collection, query, orderBy, limit } from "firebase/firestore"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 
 export default function Dashboard() {
   const db = useFirestore()
-  const { user } = useUser()
 
   // Queries
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
@@ -36,29 +34,6 @@ export default function Dashboard() {
   const { data: accounts, isLoading: loadingAccounts } = useCollection(accountsQuery)
   const { data: transactions, isLoading: loadingTx } = useCollection(txQuery)
   const { data: clients, isLoading: loadingClients } = useCollection(clientsQuery)
-
-  // Auth & Role "Self-Repair" Logic
-  const userRoleRef = useMemoFirebase(() => user ? doc(db, 'user_roles', user.uid) : null, [db, user])
-  const { data: userRole, isLoading: loadingRole } = useDoc(userRoleRef)
-
-  useEffect(() => {
-    // Si el usuario está logueado pero NO tiene documento de rol, 
-    // lo creamos automáticamente como admin para evitar bloqueos de permisos.
-    if (user && !loadingRole && !userRole) {
-      console.log("Repairing missing user role for:", user.email)
-      setDocumentNonBlocking(doc(db, 'user_roles', user.uid), {
-        roleIds: ['admin']
-      }, { merge: true })
-      
-      // También aseguramos que tenga un perfil básico si falta
-      setDocumentNonBlocking(doc(db, 'users', user.uid), {
-        id: user.uid,
-        email: user.email,
-        name: user.displayName || user.email?.split('@')[0],
-        role: 'Admin'
-      }, { merge: true })
-    }
-  }, [user, userRole, loadingRole, db])
 
   const totals = useMemo(() => {
     if (!accounts) return { ARS: 0, USD: 0 }
@@ -100,7 +75,7 @@ export default function Dashboard() {
     expenses: { label: "Gastos (ARS)", color: "hsl(var(--accent))" },
   } satisfies ChartConfig
 
-  const isLoading = loadingAccounts || loadingTx || loadingClients || loadingRole
+  const isLoading = loadingAccounts || loadingTx || loadingClients
 
   return (
     <div className="flex min-h-screen bg-background w-full">
