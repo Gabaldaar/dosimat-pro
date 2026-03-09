@@ -30,7 +30,8 @@ import {
   AlertTriangle,
   Mail,
   Send,
-  Eye
+  Eye,
+  Fingerprint
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -121,6 +122,10 @@ function TransactionsContent() {
   const [cobroCurrency, setCobroCurrency] = useState("ARS")
   const [cobroAccountId, setCobroAccountId] = useState("pending")
   const [txDescription, setTxDescription] = useState("")
+
+  const selectedClient = useMemo(() => {
+    return customers?.find(c => c.id === (selectedCustomerId || editingTx?.clientId));
+  }, [customers, selectedCustomerId, editingTx]);
 
   useEffect(() => {
     if (clientIdParam) {
@@ -509,6 +514,14 @@ function TransactionsContent() {
                         ))}
                       </SelectContent>
                     </Select>
+                    {selectedClient && (
+                      <div className="flex items-center gap-1 mt-1 px-1">
+                        <Fingerprint className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                          CUIT/DNI: {selectedClient.cuit_dni || 'S/D'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2 text-primary font-bold"><CalendarIcon className="h-4 w-4" /> Fecha de Operación</Label>
