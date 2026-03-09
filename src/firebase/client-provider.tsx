@@ -5,16 +5,12 @@ import { FirebaseProvider } from '@/firebase/provider';
 import { initializeFirebase } from '@/firebase';
 import { usePathname, useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, User } from 'firebase/auth';
 
 interface FirebaseClientProviderProps {
   children: ReactNode;
 }
 
-/**
- * Mensaje de carga sincronizado para evitar errores de hidratación.
- * El servidor y el cliente DEBEN renderizar exactamente el mismo texto inicial.
- */
 const LOADING_MESSAGE = "Sincronizando acceso...";
 
 export function FirebaseClientProvider({ children }: FirebaseClientProviderProps) {
@@ -27,6 +23,7 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
   
   const [isInitializing, setIsInitializing] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -36,24 +33,25 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
     if (!mounted) return;
 
     if (firebaseServices.auth) {
-      const unsubscribe = onAuthStateChanged(firebaseServices.auth, (user) => {
-        if (!user) {
+      const unsubscribe = onAuthStateChanged(firebaseServices.auth, (authUser) => {
+        setUser(authUser);
+        if (!authUser) {
           setIsInitializing(false);
           if (pathname !== '/login') {
             router.replace('/login');
           }
-          return;
-        }
-        setIsInitializing(false);
-        if (pathname === '/login') {
-          router.replace('/');
+        } else {
+          setIsInitializing(false);
+          if (pathname === '/login') {
+            router.replace('/');
+          }
         }
       });
       return () => unsubscribe();
     }
   }, [firebaseServices.auth, pathname, router, mounted]);
 
-  // Durante la hidratación (mounted=false) o validación, mostramos el mismo mensaje
+  // Durante la carga inicial
   if (!mounted || isInitializing) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
@@ -61,6 +59,16 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
         <p className="text-muted-foreground animate-pulse font-medium">
           {LOADING_MESSAGE}
         </p>
+      </div>
+    );
+  }
+
+  // Si no hay usuario y no estamos en login, forzamos espera al redirect
+  if (!user && pathname !== '/login') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
+        <RefreshCw className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-muted-foreground font-medium">Redirigiendo al acceso...</p>
       </div>
     );
   }

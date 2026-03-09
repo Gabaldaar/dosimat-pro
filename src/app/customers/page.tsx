@@ -54,7 +54,6 @@ export default function CustomersPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<any>(null)
 
-  // Fix para puntero bloqueado en ShadCN Dialogs
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -228,7 +227,6 @@ export default function CustomersPage() {
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="space-y-1">
                 <Label className="text-[10px] uppercase font-bold text-muted-foreground">Comodato</Label>
                 <Select value={filterComodato} onValueChange={setFilterComodato}>
@@ -240,7 +238,6 @@ export default function CustomersPage() {
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="space-y-1">
                 <Label className="text-[10px] uppercase font-bold text-muted-foreground">Reposición</Label>
                 <Select value={filterReposicion} onValueChange={setFilterReposicion}>
@@ -252,7 +249,6 @@ export default function CustomersPage() {
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="flex items-end">
                 <Button variant="outline" className="h-10 w-full font-bold" onClick={resetFilters}>
                   <FilterX className="h-4 w-4 mr-2" /> Limpiar
@@ -263,7 +259,7 @@ export default function CustomersPage() {
         </section>
 
         {!isLoading && customers && customers.length > 0 && (
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
+          <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card className="glass-card bg-primary/5 border-l-4 border-l-primary overflow-hidden relative">
               <Calculator className="absolute right-4 top-1/2 -translate-y-1/2 h-12 w-12 text-primary/10 -rotate-12" />
               <CardContent className="p-4">
@@ -276,7 +272,6 @@ export default function CustomersPage() {
                 </h3>
               </CardContent>
             </Card>
-
             <Card className="glass-card bg-emerald-50/50 border-l-4 border-l-emerald-500 overflow-hidden relative">
               <TrendingUp className="absolute right-4 top-1/2 -translate-y-1/2 h-12 w-12 text-emerald-500/10 -rotate-12" />
               <CardContent className="p-4">
@@ -302,7 +297,6 @@ export default function CustomersPage() {
             <User className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
             <h3 className="text-lg font-semibold">Sin coincidencias</h3>
             <p className="text-muted-foreground">No hay clientes que coincidan con los filtros aplicados.</p>
-            <Button variant="link" onClick={resetFilters} className="mt-2 text-primary">Restablecer filtros</Button>
           </Card>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -331,11 +325,6 @@ export default function CustomersPage() {
                             <Badge variant={customer.esClienteReposicion ? "default" : "secondary"} className="text-[10px] font-bold">
                               {customer.esClienteReposicion ? 'REPOSICIÓN' : 'OCASIONAL'}
                             </Badge>
-                            {customer.equipoInstalado?.enComodato && (
-                              <Badge variant="outline" className="text-[10px] font-bold border-amber-500 text-amber-600 bg-amber-50">
-                                COMODATO
-                              </Badge>
-                            )}
                           </div>
                         </div>
                         <div className="text-right space-y-1">
@@ -398,15 +387,6 @@ export default function CustomersPage() {
                               <a href={`mailto:${customer.mail}`}><Mail className="h-3 w-3" /> Email</a>
                             </Button>
                           )}
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="h-8 gap-2 font-bold" 
-                            asChild 
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Link href={`/transactions?clientId=${customer.id}`}><History className="h-3 w-3" /> Historial</Link>
-                          </Button>
                         </div>
                       </div>
                     </div>
@@ -530,10 +510,6 @@ export default function CustomersPage() {
                   <Label>Volumen de Piscina (Litros)</Label>
                   <Input type="number" value={formData.equipoInstalado.volumen} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, volumen: Number(e.target.value)}}))} />
                 </div>
-              </div>
-              <div className="space-y-2 mt-4">
-                <Label>Medidas y Dosis</Label>
-                <Input value={formData.equipoInstalado.medidasPileta} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, medidasPileta: e.target.value}}))} placeholder="Ej: 8x4 metros" />
               </div>
             </TabsContent>
           </Tabs>
