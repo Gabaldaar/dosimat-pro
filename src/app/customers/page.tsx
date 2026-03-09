@@ -24,7 +24,8 @@ import {
   Calculator,
   CheckCircle2,
   Mail,
-  PlusCircle
+  PlusCircle,
+  Copy
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -187,6 +188,16 @@ export default function CustomersPage() {
   const handleOpenMaps = (address: string, city: string) => {
     const query = encodeURIComponent(`${address}, ${city}, Argentina`)
     window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank')
+  }
+
+  const handleCopyClipboard = (customer: any, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const text = `*${customer.apellido}, ${customer.nombre}*\nCelular: ${customer.telefono || 'N/A'}\nDir: ${customer.direccion || 'N/A'}\nemail: ${customer.mail || 'N/A'}`
+    navigator.clipboard.writeText(text)
+    toast({
+      title: "Copiado",
+      description: "Información del cliente copiada para WhatsApp."
+    })
   }
 
   return (
@@ -369,6 +380,14 @@ export default function CustomersPage() {
                             onClick={(e) => { e.stopPropagation(); handleOpenMaps(customer.direccion, customer.localidad); }}
                           >
                             <Map className="h-3 w-3" /> Mapa
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="h-8 gap-2 font-bold"
+                            onClick={(e) => handleCopyClipboard(customer, e)}
+                          >
+                            <Copy className="h-3 w-3" /> Copiar
                           </Button>
                           <Button 
                             variant="outline" 
