@@ -29,10 +29,12 @@ import {
   Copy,
   ArrowLeftRight,
   Settings2,
-  MapPinned
+  MapPinned,
+  Send,
+  Info
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
@@ -57,26 +59,30 @@ export default function CustomersPage() {
   
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const zonesQuery = useMemoFirebase(() => collection(db, 'zones'), [db])
+  const templatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
   
   const { data: customers, isLoading } = useCollection(clientsQuery)
   const { data: zones, isLoading: isLoadingZones } = useCollection(zonesQuery)
+  const { data: templates } = useCollection(templatesQuery)
   
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isZoneManagerOpen, setIsZoneManagerOpen] = useState(false)
+  const [isBulkEmailOpen, setIsBulkEmailOpen] = useState(false)
+  const [selectedTemplateId, setSelectedTemplateId] = useState("")
   const [newZoneName, setNewZoneName] = useState("")
   const [editingCustomer, setEditingCustomer] = useState<any>(null)
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        if (!isDialogOpen && !isZoneManagerOpen) {
+        if (!isDialogOpen && !isZoneManagerOpen && !isBulkEmailOpen) {
           document.body.style.pointerEvents = 'auto';
         }
       }
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isDialogOpen, isZoneManagerOpen]);
+  }, [isDialogOpen, isZoneManagerOpen, isBulkEmailOpen]);
 
   const defaultFormData = {
     apellido: "",
@@ -230,6 +236,27 @@ export default function CustomersPage() {
     }
   }
 
+  const handleSendBulkEmail = () => {
+    const template = templates?.find(t => t.id === selectedTemplateId)
+    if (!template) return
+
+    const emails = filteredCustomers
+      .map(c => c.mail)
+      .filter(m => !!m && m.includes('@'))
+      .join(';')
+
+    if (!emails) {
+      toast({ title: "Sin emails", description: "Ningún cliente filtrado tiene un email válido.", variant: "destructive" })
+      return
+    }
+
+    // Al ser masivo, no procesamos marcadores individuales por privacidad y coherencia
+    const mailtoLink = `mailto:?bcc=${encodeURIComponent(emails)}&subject=${encodeURIComponent(template.subject)}&body=${encodeURIComponent(template.body)}`
+    window.location.href = mailtoLink
+    setIsBulkEmailOpen(false)
+    toast({ title: "Correo Masivo Preparado", description: "Se ha abierto tu gestor de correo con los clientes en CCO." })
+  }
+
   return (
     <div className="flex min-h-screen bg-background w-full">
       <Sidebar />
@@ -242,7 +269,10 @@ export default function CustomersPage() {
               <p className="text-muted-foreground">Gestión de perfiles y cuentas corrientes.</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setIsBulkEmailOpen(true)} className="border-primary text-primary hover:bg-primary/5">
+              <Mail className="mr-2 h-4 w-4" /> Mail a Filtrados
+            </Button>
             <Button variant="outline" onClick={() => setIsZoneManagerOpen(true)}>
               <MapPinned className="mr-2 h-4 w-4" /> Administrar Zonas
             </Button>
@@ -675,6 +705,62 @@ export default function CustomersPage() {
             </div>
             <DialogFooter>
               <Button onClick={() => setIsZoneManagerOpen(false)}>Cerrar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isBulkEmailOpen} onOpenChange={setIsBulkEmailOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Mail className="h-5 w-5 text-primary" /> Envío Masivo a Filtrados
+              </DialogTitle>
+              <DialogDescription>
+                Se enviará un mail a {filteredCustomers.filter(c => c.mail).length} clientes usando CCO (Copia Oculta).
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Seleccionar Plantilla</Label>
+                <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                  <SelectTrigger><SelectValue placeholder="Elige un formato..." /></SelectTrigger>
+                  <SelectContent>
+                    {templates?.map((t: any) => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Card className="bg-amber-50 border-amber-200 p-3">
+                <div className="flex gap-2 text-amber-800">
+                  <Info className="h-4 w-4 shrink-0" />
+                  <p className="text-xs">
+                    <b>Nota:</b> En los envíos masivos, los marcadores dinámicos (como el nombre o saldo) no se personalizarán para cada cliente. Se recomienda usar plantillas con mensajes genéricos.
+                  </p>
+                </div>
+              </Card>
+
+              {selectedTemplateId && (
+                <div className="space-y-3 animate-in fade-in duration-300">
+                   <div className="p-2 bg-muted/50 rounded border text-sm font-bold truncate">
+                     Asunto: {templates?.find(t => t.id === selectedTemplateId)?.subject}
+                   </div>
+                   <div className="p-3 bg-white rounded border text-xs whitespace-pre-wrap italic text-slate-600 max-h-[150px] overflow-y-auto">
+                     {templates?.find(t => t.id === selectedTemplateId)?.body}
+                   </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsBulkEmailOpen(false)}>Cancelar</Button>
+              <Button 
+                onClick={handleSendBulkEmail} 
+                disabled={!selectedTemplateId} 
+                className="bg-primary font-bold"
+              >
+                <Send className="mr-2 h-4 w-4" /> Preparar Envío
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
