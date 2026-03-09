@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useMemo } from "react"
@@ -84,7 +83,7 @@ export default function Dashboard() {
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-headline font-bold text-primary">Dashboard Administrativo</h1>
-            <p className="text-muted-foreground">ChloriTrack Pro Cloud • Control financiero y operativo.</p>
+            <p className="text-muted-foreground">Dosimat • Control financiero y operativo.</p>
           </div>
           <div className="flex gap-2">
             <Link href="/transactions">
