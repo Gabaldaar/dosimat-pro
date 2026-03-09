@@ -161,24 +161,27 @@ export default function TeamPage() {
               <DialogTitle className="flex items-center gap-2">
                 <UserPlus className="h-5 w-5 text-primary" /> ¿Cómo agregar un colaborador?
               </DialogTitle>
-              <DialogDescription className="pt-4 space-y-4">
-                <div className="flex gap-3">
-                  <div className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center text-xs shrink-0">1</div>
-                  <p className="text-sm text-foreground">
-                    Pide a tu colaborador que abra la aplicación y haga clic en <b>"Registrate aquí"</b> en la pantalla de inicio.
-                  </p>
-                </div>
-                <div className="flex gap-3">
-                  <div className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center text-xs shrink-0">2</div>
-                  <p className="text-sm text-foreground">
-                    Una vez que complete su registro, su nombre aparecerá automáticamente en esta lista de <b>Equipo</b>.
-                  </p>
-                </div>
-                <div className="flex gap-3">
-                  <div className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center text-xs shrink-0">3</div>
-                  <p className="text-sm text-foreground">
-                    Desde esta pantalla, podrás cambiar su rol a <b>Admin</b> o mantenerlo como <b>Empleado</b> según lo necesites.
-                  </p>
+              {/* Fix: Using asChild to allow div nesting inside DialogDescription (which is a p tag) */}
+              <DialogDescription asChild>
+                <div className="pt-4 space-y-4">
+                  <div className="flex gap-3">
+                    <div className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center text-xs shrink-0">1</div>
+                    <p className="text-sm text-foreground">
+                      Pide a tu colaborador que abra la aplicación y haga clic en <b>"Registrate aquí"</b> en la pantalla de inicio.
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center text-xs shrink-0">2</div>
+                    <p className="text-sm text-foreground">
+                      Una vez que complete su registro, su nombre aparecerá automáticamente en esta lista de <b>Equipo</b>.
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center text-xs shrink-0">3</div>
+                    <p className="text-sm text-foreground">
+                      Desde esta pantalla, podrás cambiar su rol a <b>Admin</b> o mantenerlo como <b>Empleado</b> según lo necesites.
+                    </p>
+                  </div>
                 </div>
               </DialogDescription>
             </DialogHeader>
