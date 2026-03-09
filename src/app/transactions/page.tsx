@@ -146,13 +146,21 @@ function TransactionsContent() {
         let subject = tpl.subject
         let body = tpl.body
         
+        const currencySymbol = selectedTxForEmail.currency === 'ARS' ? '$' : 'u$s';
+        
+        // Generar lista de items formateada
+        const listaItems = selectedTxForEmail.items?.map((i: any) => 
+          `- ${i.qty} x ${i.name} (${currencySymbol}${i.price})`
+        ).join('\n') || "N/A";
+
         const replacements: Record<string, string> = {
           "{{Apellido}}": client.apellido || "",
           "{{Nombre}}": client.nombre || "",
           "{{Fecha}}": new Date(selectedTxForEmail.date).toLocaleDateString('es-AR'),
           "{{Descripción}}": selectedTxForEmail.description || "",
-          "{{Total}}": `${selectedTxForEmail.currency === 'ARS' ? '$' : 'u$s'} ${Math.abs(selectedTxForEmail.amount).toLocaleString('es-AR')}`,
+          "{{Total}}": `${currencySymbol} ${Math.abs(selectedTxForEmail.amount).toLocaleString('es-AR')}`,
           "{{Moneda}}": selectedTxForEmail.currency || "",
+          "{{Detalle_Items}}": listaItems,
           "{{Item}}": selectedTxForEmail.items?.[0]?.name || "N/A",
           "{{Cantidad}}": selectedTxForEmail.items?.[0]?.qty?.toString() || "N/A",
           "{{Precio}}": selectedTxForEmail.items?.[0]?.price?.toString() || "N/A",

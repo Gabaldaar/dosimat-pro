@@ -143,7 +143,19 @@ export default function TemplatesPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {["Apellido", "Nombre", "Fecha", "Descripción", "Item", "Cantidad", "Precio", "Moneda", "Subtotal", "Total"].map(m => (
+            {[
+              "Apellido", 
+              "Nombre", 
+              "Fecha", 
+              "Descripción", 
+              "Detalle_Items", 
+              "Item", 
+              "Cantidad", 
+              "Precio", 
+              "Moneda", 
+              "Subtotal", 
+              "Total"
+            ].map(m => (
               <div key={m} className="text-[10px] font-mono bg-white border border-blue-100 rounded px-2 py-1 flex justify-between">
                 <span className="text-blue-600">{"{{"}{m}{"}}"}</span>
               </div>
@@ -171,7 +183,7 @@ export default function TemplatesPage() {
                 <Textarea 
                   value={formData.body} 
                   onChange={(e) => setFormData({...formData, body: e.target.value})} 
-                  placeholder="Escribe el mensaje aquí. Usa {{Nombre}}, {{Total}}, etc..."
+                  placeholder="Escribe el mensaje aquí. Usa {{Nombre}}, {{Detalle_Items}}, {{Total}}, etc..."
                   className="min-h-[200px]"
                 />
               </div>
