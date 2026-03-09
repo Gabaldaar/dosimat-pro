@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
@@ -123,6 +124,20 @@ function TransactionsContent() {
   const [cobroAccountId, setCobroAccountId] = useState("pending")
   const [txDescription, setTxDescription] = useState("")
 
+  // SOLUCIÓN TÉCNICA DEFINITIVA: Observador de mutaciones para forzar desbloqueo del puntero
+  // Esto evita que la app se "cuelgue" al cerrar diálogos o eliminar registros
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      if (document.body.style.pointerEvents === 'none') {
+        if (!isEmailDialogOpen && !txToDelete) {
+          document.body.style.pointerEvents = 'auto';
+        }
+      }
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+    return () => observer.disconnect();
+  }, [isEmailDialogOpen, txToDelete]);
+
   const selectedClient = useMemo(() => {
     return customers?.find(c => c.id === (selectedCustomerId || editingTx?.clientId));
   }, [customers, selectedCustomerId, editingTx]);
@@ -139,7 +154,6 @@ function TransactionsContent() {
     }
   }, [clientIdParam, modeParam])
 
-  // Lógica de procesamiento de Email con Marcadores
   useEffect(() => {
     if (selectedTxForEmail && selectedTemplateId && templates && customers && accounts) {
       const tpl = templates.find(t => t.id === selectedTemplateId)
@@ -151,13 +165,11 @@ function TransactionsContent() {
         
         const currencySymbol = selectedTxForEmail.currency === 'ARS' ? '$' : 'u$s';
         
-        // Generar lista de items formateada para el marcador global incluyendo el subtotal por línea
         const listaItems = selectedTxForEmail.items?.map((i: any) => {
           const itemSubtotal = (Number(i.qty) || 0) * (Number(i.price) || 0);
           return `- ${i.qty} x ${i.name} (${currencySymbol}${Number(i.price).toLocaleString('es-AR')}) - ${currencySymbol}${itemSubtotal.toLocaleString('es-AR')}`;
         }).join('\n') || "N/A";
 
-        // Lógica de Saldo_Cuenta con indicadores
         const balanceValue = selectedTxForEmail.currency === 'ARS' ? (client.saldoActual || 0) : (client.saldoUSD || 0);
         let balanceStatus = "(Sin Deuda)";
         if (balanceValue > 0) balanceStatus = "(Acreedor)";
@@ -165,7 +177,6 @@ function TransactionsContent() {
         
         const formattedBalance = `${currencySymbol} ${Math.abs(balanceValue).toLocaleString('es-AR')} ${balanceStatus}`;
 
-        // Lógica de Metodo_Pago basada en el tipo de caja
         const acc = accounts.find(a => a.id === selectedTxForEmail.financialAccountId);
         let metodoPago = "A Cuenta / Pendiente";
         if (acc) {
@@ -304,6 +315,8 @@ function TransactionsContent() {
     revertTxBalances(txToDelete)
     deleteDocumentNonBlocking(doc(db, 'transactions', txToDelete.id))
     setTxToDelete(null)
+    // Forzamos desbloqueo extra tras un pequeño delay
+    setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100)
     toast({ title: "Operación eliminada" })
   }
 
@@ -422,7 +435,6 @@ function TransactionsContent() {
     const client = customers?.find(c => c.id === selectedTxForEmail.clientId)
     if (!client?.mail || !processedEmail.subject || !processedEmail.body) return
 
-    // Utilizamos mailto para abrir el gestor predeterminado y permitir revisión final
     const mailtoLink = `mailto:${client.mail}?subject=${encodeURIComponent(processedEmail.subject)}&body=${encodeURIComponent(processedEmail.body)}`
     window.location.href = mailtoLink
     setIsEmailDialogOpen(false)
