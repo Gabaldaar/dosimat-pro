@@ -86,7 +86,7 @@ export default function AccountsPage() {
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false)
   const [accountToDelete, setAccountToDelete] = useState<any | null>(null)
   
-  // SOLUCIÓN TÉCNICA DEFINITIVA: Observador de mutaciones para forzar desbloqueo del puntero
+  // Observador de mutaciones para forzar desbloqueo del puntero
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -180,7 +180,7 @@ export default function AccountsPage() {
     setIsAccountDialogOpen(false)
     
     setDocumentNonBlocking(doc(db, 'financial_accounts', id), { ...accountFormData, id }, { merge: true })
-    toast({ title: editingAccountId ? "Cuenta actualizada" : "Cuenta creada" })
+    toast({ title: editingAccountId ? "Caja actualizada" : "Caja creada" })
   }
 
   const confirmDeleteAccount = () => {
@@ -188,7 +188,7 @@ export default function AccountsPage() {
     deleteDocumentNonBlocking(doc(db, 'financial_accounts', accountToDelete.id))
     setAccountToDelete(null)
     setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100)
-    toast({ title: "Cuenta eliminada" })
+    toast({ title: "Caja eliminada" })
   }
 
   const handleOpenTxDialog = (account: any, type: 'income' | 'expense') => {
@@ -287,7 +287,7 @@ export default function AccountsPage() {
           <div className="flex items-center gap-4">
             <SidebarTrigger className="hidden md:flex" />
             <div>
-              <h1 className="text-3xl font-headline font-bold text-primary">Cuentas Financieras</h1>
+              <h1 className="text-3xl font-headline font-bold text-primary">Cajas Financieras</h1>
               <p className="text-muted-foreground">Saldos y movimientos en tiempo real.</p>
             </div>
           </div>
@@ -296,7 +296,7 @@ export default function AccountsPage() {
               <ArrowRightLeft className="mr-2 h-4 w-4" /> Transferencia
             </Button>
             <Button onClick={() => handleOpenAccountDialog()}>
-              <Plus className="mr-2 h-4 w-4" /> Nueva Cuenta
+              <Plus className="mr-2 h-4 w-4" /> Nueva Caja
             </Button>
           </div>
         </header>
@@ -304,7 +304,7 @@ export default function AccountsPage() {
         {loadingAccounts ? (
           <div className="flex flex-col items-center justify-center h-48 gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Cargando cuentas...</p>
+            <p className="text-sm text-muted-foreground">Cargando cajas...</p>
           </div>
         ) : (accounts && accounts.length > 0) ? (
           <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -328,7 +328,7 @@ export default function AccountsPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onSelect={() => handleOpenAccountDialog(account)}>Editar parámetros</DropdownMenuItem>
                           <DropdownMenuItem className="text-destructive" onSelect={() => setAccountToDelete(account)}>
-                            <Trash2 className="mr-2 h-4 w-4" /> Eliminar cuenta
+                            <Trash2 className="mr-2 h-4 w-4" /> Eliminar caja
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -359,9 +359,9 @@ export default function AccountsPage() {
         ) : (
           <Card className="p-12 text-center border-dashed bg-muted/5">
             <Wallet className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
-            <h3 className="text-lg font-semibold">No hay cuentas registradas</h3>
+            <h3 className="text-lg font-semibold">No hay cajas registradas</h3>
             <p className="text-muted-foreground mb-6">Crea una caja o banco para empezar a registrar movimientos.</p>
-            <Button onClick={() => handleOpenAccountDialog()}><Plus className="mr-2 h-4 w-4" /> Agregar Cuenta</Button>
+            <Button onClick={() => handleOpenAccountDialog()}><Plus className="mr-2 h-4 w-4" /> Agregar Caja</Button>
           </Card>
         )}
 
@@ -421,7 +421,174 @@ export default function AccountsPage() {
           </Card>
         </section>
 
-        {/* Cierre de Dialogs omitido para brevedad, permanecen iguales */}
+        {/* Dialogs */}
+        <Dialog open={isAccountDialogOpen} onOpenChange={setIsAccountDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{editingAccountId ? 'Editar Caja' : 'Nueva Caja'}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Nombre de la Caja / Banco</Label>
+                <Input value={accountFormData.name} onChange={(e) => setAccountFormData({...accountFormData, name: e.target.value})} placeholder="Ej: Caja Central o Banco Galicia" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Tipo</Label>
+                  <Select value={accountFormData.type} onValueChange={(v) => setAccountFormData({...accountFormData, type: v})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Cash">Efectivo</SelectItem>
+                      <SelectItem value="Bank">Banco / Digital</SelectItem>
+                      <SelectItem value="Other">Otro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Moneda</Label>
+                  <Select value={accountFormData.currency} onValueChange={(v) => setAccountFormData({...accountFormData, currency: v})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ARS">Pesos (ARS)</SelectItem>
+                      <SelectItem value="USD">Dólares (USD)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {!editingAccountId && (
+                <div className="space-y-2">
+                  <Label>Saldo Inicial</Label>
+                  <Input type="number" value={accountFormData.initialBalance} onChange={(e) => setAccountFormData({...accountFormData, initialBalance: Number(e.target.value)})} />
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsAccountDialogOpen(false)}>Cancelar</Button>
+              <Button onClick={handleSaveAccount}>Guardar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isTxDialogOpen} onOpenChange={setIsTxDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className={txType === 'income' ? 'text-emerald-600' : 'text-rose-600'}>
+                {txType === 'income' ? 'Registrar Ingreso de Saldo' : 'Registrar Gasto Manual'}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Monto ({selectedAccount?.currency})</Label>
+                <Input type="number" value={txFormData.amount} onChange={(e) => setTxFormData({...txFormData, amount: Number(e.target.value)})} className="text-lg font-bold" />
+              </div>
+              {txType === 'expense' && (
+                <div className="space-y-2">
+                  <Label>Categoría / Rubro</Label>
+                  <Select value={txFormData.categoryId} onValueChange={(v) => setTxFormData({...txFormData, categoryId: v})}>
+                    <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                    <SelectContent>
+                      {expenseCategories?.map((c: any) => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label>Descripción / Concepto</Label>
+                <Input value={txFormData.description} onChange={(e) => setTxFormData({...txFormData, description: e.target.value})} placeholder="Ej: Compra de insumos" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsTxDialogOpen(false)}>Cancelar</Button>
+              <Button onClick={handleProcessTx}>Procesar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Transferencia entre Cajas</DialogTitle></DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Desde</Label>
+                  <Select value={transferFormData.fromId} onValueChange={(v) => setTransferFormData({...transferFormData, fromId: v})}>
+                    <SelectTrigger><SelectValue placeholder="Origen" /></SelectTrigger>
+                    <SelectContent>
+                      {accounts?.map((a: any) => (
+                        <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Hacia</Label>
+                  <Select value={transferFormData.toId} onValueChange={(v) => setTransferFormData({...transferFormData, toId: v})}>
+                    <SelectTrigger><SelectValue placeholder="Destino" /></SelectTrigger>
+                    <SelectContent>
+                      {accounts?.map((a: any) => (
+                        <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Monto a transferir ({fromAcc?.currency || ''})</Label>
+                <Input type="number" value={transferFormData.amount} onChange={(e) => setTransferFormData({...transferFormData, amount: Number(e.target.value)})} />
+              </div>
+              {fromAcc && toAcc && fromAcc.currency !== toAcc.currency && (
+                <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs space-y-1">
+                  <p className="font-bold text-blue-800">Transferencia Multimoneda Detectada</p>
+                  <p>Cotización: 1 USD = {exchangeRate} ARS</p>
+                  {calculatedReceipt && (
+                    <p className="font-black">Recibirá aprox: {toAcc.currency === 'ARS' ? '$' : 'u$s'} {calculatedReceipt.toLocaleString('es-AR')}</p>
+                  )}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsTransferDialogOpen(false)}>Cancelar</Button>
+              <Button onClick={handleTransfer}>Confirmar Transferencia</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Rubros de Gasto</DialogTitle></DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="flex gap-2">
+                <Input placeholder="Nuevo rubro..." value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} />
+                <Button onClick={handleAddCategory}><Plus className="h-4 w-4" /></Button>
+              </div>
+              <ScrollArea className="h-[200px] border rounded-md p-2">
+                {expenseCategories?.map((cat: any) => (
+                  <div key={cat.id} className="flex justify-between items-center p-2 border-b last:border-0">
+                    <span className="text-sm">{cat.name}</span>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteDocumentNonBlocking(doc(db, 'expense_categories', cat.id))}><Trash2 className="h-4 w-4" /></Button>
+                  </div>
+                ))}
+              </ScrollArea>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <AlertDialog open={!!accountToDelete} onOpenChange={(o) => { if(!o) setAccountToDelete(null); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Se borrará la caja <b>{accountToDelete?.name}</b>. Las transacciones existentes no se borrarán pero perderán su referencia a esta caja.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeleteAccount} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Eliminar</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </SidebarInset>
 
       <MobileNav />

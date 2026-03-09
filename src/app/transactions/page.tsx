@@ -440,7 +440,7 @@ function TransactionsContent() {
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label>Cuenta Destino</Label>
+                        <Label>Caja Destino</Label>
                         <Select value={cobroAccountId} onValueChange={setCobroAccountId}>
                           <SelectTrigger className="bg-white"><SelectValue placeholder="Caja/Banco..." /></SelectTrigger>
                           <SelectContent>
@@ -640,7 +640,7 @@ function TransactionsContent() {
                    <Select value={filterAccount} onValueChange={setFilterAccount}>
                      <SelectTrigger className="w-[160px] h-9"><SelectValue /></SelectTrigger>
                      <SelectContent>
-                       <SelectItem value="all">Cuentas/Cajas</SelectItem>
+                       <SelectItem value="all">Cajas/Bancos</SelectItem>
                        <SelectItem value="null">A Cuenta (Pendiente)</SelectItem>
                        {accounts?.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
                      </SelectContent>
@@ -739,7 +739,7 @@ function TransactionsContent() {
                 <AlertTriangle className="h-5 w-5" /> ¿Confirmar eliminación?
               </AlertDialogTitle>
               <AlertDialogDescription>
-                Esta acción es irreversible. Se revertirán automáticamente los saldos del cliente y la cuenta financiera asociada a esta operación.
+                Esta acción es irreversible. Se revertirán automáticamente los saldos del cliente y la caja financiera asociada a esta operación.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

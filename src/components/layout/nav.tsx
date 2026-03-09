@@ -35,7 +35,7 @@ const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/customers", label: "Clientes", icon: Users },
   { href: "/transactions", label: "Operaciones", icon: ArrowLeftRight },
-  { href: "/accounts", label: "Cuentas", icon: Wallet },
+  { href: "/accounts", label: "Cajas", icon: Wallet },
   { href: "/catalog", label: "Catálogo", icon: Package },
   { href: "/team", label: "Equipo", icon: Shield },
   { href: "/notifications", label: "IA Notificaciones", icon: Bell },
