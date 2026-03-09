@@ -146,10 +146,11 @@ function TransactionsContent() {
         
         const currencySymbol = selectedTxForEmail.currency === 'ARS' ? '$' : 'u$s';
         
-        // Generar lista de items formateada para el marcador global
-        const listaItems = selectedTxForEmail.items?.map((i: any) => 
-          `- ${i.qty} x ${i.name} (${currencySymbol}${i.price})`
-        ).join('\n') || "N/A";
+        // Generar lista de items formateada para el marcador global incluyendo el subtotal por línea
+        const listaItems = selectedTxForEmail.items?.map((i: any) => {
+          const itemSubtotal = (Number(i.qty) || 0) * (Number(i.price) || 0);
+          return `- ${i.qty} x ${i.name} (${currencySymbol}${Number(i.price).toLocaleString('es-AR')}) - ${currencySymbol}${itemSubtotal.toLocaleString('es-AR')}`;
+        }).join('\n') || "N/A";
 
         // Lógica de Saldo_Cuenta con indicadores
         const balanceValue = selectedTxForEmail.currency === 'ARS' ? (client.saldoActual || 0) : (client.saldoUSD || 0);
