@@ -18,7 +18,8 @@ import {
   RefreshCw,
   Loader2,
   TrendingUp,
-  AlertTriangle
+  AlertTriangle,
+  Calculator
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -84,6 +85,16 @@ export default function AccountsPage() {
     if (!rawExpenseCategories) return []
     return [...rawExpenseCategories].sort((a, b) => (a.name || "").localeCompare(b.name || ""))
   }, [rawExpenseCategories])
+
+  // Totals Calculation
+  const globalTotals = useMemo(() => {
+    if (!accounts) return { ARS: 0, USD: 0 }
+    return accounts.reduce((acc, curr) => {
+      const currency = curr.currency as 'ARS' | 'USD'
+      acc[currency] = (acc[currency] || 0) + (Number(curr.initialBalance) || 0)
+      return acc
+    }, { ARS: 0, USD: 0 })
+  }, [accounts])
 
   // Dialog States
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false)
@@ -306,6 +317,30 @@ export default function AccountsPage() {
             </Button>
           </div>
         </header>
+
+        {/* Global Totals Section */}
+        {!loadingAccounts && accounts && accounts.length > 0 && (
+          <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card className="glass-card bg-primary/5 border-l-4 border-l-primary overflow-hidden relative">
+              <Calculator className="absolute right-4 top-1/2 -translate-y-1/2 h-12 w-12 text-primary/10 -rotate-12" />
+              <CardContent className="p-4">
+                <p className="text-[10px] font-black text-primary uppercase tracking-widest">Saldo Total ARS</p>
+                <h3 className="text-2xl font-black mt-1 text-primary">
+                  ${globalTotals.ARS.toLocaleString('es-AR')}
+                </h3>
+              </CardContent>
+            </Card>
+            <Card className="glass-card bg-emerald-50/50 border-l-4 border-l-emerald-500 overflow-hidden relative">
+              <TrendingUp className="absolute right-4 top-1/2 -translate-y-1/2 h-12 w-12 text-emerald-500/10 -rotate-12" />
+              <CardContent className="p-4">
+                <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Saldo Total USD</p>
+                <h3 className="text-2xl font-black mt-1 text-emerald-700">
+                  u$s {globalTotals.USD.toLocaleString('es-AR')}
+                </h3>
+              </CardContent>
+            </Card>
+          </section>
+        )}
 
         {loadingAccounts ? (
           <div className="flex flex-col items-center justify-center h-48 gap-3">
