@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from "react"
@@ -7,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Sparkles, Send, Copy, RefreshCw, MessageSquare } from "lucide-react"
+import { Sparkles, Send, Copy, RefreshCw, MessageSquare, Mail, Phone, Info } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { generatePersonalizedNotification, type GenerateNotificationOutput } from "@/ai/flows/generate-personalized-notifications"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
@@ -24,16 +25,19 @@ export default function NotificationsPage() {
   const { data: customers } = useCollection(clientsQuery)
 
   const [formData, setFormData] = useState({
+    customerId: "",
     customerName: "",
     eventType: "chlorineRefill" as const,
     eventDetails: ""
   })
 
+  const selectedCustomer = customers?.find(c => c.id === formData.customerId)
+
   const handleGenerate = async () => {
     if (!formData.customerName || !formData.eventDetails) {
       toast({
         title: "Campos requeridos",
-        description: "Por favor completa el nombre del cliente y los detalles del evento.",
+        description: "Por favor selecciona un cliente y escribe los detalles del evento.",
         variant: "destructive"
       })
       return
@@ -68,6 +72,25 @@ export default function NotificationsPage() {
     }
   }
 
+  const sendWhatsApp = () => {
+    if (!result) return
+    const phone = selectedCustomer?.telefono?.replace(/\D/g, '')
+    const text = encodeURIComponent(result.notificationMessage)
+    window.open(`https://wa.me/${phone || ''}?text=${text}`, '_blank')
+  }
+
+  const sendMail = () => {
+    if (!result || !selectedCustomer?.mail) {
+      if (!selectedCustomer?.mail) {
+        toast({ title: "Sin Email", description: "Este cliente no tiene correo registrado.", variant: "destructive" })
+      }
+      return
+    }
+    const subject = formData.eventType === 'overduePayment' ? 'Recordatorio de Pago - Dosimat Pro' : 'Aviso de Reposición de Cloro - Dosimat Pro'
+    const mailtoLink = `mailto:${selectedCustomer.mail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(result.notificationMessage)}`
+    window.location.href = mailtoLink
+  }
+
   return (
     <div className="flex min-h-screen w-full">
       <Sidebar />
@@ -78,40 +101,40 @@ export default function NotificationsPage() {
           <div>
             <h1 className="text-3xl font-headline font-bold text-primary flex items-center gap-2">
               <Sparkles className="h-7 w-7 text-accent-foreground" />
-              Notificaciones IA
+              IA Notificaciones
             </h1>
-            <p className="text-muted-foreground">Genera mensajes personalizados y efectivos para tus clientes.</p>
+            <p className="text-muted-foreground">Tu asistente para redactar mensajes de cobro y mantenimiento.</p>
           </div>
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <Card className="glass-card">
+          <Card className="glass-card shadow-lg">
             <CardHeader>
-              <CardTitle>Configurar Evento</CardTitle>
-              <CardDescription>Describe la situación para que la IA redacte el mensaje.</CardDescription>
+              <CardTitle className="text-lg">1. ¿Qué pasó?</CardTitle>
+              <CardDescription>Completa la situación para que la IA sepa qué escribir.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="customer">Nombre del Cliente</Label>
-                <Select onValueChange={(v) => setFormData({...formData, customerName: v})}>
+                <Label htmlFor="customer">Cliente Destinatario</Label>
+                <Select onValueChange={(v) => {
+                  const c = customers?.find(cust => cust.id === v)
+                  setFormData({...formData, customerId: v, customerName: c ? `${c.nombre} ${c.apellido}` : ""})
+                }}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecciona un cliente" />
+                    <SelectValue placeholder="Seleccionar cliente..." />
                   </SelectTrigger>
                   <SelectContent>
                     {customers?.map((c: any) => (
-                      <SelectItem key={c.id} value={`${c.nombre} ${c.apellido}`}>
+                      <SelectItem key={c.id} value={c.id}>
                         {c.apellido}, {c.nombre}
                       </SelectItem>
                     ))}
-                    {!customers?.length && (
-                      <SelectItem value="Carlos Rodríguez">Carlos Rodríguez (Ejemplo)</SelectItem>
-                    )}
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="type">Tipo de Alerta</Label>
+                <Label htmlFor="type">Motivo del Mensaje</Label>
                 <Select 
                   defaultValue="chlorineRefill" 
                   onValueChange={(v: any) => setFormData({...formData, eventType: v})}
@@ -120,75 +143,97 @@ export default function NotificationsPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="chlorineRefill">Reposición de Cloro</SelectItem>
-                    <SelectItem value="overduePayment">Pago Vencido</SelectItem>
+                    <SelectItem value="chlorineRefill">Aviso de Reposición de Cloro</SelectItem>
+                    <SelectItem value="overduePayment">Recordatorio de Pago Vencido</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="details">Detalles Específicos</Label>
+                <Label htmlFor="details">Datos de la situación</Label>
                 <Textarea 
                   id="details" 
-                  placeholder={formData.eventType === 'overduePayment' ? "Monto: $5000, Fecha vto: 15/08" : "Última reposición hace 15 días, piscina de 50.000L"}
-                  className="min-h-[100px]"
+                  placeholder={formData.eventType === 'overduePayment' ? "Ej: Debe $5000 de la visita de la semana pasada." : "Ej: Mañana pasamos por la zona de Pilar y le toca reposición."}
+                  className="min-h-[120px] bg-white/50"
                   value={formData.eventDetails}
                   onChange={(e) => setFormData({...formData, eventDetails: e.target.value})}
                 />
+              </div>
+
+              <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg flex gap-3 text-blue-800">
+                <Info className="h-5 w-5 shrink-0" />
+                <p className="text-[11px] leading-snug">
+                  <b>Tip:</b> No necesitas escribir un mail perfecto. Solo pon los datos (monto, fecha, lugar) y la IA se encargará del tono profesional.
+                </p>
               </div>
             </CardContent>
             <CardFooter>
               <Button 
                 onClick={handleGenerate} 
                 disabled={isLoading}
-                className="w-full bg-primary font-bold shadow-lg shadow-primary/20"
+                className="w-full bg-primary font-bold shadow-xl shadow-primary/20 h-12"
               >
                 {isLoading ? (
-                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  <RefreshCw className="mr-2 h-5 w-5 animate-spin" />
                 ) : (
-                  <Sparkles className="mr-2 h-4 w-4" />
+                  <Sparkles className="mr-2 h-5 w-5" />
                 )}
-                {isLoading ? "Generando..." : "Generar Mensaje con IA"}
+                {isLoading ? "Redactando..." : "Redactar Mensaje con IA"}
               </Button>
             </CardFooter>
           </Card>
 
           <div className="space-y-6">
             {result ? (
-              <Card className="border-primary/30 shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 bg-white">
-                <CardHeader className="bg-primary/5 border-b">
+              <Card className="border-primary/30 shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 bg-white">
+                <CardHeader className="bg-primary/5 border-b pb-4">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm font-bold flex items-center gap-2">
-                      <MessageSquare className="h-4 w-4 text-primary" /> Sugerencia de la IA
+                    <CardTitle className="text-sm font-black flex items-center gap-2 text-primary uppercase tracking-widest">
+                      <MessageSquare className="h-4 w-4" /> Propuesta de la IA
                     </CardTitle>
-                    <Button variant="ghost" size="sm" onClick={copyToClipboard} className="h-8 gap-2">
-                      <Copy className="h-3 w-3" /> Copiar
+                    <Button variant="outline" size="sm" onClick={copyToClipboard} className="h-8 gap-2 font-bold text-[10px]">
+                      <Copy className="h-3.5 w-3.5" /> COPIAR
                     </Button>
                   </div>
                 </CardHeader>
-                <CardContent className="pt-6 space-y-4">
-                  <div className="p-4 bg-muted/20 rounded-lg italic text-sm text-slate-700 whitespace-pre-wrap border">
+                <CardContent className="pt-6 space-y-6">
+                  <div className="p-5 bg-slate-50 rounded-xl italic text-sm text-slate-800 whitespace-pre-wrap border leading-relaxed shadow-inner">
                     "{result.notificationMessage}"
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-black text-primary uppercase tracking-widest">Acción Recomendada</p>
-                    <p className="text-sm font-semibold text-slate-900 bg-emerald-50 p-2 rounded border border-emerald-100 flex items-center gap-2">
-                      <Sparkles className="h-3 w-3 text-emerald-600" />
-                      {result.suggestedAction}
+                  
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest flex items-center gap-1">
+                      <Sparkles className="h-3 w-3" /> Acción Sugerida
                     </p>
+                    <div className="text-sm font-bold text-emerald-900 bg-emerald-50 p-3 rounded-lg border border-emerald-100">
+                      {result.suggestedAction}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <Button onClick={sendWhatsApp} className="bg-emerald-600 hover:bg-emerald-700 font-bold h-11 gap-2">
+                      <Phone className="h-4 w-4" /> WhatsApp
+                    </Button>
+                    <Button onClick={sendMail} variant="outline" className="border-primary text-primary hover:bg-primary/5 font-bold h-11 gap-2">
+                      <Mail className="h-4 w-4" /> Email
+                    </Button>
                   </div>
                 </CardContent>
-                <CardFooter className="bg-slate-50 border-t flex gap-2">
-                   <Button className="flex-1 font-bold" variant="outline" onClick={copyToClipboard}>
-                     Cerrar y Copiar
-                   </Button>
+                <CardFooter className="bg-slate-50 border-t py-3">
+                  <p className="text-[10px] text-muted-foreground italic w-full text-center">
+                    Puedes editar el mensaje antes de enviarlo en WhatsApp o Mail.
+                  </p>
                 </CardFooter>
               </Card>
             ) : (
-              <div className="h-full min-h-[300px] border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-muted-foreground p-8 text-center bg-white/50">
-                <Sparkles className="h-12 w-12 mb-4 opacity-20" />
-                <h3 className="text-lg font-semibold mb-2">IA Lista para Ayudar</h3>
-                <p className="text-sm max-w-[300px]">Completa los detalles a la izquierda para que la IA redacte una comunicación profesional para el cliente.</p>
+              <div className="h-full min-h-[400px] border-2 border-dashed rounded-3xl flex flex-col items-center justify-center text-muted-foreground p-12 text-center bg-white/30 backdrop-blur-sm">
+                <div className="bg-primary/10 p-6 rounded-full mb-6">
+                  <Sparkles className="h-12 w-12 text-primary/40" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-800 mb-2">Tu Asistente de Redacción</h3>
+                <p className="text-sm max-w-[320px] leading-relaxed">
+                  Completa los datos de la izquierda y haz clic en el botón azul. La IA generará un mensaje profesional listo para enviar.
+                </p>
               </div>
             )}
           </div>
