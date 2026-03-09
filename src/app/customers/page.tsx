@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -26,7 +27,8 @@ import {
   Mail,
   PlusCircle,
   Copy,
-  Info
+  Info,
+  ArrowLeftRight
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -377,6 +379,17 @@ export default function CustomersPage() {
                           >
                             <Link href={`/transactions?clientId=${customer.id}&mode=new`}>
                               <PlusCircle className="h-3.5 w-3.5" /> Nueva Operación
+                            </Link>
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="h-8 gap-2 font-bold"
+                            asChild
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Link href={`/transactions?clientId=${customer.id}`}>
+                              <ArrowLeftRight className="h-3.5 w-3.5" /> Historial
                             </Link>
                           </Button>
                           <Button 
