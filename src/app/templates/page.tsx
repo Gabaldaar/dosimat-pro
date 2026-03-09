@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, Edit, Trash2, FileText, Info, Loader2, HelpCircle } from "lucide-react"
+import { Plus, Edit, Trash2, FileText, Info, Loader2, HelpCircle, Copy } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -91,6 +91,15 @@ export default function TemplatesPage() {
     }
   }
 
+  const copyMarker = (markerName: string) => {
+    const text = `{{${markerName}}}`
+    navigator.clipboard.writeText(text)
+    toast({
+      title: "Copiado",
+      description: `${text} copiado al portapapeles.`
+    })
+  }
+
   return (
     <div className="flex min-h-screen bg-background w-full">
       <Sidebar />
@@ -157,8 +166,14 @@ export default function TemplatesPage() {
           </CardHeader>
           <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-2">
             {AVAILABLE_MARKERS.map(m => (
-              <div key={m} className="text-[10px] font-mono bg-white border border-blue-100 rounded px-2 py-1 flex justify-between">
+              <div 
+                key={m} 
+                onClick={() => copyMarker(m)}
+                className="text-[10px] font-mono bg-white border border-blue-100 rounded px-2 py-1 flex justify-between cursor-pointer hover:bg-blue-100 transition-colors group"
+                title="Clic para copiar"
+              >
                 <span className="text-blue-600">{"{{"}{m}{"}}"}</span>
+                <Copy className="h-3 w-3 text-blue-300 opacity-0 group-hover:opacity-100" />
               </div>
             ))}
           </CardContent>
@@ -178,14 +193,18 @@ export default function TemplatesPage() {
               
               <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl space-y-3">
                 <div className="flex items-center gap-2 text-primary font-bold text-sm">
-                  <HelpCircle className="h-4 w-4" /> Guía de Marcadores
+                  <HelpCircle className="h-4 w-4" /> Guía de Marcadores (Haz clic para copiar)
                 </div>
                 <p className="text-[10px] text-muted-foreground leading-tight">
-                  Copia y pega estos códigos en el Asunto o Cuerpo para que se completen automáticamente con los datos del cliente y la operación.
+                  Copia y pega estos códigos en el Asunto o Cuerpo para que se completen automáticamente.
                 </p>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {AVAILABLE_MARKERS.map(m => (
-                    <span key={m} className="text-[10px] font-mono px-2 py-1 bg-white border rounded text-primary-foreground bg-primary/80 select-all cursor-copy">
+                    <span 
+                      key={m} 
+                      onClick={() => copyMarker(m)}
+                      className="text-[10px] font-mono px-2 py-1 bg-white border rounded text-primary border-primary/30 hover:bg-primary hover:text-white cursor-pointer transition-colors select-none"
+                    >
                       {"{{"}{m}{"}}"}
                     </span>
                   ))}
