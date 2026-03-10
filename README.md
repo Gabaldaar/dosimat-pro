@@ -4,7 +4,9 @@ Sistema inteligente para el mantenimiento de piscinas y control financiero dise�
 
 ## 🚀 Cómo subir este proyecto a GitHub
 
-Copia y pega estos comandos **uno por uno** en tu terminal (asegúrate de no copiar las comillas ni los espacios extra):
+El mensaje de error `bash: __vsc_prompt_cmd_original: command not found` que ves en tu terminal suele ser un problema visual del entorno de VS Code, **no significa que el comando falló**. 
+
+Por favor, copia y pega estos comandos **uno por uno** (asegúrate de no incluir el símbolo `$` ni las comillas):
 
 1. **Inicializar Git**:
    ```
