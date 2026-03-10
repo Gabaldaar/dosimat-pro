@@ -1,0 +1,25 @@
+[debug] [2026-03-10T11:51:37.436Z] ----------------------------------------------------------------------
+[debug] [2026-03-10T11:51:37.440Z] Command:       /nix/store/ws50yvm6vzlzf7jzz6n7xh4szddrack1-nodejs-20.19.1/bin/node /nix/store/gm9mcvzb17vv8cla08khrg29vxn3sq4r-firebase-tools-15.1.0/lib/node_modules/firebase-tools/lib/bin/firebase.js init
+[debug] [2026-03-10T11:51:37.440Z] CLI Version:   15.1.0
+[debug] [2026-03-10T11:51:37.441Z] Platform:      linux
+[debug] [2026-03-10T11:51:37.441Z] Node Version:  v20.19.1
+[debug] [2026-03-10T11:51:37.441Z] Time:          Tue Mar 10 2026 11:51:37 GMT+0000 (Coordinated Universal Time)
+[debug] [2026-03-10T11:51:37.441Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-10T11:51:37.444Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-03-10T11:51:42.973Z] No OAuth tokens found
+[debug] [2026-03-10T11:51:42.973Z] No OAuth tokens found
+[error] Failed to fetch Firebase Project from current Studio Workspace: Unable to refresh auth: not yet authenticated.
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  /home/user/studio
+
+[debug] [2026-03-10T11:51:43.096Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-03-10T11:51:43.097Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
