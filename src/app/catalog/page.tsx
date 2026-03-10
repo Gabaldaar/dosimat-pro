@@ -5,7 +5,7 @@ import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Search, Edit, Trash2, MoreVertical, Loader2, Package, AlertTriangle } from "lucide-react"
+import { Plus, Search, Edit, Trash2, MoreVertical, Loader2, Package, AlertTriangle, Droplets } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
@@ -118,15 +118,20 @@ export default function CatalogPage() {
       <Sidebar />
       <SidebarInset className="flex-1 w-full p-4 md:p-8 space-y-6 pb-32 md:pb-8 overflow-x-hidden">
         <header className="flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <SidebarTrigger className="hidden md:flex" />
+          <div className="flex items-center gap-3">
+            <SidebarTrigger className="flex" />
+            <div className="flex items-center gap-2 md:hidden pr-2 border-r">
+               <div className="bg-primary p-1.5 rounded-lg shadow-sm shadow-primary/20">
+                 <Droplets className="h-4 w-4 text-white" />
+               </div>
+               <span className="font-headline font-black text-primary text-sm tracking-tight uppercase">Dosimat<span className="text-accent-foreground">Pro</span></span>
+            </div>
             <div>
-              <h1 className="text-3xl font-bold text-primary font-headline">Catálogo de Productos</h1>
-              <p className="text-muted-foreground text-sm">Gestiona tus productos y servicios en tiempo real.</p>
+              <h1 className="text-xl md:text-3xl font-bold text-primary font-headline">Catálogo</h1>
             </div>
           </div>
           <Button onClick={() => handleOpenDialog()} className="shadow-lg">
-            <Plus className="mr-2 h-4 w-4" /> Nuevo Item
+            <Plus className="mr-2 h-4 w-4" /> Nuevo
           </Button>
         </header>
 

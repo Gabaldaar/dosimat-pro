@@ -21,7 +21,8 @@ import {
   TrendingUp,
   AlertTriangle,
   Calculator,
-  ExternalLink
+  ExternalLink,
+  Droplets
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -304,11 +305,16 @@ export default function AccountsPage() {
       
       <SidebarInset className="flex-1 w-full pb-32 md:pb-8 p-4 md:p-8 space-y-6 overflow-x-hidden">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <SidebarTrigger className="hidden md:flex" />
+          <div className="flex items-center gap-3">
+            <SidebarTrigger className="flex" />
+            <div className="flex items-center gap-2 md:hidden pr-2 border-r">
+               <div className="bg-primary p-1.5 rounded-lg shadow-sm shadow-primary/20">
+                 <Droplets className="h-4 w-4 text-white" />
+               </div>
+               <span className="font-headline font-black text-primary text-sm tracking-tight uppercase">Dosimat<span className="text-accent-foreground">Pro</span></span>
+            </div>
             <div>
-              <h1 className="text-3xl font-headline font-bold text-primary">Cajas Financieras</h1>
-              <p className="text-muted-foreground">Saldos y movimientos en tiempo real.</p>
+              <h1 className="text-xl md:text-3xl font-headline font-bold text-primary">Cajas</h1>
             </div>
           </div>
           <div className="flex gap-2">

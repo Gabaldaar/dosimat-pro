@@ -12,7 +12,8 @@ import {
   Plus,
   Loader2,
   MapPin,
-  Calendar
+  Calendar,
+  Droplets
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
@@ -83,17 +84,22 @@ export default function Dashboard() {
       
       <SidebarInset className="flex-1 w-full pb-48 md:pb-12 p-4 md:p-8 space-y-8 overflow-x-hidden">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <SidebarTrigger className="hidden md:flex" />
+          <div className="flex items-center gap-3">
+            <SidebarTrigger className="flex" />
+            <div className="flex items-center gap-2 md:hidden pr-2 border-r">
+               <div className="bg-primary p-1.5 rounded-lg shadow-sm shadow-primary/20">
+                 <Droplets className="h-4 w-4 text-white" />
+               </div>
+               <span className="font-headline font-black text-primary text-sm tracking-tight uppercase">Dosimat<span className="text-accent-foreground">Pro</span></span>
+            </div>
             <div>
-              <h1 className="text-3xl font-headline font-bold text-primary">Dashboard Administrativo</h1>
-              <p className="text-muted-foreground">Dosimat • Control financiero y operativo.</p>
+              <h1 className="text-xl md:text-3xl font-headline font-bold text-primary">Dashboard</h1>
             </div>
           </div>
           <div className="flex gap-2">
             <Link href="/transactions">
               <Button className="shadow-lg rounded-full px-6 bg-primary font-bold">
-                <Plus className="mr-2 h-4 w-4" /> Registrar Operación
+                <Plus className="mr-2 h-4 w-4" /> Operación
               </Button>
             </Link>
           </div>

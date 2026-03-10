@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Sparkles, Send, Copy, RefreshCw, MessageSquare, Mail, Phone, Info } from "lucide-react"
+import { Sparkles, Send, Copy, RefreshCw, MessageSquare, Mail, Phone, Info, Droplets } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { generatePersonalizedNotification, type GenerateNotificationOutput } from "@/ai/flows/generate-personalized-notifications"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
@@ -96,13 +96,18 @@ export default function NotificationsPage() {
       
       <SidebarInset className="flex-1 w-full pb-32 md:pb-8 p-4 md:p-8 space-y-6 overflow-x-hidden">
         <header className="flex items-center gap-4">
-          <SidebarTrigger className="hidden md:flex" />
+          <SidebarTrigger className="flex" />
+          <div className="flex items-center gap-2 md:hidden pr-2 border-r">
+             <div className="bg-primary p-1.5 rounded-lg shadow-sm shadow-primary/20">
+               <Droplets className="h-4 w-4 text-white" />
+             </div>
+             <span className="font-headline font-black text-primary text-sm tracking-tight uppercase">Dosimat<span className="text-accent-foreground">Pro</span></span>
+          </div>
           <div>
-            <h1 className="text-3xl font-headline font-bold text-primary flex items-center gap-2">
-              <Sparkles className="h-7 w-7 text-accent-foreground" />
+            <h1 className="text-xl md:text-3xl font-headline font-bold text-primary flex items-center gap-2">
+              <Sparkles className="h-6 w-6 text-accent-foreground hidden md:block" />
               IA Notificaciones
             </h1>
-            <p className="text-muted-foreground">Tu asistente para redactar mensajes de cobro y mantenimiento.</p>
           </div>
         </header>
 
@@ -162,7 +167,7 @@ export default function NotificationsPage() {
               <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg flex gap-3 text-blue-800">
                 <Info className="h-5 w-5 shrink-0" />
                 <p className="text-[11px] leading-snug">
-                  <b>Tip:</b> No necesitas escribir un mail perfecto. Solo pon los datos (monto, fecha, lugar) y la IA se encargará del tono profesional.
+                  <b>Tip:</b> No necesitas escribir un mail perfecto. Solo pon los datos y la IA hará el resto.
                 </p>
               </div>
             </CardContent>
@@ -177,7 +182,7 @@ export default function NotificationsPage() {
                 ) : (
                   <Sparkles className="mr-2 h-5 w-5" />
                 )}
-                {isLoading ? "Redactando..." : "Redactar Mensaje con IA"}
+                {isLoading ? "Redactando..." : "Redactar Mensaje"}
               </Button>
             </CardFooter>
           </Card>
@@ -220,7 +225,7 @@ export default function NotificationsPage() {
                 </CardContent>
                 <CardFooter className="bg-slate-50 border-t py-3">
                   <p className="text-[10px] text-muted-foreground italic w-full text-center">
-                    Puedes editar el mensaje antes de enviarlo en WhatsApp o Mail.
+                    Puedes editar el mensaje antes de enviarlo.
                   </p>
                 </CardFooter>
               </Card>
@@ -229,9 +234,9 @@ export default function NotificationsPage() {
                 <div className="bg-primary/10 p-6 rounded-full mb-6">
                   <Sparkles className="h-12 w-12 text-primary/40" />
                 </div>
-                <h3 className="text-xl font-bold text-slate-800 mb-2">Tu Asistente de Redacción</h3>
+                <h3 className="text-xl font-bold text-slate-800 mb-2">Asistente de Redacción</h3>
                 <p className="text-sm max-w-[320px] leading-relaxed">
-                  Completa los datos de la izquierda y haz clic en el botón azul. La IA generará un mensaje profesional listo para enviar.
+                  Completa los datos de la izquierda y haz clic en el botón. La IA generará un mensaje profesional listo para enviar.
                 </p>
               </div>
             )}

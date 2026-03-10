@@ -31,7 +31,8 @@ import {
   Mail,
   Send,
   Eye,
-  Fingerprint
+  Fingerprint,
+  Droplets
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -475,10 +476,16 @@ function TransactionsContent() {
       <Sidebar />
       <SidebarInset className="flex-1 w-full p-4 md:p-8 space-y-6 pb-48 md:pb-12 overflow-x-hidden">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <SidebarTrigger className="hidden md:flex" />
-            <h1 className="text-3xl font-bold text-primary font-headline">
-              {editingTx ? "Editar Operación" : "Operaciones"}
+          <div className="flex items-center gap-3">
+            <SidebarTrigger className="flex" />
+            <div className="flex items-center gap-2 md:hidden pr-2 border-r">
+               <div className="bg-primary p-1.5 rounded-lg shadow-sm shadow-primary/20">
+                 <Droplets className="h-4 w-4 text-white" />
+               </div>
+               <span className="font-headline font-black text-primary text-sm tracking-tight uppercase">Dosimat<span className="text-accent-foreground">Pro</span></span>
+            </div>
+            <h1 className="text-xl md:text-3xl font-bold text-primary font-headline">
+              {editingTx ? "Editar" : "Operaciones"}
             </h1>
           </div>
           <Tabs value={mainView} onValueChange={(v) => { if(v === "register" && !editingTx) resetRegisterForm(); setMainView(v); }}>
@@ -538,7 +545,7 @@ function TransactionsContent() {
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label className="flex items-center gap-2 text-primary font-bold"><CalendarIcon className="h-4 w-4" /> Fecha de Operación</Label>
+                    <Label className="flex items-center gap-2 text-primary font-bold"><CalendarIcon className="h-4 w-4" /> Fecha</Label>
                     <Input type="date" value={operationDate} onChange={(e) => setOperationDate(e.target.value)} className="bg-white" />
                   </div>
                 </div>

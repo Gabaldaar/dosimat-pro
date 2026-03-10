@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, Edit, Trash2, FileText, Info, Loader2, HelpCircle, Copy } from "lucide-react"
+import { Plus, Edit, Trash2, FileText, Info, Loader2, HelpCircle, Copy, Droplets } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -107,15 +107,20 @@ export default function TemplatesPage() {
       <Sidebar />
       <SidebarInset className="flex-1 w-full pb-32 md:pb-8 p-4 md:p-8 space-y-6 overflow-x-hidden">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <SidebarTrigger className="hidden md:flex" />
+          <div className="flex items-center gap-3">
+            <SidebarTrigger className="flex" />
+            <div className="flex items-center gap-2 md:hidden pr-2 border-r">
+               <div className="bg-primary p-1.5 rounded-lg shadow-sm shadow-primary/20">
+                 <Droplets className="h-4 w-4 text-white" />
+               </div>
+               <span className="font-headline font-black text-primary text-sm tracking-tight uppercase">Dosimat<span className="text-accent-foreground">Pro</span></span>
+            </div>
             <div>
-              <h1 className="text-3xl font-bold text-primary font-headline">Plantillas de Mail</h1>
-              <p className="text-muted-foreground">Configura formatos para comunicación automática.</p>
+              <h1 className="text-xl md:text-3xl font-bold text-primary font-headline">Plantillas</h1>
             </div>
           </div>
           <Button onClick={() => handleOpenDialog()} className="shadow-lg font-bold">
-            <Plus className="mr-2 h-4 w-4" /> Nueva Plantilla
+            <Plus className="mr-2 h-4 w-4" /> Nueva
           </Button>
         </header>
 

@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -31,7 +30,8 @@ import {
   Settings2,
   MapPinned,
   Send,
-  Info
+  Info,
+  Droplets
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
@@ -261,22 +261,27 @@ export default function CustomersPage() {
       <Sidebar />
       <SidebarInset className="flex-1 w-full p-4 md:p-8 space-y-6 overflow-x-hidden">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <SidebarTrigger className="hidden md:flex" />
+          <div className="flex items-center gap-3">
+            <SidebarTrigger className="flex" />
+            <div className="flex items-center gap-2 md:hidden pr-2 border-r">
+               <div className="bg-primary p-1.5 rounded-lg shadow-sm shadow-primary/20">
+                 <Droplets className="h-4 w-4 text-white" />
+               </div>
+               <span className="font-headline font-black text-primary text-sm tracking-tight uppercase">Dosimat<span className="text-accent-foreground">Pro</span></span>
+            </div>
             <div>
-              <h1 className="text-3xl font-bold text-primary font-headline">Clientes</h1>
-              <p className="text-muted-foreground">Gestión de perfiles y cuentas corrientes.</p>
+              <h1 className="text-xl md:text-3xl font-bold text-primary font-headline">Clientes</h1>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => setIsBulkEmailOpen(true)} className="border-primary text-primary hover:bg-primary/5">
-              <Mail className="mr-2 h-4 w-4" /> Mail a Filtrados
+              <Mail className="mr-2 h-4 w-4" /> Masivo
             </Button>
             <Button variant="outline" onClick={() => setIsZoneManagerOpen(true)}>
-              <MapPinned className="mr-2 h-4 w-4" /> Administrar Zonas
+              <MapPinned className="mr-2 h-4 w-4" /> Zonas
             </Button>
             <Button onClick={() => handleOpenDialog()} className="shadow-lg shadow-primary/20 font-bold">
-              <Plus className="mr-2 h-5 w-5" /> Nuevo Cliente
+              <Plus className="mr-2 h-5 w-5" /> Nuevo
             </Button>
           </div>
         </header>
@@ -458,7 +463,7 @@ export default function CustomersPage() {
                               onClick={(e) => e.stopPropagation()}
                             >
                               <Link href={`/transactions?clientId=${customer.id}&mode=new`}>
-                                <PlusCircle className="h-3.5 w-3.5" /> Nueva Operación
+                                <PlusCircle className="h-3.5 w-3.5" /> Operación
                               </Link>
                             </Button>
                             <Button 
@@ -531,8 +536,7 @@ export default function CustomersPage() {
           </div>
         )}
 
-        {/* Espaciador físico final para garantizar visibilidad total en móviles */}
-        <div className="h-48 md:hidden" aria-hidden="true" />
+        <div className="h-40" />
 
         <Dialog open={isDialogOpen} onOpenChange={(o) => {
           setIsDialogOpen(o);
