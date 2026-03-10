@@ -77,10 +77,10 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
     const unsubscribe = onAuthStateChanged(
       auth,
       async (firebaseUser) => {
-        if (firebaseUser) {
-          // REPARACIÓN ROBUSTA DE ROLES:
-          // Forzamos que la carga no termine hasta que el rol esté verificado/creado
-          try {
+        try {
+          if (firebaseUser) {
+            // REPARACIÓN ROBUSTA DE ROLES:
+            // Forzamos que la carga no termine hasta que el rol esté verificado/creado
             const roleRef = doc(firestore, 'user_roles', firebaseUser.uid);
             const roleSnap = await getDoc(roleRef);
             
@@ -105,13 +105,13 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
               
               console.log("Reparación completada con éxito.");
             }
-          } catch (e) {
-            console.error("Error en auto-reparación de roles:", e);
           }
+        } catch (e) {
+          console.error("Error en auto-reparación de roles:", e);
+        } finally {
+          // Garantizamos que el estado de carga termine pase lo que pase
+          setUserAuthState({ user: firebaseUser, isUserLoading: false, userError: null });
         }
-        
-        // Solo ahora marcamos que la carga de usuario ha terminado
-        setUserAuthState({ user: firebaseUser, isUserLoading: false, userError: null });
       },
       (error) => {
         console.error("FirebaseProvider: onAuthStateChanged error:", error);
