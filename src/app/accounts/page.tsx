@@ -606,7 +606,9 @@ export default function AccountsPage() {
                     <SelectTrigger><SelectValue placeholder="Origen" /></SelectTrigger>
                     <SelectContent>
                       {accounts?.map((a: any) => (
-                        <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>
+                        <SelectItem key={a.id} value={a.id}>
+                          {a.name} ({a.currency}: ${Number(a.initialBalance || 0).toLocaleString('es-AR')})
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -617,7 +619,9 @@ export default function AccountsPage() {
                     <SelectTrigger><SelectValue placeholder="Destino" /></SelectTrigger>
                     <SelectContent>
                       {accounts?.map((a: any) => (
-                        <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>
+                        <SelectItem key={a.id} value={a.id}>
+                          {a.name} ({a.currency}: ${Number(a.initialBalance || 0).toLocaleString('es-AR')})
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

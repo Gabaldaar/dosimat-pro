@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
@@ -587,7 +586,9 @@ function TransactionsContent() {
                           <SelectContent>
                             <SelectItem value="pending">A CUENTA (Deuda del cliente)</SelectItem>
                             {accounts?.filter(a => a.currency === cobroCurrency).map(a => (
-                              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                              <SelectItem key={a.id} value={a.id}>
+                                {a.name} (${Number(a.initialBalance || 0).toLocaleString('es-AR')})
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -604,7 +605,7 @@ function TransactionsContent() {
                           <SelectContent>
                             {catalog?.map((i: any) => (
                               <SelectItem key={i.id} value={i.id}>
-                                {i.name} ({i.priceARS > 0 ? '$' : 'u$s'})
+                                {i.name} (ARS: ${Number(i.priceARS || 0).toLocaleString('es-AR')} | USD: u$s {Number(i.priceUSD || 0).toLocaleString('es-AR')})
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -671,7 +672,11 @@ function TransactionsContent() {
                             <SelectTrigger className="h-9 text-xs bg-white"><SelectValue placeholder="Pendiente / A Cuenta" /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="pending">A CUENTA (Deuda del cliente)</SelectItem>
-                              {accounts?.filter((a: any) => a.currency === 'ARS').map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                              {accounts?.filter((a: any) => a.currency === 'ARS').map((a: any) => (
+                                <SelectItem key={a.id} value={a.id}>
+                                  {a.name} (${Number(a.initialBalance || 0).toLocaleString('es-AR')})
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </div>
@@ -689,7 +694,11 @@ function TransactionsContent() {
                             <SelectTrigger className="h-9 text-xs bg-white"><SelectValue placeholder="Pendiente / A Cuenta" /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="pending">A CUENTA (Deuda del cliente)</SelectItem>
-                              {accounts?.filter((a: any) => a.currency === 'USD').map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                              {accounts?.filter((a: any) => a.currency === 'USD').map((a: any) => (
+                                <SelectItem key={a.id} value={a.id}>
+                                  {a.name} (u$s {Number(a.initialBalance || 0).toLocaleString('es-AR')})
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </div>
