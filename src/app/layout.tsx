@@ -1,9 +1,11 @@
+
 import type {Metadata, Viewport} from 'next';
 import './globals.css';
 import {Toaster} from '@/components/ui/toaster';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { AuthGuard } from '@/components/auth/auth-guard';
+import Script from 'next/script';
 
 export const metadata: Metadata = {
   title: 'Dosimat Pro | Pool Management',
@@ -49,6 +51,21 @@ export default function RootLayout({
             </SidebarProvider>
           </AuthGuard>
         </FirebaseClientProvider>
+        
+        {/* Registro del Service Worker para PWA */}
+        <Script id="register-sw" strategy="afterInteractive">
+          {`
+            if ('serviceWorker' in navigator) {
+              window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/sw.js').then(function(registration) {
+                  console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                }, function(err) {
+                  console.log('ServiceWorker registration failed: ', err);
+                });
+              });
+            }
+          `}
+        </Script>
       </body>
     </html>
   );
