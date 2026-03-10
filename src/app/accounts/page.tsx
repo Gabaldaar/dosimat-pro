@@ -149,7 +149,8 @@ export default function AccountsPage() {
   const [transferFormData, setTransferFormData] = useState({
     fromId: "",
     toId: "",
-    amount: 0
+    amount: 0,
+    description: ""
   })
 
   const fromAcc = useMemo(() => accounts?.find(a => a.id === transferFormData.fromId), [accounts, transferFormData.fromId]);
@@ -247,7 +248,7 @@ export default function AccountsPage() {
   }
 
   const handleTransfer = () => {
-    const { fromId, toId, amount } = transferFormData
+    const { fromId, toId, amount, description } = transferFormData
     if (!fromAcc || !toAcc || amount <= 0) return
 
     setIsTransferDialogOpen(false)
@@ -271,7 +272,7 @@ export default function AccountsPage() {
       amount: -Number(amount),
       currency: fromAcc.currency,
       financialAccountId: fromId,
-      description: `Transferencia a ${toAcc.name} (${toAcc.currency})`
+      description: description || `Transferencia a ${toAcc.name} (${toAcc.currency})`
     })
 
     // Registrar entrada
@@ -281,7 +282,7 @@ export default function AccountsPage() {
       amount: finalAmountTo,
       currency: toAcc.currency,
       financialAccountId: toId,
-      description: `Transferencia desde ${fromAcc.name} (${fromAcc.currency})`
+      description: description || `Transferencia desde ${fromAcc.name} (${fromAcc.currency})`
     })
 
     toast({ title: "Transferencia completada" })
@@ -630,6 +631,10 @@ export default function AccountsPage() {
               <div className="space-y-2">
                 <Label>Monto a transferir ({fromAcc?.currency || ''})</Label>
                 <Input type="number" value={transferFormData.amount} onChange={(e) => setTransferFormData({...transferFormData, amount: Number(e.target.value)})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Descripción / Notas (Opcional)</Label>
+                <Input placeholder="Concepto de la transferencia..." value={transferFormData.description} onChange={(e) => setTransferFormData({...transferFormData, description: e.target.value})} />
               </div>
               {fromAcc && toAcc && fromAcc.currency !== toAcc.currency && (
                 <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs space-y-1">
