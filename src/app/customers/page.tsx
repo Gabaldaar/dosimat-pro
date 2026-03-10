@@ -249,7 +249,6 @@ export default function CustomersPage() {
       return
     }
 
-    // Al ser masivo, no procesamos marcadores individuales por privacidad y coherencia
     const mailtoLink = `mailto:?bcc=${encodeURIComponent(emails)}&subject=${encodeURIComponent(template.subject)}&body=${encodeURIComponent(template.body)}`
     window.location.href = mailtoLink
     setIsBulkEmailOpen(false)
@@ -259,7 +258,7 @@ export default function CustomersPage() {
   return (
     <div className="flex min-h-screen bg-background w-full">
       <Sidebar />
-      <SidebarInset className="flex-1 w-full pb-32 md:pb-8 p-4 md:p-8 space-y-6 overflow-x-hidden">
+      <SidebarInset className="flex-1 w-full pb-48 md:pb-12 p-4 md:p-8 space-y-6 overflow-x-hidden">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <SidebarTrigger className="hidden md:flex" />

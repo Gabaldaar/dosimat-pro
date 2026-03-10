@@ -131,7 +131,7 @@ export function MobileNav() {
   const pathname = usePathname()
   
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] flex items-center justify-around px-2 py-3 md:hidden">
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/90 backdrop-blur-lg border-t border-white/20 shadow-lg flex items-center justify-around px-2 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:hidden">
       {navItems.slice(0, 4).map((item) => (
         <Link
           key={item.href}
