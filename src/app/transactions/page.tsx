@@ -104,6 +104,15 @@ function TransactionsContent() {
   const [filterOpType, setFilterOpType] = useState("all") 
   const [filterCategory, setFilterCategory] = useState("all") 
 
+  // Set default dates to current month
+  useEffect(() => {
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+    setFilterStartDate(firstDay);
+    setFilterEndDate(lastDay);
+  }, []);
+
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
@@ -126,7 +135,6 @@ function TransactionsContent() {
   const [cobroAccountId, setCobroAccountId] = useState("pending")
   const [txDescription, setTxDescription] = useState("")
 
-  // Observador de mutaciones para desbloquear la interfaz tras cerrar diálogos
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -417,8 +425,14 @@ function TransactionsContent() {
   const resetFilters = () => {
     setFilterCustomer("all")
     setFilterAccount("all")
-    setFilterStartDate("")
-    setFilterEndDate("")
+    
+    // Reset dates to current month range
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+    setFilterStartDate(firstDay)
+    setFilterEndDate(lastDay)
+    
     setFilterOpType("all")
     setFilterCategory("all")
   }
