@@ -22,7 +22,8 @@ import {
   AlertTriangle,
   Calculator,
   ExternalLink,
-  Droplets
+  Droplets,
+  Settings
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -481,11 +482,11 @@ export default function AccountsPage() {
             </CardContent>
           </Card>
 
-          <Card className="glass-card">
+          <Card className="glass-card flex flex-col">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2"><Tag className="h-4 w-4" /> Categorías de Gasto</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-2 flex-1">
               {(!expenseCategories || expenseCategories.length === 0) ? (
                 <p className="text-xs text-muted-foreground italic text-center py-4">Sin categorías.</p>
               ) : (
@@ -496,8 +497,15 @@ export default function AccountsPage() {
                 ))
               )}
             </CardContent>
-            <CardFooter>
-              <Button variant="ghost" size="sm" className="w-full text-[10px] font-bold uppercase tracking-wider" onClick={() => setIsCategoryManagerOpen(true)}>ADMINISTRAR RUBROS</Button>
+            <CardFooter className="pt-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full text-xs font-bold uppercase tracking-wider border-primary text-primary hover:bg-primary/5 gap-2" 
+                onClick={() => setIsCategoryManagerOpen(true)}
+              >
+                <Settings className="h-3 w-3" /> GESTIONAR CATEGORÍAS
+              </Button>
             </CardFooter>
           </Card>
         </section>
@@ -670,6 +678,9 @@ export default function AccountsPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Espacio de seguridad para el menú móvil */}
+        <div className="h-40 md:hidden" />
       </SidebarInset>
 
       <MobileNav />
