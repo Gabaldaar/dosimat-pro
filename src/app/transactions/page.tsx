@@ -9,6 +9,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
 import { 
   User, 
   ClipboardCheck, 
@@ -824,6 +825,7 @@ function TransactionsContent() {
                         const Icon = typeInfo.icon;
                         const isIncome = tx.amount > 0 || tx.type === 'cobro';
                         const itemsCount = tx.items?.length || 0;
+                        const account = accounts?.find(a => a.id === tx.financialAccountId);
                         
                         return (
                           <TableRow key={tx.id} className={cn("group hover:bg-muted/5", tx.type === 'cobro' && "bg-emerald-50/10")}>
@@ -840,8 +842,19 @@ function TransactionsContent() {
                             <TableCell className="text-[11px] max-w-[250px] truncate italic text-muted-foreground">
                               {itemsCount > 0 ? tx.items.map((i: any) => `${i.qty}x ${i.name}`).join(', ') : tx.description}
                             </TableCell>
-                            <TableCell className={cn("text-right font-black text-sm", isIncome ? "text-emerald-600" : "text-rose-600")}>
-                              {tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}
+                            <TableCell className="text-right">
+                              <div className={cn("font-black text-sm", isIncome ? "text-emerald-600" : "text-rose-600")}>
+                                {tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}
+                              </div>
+                              <div className="mt-1">
+                                {!tx.financialAccountId ? (
+                                  <Badge variant="outline" className="text-[8px] h-3.5 px-1 border-amber-500 text-amber-600 bg-amber-50 leading-none">A CUENTA</Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-[8px] h-3.5 px-1 border-blue-200 text-blue-600 bg-blue-50 leading-none truncate max-w-[80px]">
+                                    {account?.name || 'COBRADO'}
+                                  </Badge>
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1 justify-end">
@@ -959,6 +972,7 @@ function TransactionsContent() {
           </AlertDialogContent>
         </AlertDialog>
       </SidebarInset>
+
       <MobileNav />
     </div>
   )
