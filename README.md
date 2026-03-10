@@ -2,9 +2,18 @@
 
 Sistema inteligente para el mantenimiento de piscinas y control financiero diseñado para profesionales.
 
-## 🚀 Cómo subir este proyecto a GitHub
+## 🚀 Guía: Cómo subir este proyecto a GitHub
 
-Para guardar tu código y habilitar el despliegue automático, sigue estos pasos en tu terminal:
+Para guardar tu código y habilitar el despliegue automático, sigue estos pasos exactos en tu terminal:
+
+### 1. Preparación en GitHub
+1. Entra a [github.com](https://github.com/) e inicia sesión.
+2. Haz clic en el botón **"New"** (Nuevo repositorio).
+3. Ponle un nombre (ej: `dosimat-pro`) y haz clic en **"Create repository"**.
+4. **IMPORTANTE**: Copia la URL que termina en `.git` (la verás en la página que aparece).
+
+### 2. Comandos en tu Terminal
+Abre la terminal en la carpeta de este proyecto y pega estos comandos uno por uno:
 
 1. **Inicializar Git**:
    ```bash
@@ -21,13 +30,23 @@ Para guardar tu código y habilitar el despliegue automático, sigue estos pasos
    git commit -m "Primer despliegue de Dosimat Pro"
    ```
 
-4. **Vincular con tu Repo en GitHub**:
-   *(Crea un repo vacío en github.com y copia la URL)*
+4. **Configurar la rama principal**:
+   ```bash
+   git branch -M main
+   ```
+
+5. **Vincular con tu Repo**:
+   *(Reemplaza la URL con la que copiaste en el paso anterior)*
    ```bash
    git remote add origin https://github.com/TU_USUARIO/TU_REPO.git
-   git branch -M main
+   ```
+
+6. **Subir el código**:
+   ```bash
    git push -u origin main
    ```
+
+---
 
 ## 🛠️ Guía de Producción y Dominios
 
@@ -45,10 +64,6 @@ Si tienes un dominio como `www.tuempresa.com`:
 1. **En la Consola**: Ve a **App Hosting** > **Configuración** > **Dominios personalizados**.
 2. **Configuración DNS**: Ingresa tu dominio y copia los registros **A** o **CNAME**.
 3. **Panel de Dominio**: Pega esos registros en el panel de control de tu proveedor (GoDaddy, etc.).
-
-### 3. Checklist de Seguridad
-- **Authentication**: Asegúrate de que el método "Correo electrónico/contraseña" esté **Habilitado**.
-- **Roles**: La App tiene un sistema de auto-reparación. El primer usuario que se registre será Administrador automáticamente.
 
 ---
 *Desarrollado con Next.js 15, Firebase y Genkit.*
