@@ -530,6 +530,9 @@ export default function CustomersPage() {
           </div>
         )}
 
+        {/* Bloque de seguridad para scroll en móviles */}
+        <div className="h-40 md:hidden" aria-hidden="true" />
+
         <Dialog open={isDialogOpen} onOpenChange={(o) => {
           setIsDialogOpen(o);
           if(!o) setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);

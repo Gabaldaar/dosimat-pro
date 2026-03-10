@@ -131,18 +131,18 @@ export function MobileNav() {
   const pathname = usePathname()
   
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/90 backdrop-blur-lg border-t border-white/20 shadow-lg flex items-center justify-around px-2 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:hidden">
+    <div className="fixed bottom-0 left-0 right-0 z-[100] bg-background/60 backdrop-blur-xl border-t border-primary/10 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] flex items-center justify-around px-4 py-3 pb-[calc(1rem+env(safe-area-inset-bottom))] md:hidden">
       {navItems.slice(0, 4).map((item) => (
         <Link
           key={item.href}
           href={item.href}
           className={cn(
-            "flex flex-col items-center gap-1 p-2 rounded-md transition-all",
-            pathname === item.href ? "text-primary scale-110" : "text-muted-foreground"
+            "flex flex-col items-center gap-1.5 p-1 rounded-md transition-all active:scale-90",
+            pathname === item.href ? "text-primary font-bold" : "text-muted-foreground/80"
           )}
         >
-          <item.icon className="h-5 w-5" />
-          <span className="text-[10px] font-bold">{item.label}</span>
+          <item.icon className={cn("h-6 w-6", pathname === item.href && "stroke-[2.5px]")} />
+          <span className="text-[9px] uppercase tracking-wider font-bold">{item.label}</span>
         </Link>
       ))}
     </div>
