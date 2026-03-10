@@ -40,7 +40,8 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-        <link rel="apple-touch-icon" href="https://picsum.photos/seed/dosimat-icon-180/180/180" />
+        <link rel="apple-touch-icon" href="https://picsum.photos/seed/dosimat-pwa-192/192/192" />
+        <link rel="icon" href="https://picsum.photos/seed/dosimat-pwa-192/192/192" />
       </head>
       <body className="font-body antialiased bg-background text-foreground min-h-screen">
         <FirebaseClientProvider>
@@ -58,9 +59,9 @@ export default function RootLayout({
             if ('serviceWorker' in navigator) {
               window.addEventListener('load', function() {
                 navigator.serviceWorker.register('/sw.js').then(function(registration) {
-                  console.log('ServiceWorker registration successful with scope: ', registration.scope);
-                }, function(err) {
-                  console.log('ServiceWorker registration failed: ', err);
+                  console.log('ServiceWorker registrado con éxito:', registration.scope);
+                }).catch(function(err) {
+                  console.log('Error al registrar el ServiceWorker:', err);
                 });
               });
             }

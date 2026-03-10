@@ -1,5 +1,5 @@
 
-// Service Worker minimalista para habilitar la instalación PWA
+// Service Worker básico para habilitar la instalación de la PWA
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
@@ -9,6 +9,6 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Estrategia de red por defecto
+  // Estrategia de red solamente para asegurar datos frescos de Firestore
   event.respondWith(fetch(event.request));
 });
