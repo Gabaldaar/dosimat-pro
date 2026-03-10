@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react"
@@ -132,18 +131,18 @@ export function MobileNav() {
   const pathname = usePathname()
   
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t flex items-center justify-around px-2 py-3 md:hidden">
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] flex items-center justify-around px-2 py-3 md:hidden">
       {navItems.slice(0, 4).map((item) => (
         <Link
           key={item.href}
           href={item.href}
           className={cn(
             "flex flex-col items-center gap-1 p-2 rounded-md transition-all",
-            pathname === item.href ? "text-primary" : "text-muted-foreground"
+            pathname === item.href ? "text-primary scale-110" : "text-muted-foreground"
           )}
         >
           <item.icon className="h-5 w-5" />
-          <span className="text-[10px] font-medium">{item.label}</span>
+          <span className="text-[10px] font-bold">{item.label}</span>
         </Link>
       ))}
     </div>

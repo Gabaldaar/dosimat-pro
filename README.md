@@ -31,7 +31,7 @@ Por favor, copia y pega estos comandos **uno por uno** (asegúrate de no incluir
 5. **Vincular con tu repositorio**:
    *(Copia la URL de tu repo de GitHub y pégala aquí abajo)*
    ```
-   git remote add origin https://github.com/TU_USUARIO/TU_REPO.git
+   git remote add origin https://github.com/Gabaldaar/dosimat-pro.git
    ```
 
 6. **Subir el código**:

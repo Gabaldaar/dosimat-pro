@@ -84,7 +84,7 @@ export default function TeamPage() {
   return (
     <div className="flex min-h-screen w-full">
       <Sidebar />
-      <SidebarInset className="flex-1 w-full pb-20 md:pb-8 p-4 md:p-8 space-y-6 overflow-x-hidden">
+      <SidebarInset className="flex-1 w-full pb-32 md:pb-8 p-4 md:p-8 space-y-6 overflow-x-hidden">
         <header className="flex justify-between items-center">
           <div className="flex items-center gap-4">
             <SidebarTrigger className="hidden md:flex" />
