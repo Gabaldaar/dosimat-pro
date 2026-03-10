@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
@@ -610,14 +611,14 @@ function TransactionsContent() {
                         </Select>
                       </div>
                     )}
-                    <div className="border rounded-xl overflow-hidden shadow-sm">
-                      <Table>
+                    <div className="border rounded-xl overflow-x-auto shadow-sm">
+                      <Table className="min-w-[600px]">
                         <TableHeader className="bg-muted/30">
                           <TableRow>
                             <TableHead className="font-bold">Ítem</TableHead>
-                            <TableHead className="w-24 font-bold text-center">Cant.</TableHead>
-                            <TableHead className="w-32 font-bold text-center">Precio</TableHead>
-                            <TableHead className="w-24 font-bold text-center">Moneda</TableHead>
+                            <TableHead className="w-28 font-bold text-center">Cant.</TableHead>
+                            <TableHead className="w-36 font-bold text-center">Precio</TableHead>
+                            <TableHead className="w-28 font-bold text-center">Moneda</TableHead>
                             <TableHead className="text-right font-bold">Subtotal</TableHead>
                             {!editingTx && <TableHead className="w-12"></TableHead>}
                           </TableRow>
@@ -800,14 +801,14 @@ function TransactionsContent() {
               </CardContent>
             </Card>
 
-            <Card className="glass-card shadow-sm">
-              <CardContent className="p-0">
+            <Card className="glass-card shadow-sm overflow-hidden">
+              <CardContent className="p-0 overflow-x-auto">
                 {loadingTx ? (
                   <div className="p-12 text-center text-muted-foreground animate-pulse">Sincronizando operaciones...</div>
                 ) : filteredTransactions.length === 0 ? (
                   <div className="p-12 text-center text-muted-foreground italic">No se encontraron registros con estos filtros.</div>
                 ) : (
-                  <Table>
+                  <Table className="min-w-[800px]">
                     <TableHeader className="bg-muted/30">
                       <TableRow>
                         <TableHead className="font-bold">Fecha</TableHead>
