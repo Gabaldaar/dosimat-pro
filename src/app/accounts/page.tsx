@@ -317,18 +317,23 @@ export default function AccountsPage() {
   const handleCopyAllAccounts = () => {
     if (!accounts || accounts.length === 0) return;
     
-    const text = accounts.map((acc: any) => {
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('es-AR');
+    
+    let text = `Saldos de Cajas al ${dateStr}\n\n`;
+    
+    text += accounts.map((acc: any) => {
       const balance = acc.currency === 'USD' 
         ? `u$s ${Number(acc.initialBalance || 0).toLocaleString('es-AR')}`
         : `$${Number(acc.initialBalance || 0).toLocaleString('es-AR')}`;
       
-      return `*${acc.name}*\n${acc.currency}\n${balance}`;
+      return `*${acc.name}*\n${balance}`;
     }).join('\n\n');
 
     navigator.clipboard.writeText(text);
     toast({
       title: "Copiado",
-      description: "Resumen de todas las cajas copiado al portapapeles."
+      description: "Resumen de saldos copiado al portapapeles."
     });
   }
 
@@ -357,7 +362,7 @@ export default function AccountsPage() {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="icon" onClick={handleCopyAllAccounts} title="Copiar resumen de cajas">
+            <Button variant="outline" size="icon" onClick={handleCopyAllAccounts} title="Copiar resumen de saldos">
               <Copy className="h-4 w-4" />
             </Button>
             <Button variant="outline" onClick={() => setIsTransferDialogOpen(true)}>
