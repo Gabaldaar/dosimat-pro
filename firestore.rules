@@ -27,6 +27,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
+      // Soporta variaciones de mayúsculas y minúsculas para robustez
       return hasAnyRole(['admin', 'Admin', 'ADMIN']);
     }
 
@@ -37,17 +38,16 @@ service cloud.firestore {
     // --- REGLAS DE COLECCIÓN ---
 
     match /users/{userId} {
-      allow get, create: if isOwner(userId);
+      allow get: if isSignedIn();
+      allow create: if isOwner(userId);
       allow list: if isStaff();
       allow update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();
     }
 
     match /user_roles/{userId} {
-      // Un usuario puede ver su propio rol. Los administradores pueden ver todos.
-      allow get: if isOwner(userId) || isAdmin();
-      // Un usuario puede crear su documento inicial. Los administradores pueden gestionar todos.
-      allow create, update: if isOwner(userId) || isAdmin();
+      // El dueño puede ver y crear su propio rol inicial. El Admin gestiona todos.
+      allow get, create, update: if isOwner(userId) || isAdmin();
       allow list: if isStaff();
       allow delete: if isAdmin();
     }

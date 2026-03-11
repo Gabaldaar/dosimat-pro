@@ -2,9 +2,9 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { useFirebase, setDocumentNonBlocking } from "@/firebase"
+import { useFirebase, setDocumentNonBlocking, useFirestore } from "@/firebase"
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth"
-import { doc } from "firebase/firestore"
+import { doc, getDocs, collection, query, limit } from "firebase/firestore"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -33,28 +33,35 @@ export default function LoginPage() {
         toast({ title: "Bienvenido", description: "Iniciando sesión..." })
         router.push("/")
       } else {
+        // Verificar si es el primer usuario del sistema
+        const usersSnap = await getDocs(query(collection(firestore, 'users'), limit(1)))
+        const isFirstUser = usersSnap.empty
+        
         const userCredential = await createUserWithEmailAndPassword(auth, email, password)
         const user = userCredential.user
         
-        // Registro por defecto como EMPLEADO (Staff) para CUALQUIER usuario nuevo.
-        // Un administrador existente deberá promoverlo luego desde la sección de Equipo.
+        // El primer usuario es Admin, los demás son Employee
+        const initialRole = isFirstUser ? 'Admin' : 'Employee'
+        const initialRoleId = isFirstUser ? 'admin' : 'staff'
+
         setDocumentNonBlocking(doc(firestore, 'users', user.uid), {
           id: user.uid,
           name: name || email.split('@')[0],
           email: email,
-          role: 'Employee',
+          role: initialRole,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         }, { merge: true })
 
-        // El documento de 'user_roles' asigna el permiso técnico inicial de 'staff'
         setDocumentNonBlocking(doc(firestore, 'user_roles', user.uid), {
-          roleIds: ['staff']
+          roleIds: [initialRoleId]
         }, { merge: true })
         
         toast({ 
-          title: "Cuenta creada", 
-          description: "Has sido registrado como Empleado. Un administrador debe autorizar tu nivel de acceso." 
+          title: isFirstUser ? "Cuenta de Administrador creada" : "Cuenta creada", 
+          description: isFirstUser 
+            ? "Has sido registrado como el primer administrador del sistema." 
+            : "Has sido registrado como Empleado. Un administrador debe autorizar tu nivel de acceso." 
         })
         router.push("/")
       }
