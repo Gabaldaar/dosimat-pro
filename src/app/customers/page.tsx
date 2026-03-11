@@ -34,7 +34,6 @@ import {
   Info,
   Droplets
 } from "lucide-react"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -424,129 +423,110 @@ export default function CustomersPage() {
                   onClick={() => handleOpenDialog(customer)}
                 >
                   <div className={cn(
-                    "absolute top-0 left-0 w-1 h-full",
+                    "absolute top-0 left-0 w-1.5 h-full",
                     customer.equipoInstalado?.enComodato ? "bg-amber-500" : "bg-primary"
                   )} />
-                  <CardContent className="p-6">
-                    <div className="flex items-start gap-4">
-                      <Avatar className="h-14 w-14 border-2 border-primary/10">
-                        <AvatarFallback className="bg-primary/5 text-primary font-bold text-xl uppercase">
-                          {customer.nombre?.[0]}{customer.apellido?.[0]}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <div className="flex flex-col gap-1">
-                            <h3 className="text-lg font-bold truncate">{customer.apellido}, {customer.nombre}</h3>
-                            <div className="flex gap-1 flex-wrap">
-                              <Badge variant={customer.esClienteReposicion ? "default" : "secondary"} className="text-[10px] font-bold">
-                                {customer.esClienteReposicion ? 'REPOSICIÓN' : 'OCASIONAL'}
+                  <CardContent className="p-5">
+                    <div className="flex flex-col gap-4">
+                      {/* Name and Balances Row */}
+                      <div className="flex justify-between items-start gap-4">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-xl font-bold truncate leading-tight">
+                            {customer.apellido}, {customer.nombre}
+                          </h3>
+                          <div className="flex gap-1.5 mt-2 flex-wrap">
+                            <Badge variant={customer.esClienteReposicion ? "default" : "secondary"} className="text-[9px] h-5 font-bold px-2">
+                              {customer.esClienteReposicion ? 'REPO' : 'OCASIONAL'}
+                            </Badge>
+                            {customer.equipoInstalado?.enComodato && (
+                              <Badge variant="outline" className="text-[9px] h-5 font-bold border-amber-500 text-amber-700 bg-amber-50 px-2">
+                                COMODATO
                               </Badge>
-                              {customer.equipoInstalado?.enComodato && (
-                                <Badge variant="outline" className="text-[10px] font-bold border-amber-500 text-amber-600 bg-amber-50">
-                                  COMODATO
-                                </Badge>
-                              )}
-                              {zone && (
-                                <Badge variant="outline" className="text-[10px] font-bold border-primary/30 text-primary bg-primary/5">
-                                  {zone.name}
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                          <div className="text-right space-y-1">
-                            <div className={cn(
-                              "text-[10px] font-black px-2 py-0.5 rounded border uppercase flex items-center gap-1 justify-end",
-                              (customer.saldoActual || 0) < 0 ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
-                            )}>
-                              <Banknote className="h-3 w-3" /> ${(customer.saldoActual || 0).toLocaleString('es-AR')}
-                            </div>
-                            <div className={cn(
-                              "text-[10px] font-black px-2 py-0.5 rounded border uppercase flex items-center gap-1 justify-end",
-                              (customer.saldoUSD || 0) < 0 ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"
-                            )}>
-                              <TrendingUp className="h-3 w-3" /> u$s {(customer.saldoUSD || 0).toLocaleString('es-AR')}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="space-y-2 mt-3 text-sm text-muted-foreground flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            <MapPin className="h-4 w-4 shrink-0 text-primary/60" />
-                            <span className="truncate">{customer.direccion}, {customer.localidad}</span>
-                          </div>
-                          <div className="flex flex-wrap gap-2 mt-4">
-                            <Button 
-                              variant="default" 
-                              size="sm" 
-                              className="h-8 gap-2 font-bold bg-primary text-primary-foreground"
-                              asChild
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Link href={`/transactions?clientId=${customer.id}&mode=new`}>
-                                <PlusCircle className="h-3.5 w-3.5" /> Operación
-                              </Link>
-                            </Button>
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="h-8 gap-2 font-bold"
-                              asChild
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Link href={`/transactions?clientId=${customer.id}`}>
-                                <ArrowLeftRight className="h-3.5 w-3.5" /> Historial
-                              </Link>
-                            </Button>
-                            <Button 
-                              variant="secondary" 
-                              size="icon" 
-                              className="h-8 w-8"
-                              onClick={(e) => { e.stopPropagation(); handleOpenMaps(customer.direccion, customer.localidad); }}
-                              title="Ver en Mapa"
-                            >
-                              <MapPinned className="h-4 w-4" />
-                            </Button>
-                            <Button 
-                              variant="outline" 
-                              size="icon" 
-                              className="h-8 w-8"
-                              onClick={(e) => handleCopyClipboard(customer, e)}
-                              title="Copiar Datos"
-                            >
-                              <Copy className="h-4 w-4" />
-                            </Button>
-                            <Button 
-                              variant="outline" 
-                              size="icon" 
-                              className="h-8 w-8"
-                              asChild
-                              onClick={(e) => e.stopPropagation()}
-                              title="Llamar"
-                            >
-                              <a href={`tel:${customer.telefono}`}><PhoneCall className="h-4 w-4" /></a>
-                            </Button>
-                            {customer.mail && (
-                              <Button 
-                                variant="outline" 
-                                size="icon" 
-                                className="h-8 w-8"
-                                asChild
-                                onClick={(e) => e.stopPropagation()}
-                                title="Enviar Email"
-                              >
-                                <a href={`mailto:${customer.mail}`}><Mail className="h-4 w-4" /></a>
-                              </Button>
+                            )}
+                            {zone && (
+                              <Badge variant="outline" className="text-[9px] h-5 font-bold border-primary/30 text-primary bg-primary/5 px-2">
+                                {zone.name}
+                              </Badge>
                             )}
                           </div>
                         </div>
+
+                        <div className="flex flex-col gap-1.5 shrink-0">
+                          <div className={cn(
+                            "text-[11px] font-black px-3 py-1 rounded-md border flex items-center gap-2 justify-end min-w-[100px]",
+                            (customer.saldoActual || 0) < 0 ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          )}>
+                            <span className="opacity-50 text-[9px] font-bold">ARS</span>
+                            <span className="font-black">${(customer.saldoActual || 0).toLocaleString('es-AR')}</span>
+                          </div>
+                          <div className={cn(
+                            "text-[11px] font-black px-3 py-1 rounded-md border flex items-center gap-2 justify-end min-w-[100px]",
+                            (customer.saldoUSD || 0) < 0 ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          )}>
+                            <span className="opacity-50 text-[9px] font-bold">USD</span>
+                            <span className="font-black">u$s {(customer.saldoUSD || 0).toLocaleString('es-AR')}</span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex flex-col gap-2">
-                        <Button variant="ghost" size="icon" className="text-muted-foreground group-hover:text-primary transition-colors">
-                          <ChevronRight className="h-5 w-5" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="text-destructive opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => handleDelete(customer.id, e)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+
+                      {/* Address and Actions Row */}
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-2 border-t border-primary/5">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground flex-1 min-w-0">
+                          <MapPin className="h-4 w-4 shrink-0 text-primary/60" />
+                          <span className="truncate">{customer.direccion}, {customer.localidad}</span>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Button 
+                            variant="default" 
+                            size="sm" 
+                            className="h-9 gap-2 font-bold px-4"
+                            asChild
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Link href={`/transactions?clientId=${customer.id}&mode=new`}>
+                              <PlusCircle className="h-4 w-4" /> Operar
+                            </Link>
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="icon" 
+                            className="h-9 w-9"
+                            asChild
+                            onClick={(e) => e.stopPropagation()}
+                            title="Historial"
+                          >
+                            <Link href={`/transactions?clientId=${customer.id}`}>
+                              <ArrowLeftRight className="h-4 w-4" />
+                            </Link>
+                          </Button>
+                          <Button 
+                            variant="secondary" 
+                            size="icon" 
+                            className="h-9 w-9"
+                            onClick={(e) => { e.stopPropagation(); handleOpenMaps(customer.direccion, customer.localidad); }}
+                            title="Ver en Mapa"
+                          >
+                            <MapPinned className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="icon" 
+                            className="h-9 w-9"
+                            onClick={(e) => handleCopyClipboard(customer, e)}
+                            title="Copiar Datos"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-9 w-9 text-destructive opacity-40 hover:opacity-100 hover:bg-destructive/10 transition-all" 
+                            onClick={(e) => handleDelete(customer.id, e)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </CardContent>
