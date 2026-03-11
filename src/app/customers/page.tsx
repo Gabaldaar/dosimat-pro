@@ -1,7 +1,9 @@
+
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, Suspense } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -45,10 +47,11 @@ import { cn } from "@/lib/utils"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
-export default function CustomersPage() {
+function CustomersContent() {
   const { toast } = useToast()
   const db = useFirestore()
   const { user } = useUser()
+  const searchParams = useSearchParams()
   
   const [searchTerm, setSearchTerm] = useState("")
   const [filterBalance, setFilterBalance] = useState("all") 
@@ -70,6 +73,14 @@ export default function CustomersPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState("")
   const [newZoneName, setNewZoneName] = useState("")
   const [editingCustomer, setEditingCustomer] = useState<any>(null)
+
+  // Manejar filtros externos (desde el Dashboard)
+  useEffect(() => {
+    const balanceParam = searchParams.get('filterBalance')
+    if (balanceParam) {
+      setFilterBalance(balanceParam)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -818,5 +829,17 @@ export default function CustomersPage() {
       </SidebarInset>
       <MobileNav />
     </div>
+  )
+}
+
+export default function CustomersPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    }>
+      <CustomersContent />
+    </Suspense>
   )
 }

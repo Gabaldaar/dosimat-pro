@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useMemo } from "react"
@@ -13,10 +14,13 @@ import {
   Loader2,
   MapPin,
   Calendar,
-  Droplets
+  Droplets,
+  ArrowRight,
+  Calculator
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid } from "recharts"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
@@ -26,6 +30,7 @@ import { cn } from "@/lib/utils"
 
 export default function Dashboard() {
   const db = useFirestore()
+  const router = useRouter()
 
   // Queries
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
@@ -44,6 +49,18 @@ export default function Dashboard() {
       return acc
     }, { ARS: 0, USD: 0 })
   }, [accounts])
+
+  // Cálculo de Deudas a Cobrar (Suma de saldos negativos de clientes)
+  const debtTotals = useMemo(() => {
+    if (!clients) return { ARS: 0, USD: 0 }
+    return clients.reduce((acc: any, curr: any) => {
+      const ars = Number(curr.saldoActual || 0)
+      const usd = Number(curr.saldoUSD || 0)
+      if (ars < 0) acc.ARS += Math.abs(ars)
+      if (usd < 0) acc.USD += Math.abs(usd)
+      return acc
+    }, { ARS: 0, USD: 0 })
+  }, [clients])
 
   const chartData = useMemo(() => {
     if (!transactions) return []
@@ -181,6 +198,49 @@ export default function Dashboard() {
                   </div>
                 </CardContent>
               </Card>
+            </section>
+
+            {/* Nueva sección: Cobranzas Pendientes (Deudas a Cobrar) */}
+            <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+               <Card 
+                className="glass-card bg-rose-50 border-l-4 border-l-rose-500 cursor-pointer hover:bg-rose-100/80 transition-all group overflow-hidden relative"
+                onClick={() => router.push('/customers?filterBalance=debt')}
+               >
+                 <Calculator className="absolute right-4 top-1/2 -translate-y-1/2 h-16 w-16 text-rose-500/10 -rotate-12 group-hover:rotate-0 transition-transform" />
+                 <CardContent className="pt-6">
+                   <div className="flex justify-between items-center">
+                     <div>
+                       <p className="text-[10px] font-black uppercase tracking-widest text-rose-700">Deudas a Cobrar (ARS)</p>
+                       <h3 className="text-3xl font-black mt-1 text-rose-800">
+                         ${debtTotals.ARS.toLocaleString('es-AR')}
+                       </h3>
+                       <p className="text-[10px] mt-1 font-bold text-rose-600 flex items-center gap-1">
+                         Ver listado de deudores <ArrowRight className="h-3 w-3" />
+                       </p>
+                     </div>
+                   </div>
+                 </CardContent>
+               </Card>
+
+               <Card 
+                className="glass-card bg-rose-50 border-l-4 border-l-rose-500 cursor-pointer hover:bg-rose-100/80 transition-all group overflow-hidden relative"
+                onClick={() => router.push('/customers?filterBalance=debt')}
+               >
+                 <TrendingUp className="absolute right-4 top-1/2 -translate-y-1/2 h-16 w-16 text-rose-500/10 -rotate-12 group-hover:rotate-0 transition-transform" />
+                 <CardContent className="pt-6">
+                   <div className="flex justify-between items-center">
+                     <div>
+                       <p className="text-[10px] font-black uppercase tracking-widest text-rose-700">Deudas a Cobrar (USD)</p>
+                       <h3 className="text-3xl font-black mt-1 text-rose-800">
+                         u$s {debtTotals.USD.toLocaleString('es-AR')}
+                       </h3>
+                       <p className="text-[10px] mt-1 font-bold text-rose-600 flex items-center gap-1">
+                         Ver listado de deudores <ArrowRight className="h-3 w-3" />
+                       </p>
+                     </div>
+                   </div>
+                 </CardContent>
+               </Card>
             </section>
 
             <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
