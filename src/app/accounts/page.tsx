@@ -597,6 +597,9 @@ export default function AccountsPage() {
                 <div className="space-y-2">
                   <Label>Tipo</Label>
                   <Select value={accountFormData.type} onValueChange={(v) => setAccountFormData({...accountFormData, type: v})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar tipo..." />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Cash">Efectivo</SelectItem>
                       <SelectItem value="Bank">Banco / Digital</SelectItem>
@@ -607,12 +610,23 @@ export default function AccountsPage() {
                 <div className="space-y-2">
                   <Label>Moneda</Label>
                   <Select value={accountFormData.currency} onValueChange={(v) => setAccountFormData({...accountFormData, currency: v})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar moneda..." />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="ARS">Pesos (ARS)</SelectItem>
                       <SelectItem value="USD">Dólares (USD)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Saldo Inicial / Actual</Label>
+                <Input 
+                  type="number" 
+                  value={accountFormData.initialBalance} 
+                  onChange={(e) => setAccountFormData({...accountFormData, initialBalance: Number(e.target.value)})} 
+                />
               </div>
             </div>
             <DialogFooter>
