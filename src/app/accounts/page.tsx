@@ -199,6 +199,10 @@ export default function AccountsPage() {
   }
 
   const handleSaveAccount = () => {
+    if (!isAdmin) {
+      toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos para realizar esta acción.", variant: "destructive" })
+      return
+    }
     if (!accountFormData.name) {
       toast({ title: "Error", description: "El nombre es obligatorio", variant: "destructive" })
       return
@@ -213,6 +217,10 @@ export default function AccountsPage() {
   }
 
   const confirmDeleteAccount = () => {
+    if (!isAdmin) {
+      toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos para realizar esta acción.", variant: "destructive" })
+      return
+    }
     if (!accountToDelete) return
     deleteDocumentNonBlocking(doc(db, 'financial_accounts', accountToDelete.id))
     setAccountToDelete(null)
@@ -519,7 +527,7 @@ export default function AccountsPage() {
                 className="w-full text-xs font-bold uppercase tracking-wider border-primary text-primary hover:bg-primary/5 gap-2" 
                 onClick={() => {
                   if (!isAdmin) {
-                    toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos para gestionar categorías de gastos.", variant: "destructive" })
+                    toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos de Administrador para gestionar categorías de gastos.", variant: "destructive" })
                     return
                   }
                   setIsCategoryManagerOpen(true)
@@ -685,7 +693,13 @@ export default function AccountsPage() {
                 {expenseCategories?.map((cat: any) => (
                   <div key={cat.id} className="flex justify-between items-center p-2 border-b last:border-0">
                     <span className="text-sm">{cat.name}</span>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteDocumentNonBlocking(doc(db, 'expense_categories', cat.id))}><Trash2 className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => {
+                      if (!isAdmin) {
+                        toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos para realizar esta acción.", variant: "destructive" })
+                        return
+                      }
+                      deleteDocumentNonBlocking(doc(db, 'expense_categories', cat.id))
+                    }}><Trash2 className="h-4 w-4" /></Button>
                   </div>
                 ))}
               </ScrollArea>

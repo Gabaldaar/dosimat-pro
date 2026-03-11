@@ -44,10 +44,10 @@ service cloud.firestore {
     }
 
     match /user_roles/{userId} {
-      // Permitimos que el propietario cree y actualice su propio documento de roles.
-      // Esto es crucial para el arranque del primer administrador y para que el usuario
-      // pueda gestionar su propia identidad de seguridad si tiene los permisos de UI.
-      allow get, create, update: if isOwner(userId);
+      // Un usuario puede ver su propio rol. Los administradores pueden ver todos.
+      allow get: if isOwner(userId) || isAdmin();
+      // Un usuario puede crear su documento inicial. Los administradores pueden gestionar todos.
+      allow create, update: if isOwner(userId) || isAdmin();
       allow list: if isStaff();
       allow delete: if isAdmin();
     }

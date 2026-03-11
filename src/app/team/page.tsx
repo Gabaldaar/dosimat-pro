@@ -86,6 +86,7 @@ export default function TeamPage() {
     updateDocumentNonBlocking(doc(db, 'users', userId), { role: newRole })
     
     // Sincronizamos con el sistema de seguridad (user_roles)
+    // El rol se guarda en minúsculas para coincidir con las reglas de seguridad.
     const roleId = newRole.toLowerCase() === 'admin' ? 'admin' : 'staff';
     setDocumentNonBlocking(doc(db, 'user_roles', userId), { 
       roleIds: [roleId] 

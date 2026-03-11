@@ -82,7 +82,7 @@ export default function CatalogPage() {
 
   const handleOpenDialog = (item?: any) => {
     if (!isAdmin) {
-      toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos para gestionar el catálogo.", variant: "destructive" })
+      toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos de Administrador para gestionar el catálogo.", variant: "destructive" })
       return
     }
     if (item) {
@@ -102,6 +102,10 @@ export default function CatalogPage() {
   }
 
   const handleSave = () => {
+    if (!isAdmin) {
+      toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos para realizar esta acción.", variant: "destructive" })
+      return
+    }
     if (!formData.name) return
     const id = editingItemId || Math.random().toString(36).substr(2, 9)
     
@@ -113,6 +117,10 @@ export default function CatalogPage() {
   }
 
   const confirmDelete = () => {
+    if (!isAdmin) {
+      toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos para realizar esta acción.", variant: "destructive" })
+      return
+    }
     if (!itemToDelete) return
     deleteDocumentNonBlocking(doc(db, 'products_services', itemToDelete.id))
     setItemToDelete(null)
