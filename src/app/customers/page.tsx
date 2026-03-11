@@ -95,15 +95,16 @@ export default function CustomersPage() {
     pais: "Argentina",
     mail: "",
     cuit_dni: "",
-    observaciones: "",
-    zonaId: "",
+    observaciones: "", // Se mantiene por compatibilidad con Address
+    notasGeneral: "",
     equipoInstalado: {
       medidasPileta: "",
       volumen: 0,
       dosisCloro: "",
       cantidadBidones: 0,
       modeloEquipo: "",
-      enComodato: false
+      enComodato: false,
+      notas: ""
     },
     esClienteReposicion: true,
     saldoActual: 0,
@@ -115,30 +116,42 @@ export default function CustomersPage() {
 
   const filteredCustomers = useMemo(() => {
     if (!customers) return []
-    return customers.filter((c: any) => {
-      const fullName = `${c.nombre || ""} ${c.apellido || ""}`.toLowerCase();
-      const searchMatch = fullName.includes(searchTerm.toLowerCase()) ||
-                          (c.cuit_dni && c.cuit_dni.includes(searchTerm)) ||
-                          (c.mail && c.mail.toLowerCase().includes(searchTerm.toLowerCase()));
-      if (!searchMatch) return false
-      
-      const saldoARS = Number(c.saldoActual || 0)
-      const saldoUSD = Number(c.saldoUSD || 0)
-      if (filterBalance === 'debt' && (saldoARS >= 0 && saldoUSD >= 0)) return false
-      if (filterBalance === 'credit' && (saldoARS <= 0 && saldoUSD <= 0)) return false
+    return customers
+      .filter((c: any) => {
+        const fullName = `${c.nombre || ""} ${c.apellido || ""}`.toLowerCase();
+        const searchMatch = fullName.includes(searchTerm.toLowerCase()) ||
+                            (c.cuit_dni && c.cuit_dni.includes(searchTerm)) ||
+                            (c.mail && c.mail.toLowerCase().includes(searchTerm.toLowerCase()));
+        if (!searchMatch) return false
+        
+        const saldoARS = Number(c.saldoActual || 0)
+        const saldoUSD = Number(c.saldoUSD || 0)
+        if (filterBalance === 'debt' && (saldoARS >= 0 && saldoUSD >= 0)) return false
+        if (filterBalance === 'credit' && (saldoARS <= 0 && saldoUSD <= 0)) return false
 
-      const isComodato = c.equipoInstalado?.enComodato === true
-      if (filterComodato === 'yes' && !isComodato) return false
-      if (filterComodato === 'no' && isComodato) return false
+        const isComodato = c.equipoInstalado?.enComodato === true
+        if (filterComodato === 'yes' && !isComodato) return false
+        if (filterComodato === 'no' && isComodato) return false
 
-      const isRepo = c.esClienteReposicion === true
-      if (filterReposicion === 'yes' && !isRepo) return false
-      if (filterReposicion === 'no' && isRepo) return false
+        const isRepo = c.esClienteReposicion === true
+        if (filterReposicion === 'yes' && !isRepo) return false
+        if (filterReposicion === 'no' && isRepo) return false
 
-      if (filterZone !== 'all' && c.zonaId !== filterZone) return false
+        if (filterZone !== 'all' && c.zonaId !== filterZone) return false
 
-      return true
-    })
+        return true
+      })
+      .sort((a: any, b: any) => {
+        const apellidoA = (a.apellido || "").toLowerCase();
+        const apellidoB = (b.apellido || "").toLowerCase();
+        if (apellidoA < apellidoB) return -1;
+        if (apellidoA > apellidoB) return 1;
+        const nombreA = (a.nombre || "").toLowerCase();
+        const nombreB = (b.nombre || "").toLowerCase();
+        if (nombreA < nombreB) return -1;
+        if (nombreA > nombreB) return 1;
+        return 0;
+      })
   }, [customers, searchTerm, filterBalance, filterComodato, filterReposicion, filterZone])
 
   const filteredTotals = useMemo(() => {
@@ -612,6 +625,10 @@ export default function CustomersPage() {
                     />
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <Label className="font-bold">Notas Generales</Label>
+                  <Textarea value={formData.notasGeneral} onChange={(e) => setFormData({...formData, notasGeneral: e.target.value})} placeholder="Notas sobre el perfil del cliente..." className="min-h-[80px]" />
+                </div>
               </TabsContent>
 
               <TabsContent value="address" className="space-y-4 py-4">
@@ -647,7 +664,7 @@ export default function CustomersPage() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Observaciones Internas</Label>
+                  <Label>Observaciones de Ubicación</Label>
                   <Textarea value={formData.observaciones} onChange={(e) => setFormData({...formData, observaciones: e.target.value})} placeholder="Detalles de acceso, perros, etc..." className="min-h-[100px]" />
                 </div>
               </TabsContent>
@@ -678,6 +695,10 @@ export default function CustomersPage() {
                     <Label>Cantidad de Bidones</Label>
                     <Input type="number" value={formData.equipoInstalado.cantidadBidones} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, cantidadBidones: Number(e.target.value)}}))} />
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-bold">Notas Técnicas / Equipo</Label>
+                  <Textarea value={formData.equipoInstalado.notas} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, notas: e.target.value}}))} placeholder="Detalles sobre la instalación, fallas técnicas, reparaciones..." className="min-h-[80px]" />
                 </div>
               </TabsContent>
             </Tabs>
