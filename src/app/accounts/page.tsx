@@ -428,34 +428,37 @@ export default function AccountsPage() {
               return (
                 <Card 
                   key={account.id} 
-                  className={`glass-card overflow-hidden group border-l-4 cursor-pointer hover:shadow-md transition-all ${isUSD ? 'border-l-emerald-500' : 'border-l-blue-500'}`}
-                  onClick={() => router.push(`/transactions?accountId=${account.id}`)}
+                  className={cn(
+                    "glass-card overflow-hidden group border-l-4 cursor-pointer hover:shadow-md transition-all",
+                    isUSD ? 'border-l-emerald-500' : 'border-l-blue-500'
+                  )}
+                  onClick={(e) => {
+                    const target = e.target as HTMLElement;
+                    if (target.closest('button') || target.closest('[role="menuitem"]')) return;
+                    router.push(`/transactions?accountId=${account.id}`);
+                  }}
                 >
                   <CardHeader className="pb-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        {/* Icono a la izquierda ocupando toda la altura de la cabecera */}
                         <div className={cn("p-4 rounded-xl flex items-center justify-center shrink-0", bgColor, themeColor)}>
                           {account.type === 'Bank' ? <Building2 className="h-10 w-10" /> : 
                            account.type === 'Cash' ? <Banknote className="h-10 w-10" /> : <Wallet className="h-10 w-10" />}
                         </div>
                         <div className="flex flex-col justify-center min-w-0">
-                          {/* Nombre más grande a la derecha del icono */}
                           <CardTitle className="text-xl font-black leading-tight truncate">{account.name}</CardTitle>
-                          {/* Moneda debajo del nombre alineada a la izquierda */}
                           <span className={cn("text-xs font-black uppercase tracking-widest", themeColor)}>
                             {account.currency}
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center">
+                      <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button 
                               variant="ghost" 
                               size="icon" 
                               className="h-10 w-10"
-                              onClick={(e) => e.stopPropagation()}
                             >
                               <MoreVertical className="h-5 w-5" />
                             </Button>
@@ -476,7 +479,6 @@ export default function AccountsPage() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    {/* Saldo bien visible */}
                     <div className={cn("text-4xl font-black tracking-tighter mb-6", themeColor)}>
                       {isUSD ? 'u$s' : '$'}{Number(account.initialBalance || 0).toLocaleString('es-AR')}
                     </div>
