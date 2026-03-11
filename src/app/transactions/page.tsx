@@ -768,14 +768,17 @@ function TransactionsContent() {
                 <SelectContent>{templates?.map((t: any) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}</SelectContent>
               </Select>
               {selectedTemplateId && (
-                <div className="p-4 bg-muted/20 rounded border space-y-2">
-                  <p className="text-sm font-bold">{processedEmail.subject}</p>
-                  <p className="text-xs whitespace-pre-wrap italic">{processedEmail.body}</p>
+                <div className="p-4 bg-muted/20 rounded border space-y-2 max-h-[450px] overflow-y-auto">
+                  <div className="sticky top-0 bg-muted/20 pb-2 border-b mb-4">
+                    <p className="text-sm font-bold text-primary">Asunto: {processedEmail.subject}</p>
+                  </div>
+                  <p className="text-xs whitespace-pre-wrap italic leading-relaxed">{processedEmail.body}</p>
                 </div>
               )}
             </div>
             <DialogFooter>
-              <Button onClick={handleSendEmail} disabled={!selectedTemplateId}>Enviar</Button>
+              <Button variant="outline" onClick={() => setIsEmailDialogOpen(false)}>Cerrar</Button>
+              <Button onClick={handleSendEmail} disabled={!selectedTemplateId}>Preparar Email</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
