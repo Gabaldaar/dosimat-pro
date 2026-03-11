@@ -34,7 +34,8 @@ import {
   Send,
   Eye,
   Fingerprint,
-  Droplets
+  Droplets,
+  RefreshCw
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -71,7 +72,7 @@ const txTypeMap: Record<string, { label: string, icon: any, color: string, descr
   sale: { label: "Venta", icon: ShoppingBag, color: "text-blue-600 bg-blue-50", description: "Venta general de productos, insumos o accesorios de piscina." },
   refill: { label: "Reposición", icon: Droplet, color: "text-cyan-600 bg-cyan-50", description: "Registro de servicio de reposición de cloro y químicos." },
   service: { label: "Técnico", icon: Wrench, color: "text-indigo-600 bg-indigo-50", description: "Servicios técnicos, reparaciones o visitas de mantenimiento." },
-  adjustment: { label: "Interno", icon: Settings2, color: "text-slate-600 bg-slate-50", description: "Ajustes manuales de saldo o correcciones administrativas." },
+  adjustment: { label: "Ajuste", icon: Settings2, color: "text-slate-600 bg-slate-50", description: "Corrección manual de saldo (Ingresos o Egresos) en la cuenta del cliente." },
   cobro: { label: "Cobro", icon: Receipt, color: "text-emerald-600 bg-emerald-50", description: "Registro de pago recibido del cliente para cancelar deuda." },
   FinancialTransferIn: { label: "Transferencia (Entrada)", icon: ArrowRightLeft, color: "text-emerald-600 bg-emerald-50", description: "Ingreso por transferencia entre cuentas." },
   FinancialTransferOut: { label: "Transferencia (Salida)", icon: ArrowRightLeft, color: "text-amber-600 bg-amber-50", description: "Egreso por transferencia entre cuentas." },
@@ -131,9 +132,11 @@ function TransactionsContent() {
   const [destinationAccounts, setDestinationAccounts] = useState<Record<string, string>>({ ARS: "pending", USD: "pending" })
   const [operationDate, setOperationDate] = useState(new Date().toISOString().split('T')[0])
   
-  const [cobroAmount, setCobroAmount] = useState(0)
-  const [cobroCurrency, setCobroCurrency] = useState("ARS")
-  const [cobroAccountId, setCobroAccountId] = useState("pending")
+  // States for simplified amount operations (Adjustment/Cobro)
+  const [manualAmount, setManualAmount] = useState(0)
+  const [manualCurrency, setManualCurrency] = useState("ARS")
+  const [manualAccountId, setManualAccountId] = useState("pending")
+  const [adjustmentSign, setAdjustmentSign] = useState<"1" | "-1">("1") // 1: A favor (increase balance), -1: A cargo (decrease balance)
   const [txDescription, setTxDescription] = useState("")
 
   useEffect(() => {
@@ -270,10 +273,13 @@ function TransactionsContent() {
     setActiveTab(tx.type)
     setTxDescription(tx.description || "")
 
-    if (tx.type === 'cobro') {
-      setCobroAmount(Math.abs(tx.amount))
-      setCobroCurrency(tx.currency)
-      setCobroAccountId(tx.financialAccountId || "pending")
+    if (tx.type === 'cobro' || tx.type === 'adjustment') {
+      setManualAmount(Math.abs(tx.amount))
+      setManualCurrency(tx.currency)
+      setManualAccountId(tx.financialAccountId || "pending")
+      if (tx.type === 'adjustment') {
+        setAdjustmentSign(tx.amount >= 0 ? "1" : "-1")
+      }
     } else {
       if (tx.items && tx.items.length > 0) {
         setSelectedItems(tx.items)
@@ -296,30 +302,26 @@ function TransactionsContent() {
     const acc = accounts?.find(a => a.id === tx.financialAccountId)
     const amount = Number(tx.amount) || 0;
     
-    if (tx.type === 'cobro') {
-      if (acc) {
-        updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { 
-          initialBalance: Number(acc.initialBalance || 0) - amount 
-        })
-      }
-      const balanceField = tx.currency === 'ARS' ? 'saldoActual' : 'saldoUSD'
-      if (client) {
+    // Reverse financial account impact
+    if (acc) {
+      updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { 
+        initialBalance: Number(acc.initialBalance || 0) - amount 
+      })
+    }
+    
+    // Reverse client balance impact
+    const balanceField = tx.currency === 'ARS' ? 'saldoActual' : 'saldoUSD'
+    if (client) {
+      if (tx.type === 'cobro' || tx.type === 'adjustment') {
+        // These types ADDED to balance. Reverting means SUBTRACTING.
         updateDocumentNonBlocking(doc(db, 'clients', client.id), { 
           [balanceField]: Number(client[balanceField] || 0) - amount 
         })
-      }
-    } else {
-      if (acc) {
-        updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { 
-          initialBalance: Number(acc.initialBalance || 0) - amount 
-        })
       } else {
-        const balanceField = tx.currency === 'ARS' ? 'saldoActual' : 'saldoUSD'
-        if (client) {
-          updateDocumentNonBlocking(doc(db, 'clients', client.id), { 
-            [balanceField]: Number(client[balanceField] || 0) + amount 
-          })
-        }
+        // sales/refill/service SUBTRACTED from balance. Reverting means ADDING.
+        updateDocumentNonBlocking(doc(db, 'clients', client.id), { 
+          [balanceField]: Number(client[balanceField] || 0) + amount 
+        })
       }
     }
   }
@@ -348,30 +350,41 @@ function TransactionsContent() {
       setEditingTx(null);
     }
 
-    if (activeTab === 'cobro') {
-      if (cobroAmount <= 0) return
+    if (activeTab === 'cobro' || activeTab === 'adjustment') {
+      if (manualAmount <= 0) return
       
       const txId = Math.random().toString(36).substring(2, 11)
+      const multiplier = activeTab === 'adjustment' ? Number(adjustmentSign) : 1
+      const finalAmount = Number(manualAmount) * multiplier
+
       const txData = {
         id: txId,
         date: new Date(operationDate).toISOString(),
         clientId: selectedCustomerId,
-        type: 'cobro',
-        amount: Number(cobroAmount),
-        currency: cobroCurrency,
-        description: txDescription || `Cobro de saldo - ${cobroCurrency}`,
-        financialAccountId: cobroAccountId === "pending" ? null : cobroAccountId
+        type: activeTab,
+        amount: finalAmount,
+        currency: manualCurrency,
+        description: txDescription || `${txTypeMap[activeTab].label} manual - ${manualCurrency}`,
+        financialAccountId: manualAccountId === "pending" ? null : manualAccountId
       }
 
       setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
       
-      const acc = accounts?.find(a => a.id === cobroAccountId)
-      if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: Number(acc.initialBalance || 0) + Number(cobroAmount) })
+      // Update financial account if selected
+      const acc = accounts?.find(a => a.id === manualAccountId)
+      if (acc) {
+        updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { 
+          initialBalance: Number(acc.initialBalance || 0) + finalAmount 
+        })
+      }
       
-      const balanceField = cobroCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'
-      updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: Number(client[balanceField] || 0) + Number(cobroAmount) })
+      // Update client balance (A favor increases balance, A cargo decreases it)
+      const balanceField = manualCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'
+      updateDocumentNonBlocking(doc(db, 'clients', client.id), { 
+        [balanceField]: Number(client[balanceField] || 0) + finalAmount 
+      })
 
-      toast({ title: "Cobro registrado correctamente" })
+      toast({ title: `${txTypeMap[activeTab].label} registrado correctamente` })
     } else {
       if (selectedItems.length === 0) return
 
@@ -419,7 +432,7 @@ function TransactionsContent() {
     setSelectedCustomerId("")
     setSelectedItems([])
     setTxDescription("")
-    setCobroAmount(0)
+    setManualAmount(0)
     setOperationDate(new Date().toISOString().split('T')[0])
   }
 
@@ -523,7 +536,9 @@ function TransactionsContent() {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                    <div className="space-y-1">
                      <CardTitle className="text-xl flex items-center gap-2">
-                       {activeTab === 'cobro' ? <Receipt className="h-5 w-5 text-emerald-600" /> : <PlusCircle className="h-5 w-5 text-primary" />}
+                       {activeTab === 'cobro' ? <Receipt className="h-5 w-5 text-emerald-600" /> : 
+                        activeTab === 'adjustment' ? <Settings2 className="h-5 w-5 text-slate-600" /> :
+                        <PlusCircle className="h-5 w-5 text-primary" />}
                        {txTypeMap[activeTab]?.label || activeTab}
                      </CardTitle>
                      <p className="text-xs text-muted-foreground">{txTypeMap[activeTab]?.description}</p>
@@ -535,7 +550,7 @@ function TransactionsContent() {
                           <TabsTrigger value="refill">Repo</TabsTrigger>
                           <TabsTrigger value="service">Técnico</TabsTrigger>
                           <TabsTrigger value="cobro">Cobro</TabsTrigger>
-                          <TabsTrigger value="adjustment">Interno</TabsTrigger>
+                          <TabsTrigger value="adjustment">Ajuste</TabsTrigger>
                       </TabsList>
                     </Tabs>
                    )}
@@ -580,17 +595,26 @@ function TransactionsContent() {
                   />
                 </div>
 
-                {activeTab === 'cobro' ? (
-                  <div className="p-6 bg-emerald-50 border border-emerald-100 rounded-xl space-y-4 animate-in slide-in-from-top-2 duration-300">
-                    <h3 className="font-bold text-emerald-800 flex items-center gap-2"><Wallet className="h-4 w-4" /> Registrar Pago de Cliente</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {(activeTab === 'cobro' || activeTab === 'adjustment') ? (
+                  <div className={cn(
+                    "p-6 border rounded-xl space-y-4 animate-in slide-in-from-top-2 duration-300",
+                    activeTab === 'cobro' ? "bg-emerald-50 border-emerald-100" : "bg-slate-50 border-slate-100"
+                  )}>
+                    <h3 className={cn(
+                      "font-bold flex items-center gap-2",
+                      activeTab === 'cobro' ? "text-emerald-800" : "text-slate-800"
+                    )}>
+                      {activeTab === 'cobro' ? <Receipt className="h-4 w-4" /> : <Settings2 className="h-4 w-4" />}
+                      {activeTab === 'cobro' ? "Registrar Pago de Cliente" : "Registrar Ajuste Manual de Saldo"}
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div className="space-y-2">
-                        <Label>Monto a cobrar</Label>
-                        <Input type="number" value={cobroAmount} onChange={(e) => setCobroAmount(Number(e.target.value))} className="bg-white font-bold text-lg" />
+                        <Label>Monto</Label>
+                        <Input type="number" value={manualAmount} onChange={(e) => setManualAmount(Number(e.target.value))} className="bg-white font-bold text-lg" />
                       </div>
                       <div className="space-y-2">
                         <Label>Moneda</Label>
-                        <Select value={cobroCurrency} onValueChange={setCobroCurrency} disabled={!!editingTx}>
+                        <Select value={manualCurrency} onValueChange={setManualCurrency} disabled={!!editingTx}>
                           <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="ARS">Pesos ($)</SelectItem>
@@ -598,13 +622,25 @@ function TransactionsContent() {
                           </SelectContent>
                         </Select>
                       </div>
+                      {activeTab === 'adjustment' && (
+                        <div className="space-y-2">
+                          <Label>Tipo de Ajuste</Label>
+                          <Select value={adjustmentSign} onValueChange={(v: any) => setAdjustmentSign(v)}>
+                            <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="1">A FAVOR del cliente (+)</SelectItem>
+                              <SelectItem value="-1">A CARGO del cliente (-)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                       <div className="space-y-2">
-                        <Label>Caja Destino</Label>
-                        <Select value={cobroAccountId} onValueChange={setCobroAccountId}>
+                        <Label>Caja Destino / Origen</Label>
+                        <Select value={manualAccountId} onValueChange={setManualAccountId}>
                           <SelectTrigger className="bg-white"><SelectValue placeholder="Caja/Banco..." /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="pending">A CUENTA (Deuda del cliente)</SelectItem>
-                            {accounts?.filter(a => a.currency === cobroCurrency).map(a => (
+                            <SelectItem value="pending">A CUENTA (Solo saldo cliente)</SelectItem>
+                            {accounts?.filter(a => a.currency === manualCurrency).map(a => (
                               <SelectItem key={a.id} value={a.id}>
                                 {a.name} (${Number(a.initialBalance || 0).toLocaleString('es-AR')})
                               </SelectItem>
@@ -677,7 +713,7 @@ function TransactionsContent() {
             <Card className="glass-card h-fit sticky top-8 shadow-lg">
               <CardHeader className="bg-primary/5 border-b"><CardTitle className="text-base flex items-center gap-2"><ClipboardCheck className="h-4 w-4" /> Confirmación</CardTitle></CardHeader>
               <CardContent className="space-y-6 pt-6">
-                {activeTab !== 'cobro' && (
+                {(activeTab !== 'cobro' && activeTab !== 'adjustment') && (
                   <div className="space-y-4">
                     {cartTotals.ARS > 0 && (
                       <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100 space-y-3">
@@ -727,10 +763,10 @@ function TransactionsContent() {
                 )}
                 <Button 
                   className="w-full h-14 font-black text-md shadow-xl transition-all hover:scale-[1.02]" 
-                  disabled={(activeTab !== 'cobro' && selectedItems.length === 0) || (activeTab === 'cobro' && cobroAmount <= 0) || !selectedCustomerId} 
+                  disabled={((activeTab !== 'cobro' && activeTab !== 'adjustment') && selectedItems.length === 0) || ((activeTab === 'cobro' || activeTab === 'adjustment') && manualAmount <= 0) || !selectedCustomerId} 
                   onClick={handleSaveTransaction}
                 >
-                  {editingTx ? 'GUARDAR CAMBIOS' : (activeTab === 'cobro' ? 'REGISTRAR PAGO RECIBIDO' : `GUARDAR ${txTypeMap[activeTab]?.label.toUpperCase()}`)}
+                  {editingTx ? 'GUARDAR CAMBIOS' : (activeTab === 'cobro' ? 'REGISTRAR PAGO RECIBIDO' : activeTab === 'adjustment' ? 'GUARDAR AJUSTE' : `GUARDAR ${txTypeMap[activeTab]?.label.toUpperCase()}`)}
                 </Button>
                 {editingTx && (
                   <Button variant="outline" className="w-full" onClick={() => { resetRegisterForm(); setMainView("history"); }}>
@@ -852,12 +888,12 @@ function TransactionsContent() {
                         const customer = customers?.find(c => c.id === tx.clientId);
                         const typeInfo = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
                         const Icon = typeInfo.icon;
-                        const isIncome = tx.amount > 0 || tx.type === 'cobro';
+                        const isIncome = tx.amount > 0 || tx.type === 'cobro' || (tx.type === 'adjustment' && tx.amount > 0);
                         const itemsCount = tx.items?.length || 0;
                         const account = accounts?.find(a => a.id === tx.financialAccountId);
                         
                         return (
-                          <TableRow key={tx.id} className={cn("group hover:bg-muted/5", tx.type === 'cobro' && "bg-emerald-50/10")}>
+                          <TableRow key={tx.id} className={cn("group hover:bg-muted/5", (tx.type === 'cobro' || (tx.type === 'adjustment' && tx.amount > 0)) && "bg-emerald-50/10")}>
                             <TableCell className="text-xs whitespace-nowrap font-medium">{new Date(tx.date).toLocaleDateString('es-AR')}</TableCell>
                             <TableCell className="font-bold text-sm">{customer ? `${customer.apellido}, ${customer.nombre}` : 'Sin cliente'}</TableCell>
                             <TableCell>
