@@ -666,13 +666,24 @@ function TransactionsContent() {
                     })}
                   </div>
                 )}
-                <Button 
-                  className="w-full h-14 font-black text-md shadow-xl" 
-                  disabled={((activeTab !== 'cobro' && activeTab !== 'adjustment') && selectedItems.length === 0) || ((activeTab === 'cobro' || activeTab === 'adjustment') && manualAmount <= 0) || !selectedCustomerId} 
-                  onClick={handleSaveTransaction}
-                >
-                  {editingTx ? 'GUARDAR CAMBIOS' : 'REGISTRAR OPERACIÓN'}
-                </Button>
+                <div className="flex flex-col gap-3">
+                  <Button 
+                    className="w-full h-14 font-black text-md shadow-xl" 
+                    disabled={((activeTab !== 'cobro' && activeTab !== 'adjustment') && selectedItems.length === 0) || ((activeTab === 'cobro' || activeTab === 'adjustment') && manualAmount <= 0) || !selectedCustomerId} 
+                    onClick={handleSaveTransaction}
+                  >
+                    {editingTx ? 'GUARDAR CAMBIOS' : 'REGISTRAR OPERACIÓN'}
+                  </Button>
+                  {editingTx && (
+                    <Button 
+                      variant="outline" 
+                      className="w-full h-12 font-bold border-rose-200 text-rose-600 hover:bg-rose-50" 
+                      onClick={() => { resetRegisterForm(); setMainView("history"); }}
+                    >
+                      CANCELAR EDICIÓN
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>
