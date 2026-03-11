@@ -33,16 +33,15 @@ export default function LoginPage() {
         toast({ title: "Bienvenido", description: "Iniciando sesión..." })
         router.push("/")
       } else {
-        // Verificar si es el primer usuario del sistema
+        // Verificar si es el primer usuario del sistema para darle rol Admin
         const usersSnap = await getDocs(query(collection(firestore, 'users'), limit(1)))
         const isFirstUser = usersSnap.empty
         
         const userCredential = await createUserWithEmailAndPassword(auth, email, password)
         const user = userCredential.user
         
-        // El primer usuario es Admin, los demás son Employee
+        // El primer usuario es Admin, los demás son Employee por defecto (pueden ser cambiados por el admin)
         const initialRole = isFirstUser ? 'Admin' : 'Employee'
-        const initialRoleId = isFirstUser ? 'admin' : 'staff'
 
         setDocumentNonBlocking(doc(firestore, 'users', user.uid), {
           id: user.uid,
@@ -53,15 +52,16 @@ export default function LoginPage() {
           updatedAt: new Date().toISOString()
         }, { merge: true })
 
+        // No dependemos de user_roles para las reglas, pero lo mantenemos por si acaso
         setDocumentNonBlocking(doc(firestore, 'user_roles', user.uid), {
-          roleIds: [initialRoleId]
+          roleIds: [initialRole.toLowerCase()]
         }, { merge: true })
         
         toast({ 
           title: isFirstUser ? "Cuenta de Administrador creada" : "Cuenta creada", 
           description: isFirstUser 
             ? "Has sido registrado como el primer administrador del sistema." 
-            : "Has sido registrado como Empleado. Un administrador debe autorizar tu nivel de acceso." 
+            : "Has sido registrado como Empleado." 
         })
         router.push("/")
       }
@@ -72,7 +72,7 @@ export default function LoginPage() {
       if (error.code === 'auth/invalid-credential') {
         message = "Email o contraseña incorrectos."
       } else if (error.code === 'auth/user-not-found') {
-        message = "Usuario no encontrado. Por favor, regístrate."
+        message = "Usuario no encontrado."
       } else if (error.code === 'auth/email-already-in-use') {
         message = "Este email ya está en uso."
       }

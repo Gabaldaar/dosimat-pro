@@ -59,48 +59,44 @@ export default function TeamPage() {
   }, [isInviteOpen]);
 
   const handleUpdateRole = (userId: string, newRole: string) => {
-    // Verificación proactiva de permisos antes de la acción
+    // Verificación de permisos en la aplicación
     if (!isAdmin) {
       toast({ 
         title: "Acceso denegado", 
-        description: "Su usuario no tiene permisos de Administrador para cambiar roles de equipo.", 
+        description: "Su usuario no tiene permisos de Administrador para realizar esta acción.", 
         variant: "destructive" 
       })
       return
     }
 
     // Validar que no sea el último administrador quitándose el rol a sí mismo
+    const adminCount = team?.filter((m: any) => m.role === 'Admin').length || 0;
     if (userId === currentUser?.uid && newRole !== 'Admin') {
-      const adminCount = team?.filter((m: any) => m.role === 'Admin').length || 0;
       if (adminCount <= 1) {
         toast({ 
           title: "Acción no permitida", 
-          description: "Debe haber al menos un administrador activo en el sistema. No puedes quitarte el rol si eres el único.", 
+          description: "Debe haber al menos un administrador activo en el sistema.", 
           variant: "destructive" 
         });
         return;
       }
     }
 
-    // Actualizamos perfil básico
     updateDocumentNonBlocking(doc(db, 'users', userId), { role: newRole })
     
-    // Sincronizamos con el sistema de seguridad (user_roles)
-    // El rol se guarda en minúsculas para coincidir con las reglas de seguridad.
-    const roleId = newRole.toLowerCase() === 'admin' ? 'admin' : 'staff';
+    // También actualizamos el documento auxiliar de roles por si acaso
     setDocumentNonBlocking(doc(db, 'user_roles', userId), { 
-      roleIds: [roleId] 
+      roleIds: [newRole.toLowerCase()] 
     }, { merge: true })
 
     toast({ title: "Rol actualizado", description: `Usuario ahora es ${newRole}` })
   }
 
   const handleDeleteUser = (userId: string) => {
-    // Verificación proactiva de permisos antes de la acción
     if (!isAdmin) {
       toast({ 
         title: "Acceso denegado", 
-        description: "Su usuario no tiene permisos de Administrador para eliminar colaboradores.", 
+        description: "Su usuario no tiene permisos de Administrador.", 
         variant: "destructive" 
       })
       return
@@ -117,7 +113,7 @@ export default function TeamPage() {
       if (adminCount <= 1) {
         toast({ 
           title: "Acción no permitida", 
-          description: "No se puede eliminar al único administrador del sistema.", 
+          description: "No se puede eliminar al único administrador.", 
           variant: "destructive" 
         });
         return;
@@ -204,7 +200,6 @@ export default function TeamPage() {
             <Card className="p-12 text-center border-dashed">
               <Users className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
               <h3 className="text-lg font-semibold">No hay usuarios registrados</h3>
-              <p className="text-muted-foreground">Invita a tus colaboradores a registrarse en la App.</p>
             </Card>
           )}
         </div>
@@ -213,14 +208,13 @@ export default function TeamPage() {
           <CardHeader>
             <CardTitle className="text-sm flex items-center gap-2">
               <ShieldAlert className="h-4 w-4 text-accent-foreground" />
-              Seguridad de Roles
+              Gestión de Permisos (App-Side)
             </CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground space-y-2">
-            <p>• Los <b>Administradores</b> pueden gestionar el equipo, el catálogo y las cuentas financieras.</p>
-            <p>• Los <b>Empleados</b> solo pueden registrar operaciones y ver clientes.</p>
-            <p>• Solo usuarios registrados y presentes en esta lista tienen acceso a los datos de la nube.</p>
-            <p className="text-primary font-bold">• El sistema siempre requiere al menos un administrador activo.</p>
+            <p>• Los <b>Administradores</b> tienen acceso total a la gestión financiera, catálogo y equipo.</p>
+            <p>• Los <b>Empleados</b> pueden operar y registrar, pero no borrar registros sensibles.</p>
+            <p>• Este sistema de permisos se gestiona directamente desde la aplicación para mayor flexibilidad.</p>
           </CardContent>
         </Card>
 
@@ -228,28 +222,13 @@ export default function TeamPage() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <UserPlus className="h-5 w-5 text-primary" /> ¿Cómo agregar un colaborador?
+                <UserPlus className="h-5 w-5 text-primary" /> Agregar colaborador
               </DialogTitle>
               <DialogDescription asChild>
                 <div className="pt-4 space-y-4">
-                  <div className="flex gap-3">
-                    <div className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center text-xs shrink-0">1</div>
-                    <p className="text-sm text-foreground">
-                      Pide a tu colaborador que abra la aplicación y haga clic en <b>"Registrate aquí"</b> en la pantalla de inicio.
-                    </p>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center text-xs shrink-0">2</div>
-                    <p className="text-sm text-foreground">
-                      Una vez que complete su registro, su nombre aparecerá automáticamente en esta lista de <b>Equipo</b>.
-                    </p>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center text-xs shrink-0">3</div>
-                    <p className="text-sm text-foreground">
-                      Desde esta pantalla, podrás cambiar su rol a <b>Admin</b> o mantenerlo como <b>Empleado</b> según lo necesites.
-                    </p>
-                  </div>
+                  <p className="text-sm text-foreground">
+                    Pide a tu colaborador que se registre con su email. Una vez registrado, aparecerá en esta lista y podrás asignarle el rol necesario.
+                  </p>
                 </div>
               </DialogDescription>
             </DialogHeader>

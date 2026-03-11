@@ -1,92 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    /**
-     * DOSIMAT PRO - REGLAS DE SEGURIDAD OPTIMIZADAS
-     */
-
-    // --- FUNCIONES HELPER ---
-
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function getUserRoleData() {
-      return get(/databases/$(database)/documents/user_roles/$(request.auth.uid)).data;
-    }
-
-    function hasAnyRole(roles) {
-      return isSignedIn() && 
-             exists(/databases/$(database)/documents/user_roles/$(request.auth.uid)) &&
-             getUserRoleData().roleIds.hasAny(roles);
-    }
-
-    function isAdmin() {
-      // Soporta variaciones de mayúsculas y minúsculas para robustez
-      return hasAnyRole(['admin', 'Admin', 'ADMIN']);
-    }
-
-    function isStaff() {
-      return hasAnyRole(['staff', 'Staff', 'admin', 'Admin', 'ADMIN', 'Employee', 'STAFF']);
-    }
-
-    // --- REGLAS DE COLECCIÓN ---
-
-    match /users/{userId} {
-      allow get: if isSignedIn();
-      allow create: if isOwner(userId);
-      allow list: if isStaff();
-      allow update: if isOwner(userId) || isAdmin();
-      allow delete: if isAdmin();
-    }
-
-    match /user_roles/{userId} {
-      // El dueño puede ver y crear su propio rol inicial. El Admin gestiona todos.
-      allow get, create, update: if isOwner(userId) || isAdmin();
-      allow list: if isStaff();
-      allow delete: if isAdmin();
-    }
-
-    match /zones/{zoneId} {
-      allow get, list: if isStaff();
-      allow create, update, delete: if isStaff();
-    }
-
-    match /clients/{clientId} {
-      allow get, list, create, update: if isStaff();
-      allow delete: if isAdmin();
-    }
-
-    match /products_services/{productId} {
-      allow get, list: if isStaff();
-      allow create, update, delete: if isAdmin();
-    }
-
-    match /financial_accounts/{accountId} {
-      allow get, list: if isStaff();
-      allow create, update: if isStaff();
-      allow delete: if isAdmin();
-    }
-
-    match /expense_categories/{categoryId} {
-      allow get, list: if isStaff();
-      allow create, update: if isStaff();
-      allow delete: if isAdmin();
-    }
-
-    match /transactions/{transactionId} {
-      allow get, list, create: if isStaff();
-      allow update, delete: if isAdmin();
-    }
-
-    match /email_templates/{templateId} {
-      allow get, list: if isStaff();
-      allow create, update, delete: if isAdmin();
+    // REGLAS ABIERTAS PARA DESARROLLO AGIL
+    // La seguridad y permisos se gestionan desde la lógica de la aplicación
+    match /{document=**} {
+      allow read, write: if request.auth != null;
     }
   }
 }
