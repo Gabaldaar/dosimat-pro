@@ -13,6 +13,7 @@ import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, d
 import { collection, doc } from "firebase/firestore"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 const AVAILABLE_MARKERS = [
   "Apellido", 
@@ -108,7 +109,7 @@ export default function TemplatesPage() {
   const copyMarker = (markerName: string) => {
     const text = `{{${markerName}}}`
     navigator.clipboard.writeText(text)
-    toast({ title: "Copiado", description: `${text} copiado.` })
+    toast({ title: "Copiado", description: `${text} listo para pegar.` })
   }
 
   return (
@@ -155,27 +156,65 @@ export default function TemplatesPage() {
           ))}
         </section>
 
-        <Card className="bg-blue-50/50 border-blue-200">
-          <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2 text-blue-800"><Info className="h-4 w-4" /> Marcadores Disponibles (Clic para copiar)</CardTitle></CardHeader>
-          <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {AVAILABLE_MARKERS.map(m => (
-              <div key={m} onClick={() => copyMarker(m)} className="text-[10px] font-mono bg-white border border-blue-100 rounded px-2 py-1 flex justify-between cursor-pointer hover:bg-blue-100 transition-colors">
-                <span className="text-blue-600">{"{{"}{m}{"}}"}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>{editingTemplateId ? 'Editar Plantilla' : 'Nueva Plantilla'}</DialogTitle></DialogHeader>
+          <DialogContent className="max-w-3xl max-h-[95vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{editingTemplateId ? 'Editar Plantilla' : 'Nueva Plantilla'}</DialogTitle>
+              <DialogDescription>Completa los datos de la plantilla. Haz clic en los marcadores para copiarlos.</DialogDescription>
+            </DialogHeader>
+            
             <div className="space-y-6 py-4">
-              <div className="space-y-2"><Label className="font-bold">Nombre Interno</Label><Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Factura de Reposición" /></div>
-              <div className="space-y-2"><Label className="font-bold">CCO (Separar con ;)</Label><Input value={formData.bcc} onChange={(e) => setFormData({...formData, bcc: e.target.value})} placeholder="admin@dosimat.pro" /></div>
-              <div className="space-y-2"><Label className="font-bold">Asunto</Label><Input value={formData.subject} onChange={(e) => setFormData({...formData, subject: e.target.value})} placeholder="Hola {{Nombre}}, tu factura..." /></div>
-              <div className="space-y-2"><Label className="font-bold">Cuerpo</Label><Textarea value={formData.body} onChange={(e) => setFormData({...formData, body: e.target.value})} className="min-h-[250px]" /></div>
+              {/* Bloque de marcadores en la parte superior de la edición */}
+              <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl space-y-3">
+                <div className="flex items-center gap-2 text-blue-800 text-xs font-bold uppercase tracking-wider">
+                  <Info className="h-4 w-4" /> Marcadores (Clic para copiar)
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                  {AVAILABLE_MARKERS.map(m => (
+                    <button 
+                      key={m} 
+                      type="button"
+                      onClick={() => copyMarker(m)} 
+                      className="text-[10px] font-mono bg-white hover:bg-blue-100 border border-blue-200 rounded px-2 py-1.5 transition-colors text-left truncate"
+                      title={`Copiar {{${m}}}`}
+                    >
+                      <span className="text-blue-600">{"{{"}{m}{"}}"}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="font-bold">Nombre Interno</Label>
+                  <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Factura de Reposición" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-bold">CCO (Separar con ;)</Label>
+                  <Input value={formData.bcc} onChange={(e) => setFormData({...formData, bcc: e.target.value})} placeholder="admin@dosimat.pro" />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="font-bold">Asunto</Label>
+                <Input value={formData.subject} onChange={(e) => setFormData({...formData, subject: e.target.value})} placeholder="Hola {{Nombre}}, tu factura de {{Fecha}}..." />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="font-bold">Cuerpo del Mensaje</Label>
+                <Textarea 
+                  value={formData.body} 
+                  onChange={(e) => setFormData({...formData, body: e.target.value})} 
+                  className="min-h-[300px] font-sans text-sm leading-relaxed" 
+                  placeholder="Escribe el contenido aquí. Recuerda que no admite formato negrita en mailto."
+                />
+              </div>
             </div>
-            <DialogFooter><Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button><Button onClick={handleSave}>Guardar</Button></DialogFooter>
+
+            <DialogFooter className="border-t pt-4">
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
+              <Button onClick={handleSave} className="font-bold px-8">Guardar Plantilla</Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </SidebarInset>
