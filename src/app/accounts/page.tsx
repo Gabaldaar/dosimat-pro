@@ -88,6 +88,19 @@ export default function AccountsPage() {
   const { data: rawExpenseCategories } = useCollection(categoriesQuery)
   const { data: recentTxs } = useCollection(txQuery)
   
+  // Sorted Accounts Logic
+  const sortedAccounts = useMemo(() => {
+    if (!accounts) return []
+    return [...accounts].sort((a: any, b: any) => {
+      // Primary Sort: Currency (ARS before USD)
+      if (a.currency !== b.currency) {
+        return (a.currency || "").localeCompare(b.currency || "")
+      }
+      // Secondary Sort: Alphabetical Name
+      return (a.name || "").localeCompare(b.name || "")
+    })
+  }, [accounts])
+
   // Sorted Categories
   const expenseCategories = useMemo(() => {
     if (!rawExpenseCategories) return []
@@ -315,14 +328,14 @@ export default function AccountsPage() {
   }
 
   const handleCopyAllAccounts = () => {
-    if (!accounts || accounts.length === 0) return;
+    if (!sortedAccounts || sortedAccounts.length === 0) return;
     
     const now = new Date();
     const dateStr = now.toLocaleDateString('es-AR');
     
     let text = `Saldos de Cajas al ${dateStr}\n\n`;
     
-    text += accounts.map((acc: any) => {
+    text += sortedAccounts.map((acc: any) => {
       const balance = acc.currency === 'USD' 
         ? `u$s ${Number(acc.initialBalance || 0).toLocaleString('es-AR')}`
         : `$${Number(acc.initialBalance || 0).toLocaleString('es-AR')}`;
@@ -405,9 +418,9 @@ export default function AccountsPage() {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
             <p className="text-sm text-muted-foreground">Cargando cajas...</p>
           </div>
-        ) : (accounts && accounts.length > 0) ? (
+        ) : (sortedAccounts && sortedAccounts.length > 0) ? (
           <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {accounts.map((account: any) => {
+            {sortedAccounts.map((account: any) => {
               const isUSD = account.currency === 'USD';
               const themeColor = isUSD ? 'text-emerald-700' : 'text-blue-700';
               const bgColor = isUSD ? 'bg-emerald-100' : 'bg-blue-100';
@@ -650,7 +663,7 @@ export default function AccountsPage() {
                   <Select value={transferFormData.fromId} onValueChange={(v) => setTransferFormData({...transferFormData, fromId: v})}>
                     <SelectTrigger><SelectValue placeholder="Caja..." /></SelectTrigger>
                     <SelectContent>
-                      {accounts?.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency}) - Saldo: {a.currency === 'USD' ? 'u$s' : '$'}{a.initialBalance.toLocaleString('es-AR')}</SelectItem>)}
+                      {sortedAccounts?.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency}) - Saldo: {a.currency === 'USD' ? 'u$s' : '$'}{a.initialBalance.toLocaleString('es-AR')}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -659,7 +672,7 @@ export default function AccountsPage() {
                   <Select value={transferFormData.toId} onValueChange={(v) => setTransferFormData({...transferFormData, toId: v})}>
                     <SelectTrigger><SelectValue placeholder="Caja..." /></SelectTrigger>
                     <SelectContent>
-                      {accounts?.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency}) - Saldo: {a.currency === 'USD' ? 'u$s' : '$'}{a.initialBalance.toLocaleString('es-AR')}</SelectItem>)}
+                      {sortedAccounts?.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency}) - Saldo: {a.currency === 'USD' ? 'u$s' : '$'}{a.initialBalance.toLocaleString('es-AR')}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
