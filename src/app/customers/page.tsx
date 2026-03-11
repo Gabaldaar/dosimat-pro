@@ -223,18 +223,43 @@ export default function CustomersPage() {
     window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank')
   }
 
-  const handleCopyClipboard = (customer: any, e: React.MouseEvent) => {
-    e.stopPropagation()
+  const handleCopyClipboard = (customer: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
     const balanceARS = Number(customer.saldoActual || 0).toLocaleString('es-AR')
     const balanceUSD = Number(customer.saldoUSD || 0).toLocaleString('es-AR')
     const fullAddress = [customer.direccion, customer.localidad, customer.provincia].filter(Boolean).join(", ")
     
     const text = `*${customer.apellido}, ${customer.nombre}*\nCelular: ${customer.telefono || 'N/A'}\nDir: ${fullAddress || 'N/A'}\nSaldo ARS: $${balanceARS}\nSaldo USD: u$s ${balanceUSD}\nemail: ${customer.mail || 'N/A'}`
-    navigator.clipboard.writeText(text)
+    
+    if (e) {
+      navigator.clipboard.writeText(text)
+      toast({
+        title: "Copiado",
+        description: "Información completa del cliente copiada."
+      })
+    }
+    return text
+  }
+
+  const handleCopyAllFiltered = () => {
+    if (filteredCustomers.length === 0) {
+      toast({ title: "Sin clientes", description: "No hay clientes filtrados para copiar.", variant: "destructive" })
+      return
+    }
+
+    const text = filteredCustomers.map(customer => {
+      const balanceARS = Number(customer.saldoActual || 0).toLocaleString('es-AR')
+      const balanceUSD = Number(customer.saldoUSD || 0).toLocaleString('es-AR')
+      const fullAddress = [customer.direccion, customer.localidad, customer.provincia].filter(Boolean).join(", ")
+      
+      return `*${customer.apellido}, ${customer.nombre}*\nCelular: ${customer.telefono || 'N/A'}\nDir: ${fullAddress || 'N/A'}\nSaldo ARS: $${balanceARS}\nSaldo USD: u$s ${balanceUSD}\nemail: ${customer.mail || 'N/A'}`
+    }).join('\n\n---\n\n');
+
+    navigator.clipboard.writeText(text);
     toast({
-      title: "Copiado",
-      description: "Información completa del cliente copiada."
-    })
+      title: "Copiado Masivo",
+      description: `Se han copiado los datos de ${filteredCustomers.length} clientes filtrados.`
+    });
   }
 
   const handleAddZone = () => {
@@ -296,6 +321,9 @@ export default function CustomersPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={handleCopyAllFiltered} className="border-primary text-primary hover:bg-primary/5">
+              <Copy className="mr-2 h-4 w-4" /> Copiar Todo
+            </Button>
             <Button variant="outline" onClick={() => setIsBulkEmailOpen(true)} className="border-primary text-primary hover:bg-primary/5">
               <Mail className="mr-2 h-4 w-4" /> Masivo
             </Button>
