@@ -23,7 +23,8 @@ import {
   Calculator,
   ExternalLink,
   Droplets,
-  Settings
+  Settings,
+  Copy
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -313,6 +314,24 @@ export default function AccountsPage() {
     setNewCategoryName("")
   }
 
+  const handleCopyAllAccounts = () => {
+    if (!accounts || accounts.length === 0) return;
+    
+    const text = accounts.map((acc: any) => {
+      const balance = acc.currency === 'USD' 
+        ? `u$s ${Number(acc.initialBalance || 0).toLocaleString('es-AR')}`
+        : `$${Number(acc.initialBalance || 0).toLocaleString('es-AR')}`;
+      
+      return `*${acc.name}*\n${acc.currency}\n${balance}`;
+    }).join('\n\n');
+
+    navigator.clipboard.writeText(text);
+    toast({
+      title: "Copiado",
+      description: "Resumen de todas las cajas copiado al portapapeles."
+    });
+  }
+
   const calculatedReceipt = useMemo(() => {
     if (!fromAcc || !toAcc || fromAcc.currency === toAcc.currency) return null;
     if (fromAcc.currency === 'ARS') return Number(transferFormData.amount) / exchangeRate;
@@ -338,6 +357,9 @@ export default function AccountsPage() {
             </div>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" size="icon" onClick={handleCopyAllAccounts} title="Copiar resumen de cajas">
+              <Copy className="h-4 w-4" />
+            </Button>
             <Button variant="outline" onClick={() => setIsTransferDialogOpen(true)}>
               <ArrowRightLeft className="mr-2 h-4 w-4" /> Transferencia
             </Button>
@@ -393,44 +415,51 @@ export default function AccountsPage() {
                 >
                   <CardHeader className="pb-4">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={cn("p-3 rounded-xl flex items-center justify-center", bgColor, themeColor)}>
-                          {account.type === 'Bank' ? <Building2 className="h-8 w-8" /> : 
-                           account.type === 'Cash' ? <Banknote className="h-8 w-8" /> : <Wallet className="h-8 w-8" />}
+                      <div className="flex items-center gap-4">
+                        {/* Icono a la izquierda ocupando toda la altura de la cabecera */}
+                        <div className={cn("p-4 rounded-xl flex items-center justify-center shrink-0", bgColor, themeColor)}>
+                          {account.type === 'Bank' ? <Building2 className="h-10 w-10" /> : 
+                           account.type === 'Cash' ? <Banknote className="h-10 w-10" /> : <Wallet className="h-10 w-10" />}
                         </div>
-                        <div className="flex flex-col">
-                          <CardTitle className="text-lg font-bold leading-tight truncate max-w-[150px]">{account.name}</CardTitle>
-                          <span className={cn("text-[10px] font-black uppercase tracking-widest", themeColor)}>
+                        <div className="flex flex-col justify-center min-w-0">
+                          {/* Nombre más grande a la derecha del icono */}
+                          <CardTitle className="text-xl font-black leading-tight truncate">{account.name}</CardTitle>
+                          {/* Moneda debajo del nombre alineada a la izquierda */}
+                          <span className={cn("text-xs font-black uppercase tracking-widest", themeColor)}>
                             {account.currency}
                           </span>
                         </div>
                       </div>
                       <div className="flex items-center">
-                        {isAdmin && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-10 w-10"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <MoreVertical className="h-5 w-5" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onSelect={() => handleOpenAccountDialog(account)}>Editar parámetros</DropdownMenuItem>
-                              <DropdownMenuItem className="text-destructive" onSelect={() => setAccountToDelete(account)}>
-                                <Trash2 className="mr-2 h-4 w-4" /> Eliminar caja
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-10 w-10"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreVertical className="h-5 w-5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {isAdmin && (
+                              <>
+                                <DropdownMenuItem onSelect={() => handleOpenAccountDialog(account)}>Editar parámetros</DropdownMenuItem>
+                                <DropdownMenuItem className="text-destructive" onSelect={() => setAccountToDelete(account)}>
+                                  <Trash2 className="mr-2 h-4 w-4" /> Eliminar caja
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                            <DropdownMenuItem onSelect={() => router.push(`/transactions?accountId=${account.id}`)}>Ver movimientos</DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className={cn("text-3xl font-black tracking-tighter mb-4", themeColor)}>
+                    {/* Saldo bien visible */}
+                    <div className={cn("text-4xl font-black tracking-tighter mb-6", themeColor)}>
                       {isUSD ? 'u$s' : '$'}{Number(account.initialBalance || 0).toLocaleString('es-AR')}
                     </div>
                     <div className="flex gap-2">
@@ -518,7 +547,7 @@ export default function AccountsPage() {
               <Button 
                 variant="outline" 
                 size="sm" 
-                className="w-full text-xs font-bold uppercase tracking-wider border-primary text-primary hover:bg-primary/5 gap-2" 
+                className="w-full font-black uppercase tracking-wider border-primary text-primary hover:bg-primary/5 gap-2 h-10" 
                 onClick={() => {
                   if (!isAdmin) {
                     toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos de Administrador.", variant: "destructive" })
@@ -527,7 +556,7 @@ export default function AccountsPage() {
                   setIsCategoryManagerOpen(true)
                 }}
               >
-                <Settings className="h-3 w-3" /> GESTIONAR CATEGORÍAS
+                <Settings className="h-4 w-4" /> GESTIONAR CATEGORÍAS
               </Button>
             </CardFooter>
           </Card>
