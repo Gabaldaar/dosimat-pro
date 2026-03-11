@@ -34,7 +34,8 @@ import {
   Eye,
   Fingerprint,
   Droplets,
-  RefreshCw
+  RefreshCw,
+  Copy
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -428,6 +429,53 @@ function TransactionsContent() {
     setIsEmailDialogOpen(false)
   }
 
+  const handleCopyWhatsApp = (tx: any) => {
+    const client = customers?.find(c => c.id === tx.clientId);
+    const info = txTypeMap[tx.type] || { label: tx.type };
+    const dateStr = new Date(tx.date).toLocaleDateString('es-AR');
+    const currencySymbol = tx.currency === 'USD' ? 'u$s' : '$';
+
+    let text = `*DOSIMAT PRO - DETALLE DE OPERACIÓN*\n\n`;
+    text += `📅 *Fecha:* ${dateStr}\n`;
+    text += `👤 *Cliente:* ${client ? `${client.apellido}, ${client.nombre}` : 'N/A'}\n`;
+    text += `📝 *Tipo:* ${info.label}\n`;
+    
+    if (tx.description) {
+      text += `ℹ️ *Nota:* ${tx.description}\n`;
+    }
+
+    if (tx.items && tx.items.length > 0) {
+      text += `\n*Detalle:*\n`;
+      tx.items.forEach((item: any) => {
+        const subtotal = (item.qty || 0) * (item.price || 0);
+        text += `- ${item.qty} x ${item.name} (${currencySymbol}${item.price.toLocaleString('es-AR')}) = ${currencySymbol}${subtotal.toLocaleString('es-AR')}\n`;
+      });
+    }
+
+    text += `\n💰 *Total:* ${currencySymbol}${Math.abs(tx.amount || 0).toLocaleString('es-AR')}\n`;
+    
+    if (tx.paidAmount !== undefined) {
+      text += `✅ *Abonado:* ${currencySymbol}${tx.paidAmount.toLocaleString('es-AR')}\n`;
+      const debt = (tx.amount || 0) - (tx.paidAmount || 0);
+      if (debt > 0) {
+        text += `⚖️ *Pendiente:* ${currencySymbol}${debt.toLocaleString('es-AR')}\n`;
+      }
+    }
+
+    const acc = accounts?.find(a => a.id === tx.financialAccountId);
+    if (acc) {
+      text += `🏦 *Caja:* ${acc.name}\n`;
+    } else if (tx.type !== 'adjustment' && (!tx.paidAmount || tx.paidAmount === 0)) {
+      text += `💳 *Estado:* A Cuenta\n`;
+    }
+
+    navigator.clipboard.writeText(text);
+    toast({
+      title: "Copiado",
+      description: "Detalles de la operación listos para WhatsApp."
+    });
+  }
+
   const filteredTransactions = useMemo(() => {
     if (!transactions) return []
     return transactions.filter((tx: any) => {
@@ -754,6 +802,7 @@ function TransactionsContent() {
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleCopyWhatsApp(tx)}><Copy className="h-4 w-4 mr-2" /> Copiar WhatsApp</DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleOpenEmailDialog(tx)}><Mail className="h-4 w-4 mr-2" /> Email</DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleEditTx(tx)}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
                               <DropdownMenuItem className="text-destructive" onClick={() => setTxToDelete(tx)}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
