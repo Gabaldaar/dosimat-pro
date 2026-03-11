@@ -63,6 +63,20 @@ export default function TeamPage() {
       toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos para cambiar roles de equipo.", variant: "destructive" })
       return
     }
+
+    // Validar que no sea el último administrador quitándose el rol a sí mismo
+    if (userId === currentUser?.uid && newRole !== 'Admin') {
+      const adminCount = team?.filter((m: any) => m.role === 'Admin').length || 0;
+      if (adminCount <= 1) {
+        toast({ 
+          title: "Acción no permitida", 
+          description: "Debe haber al menos un administrador activo en el sistema. No puedes quitarte el rol si eres el único.", 
+          variant: "destructive" 
+        });
+        return;
+      }
+    }
+
     // Actualizamos perfil básico
     updateDocumentNonBlocking(doc(db, 'users', userId), { role: newRole })
     
@@ -84,6 +98,21 @@ export default function TeamPage() {
       toast({ title: "Error", description: "No puedes eliminar tu propio usuario", variant: "destructive" })
       return
     }
+
+    // Validar si el usuario a eliminar es un admin y si es el último (aunque el check de arriba ya cubre el self-delete)
+    const memberToDelete = team?.find((m: any) => m.id === userId);
+    if (memberToDelete?.role === 'Admin') {
+      const adminCount = team?.filter((m: any) => m.role === 'Admin').length || 0;
+      if (adminCount <= 1) {
+        toast({ 
+          title: "Acción no permitida", 
+          description: "No se puede eliminar al único administrador del sistema.", 
+          variant: "destructive" 
+        });
+        return;
+      }
+    }
+
     if (confirm("¿Estás seguro de eliminar a este usuario del sistema?")) {
       deleteDocumentNonBlocking(doc(db, 'users', userId))
       deleteDocumentNonBlocking(doc(db, 'user_roles', userId))
@@ -180,6 +209,7 @@ export default function TeamPage() {
             <p>• Los <b>Administradores</b> pueden gestionar el equipo, el catálogo y las cuentas financieras.</p>
             <p>• Los <b>Empleados</b> solo pueden registrar operaciones y ver clientes.</p>
             <p>• Solo usuarios registrados y presentes en esta lista tienen acceso a los datos de la nube.</p>
+            <p className="text-primary font-bold">• El sistema siempre requiere al menos un administrador activo.</p>
           </CardContent>
         </Card>
 
