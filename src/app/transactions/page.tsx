@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
@@ -633,7 +634,9 @@ function TransactionsContent() {
                         </Select>
                       </div>
                     )}
-                    <div className="border rounded-xl overflow-x-auto">
+                    
+                    {/* Items Desktop Table */}
+                    <div className="hidden md:block border rounded-xl overflow-x-auto">
                       <Table className="min-w-[700px]">
                         <TableHeader className="bg-muted/30">
                           <TableRow>
@@ -663,6 +666,46 @@ function TransactionsContent() {
                           ))}
                         </TableBody>
                       </Table>
+                    </div>
+
+                    {/* Items Mobile Cards */}
+                    <div className="md:hidden space-y-3">
+                      {selectedItems.map((item, i) => (
+                        <Card key={i} className="p-4 bg-white/50 border-primary/10 relative">
+                          <div className="flex justify-between items-start mb-3 pr-8">
+                            <div className="font-bold text-sm">{item.name}</div>
+                            {!editingTx && (
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive absolute top-2 right-2" onClick={() => removeItem(i)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Cant.</Label>
+                              <Input type="number" value={item.qty} className="h-9" onChange={(e) => updateItem(i, 'qty', e.target.value)} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Precio</Label>
+                              <Input type="number" value={item.price} className="h-9" onChange={(e) => updateItem(i, 'price', e.target.value)} />
+                            </div>
+                          </div>
+                          <div className="flex justify-between items-center mt-3 pt-3 border-t">
+                            <div className="w-24">
+                              <Select value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)} disabled={!!editingTx}>
+                                <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                                <SelectContent><SelectItem value="ARS">$ (ARS)</SelectItem><SelectItem value="USD">u$s (USD)</SelectItem></SelectContent>
+                              </Select>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[10px] font-bold text-muted-foreground uppercase">Subtotal</p>
+                              <p className="font-black text-primary">
+                                {item.currency === 'ARS' ? '$' : 'u$s'} {(item.price * item.qty).toLocaleString('es-AR')}
+                              </p>
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -760,7 +803,8 @@ function TransactionsContent() {
                  <Button variant="ghost" size="icon" onClick={resetFilters}><FilterX className="h-4 w-4" /></Button>
             </Card>
 
-            <Card className="glass-card overflow-hidden">
+            {/* Desktop History View */}
+            <Card className="glass-card overflow-hidden hidden md:block">
               <Table className="min-w-[800px]">
                 <TableHeader className="bg-muted/30">
                   <TableRow>
@@ -815,6 +859,68 @@ function TransactionsContent() {
                 </TableBody>
               </Table>
             </Card>
+
+            {/* Mobile History View (Cards) */}
+            <div className="grid grid-cols-1 gap-4 md:hidden">
+              {filteredTransactions.map((tx: any) => {
+                const cust = customers?.find(c => c.id === tx.clientId);
+                const acc = accounts?.find(a => a.id === tx.financialAccountId);
+                const info = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
+                const debt = (tx.amount || 0) - (tx.paidAmount || 0);
+                
+                return (
+                  <Card key={tx.id} className="glass-card p-4 relative border-l-4 border-l-primary hover:shadow-md transition-shadow">
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase bg-muted/50 px-2 py-0.5 rounded">
+                        {new Date(tx.date).toLocaleDateString('es-AR')}
+                      </span>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 -mt-1 -mr-1">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleCopyWhatsApp(tx)}><Copy className="h-4 w-4 mr-2" /> Copiar</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleOpenEmailDialog(tx)}><Mail className="h-4 w-4 mr-2" /> Email</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleEditTx(tx)}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
+                          <DropdownMenuItem className="text-destructive" onClick={() => setTxToDelete(tx)}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                    <div className="mb-4">
+                      <h4 className="font-bold text-md leading-tight">{cust ? `${cust.apellido}, ${cust.nombre}` : 'Sin Cliente'}</h4>
+                      <Badge variant="outline" className={cn("text-[10px] gap-1 mt-2", info.color)}>
+                        <info.icon className="h-3 w-3" />{info.label}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 border-t pt-3 mb-4">
+                      <div>
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase mb-0.5">Total</p>
+                        <p className="font-black text-sm">{tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase mb-0.5">Abonado</p>
+                        <p className={cn("font-black text-sm", tx.paidAmount > 0 ? "text-emerald-600" : "text-slate-400")}>
+                          {tx.currency === 'USD' ? 'u$s' : '$'} {(tx.paidAmount || 0).toLocaleString('es-AR')}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center bg-muted/20 -mx-4 -mb-4 p-2 px-4 rounded-b-lg border-t border-primary/5">
+                      <div className="flex items-center gap-2">
+                        <Wallet className="h-3.5 w-3.5 text-slate-500" />
+                        <span className="text-[10px] font-bold text-slate-700">
+                          {acc ? acc.name : "A Cuenta"}
+                        </span>
+                      </div>
+                      {debt > 0 && (
+                        <Badge variant="destructive" className="text-[9px] h-5 font-bold uppercase tracking-tighter px-2">DEUDA</Badge>
+                      )}
+                    </div>
+                  </Card>
+                )
+              })}
+            </div>
           </div>
         )}
 
