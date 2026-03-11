@@ -538,19 +538,51 @@ function TransactionsContent() {
                      <CardTitle className="text-xl flex items-center gap-2">
                        {activeTab === 'cobro' ? <Receipt className="h-5 w-5 text-emerald-600" /> : 
                         activeTab === 'adjustment' ? <Settings2 className="h-5 w-5 text-slate-600" /> :
-                        <PlusCircle className="h-5 w-5 text-primary" />}
+                        activeTab === 'sale' ? <ShoppingBag className="h-5 w-5 text-blue-600" /> :
+                        activeTab === 'refill' ? <Droplet className="h-5 w-5 text-cyan-600" /> :
+                        <Wrench className="h-5 w-5 text-indigo-600" />}
                        {txTypeMap[activeTab]?.label || activeTab}
                      </CardTitle>
                      <p className="text-xs text-muted-foreground">{txTypeMap[activeTab]?.description}</p>
                    </div>
                    {!editingTx && (
                     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
-                      <TabsList className="grid grid-cols-5 w-full">
-                          <TabsTrigger value="sale">Venta</TabsTrigger>
-                          <TabsTrigger value="refill">Repo</TabsTrigger>
-                          <TabsTrigger value="service">Técnico</TabsTrigger>
-                          <TabsTrigger value="cobro">Cobro</TabsTrigger>
-                          <TabsTrigger value="adjustment">Ajuste</TabsTrigger>
+                      <TabsList className="grid grid-cols-5 w-full h-auto p-1 bg-muted/50 border shadow-inner">
+                          <TabsTrigger 
+                            value="sale" 
+                            className="data-[state=active]:bg-blue-600 data-[state=active]:text-white py-2 flex flex-col gap-1 transition-all"
+                          >
+                            <ShoppingBag className="h-4 w-4" />
+                            <span className="text-[9px] font-black tracking-tighter">VENTA</span>
+                          </TabsTrigger>
+                          <TabsTrigger 
+                            value="refill" 
+                            className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white py-2 flex flex-col gap-1 transition-all"
+                          >
+                            <Droplet className="h-4 w-4" />
+                            <span className="text-[9px] font-black tracking-tighter">REPO</span>
+                          </TabsTrigger>
+                          <TabsTrigger 
+                            value="service" 
+                            className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white py-2 flex flex-col gap-1 transition-all"
+                          >
+                            <Wrench className="h-4 w-4" />
+                            <span className="text-[9px] font-black tracking-tighter">TÉCNICO</span>
+                          </TabsTrigger>
+                          <TabsTrigger 
+                            value="cobro" 
+                            className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white py-2 flex flex-col gap-1 transition-all"
+                          >
+                            <Receipt className="h-4 w-4" />
+                            <span className="text-[9px] font-black tracking-tighter">COBRO</span>
+                          </TabsTrigger>
+                          <TabsTrigger 
+                            value="adjustment" 
+                            className="data-[state=active]:bg-slate-600 data-[state=active]:text-white py-2 flex flex-col gap-1 transition-all"
+                          >
+                            <Settings2 className="h-4 w-4" />
+                            <span className="text-[9px] font-black tracking-tighter">AJUSTE</span>
+                          </TabsTrigger>
                       </TabsList>
                     </Tabs>
                    )}
