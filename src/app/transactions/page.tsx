@@ -162,7 +162,7 @@ function TransactionsContent() {
     }
   }, [clientIdParam, accountIdParam, modeParam])
 
-  // Actualizar montos abonados por defecto cuando cambia el carrito
+  // Cálculo de totales del carrito
   const cartTotals = useMemo(() => {
     return selectedItems.reduce((acc, item) => {
       const amount = (Number(item.price) || 0) * (Number(item.qty) || 0)
@@ -171,14 +171,8 @@ function TransactionsContent() {
     }, { ARS: 0, USD: 0 })
   }, [selectedItems])
 
-  useEffect(() => {
-    if (!editingTx) {
-      setPaidAmounts({
-        ARS: cartTotals.ARS,
-        USD: cartTotals.USD
-      })
-    }
-  }, [cartTotals, editingTx])
+  // Nota: Hemos eliminado el useEffect que igualaba paidAmounts a cartTotals.
+  // Ahora paidAmounts permanece en 0 (inicializado arriba) hasta que el usuario lo edite.
 
   useEffect(() => {
     if (selectedTxForEmail && selectedTemplateId && templates && customers && accounts) {
@@ -272,7 +266,7 @@ function TransactionsContent() {
     } else {
       setSelectedItems(tx.items || [])
       setDestinationAccounts({ [tx.currency]: tx.financialAccountId || "pending" })
-      setPaidAmounts({ [tx.currency]: tx.paidAmount || tx.amount })
+      setPaidAmounts({ [tx.currency]: tx.paidAmount || 0 })
     }
     setMainView("register")
   }
@@ -396,6 +390,7 @@ function TransactionsContent() {
     setManualAmount(0)
     setOperationDate(new Date().toISOString().split('T')[0])
     setPaidAmounts({ ARS: 0, USD: 0 })
+    setDestinationAccounts({ ARS: "pending", USD: "pending" })
   }
 
   const resetFilters = () => {
@@ -627,9 +622,16 @@ function TransactionsContent() {
                         <Select onValueChange={handleAddItem}>
                           <SelectTrigger className="h-11"><SelectValue placeholder="Seleccionar producto..." /></SelectTrigger>
                           <SelectContent>
-                            {sortedCatalog?.map((i: any) => (
-                              <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
-                            ))}
+                            {sortedCatalog?.map((i: any) => {
+                              const priceStr = i.priceARS > 0 
+                                ? `$${i.priceARS.toLocaleString('es-AR')}` 
+                                : `u$s ${i.priceUSD.toLocaleString('es-AR')}`;
+                              return (
+                                <SelectItem key={i.id} value={i.id}>
+                                  {i.name} ({priceStr})
+                                </SelectItem>
+                              );
+                            })}
                           </SelectContent>
                         </Select>
                       </div>
