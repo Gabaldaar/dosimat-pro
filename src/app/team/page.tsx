@@ -59,8 +59,13 @@ export default function TeamPage() {
   }, [isInviteOpen]);
 
   const handleUpdateRole = (userId: string, newRole: string) => {
+    // Verificación proactiva de permisos antes de la acción
     if (!isAdmin) {
-      toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos para cambiar roles de equipo.", variant: "destructive" })
+      toast({ 
+        title: "Acceso denegado", 
+        description: "Su usuario no tiene permisos de Administrador para cambiar roles de equipo.", 
+        variant: "destructive" 
+      })
       return
     }
 
@@ -90,16 +95,21 @@ export default function TeamPage() {
   }
 
   const handleDeleteUser = (userId: string) => {
+    // Verificación proactiva de permisos antes de la acción
     if (!isAdmin) {
-      toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos para eliminar colaboradores.", variant: "destructive" })
+      toast({ 
+        title: "Acceso denegado", 
+        description: "Su usuario no tiene permisos de Administrador para eliminar colaboradores.", 
+        variant: "destructive" 
+      })
       return
     }
+    
     if (userId === currentUser?.uid) {
       toast({ title: "Error", description: "No puedes eliminar tu propio usuario", variant: "destructive" })
       return
     }
 
-    // Validar si el usuario a eliminar es un admin y si es el último (aunque el check de arriba ya cubre el self-delete)
     const memberToDelete = team?.find((m: any) => m.id === userId);
     if (memberToDelete?.role === 'Admin') {
       const adminCount = team?.filter((m: any) => m.role === 'Admin').length || 0;

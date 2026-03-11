@@ -36,7 +36,8 @@ export default function LoginPage() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password)
         const user = userCredential.user
         
-        // Registro por defecto como EMPLEADO (Staff)
+        // Registro por defecto como EMPLEADO (Staff) para CUALQUIER usuario nuevo.
+        // Un administrador existente deberá promoverlo luego desde la sección de Equipo.
         setDocumentNonBlocking(doc(firestore, 'users', user.uid), {
           id: user.uid,
           name: name || email.split('@')[0],
@@ -46,14 +47,14 @@ export default function LoginPage() {
           updatedAt: new Date().toISOString()
         }, { merge: true })
 
-        // El documento de 'user_roles' asigna el permiso técnico 'staff'
+        // El documento de 'user_roles' asigna el permiso técnico inicial de 'staff'
         setDocumentNonBlocking(doc(firestore, 'user_roles', user.uid), {
           roleIds: ['staff']
         }, { merge: true })
         
         toast({ 
           title: "Cuenta creada", 
-          description: "Has sido registrado como Empleado. Un administrador puede elevar tu rango." 
+          description: "Has sido registrado como Empleado. Un administrador debe autorizar tu nivel de acceso." 
         })
         router.push("/")
       }
@@ -112,7 +113,7 @@ export default function LoginPage() {
               <Input 
                 id="email" 
                 type="email" 
-                placeholder="admin@dosimat.pro" 
+                placeholder="usuario@dosimat.pro" 
                 value={email} 
                 onChange={(e) => setEmail(e.target.value)} 
                 required 
