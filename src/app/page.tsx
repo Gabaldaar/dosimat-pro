@@ -22,6 +22,7 @@ import { Bar, BarChart, XAxis, YAxis, CartesianGrid } from "recharts"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, query, orderBy, limit } from "firebase/firestore"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
+import { cn } from "@/lib/utils"
 
 export default function Dashboard() {
   const db = useFirestore()
@@ -97,9 +98,9 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex gap-2">
-            <Link href="/transactions">
+            <Link href="/transactions?mode=new">
               <Button className="shadow-lg rounded-full px-6 bg-primary font-bold">
-                <Plus className="mr-2 h-4 w-4" /> Operación
+                <Plus className="mr-2 h-4 w-4" /> Nueva Operación
               </Button>
             </Link>
           </div>
@@ -117,10 +118,17 @@ export default function Dashboard() {
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Saldo ARS</p>
-                      <h3 className="text-2xl font-black mt-1">${totals.ARS.toLocaleString('es-AR')}</h3>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Saldo Total ARS</p>
+                      <h3 className={cn(
+                        "text-2xl font-black mt-1",
+                        totals.ARS < 0 ? "text-rose-600" : "text-emerald-600"
+                      )}>
+                        ${totals.ARS.toLocaleString('es-AR')}
+                      </h3>
                     </div>
-                    <div className="bg-primary/10 p-2 rounded-full"><Wallet className="h-5 w-5 text-primary" /></div>
+                    <div className={cn("p-2 rounded-full", totals.ARS < 0 ? "bg-rose-100 text-rose-600" : "bg-emerald-100 text-emerald-600")}>
+                      <Wallet className="h-5 w-5" />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -129,10 +137,17 @@ export default function Dashboard() {
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Saldo USD</p>
-                      <h3 className="text-2xl font-black mt-1">u$s {totals.USD.toLocaleString('es-AR')}</h3>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Saldo Total USD</p>
+                      <h3 className={cn(
+                        "text-2xl font-black mt-1",
+                        totals.USD < 0 ? "text-rose-600" : "text-emerald-600"
+                      )}>
+                        u$s {totals.USD.toLocaleString('es-AR')}
+                      </h3>
                     </div>
-                    <div className="bg-accent/20 p-2 rounded-full"><Wallet className="h-5 w-5 text-accent-foreground" /></div>
+                    <div className={cn("p-2 rounded-full", totals.USD < 0 ? "bg-rose-100 text-rose-600" : "bg-emerald-100 text-emerald-600")}>
+                      <Wallet className="h-5 w-5" />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -141,10 +156,12 @@ export default function Dashboard() {
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Total Clientes</p>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Clientes Registrados</p>
                       <h3 className="text-2xl font-black mt-1">{clients?.length || 0}</h3>
                     </div>
-                    <div className="bg-emerald-100 p-2 rounded-full"><Users className="h-5 w-5 text-emerald-600" /></div>
+                    <div className="bg-blue-100 p-2 rounded-full text-blue-600">
+                      <Users className="h-5 w-5" />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -153,12 +170,14 @@ export default function Dashboard() {
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Reposiciones</p>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Clientes Reposición</p>
                       <h3 className="text-2xl font-black mt-1">
                         {clients?.filter((c: any) => c.esClienteReposicion).length || 0}
                       </h3>
                     </div>
-                    <div className="bg-blue-100 p-2 rounded-full"><Droplet className="h-5 w-5 text-blue-600" /></div>
+                    <div className="bg-cyan-100 p-2 rounded-full text-cyan-600">
+                      <Droplet className="h-5 w-5" />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -194,12 +213,14 @@ export default function Dashboard() {
                     {clients && clients.length > 0 ? (
                       clients.slice(0, 4).map((c: any) => (
                         <div key={c.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">
+                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary uppercase">
                             {c.nombre?.[0] || ''}{c.apellido?.[0] || ''}
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-bold truncate">{c.apellido}, {c.nombre}</p>
-                            <p className="text-[10px] text-muted-foreground flex items-center gap-1"><MapPin className="h-2 w-2" /> {c.localidad}</p>
+                            <p className="text-[10px] text-muted-foreground flex items-center gap-1 uppercase font-bold tracking-tight">
+                              <MapPin className="h-2.5 w-2.5 text-primary" /> {c.localidad || 'S/D'}
+                            </p>
                           </div>
                         </div>
                       ))
@@ -207,23 +228,26 @@ export default function Dashboard() {
                       <p className="text-sm text-center py-4 italic text-muted-foreground">Sin clientes registrados.</p>
                     )}
                     <Link href="/customers" className="block text-center text-xs font-bold text-primary hover:underline mt-2">
-                      Ver listado de clientes
+                      Gestionar todos los clientes
                     </Link>
                   </CardContent>
                 </Card>
 
-                <Card className="glass-card bg-primary text-primary-foreground border-none">
+                <Card className="glass-card bg-primary text-primary-foreground border-none relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
+                    <Droplets className="h-24 w-24" />
+                  </div>
                   <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2 text-white">
                       <AlertCircle className="h-5 w-5" /> Alertas Operativas
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <div className="p-3 bg-white/10 rounded-lg text-xs flex items-center gap-2">
+                    <div className="p-3 bg-white/10 rounded-lg text-xs flex items-center gap-2 backdrop-blur-sm">
                       <Calendar className="h-4 w-4" /> 
                       Próxima revisión de reposiciones: Lunes
                     </div>
-                    <div className="p-3 bg-white/10 rounded-lg text-xs flex items-center gap-2">
+                    <div className="p-3 bg-white/10 rounded-lg text-xs flex items-center gap-2 backdrop-blur-sm">
                       <Droplet className="h-4 w-4" /> 
                       {clients?.filter((c: any) => c.equipoInstalado?.enComodato).length || 0} Equipos en comodato activos.
                     </div>
