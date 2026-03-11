@@ -36,24 +36,25 @@ export default function LoginPage() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password)
         const user = userCredential.user
         
-        // Al registrarse, creamos el perfil del usuario.
-        // El documento de 'users' es para la interfaz.
+        // Registro por defecto como EMPLEADO (Staff)
         setDocumentNonBlocking(doc(firestore, 'users', user.uid), {
           id: user.uid,
           name: name || email.split('@')[0],
           email: email,
-          role: 'Admin',
+          role: 'Employee',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         }, { merge: true })
 
-        // El documento de 'user_roles' es CRÍTICO para la seguridad de Firestore.
-        // Hacemos que los nuevos usuarios sean Admin por defecto para esta fase inicial.
+        // El documento de 'user_roles' asigna el permiso técnico 'staff'
         setDocumentNonBlocking(doc(firestore, 'user_roles', user.uid), {
-          roleIds: ['admin']
+          roleIds: ['staff']
         }, { merge: true })
         
-        toast({ title: "Cuenta creada", description: "Has sido registrado como Administrador." })
+        toast({ 
+          title: "Cuenta creada", 
+          description: "Has sido registrado como Empleado. Un administrador puede elevar tu rango." 
+        })
         router.push("/")
       }
     } catch (error: any) {
@@ -89,7 +90,7 @@ export default function LoginPage() {
           </div>
           <CardTitle className="text-3xl font-bold font-headline tracking-tight">Dosimat Pro</CardTitle>
           <CardDescription className="text-muted-foreground">
-            {isLogin ? "Ingresa tus credenciales para continuar" : "Crea tu cuenta de administrador"}
+            {isLogin ? "Ingresa tus credenciales para continuar" : "Crea tu cuenta de colaborador"}
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleAuth}>
@@ -131,7 +132,7 @@ export default function LoginPage() {
           <CardFooter className="flex flex-col gap-4">
             <Button type="submit" className="w-full font-bold h-12" disabled={isLoading}>
               {isLoading ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
-              {isLogin ? "Iniciar Sesión" : "Registrarse como Admin"}
+              {isLogin ? "Iniciar Sesión" : "Registrarse"}
             </Button>
             <Button 
               type="button" 

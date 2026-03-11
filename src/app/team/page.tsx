@@ -39,7 +39,8 @@ import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 export default function TeamPage() {
   const { toast } = useToast()
   const db = useFirestore()
-  const { user: currentUser } = useUser()
+  const { user: currentUser, userData } = useUser()
+  const isAdmin = userData?.role === 'Admin'
   const [isInviteOpen, setIsInviteOpen] = useState(false)
   
   const usersQuery = useMemoFirebase(() => collection(db, 'users'), [db])
@@ -58,6 +59,10 @@ export default function TeamPage() {
   }, [isInviteOpen]);
 
   const handleUpdateRole = (userId: string, newRole: string) => {
+    if (!isAdmin) {
+      toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos para cambiar roles de equipo.", variant: "destructive" })
+      return
+    }
     // Actualizamos perfil básico
     updateDocumentNonBlocking(doc(db, 'users', userId), { role: newRole })
     
@@ -71,6 +76,10 @@ export default function TeamPage() {
   }
 
   const handleDeleteUser = (userId: string) => {
+    if (!isAdmin) {
+      toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos para eliminar colaboradores.", variant: "destructive" })
+      return
+    }
     if (userId === currentUser?.uid) {
       toast({ title: "Error", description: "No puedes eliminar tu propio usuario", variant: "destructive" })
       return
@@ -99,9 +108,11 @@ export default function TeamPage() {
               <h1 className="text-xl md:text-3xl font-headline font-bold text-primary">Equipo</h1>
             </div>
           </div>
-          <Button onClick={() => setIsInviteOpen(true)} className="font-bold">
-            <UserPlus className="mr-2 h-4 w-4" /> Invitar
-          </Button>
+          {isAdmin && (
+            <Button onClick={() => setIsInviteOpen(true)} className="font-bold">
+              <UserPlus className="mr-2 h-4 w-4" /> Invitar
+            </Button>
+          )}
         </header>
 
         <div className="grid grid-cols-1 gap-4">
@@ -128,22 +139,24 @@ export default function TeamPage() {
                     </div>
                   </div>
 
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleUpdateRole(member.id, 'Admin')}>
-                        <ShieldCheck className="mr-2 h-4 w-4" /> Hacer Admin
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleUpdateRole(member.id, 'Employee')}>
-                        <UserCircle className="mr-2 h-4 w-4" /> Hacer Empleado
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteUser(member.id)}>
-                        <Trash2 className="mr-2 h-4 w-4" /> Eliminar
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  {isAdmin && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleUpdateRole(member.id, 'Admin')}>
+                          <ShieldCheck className="mr-2 h-4 w-4" /> Hacer Admin
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleUpdateRole(member.id, 'Employee')}>
+                          <UserCircle className="mr-2 h-4 w-4" /> Hacer Empleado
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteUser(member.id)}>
+                          <Trash2 className="mr-2 h-4 w-4" /> Eliminar
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                 </CardContent>
               </Card>
             ))

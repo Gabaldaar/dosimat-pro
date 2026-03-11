@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
-import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase"
+import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from "@/firebase"
 import { collection, doc } from "firebase/firestore"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
@@ -33,6 +33,8 @@ const AVAILABLE_MARKERS = [
 export default function TemplatesPage() {
   const { toast } = useToast()
   const db = useFirestore()
+  const { userData } = useUser()
+  const isAdmin = userData?.role === 'Admin'
   
   const templatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
   const { data: templates, isLoading } = useCollection(templatesQuery)
@@ -59,6 +61,10 @@ export default function TemplatesPage() {
   }, [isDialogOpen]);
 
   const handleOpenDialog = (template?: any) => {
+    if (!isAdmin) {
+      toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos para gestionar plantillas de mail.", variant: "destructive" })
+      return
+    }
     if (template) {
       setEditingTemplateId(template.id)
       setFormData({
@@ -87,6 +93,10 @@ export default function TemplatesPage() {
   }
 
   const handleDelete = (id: string) => {
+    if (!isAdmin) {
+      toast({ title: "Acceso denegado", description: "No tienes permisos para eliminar plantillas.", variant: "destructive" })
+      return
+    }
     if (confirm("¿Estás seguro de eliminar esta plantilla?")) {
       deleteDocumentNonBlocking(doc(db, 'email_templates', id))
       toast({ title: "Plantilla eliminada" })
@@ -119,9 +129,11 @@ export default function TemplatesPage() {
               <h1 className="text-xl md:text-3xl font-bold text-primary font-headline">Plantillas</h1>
             </div>
           </div>
-          <Button onClick={() => handleOpenDialog()} className="shadow-lg font-bold">
-            <Plus className="mr-2 h-4 w-4" /> Nueva
-          </Button>
+          {isAdmin && (
+            <Button onClick={() => handleOpenDialog()} className="shadow-lg font-bold">
+              <Plus className="mr-2 h-4 w-4" /> Nueva
+            </Button>
+          )}
         </header>
 
         <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -137,14 +149,16 @@ export default function TemplatesPage() {
                 <CardHeader className="pb-3">
                   <div className="flex justify-between items-start">
                     <FileText className="h-6 w-6 text-primary/40" />
-                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenDialog(tpl)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(tpl.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    {isAdmin && (
+                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenDialog(tpl)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(tpl.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                   <CardTitle className="text-lg mt-2 truncate">{tpl.name}</CardTitle>
                   <CardDescription className="truncate italic text-xs">Asunto: {tpl.subject}</CardDescription>
@@ -160,7 +174,7 @@ export default function TemplatesPage() {
             <div className="col-span-full py-20 text-center border-2 border-dashed rounded-xl bg-muted/5">
               <FileText className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
               <p className="text-muted-foreground">No tienes plantillas creadas todavía.</p>
-              <Button variant="link" onClick={() => handleOpenDialog()}>Crear la primera</Button>
+              {isAdmin && <Button variant="link" onClick={() => handleOpenDialog()}>Crear la primera</Button>}
             </div>
           )}
         </section>

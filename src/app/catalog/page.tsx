@@ -35,13 +35,16 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
-import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase"
+import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from "@/firebase"
 import { collection, doc } from "firebase/firestore"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 
 export default function CatalogPage() {
   const { toast } = useToast()
   const db = useFirestore()
+  const { userData } = useUser()
+  const isAdmin = userData?.role === 'Admin'
+
   const [searchTerm, setSearchTerm] = useState("")
   
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
@@ -78,6 +81,10 @@ export default function CatalogPage() {
   }, [items, searchTerm])
 
   const handleOpenDialog = (item?: any) => {
+    if (!isAdmin) {
+      toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos para gestionar el catálogo.", variant: "destructive" })
+      return
+    }
     if (item) {
       setEditingItemId(item.id)
       setFormData({
@@ -130,9 +137,11 @@ export default function CatalogPage() {
               <h1 className="text-xl md:text-3xl font-bold text-primary font-headline">Catálogo</h1>
             </div>
           </div>
-          <Button onClick={() => handleOpenDialog()} className="shadow-lg">
-            <Plus className="mr-2 h-4 w-4" /> Nuevo
-          </Button>
+          {isAdmin && (
+            <Button onClick={() => handleOpenDialog()} className="shadow-lg">
+              <Plus className="mr-2 h-4 w-4" /> Nuevo
+            </Button>
+          )}
         </header>
 
         <div className="relative">
@@ -165,21 +174,23 @@ export default function CatalogPage() {
                     <Badge variant={item.isService ? "secondary" : "default"} className="text-[10px] font-bold">
                       {item.isService ? 'SERVICIO' : 'PRODUCTO'}
                     </Badge>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onSelect={() => handleOpenDialog(item)}>
-                          <Edit className="mr-2 h-4 w-4" /> Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive" onSelect={() => setItemToDelete(item)}>
-                          <Trash2 className="mr-2 h-4 w-4" /> Eliminar
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    {isAdmin && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => handleOpenDialog(item)}>
+                            <Edit className="mr-2 h-4 w-4" /> Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="text-destructive" onSelect={() => setItemToDelete(item)}>
+                            <Trash2 className="mr-2 h-4 w-4" /> Eliminar
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
                   <CardTitle className="text-lg mt-2 truncate">{item.name}</CardTitle>
                 </CardHeader>

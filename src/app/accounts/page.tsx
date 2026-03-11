@@ -53,7 +53,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, setDocumentNonBlocking, addDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase"
+import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, setDocumentNonBlocking, addDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from "@/firebase"
 import { collection, doc, query, orderBy, limit } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
@@ -74,6 +74,8 @@ export default function AccountsPage() {
   const { toast } = useToast()
   const db = useFirestore()
   const router = useRouter()
+  const { userData } = useUser()
+  const isAdmin = userData?.role === 'Admin'
   
   // Queries
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
@@ -172,6 +174,10 @@ export default function AccountsPage() {
 
   // Handlers
   const handleOpenAccountDialog = (account?: any) => {
+    if (!isAdmin) {
+      toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos para crear o modificar cajas financieras.", variant: "destructive" })
+      return
+    }
     if (account) {
       setEditingAccountId(account.id)
       setAccountFormData({
@@ -289,6 +295,10 @@ export default function AccountsPage() {
   }
 
   const handleAddCategory = () => {
+    if (!isAdmin) {
+      toast({ title: "Sin permisos", description: "Solo un administrador puede crear categorías.", variant: "destructive" })
+      return
+    }
     if (!newCategoryName.trim()) return
     const id = Math.random().toString(36).substring(2, 11)
     setDocumentNonBlocking(doc(db, 'expense_categories', id), { id, name: newCategoryName }, { merge: true })
@@ -323,9 +333,11 @@ export default function AccountsPage() {
             <Button variant="outline" onClick={() => setIsTransferDialogOpen(true)}>
               <ArrowRightLeft className="mr-2 h-4 w-4" /> Transferencia
             </Button>
-            <Button onClick={() => handleOpenAccountDialog()}>
-              <Plus className="mr-2 h-4 w-4" /> Nueva Caja
-            </Button>
+            {isAdmin && (
+              <Button onClick={() => handleOpenAccountDialog()}>
+                <Plus className="mr-2 h-4 w-4" /> Nueva Caja
+              </Button>
+            )}
           </div>
         </header>
 
@@ -386,24 +398,26 @@ export default function AccountsPage() {
                         >
                           <ExternalLink className="h-4 w-4" />
                         </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onSelect={() => handleOpenAccountDialog(account)}>Editar parámetros</DropdownMenuItem>
-                            <DropdownMenuItem className="text-destructive" onSelect={() => setAccountToDelete(account)}>
-                              <Trash2 className="mr-2 h-4 w-4" /> Eliminar caja
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        {isAdmin && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onSelect={() => handleOpenAccountDialog(account)}>Editar parámetros</DropdownMenuItem>
+                              <DropdownMenuItem className="text-destructive" onSelect={() => setAccountToDelete(account)}>
+                                <Trash2 className="mr-2 h-4 w-4" /> Eliminar caja
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </div>
                     </div>
                     <CardTitle className="text-base mt-2 truncate">{account.name}</CardTitle>
@@ -444,7 +458,7 @@ export default function AccountsPage() {
             <Wallet className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
             <h3 className="text-lg font-semibold">No hay cajas registradas</h3>
             <p className="text-muted-foreground mb-6">Crea una caja o banco para empezar a registrar movimientos.</p>
-            <Button onClick={() => handleOpenAccountDialog()}><Plus className="mr-2 h-4 w-4" /> Agregar Caja</Button>
+            {isAdmin && <Button onClick={() => handleOpenAccountDialog()}><Plus className="mr-2 h-4 w-4" /> Agregar Caja</Button>}
           </Card>
         )}
 
@@ -503,7 +517,13 @@ export default function AccountsPage() {
                 variant="outline" 
                 size="sm" 
                 className="w-full text-xs font-bold uppercase tracking-wider border-primary text-primary hover:bg-primary/5 gap-2" 
-                onClick={() => setIsCategoryManagerOpen(true)}
+                onClick={() => {
+                  if (!isAdmin) {
+                    toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos para gestionar categorías de gastos.", variant: "destructive" })
+                    return
+                  }
+                  setIsCategoryManagerOpen(true)
+                }}
               >
                 <Settings className="h-3 w-3" /> GESTIONAR CATEGORÍAS
               </Button>
