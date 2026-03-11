@@ -710,12 +710,14 @@ function TransactionsContent() {
                     <TableHead>Operación</TableHead>
                     <TableHead className="text-right">Monto Total</TableHead>
                     <TableHead className="text-right">Abonado</TableHead>
+                    <TableHead>Caja</TableHead>
                     <TableHead className="w-12"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredTransactions.map((tx: any) => {
                     const cust = customers?.find(c => c.id === tx.clientId);
+                    const acc = accounts?.find(a => a.id === tx.financialAccountId);
                     const info = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
                     return (
                       <TableRow key={tx.id}>
@@ -727,6 +729,15 @@ function TransactionsContent() {
                           <span className={cn("text-xs font-bold", tx.paidAmount > 0 ? "text-emerald-600" : "text-muted-foreground")}>
                             {tx.currency === 'USD' ? 'u$s' : '$'} {(tx.paidAmount || 0).toLocaleString('es-AR')}
                           </span>
+                        </TableCell>
+                        <TableCell>
+                          {acc ? (
+                            <Badge variant="secondary" className="text-[9px] font-bold bg-slate-100 hover:bg-slate-200">
+                              <Wallet className="h-3 w-3 mr-1 text-slate-500" /> {acc.name}
+                            </Badge>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground italic">A Cuenta</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <DropdownMenu>
