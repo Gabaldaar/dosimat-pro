@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -44,7 +45,8 @@ export default function TemplatesPage() {
   const [formData, setFormData] = useState({
     name: "",
     subject: "",
-    body: ""
+    body: "",
+    bcc: ""
   })
 
   // Evitar bloqueo de puntero al cerrar diálogos
@@ -70,11 +72,12 @@ export default function TemplatesPage() {
       setFormData({
         name: template.name,
         subject: template.subject,
-        body: template.body
+        body: template.body,
+        bcc: template.bcc || ""
       })
     } else {
       setEditingTemplateId(null)
-      setFormData({ name: "", subject: "", body: "" })
+      setFormData({ name: "", subject: "", body: "", bcc: "" })
     }
     setIsDialogOpen(true)
   }
@@ -162,6 +165,7 @@ export default function TemplatesPage() {
                   </div>
                   <CardTitle className="text-lg mt-2 truncate">{tpl.name}</CardTitle>
                   <CardDescription className="truncate italic text-xs">Asunto: {tpl.subject}</CardDescription>
+                  {tpl.bcc && <CardDescription className="truncate italic text-[10px] text-blue-600">CCO: {tpl.bcc}</CardDescription>}
                 </CardHeader>
                 <CardContent>
                   <p className="text-xs text-muted-foreground line-clamp-3 bg-muted/20 p-3 rounded-lg border">
@@ -210,6 +214,11 @@ export default function TemplatesPage() {
               <div className="space-y-2">
                 <Label className="font-bold">Nombre Interno de la Plantilla</Label>
                 <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Factura de Reposición Semanal" />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="font-bold">CCO (Copia Oculta) - Separar con ;</Label>
+                <Input value={formData.bcc} onChange={(e) => setFormData({...formData, bcc: e.target.value})} placeholder="ejemplo@mail.com; admin@dosimat.pro" />
               </div>
               
               <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl space-y-3">

@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "User": {
@@ -37,6 +38,18 @@
         "priceARS": { "type": "number" },
         "priceUSD": { "type": "number" },
         "isService": { "type": "boolean" }
+      }
+    },
+    "EmailTemplate": {
+      "title": "EmailTemplate",
+      "type": "object",
+      "description": "Templates for email notifications.",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "subject": { "type": "string" },
+        "body": { "type": "string" },
+        "bcc": { "type": "string", "description": "Blind Carbon Copy emails separated by semicolon." }
       }
     }
   },

@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -240,10 +241,16 @@ export default function CustomersPage() {
     const template = templates?.find(t => t.id === selectedTemplateId)
     if (!template) return
 
-    const emails = filteredCustomers
+    let bccList = filteredCustomers
       .map(c => c.mail)
       .filter(m => !!m && m.includes('@'))
-      .join(';')
+    
+    if (template.bcc) {
+      const extraBccs = template.bcc.split(';').map((e: string) => e.trim()).filter((e: string) => !!e)
+      bccList = [...new Set([...bccList, ...extraBccs])]
+    }
+
+    const emails = bccList.join(';')
 
     if (!emails) {
       toast({ title: "Sin emails", description: "Ningún cliente filtrado tiene un email válido.", variant: "destructive" })
@@ -752,6 +759,11 @@ export default function CustomersPage() {
                    <div className="p-2 bg-muted/50 rounded border text-sm font-bold truncate">
                      Asunto: {templates?.find(t => t.id === selectedTemplateId)?.subject}
                    </div>
+                   {templates?.find((t: any) => t.id === selectedTemplateId)?.bcc && (
+                     <div className="p-2 bg-blue-50 rounded border text-[10px] font-bold text-blue-700 truncate">
+                       CCO Fijo: {templates.find((t: any) => t.id === selectedTemplateId).bcc}
+                     </div>
+                   )}
                    <div className="p-3 bg-white rounded border text-xs whitespace-pre-wrap italic text-slate-600 max-h-[150px] overflow-y-auto">
                      {templates?.find(t => t.id === selectedTemplateId)?.body}
                    </div>

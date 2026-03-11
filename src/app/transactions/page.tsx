@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
@@ -451,9 +452,13 @@ function TransactionsContent() {
 
   const handleSendEmail = () => {
     const client = customers?.find(c => c.id === selectedTxForEmail.clientId)
-    if (!client?.mail || !processedEmail.subject || !processedEmail.body) return
+    const tpl = templates?.find(t => t.id === selectedTemplateId)
+    if (!client?.mail || !processedEmail.subject || !processedEmail.body || !tpl) return
 
-    const mailtoLink = `mailto:${client.mail}?subject=${encodeURIComponent(processedEmail.subject)}&body=${encodeURIComponent(processedEmail.body)}`
+    let mailtoLink = `mailto:${client.mail}?subject=${encodeURIComponent(processedEmail.subject)}&body=${encodeURIComponent(processedEmail.body)}`
+    if (tpl.bcc) {
+      mailtoLink += `&bcc=${encodeURIComponent(tpl.bcc)}`
+    }
     window.location.href = mailtoLink
     setIsEmailDialogOpen(false)
   }
