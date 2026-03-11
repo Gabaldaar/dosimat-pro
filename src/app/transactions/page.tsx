@@ -586,7 +586,7 @@ function TransactionsContent() {
                       </div>
                     )}
                     <div className="border rounded-xl overflow-x-auto">
-                      <Table>
+                      <Table className="min-w-[700px]">
                         <TableHeader className="bg-muted/30">
                           <TableRow>
                             <TableHead>Ítem</TableHead>
@@ -702,7 +702,7 @@ function TransactionsContent() {
             </Card>
 
             <Card className="glass-card overflow-hidden">
-              <Table>
+              <Table className="min-w-[800px]">
                 <TableHeader className="bg-muted/30">
                   <TableRow>
                     <TableHead>Fecha</TableHead>
@@ -768,7 +768,7 @@ function TransactionsContent() {
                 <SelectContent>{templates?.map((t: any) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}</SelectContent>
               </Select>
               {selectedTemplateId && (
-                <div className="p-4 bg-muted/20 rounded border space-y-2 max-h-[450px] overflow-y-auto">
+                <div className="p-4 bg-muted/20 rounded border space-y-2 max-h-[350px] overflow-y-auto">
                   <div className="sticky top-0 bg-muted/20 pb-2 border-b mb-4">
                     <p className="text-sm font-bold text-primary">Asunto: {processedEmail.subject}</p>
                   </div>
