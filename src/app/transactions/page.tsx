@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
@@ -126,6 +125,11 @@ function TransactionsContent() {
   const { data: accounts } = useCollection(accountsQuery)
   const { data: transactions, isLoading: loadingTx } = useCollection(txQuery)
   const { data: templates } = useCollection(templatesQuery)
+
+  const sortedCatalog = useMemo(() => {
+    if (!catalog) return []
+    return [...catalog].sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""))
+  }, [catalog])
 
   const [selectedCustomerId, setSelectedCustomerId] = useState("")
   const [selectedItems, setSelectedItems] = useState<any[]>([])
@@ -690,7 +694,7 @@ function TransactionsContent() {
                         <Select onValueChange={handleAddItem}>
                           <SelectTrigger className="h-11"><SelectValue placeholder="Seleccionar producto o servicio..." /></SelectTrigger>
                           <SelectContent>
-                            {catalog?.map((i: any) => (
+                            {sortedCatalog?.map((i: any) => (
                               <SelectItem key={i.id} value={i.id}>
                                 {i.name} (ARS: ${Number(i.priceARS || 0).toLocaleString('es-AR')} | USD: u$s {Number(i.priceUSD || 0).toLocaleString('es-AR')})
                               </SelectItem>

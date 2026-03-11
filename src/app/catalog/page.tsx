@@ -75,9 +75,11 @@ export default function CatalogPage() {
 
   const filteredItems = useMemo(() => {
     if (!items) return []
-    return items.filter((item: any) => 
-      item.name.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    return items
+      .filter((item: any) => 
+        item.name.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+      .sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""))
   }, [items, searchTerm])
 
   const handleOpenDialog = (item?: any) => {
