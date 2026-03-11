@@ -379,7 +379,7 @@ export default function AccountsPage() {
             <p className="text-sm text-muted-foreground">Cargando cajas...</p>
           </div>
         ) : (accounts && accounts.length > 0) ? (
-          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {accounts.map((account: any) => {
               const isUSD = account.currency === 'USD';
               const themeColor = isUSD ? 'text-emerald-700' : 'text-blue-700';
@@ -391,31 +391,31 @@ export default function AccountsPage() {
                   className={`glass-card overflow-hidden group border-l-4 cursor-pointer hover:shadow-md transition-all ${isUSD ? 'border-l-emerald-500' : 'border-l-blue-500'}`}
                   onClick={() => router.push(`/transactions?accountId=${account.id}`)}
                 >
-                  <CardHeader className="pb-2">
-                    <div className="flex items-start justify-between">
-                      <div className={`p-2 rounded-lg ${bgColor} ${themeColor}`}>
-                        {account.type === 'Bank' ? <Building2 className="h-5 w-5" /> : 
-                         account.type === 'Cash' ? <Banknote className="h-5 w-5" /> : <Wallet className="h-5 w-5" />}
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={cn("p-3 rounded-xl flex items-center justify-center", bgColor, themeColor)}>
+                          {account.type === 'Bank' ? <Building2 className="h-8 w-8" /> : 
+                           account.type === 'Cash' ? <Banknote className="h-8 w-8" /> : <Wallet className="h-8 w-8" />}
+                        </div>
+                        <div className="flex flex-col">
+                          <CardTitle className="text-lg font-bold leading-tight truncate max-w-[150px]">{account.name}</CardTitle>
+                          <span className={cn("text-[10px] font-black uppercase tracking-widest", themeColor)}>
+                            {account.currency}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-primary"
-                          title="Ver movimientos"
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </Button>
+                      <div className="flex items-center">
                         {isAdmin && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button 
                                 variant="ghost" 
                                 size="icon" 
-                                className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="h-10 w-10"
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                <MoreVertical className="h-4 w-4" />
+                                <MoreVertical className="h-5 w-5" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
@@ -428,21 +428,16 @@ export default function AccountsPage() {
                         )}
                       </div>
                     </div>
-                    <CardTitle className="text-base mt-2 truncate">{account.name}</CardTitle>
-                    <CardDescription className={`text-[10px] font-bold uppercase tracking-widest ${themeColor}`}>
-                      {account.currency}
-                    </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className={`text-2xl font-black tracking-tight ${themeColor}`}>
-                      {isUSD ? 'u$s' : '$'}
-                      {Number(account.initialBalance || 0).toLocaleString('es-AR')}
+                    <div className={cn("text-3xl font-black tracking-tighter mb-4", themeColor)}>
+                      {isUSD ? 'u$s' : '$'}{Number(account.initialBalance || 0).toLocaleString('es-AR')}
                     </div>
-                    <div className="mt-4 flex gap-2">
+                    <div className="flex gap-2">
                       <Button 
                         size="sm" 
                         variant="outline" 
-                        className="flex-1 text-[10px] h-8 hover:bg-emerald-50" 
+                        className="flex-1 text-[10px] h-8 font-bold hover:bg-emerald-50" 
                         onClick={(e) => { e.stopPropagation(); handleOpenTxDialog(account, 'income'); }}
                       >
                         INGRESO
@@ -450,7 +445,7 @@ export default function AccountsPage() {
                       <Button 
                         size="sm" 
                         variant="outline" 
-                        className="flex-1 text-[10px] h-8 hover:bg-rose-50" 
+                        className="flex-1 text-[10px] h-8 font-bold hover:bg-rose-50" 
                         onClick={(e) => { e.stopPropagation(); handleOpenTxDialog(account, 'expense'); }}
                       >
                         GASTO
@@ -577,7 +572,89 @@ export default function AccountsPage() {
           </DialogContent>
         </Dialog>
 
-        {/* ... Resto de diálogos de la pantalla ... */}
+        <Dialog open={isTxDialogOpen} onOpenChange={setIsTxDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{txType === 'income' ? 'Ingreso Manual' : 'Gasto Manual'}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Monto</Label>
+                <Input type="number" value={txFormData.amount} onChange={(e) => setTxFormData({...txFormData, amount: Number(e.target.value)})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Descripción</Label>
+                <Input value={txFormData.description} onChange={(e) => setTxFormData({...txFormData, description: e.target.value})} />
+              </div>
+              {txType === 'expense' && (
+                <div className="space-y-2">
+                  <Label>Categoría</Label>
+                  <Select value={txFormData.categoryId} onValueChange={(v) => setTxFormData({...txFormData, categoryId: v})}>
+                    <SelectTrigger><SelectValue placeholder="Seleccionar rubro..." /></SelectTrigger>
+                    <SelectContent>
+                      {expenseCategories.map((c: any) => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button onClick={handleProcessTx}>Procesar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Transferencia entre Cajas</DialogTitle></DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Origen</Label>
+                  <Select value={transferFormData.fromId} onValueChange={(v) => setTransferFormData({...transferFormData, fromId: v})}>
+                    <SelectTrigger><SelectValue placeholder="Caja..." /></SelectTrigger>
+                    <SelectContent>
+                      {accounts?.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency}) - Saldo: {a.currency === 'USD' ? 'u$s' : '$'}{a.initialBalance.toLocaleString('es-AR')}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Destino</Label>
+                  <Select value={transferFormData.toId} onValueChange={(v) => setTransferFormData({...transferFormData, toId: v})}>
+                    <SelectTrigger><SelectValue placeholder="Caja..." /></SelectTrigger>
+                    <SelectContent>
+                      {accounts?.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency}) - Saldo: {a.currency === 'USD' ? 'u$s' : '$'}{a.initialBalance.toLocaleString('es-AR')}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Monto a transferir ({fromAcc?.currency || '...' })</Label>
+                <Input type="number" value={transferFormData.amount} onChange={(e) => setTransferFormData({...transferFormData, amount: Number(e.target.value)})} />
+              </div>
+              {calculatedReceipt !== null && (
+                <div className="p-3 bg-accent/5 rounded border text-xs font-bold flex justify-between">
+                  <span>Recibirá en destino ({toAcc?.currency}):</span>
+                  <span>{toAcc?.currency === 'USD' ? 'u$s' : '$'}{calculatedReceipt.toLocaleString('es-AR')}</span>
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label>Descripción / Notas</Label>
+                <Input 
+                  placeholder="Ej: Retiro para sueldos, Pago proveedor..." 
+                  value={transferFormData.description} 
+                  onChange={(e) => setTransferFormData({...transferFormData, description: e.target.value})} 
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={handleTransfer}>Transferir</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
           <DialogContent>
             <DialogHeader><DialogTitle>Categorías de Gasto</DialogTitle></DialogHeader>
@@ -603,6 +680,21 @@ export default function AccountsPage() {
             </div>
           </DialogContent>
         </Dialog>
+
+        <AlertDialog open={!!accountToDelete} onOpenChange={(o) => { if(!o) setAccountToDelete(null); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Confirmar eliminación de caja?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Se borrará "{accountToDelete?.name}". Asegúrate de que el saldo sea 0 o de haber transferido los fondos antes.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeleteAccount} className="bg-destructive text-destructive-foreground">Eliminar</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
       </SidebarInset>
 
