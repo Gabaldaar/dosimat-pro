@@ -45,7 +45,7 @@ export function Sidebar({ className }: { className?: string }) {
   const pathname = usePathname()
   const { auth, firestore, user } = useFirebase()
   const router = useRouter()
-  const { state } = useSidebar()
+  const { state, isMobile, setOpenMobile } = useSidebar()
 
   const userDocRef = useMemoFirebase(() => user ? doc(firestore, 'users', user.uid) : null, [user, firestore])
   const { data: userData, isLoading: isUserDocLoading } = useDoc(userDocRef)
@@ -56,6 +56,12 @@ export function Sidebar({ className }: { className?: string }) {
       router.push("/login")
     } catch (error) {
       console.error("Error signing out:", error)
+    }
+  }
+
+  const handleLinkClick = () => {
+    if (isMobile) {
+      setOpenMobile(false)
     }
   }
 
@@ -80,6 +86,7 @@ export function Sidebar({ className }: { className?: string }) {
                 asChild
                 isActive={pathname === item.href}
                 tooltip={item.label}
+                onClick={handleLinkClick}
               >
                 <Link href={item.href}>
                   <item.icon className="h-4 w-4" />
