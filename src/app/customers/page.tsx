@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -94,7 +93,7 @@ export default function CustomersPage() {
     pais: "Argentina",
     mail: "",
     cuit_dni: "",
-    observaciones: "", // Se mantiene por compatibilidad con Address
+    observaciones: "", 
     notasGeneral: "",
     equipoInstalado: {
       medidasPileta: "",
@@ -226,11 +225,15 @@ export default function CustomersPage() {
 
   const handleCopyClipboard = (customer: any, e: React.MouseEvent) => {
     e.stopPropagation()
-    const text = `*${customer.apellido}, ${customer.nombre}*\nCelular: ${customer.telefono || 'N/A'}\nDir: ${customer.direccion || 'N/A'}\nemail: ${customer.mail || 'N/A'}`
+    const balanceARS = Number(customer.saldoActual || 0).toLocaleString('es-AR')
+    const balanceUSD = Number(customer.saldoUSD || 0).toLocaleString('es-AR')
+    const fullAddress = [customer.direccion, customer.localidad, customer.provincia].filter(Boolean).join(", ")
+    
+    const text = `*${customer.apellido}, ${customer.nombre}*\nCelular: ${customer.telefono || 'N/A'}\nDir: ${fullAddress || 'N/A'}\nSaldo ARS: $${balanceARS}\nSaldo USD: u$s ${balanceUSD}\nemail: ${customer.mail || 'N/A'}`
     navigator.clipboard.writeText(text)
     toast({
       title: "Copiado",
-      description: "Información del cliente copiada para WhatsApp."
+      description: "Información completa del cliente copiada."
     })
   }
 

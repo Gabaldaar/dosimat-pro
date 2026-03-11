@@ -34,7 +34,7 @@ import {
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/customers", label: "Clientes", icon: Users },
-  { href: "/transactions", label: "Operaciones", icon: ArrowLeftRight },
+  { href: "/transactions", label: "Historial", icon: ArrowLeftRight },
   { href: "/accounts", label: "Cajas", icon: Wallet },
   { href: "/catalog", label: "Catálogo", icon: Package },
   { href: "/templates", label: "Plantillas Mail", icon: FileText },
@@ -139,7 +139,7 @@ export function MobileNav() {
   
   return (
     <div className="fixed bottom-0 left-0 right-0 z-[100] bg-background/60 backdrop-blur-xl border-t border-primary/10 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] flex items-center justify-around px-4 py-3 pb-[calc(1rem+env(safe-area-inset-bottom))] md:hidden">
-      {navItems.slice(0, 4).map((item) => (
+      {navItems.slice(0, 5).map((item) => (
         <Link
           key={item.href}
           href={item.href}
