@@ -122,6 +122,15 @@ function TransactionsContent() {
     return [...catalog].sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""))
   }, [catalog])
 
+  const sortedCustomers = useMemo(() => {
+    if (!customers) return []
+    return [...customers].sort((a: any, b: any) => {
+      const nameA = `${a.apellido || ""} ${a.nombre || ""}`.toLowerCase();
+      const nameB = `${b.apellido || ""} ${b.nombre || ""}`.toLowerCase();
+      return nameA.localeCompare(nameB);
+    })
+  }, [customers])
+
   const [selectedCustomerId, setSelectedCustomerId] = useState("")
   const [selectedItems, setSelectedItems] = useState<any[]>([])
   const [destinationAccounts, setDestinationAccounts] = useState<Record<string, string>>({ ARS: "pending", USD: "pending" })
@@ -170,9 +179,6 @@ function TransactionsContent() {
       return acc
     }, { ARS: 0, USD: 0 })
   }, [selectedItems])
-
-  // Nota: Hemos eliminado el useEffect que igualaba paidAmounts a cartTotals.
-  // Ahora paidAmounts permanece en 0 (inicializado arriba) hasta que el usuario lo edite.
 
   useEffect(() => {
     if (selectedTxForEmail && selectedTemplateId && templates && customers && accounts) {
@@ -560,8 +566,10 @@ function TransactionsContent() {
                     <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId} disabled={!!editingTx}>
                       <SelectTrigger className="bg-white"><SelectValue placeholder="Buscar cliente..." /></SelectTrigger>
                       <SelectContent>
-                        {customers?.map((c: any) => (
-                          <SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>
+                        {sortedCustomers.map((c: any) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.apellido}, {c.nombre} (Saldo: ${Number(c.saldoActual || 0).toLocaleString('es-AR')} / u$s {Number(c.saldoUSD || 0).toLocaleString('es-AR')})
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -798,7 +806,7 @@ function TransactionsContent() {
             </section>
 
             <Card className="glass-card p-4 flex flex-wrap gap-4 items-end">
-                 <div className="space-y-1"><Label className="text-xs">Cliente</Label><Select value={filterCustomer} onValueChange={setFilterCustomer}><SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem>{customers?.map((c: any) => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}</SelectContent></Select></div>
+                 <div className="space-y-1"><Label className="text-xs">Cliente</Label><Select value={filterCustomer} onValueChange={setFilterCustomer}><SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem>{sortedCustomers.map((c: any) => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}</SelectContent></Select></div>
                  <div className="space-y-1"><Label className="text-xs">Categoría</Label><Select value={filterCategory} onValueChange={setFilterCategory}><SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{Object.entries(txTypeMap).map(([k, v]) => (<SelectItem key={k} value={k}>{v.label}</SelectItem>))}</SelectContent></Select></div>
                  <div className="space-y-1"><Label className="text-xs">Desde</Label><Input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="w-[140px] h-9" /></div>
                  <div className="space-y-1"><Label className="text-xs">Hasta</Label><Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="w-[140px] h-9" /></div>
