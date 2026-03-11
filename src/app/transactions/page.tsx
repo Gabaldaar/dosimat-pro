@@ -73,8 +73,6 @@ const txTypeMap: Record<string, { label: string, icon: any, color: string, descr
   service: { label: "Técnico", icon: Wrench, color: "text-indigo-600 bg-indigo-50", description: "Servicios técnicos, reparaciones o visitas de mantenimiento." },
   adjustment: { label: "Ajuste", icon: Settings2, color: "text-slate-600 bg-slate-50", description: "Corrección manual de saldo (Ingresos o Egresos) en la cuenta del cliente." },
   cobro: { label: "Cobro", icon: Receipt, color: "text-emerald-600 bg-emerald-50", description: "Registro de pago recibido del cliente para cancelar deuda." },
-  FinancialTransferIn: { label: "Transferencia (Entrada)", icon: ArrowRightLeft, color: "text-emerald-600 bg-emerald-50", description: "Ingreso por transferencia entre cuentas." },
-  FinancialTransferOut: { label: "Transferencia (Salida)", icon: ArrowRightLeft, color: "text-amber-600 bg-amber-50", description: "Egreso por transferencia entre cuentas." },
 }
 
 function TransactionsContent() {
@@ -105,15 +103,6 @@ function TransactionsContent() {
   const [filterOpType, setFilterOpType] = useState("all") 
   const [filterCategory, setFilterCategory] = useState("all") 
 
-  // Set default dates to current month
-  useEffect(() => {
-    const now = new Date();
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-    setFilterStartDate(firstDay);
-    setFilterEndDate(lastDay);
-  }, []);
-
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
@@ -134,13 +123,13 @@ function TransactionsContent() {
   const [selectedCustomerId, setSelectedCustomerId] = useState("")
   const [selectedItems, setSelectedItems] = useState<any[]>([])
   const [destinationAccounts, setDestinationAccounts] = useState<Record<string, string>>({ ARS: "pending", USD: "pending" })
+  const [paidAmounts, setPaidAmounts] = useState<Record<string, number>>({ ARS: 0, USD: 0 })
   const [operationDate, setOperationDate] = useState(new Date().toISOString().split('T')[0])
   
-  // States for simplified amount operations (Adjustment/Cobro)
   const [manualAmount, setManualAmount] = useState(0)
   const [manualCurrency, setManualCurrency] = useState("ARS")
   const [manualAccountId, setManualAccountId] = useState("pending")
-  const [adjustmentSign, setAdjustmentSign] = useState<"1" | "-1">("1") // 1: A favor (increase balance), -1: A cargo (decrease balance)
+  const [adjustmentSign, setAdjustmentSign] = useState<"1" | "-1">("1")
   const [txDescription, setTxDescription] = useState("")
 
   useEffect(() => {
@@ -163,17 +152,31 @@ function TransactionsContent() {
     if (clientIdParam) {
       setFilterCustomer(clientIdParam)
       setSelectedCustomerId(clientIdParam)
-      if (modeParam === 'new') {
-        setMainView("register")
-      } else {
-        setMainView("history")
-      }
+      if (modeParam === 'new') setMainView("register")
     }
     if (accountIdParam) {
       setFilterAccount(accountIdParam)
       setMainView("history")
     }
   }, [clientIdParam, accountIdParam, modeParam])
+
+  // Actualizar montos abonados por defecto cuando cambia el carrito
+  const cartTotals = useMemo(() => {
+    return selectedItems.reduce((acc, item) => {
+      const amount = (Number(item.price) || 0) * (Number(item.qty) || 0)
+      acc[item.currency as 'ARS' | 'USD'] = (acc[item.currency as 'ARS' | 'USD'] || 0) + amount
+      return acc
+    }, { ARS: 0, USD: 0 })
+  }, [selectedItems])
+
+  useEffect(() => {
+    if (!editingTx) {
+      setPaidAmounts({
+        ARS: cartTotals.ARS,
+        USD: cartTotals.USD
+      })
+    }
+  }, [cartTotals, editingTx])
 
   useEffect(() => {
     if (selectedTxForEmail && selectedTemplateId && templates && customers && accounts) {
@@ -201,13 +204,9 @@ function TransactionsContent() {
         const acc = accounts.find(a => a.id === selectedTxForEmail.financialAccountId);
         let metodoPago = "A Cuenta / Pendiente";
         if (acc) {
-          if (acc.type === 'Bank') {
-            metodoPago = "Transferencia/Depósito bancario";
-          } else if (acc.type === 'Cash') {
-            metodoPago = "Efectivo";
-          } else {
-            metodoPago = acc.name || "Otro";
-          }
+          if (acc.type === 'Bank') metodoPago = "Transferencia/Depósito bancario";
+          else if (acc.type === 'Cash') metodoPago = "Efectivo";
+          else metodoPago = acc.name || "Otro";
         }
 
         const replacements: Record<string, string> = {
@@ -216,6 +215,8 @@ function TransactionsContent() {
           "{{Fecha}}": new Date(selectedTxForEmail.date).toLocaleDateString('es-AR'),
           "{{Descripción}}": selectedTxForEmail.description || "",
           "{{Total}}": `${currencySymbol} ${Math.abs(selectedTxForEmail.amount).toLocaleString('es-AR')}`,
+          "{{Monto_Abonado}}": `${currencySymbol} ${(selectedTxForEmail.paidAmount || 0).toLocaleString('es-AR')}`,
+          "{{Caja_Destino}}": acc ? acc.name : "A Cuenta",
           "{{Moneda}}": selectedTxForEmail.currency || "",
           "{{Detalle_Items}}": listaItems,
           "{{Item}}": selectedTxForEmail.items?.[0]?.name || "N/A",
@@ -239,17 +240,9 @@ function TransactionsContent() {
   const handleAddItem = (itemId: string) => {
     const item = catalog?.find((i: any) => i.id === itemId)
     if (!item) return
-    
     const defaultCurrency = (item.priceARS || 0) > 0 ? 'ARS' : 'USD'
     const defaultPrice = (item.priceARS || 0) > 0 ? item.priceARS : item.priceUSD
-
-    setSelectedItems(prev => [...prev, { 
-      itemId: item.id, 
-      name: item.name, 
-      qty: 1, 
-      price: defaultPrice, 
-      currency: defaultCurrency 
-    }])
+    setSelectedItems(prev => [...prev, { itemId: item.id, name: item.name, qty: 1, price: defaultPrice, currency: defaultCurrency }])
   }
 
   const updateItem = (index: number, field: string, value: any) => {
@@ -262,14 +255,6 @@ function TransactionsContent() {
     setSelectedItems(prev => prev.filter((_, i) => i !== index))
   }
 
-  const cartTotals = useMemo(() => {
-    return selectedItems.reduce((acc, item) => {
-      const amount = (Number(item.price) || 0) * (Number(item.qty) || 0)
-      acc[item.currency as 'ARS' | 'USD'] = (acc[item.currency as 'ARS' | 'USD'] || 0) + amount
-      return acc
-    }, { ARS: 0, USD: 0 })
-  }, [selectedItems])
-
   const handleEditTx = (tx: any) => {
     setEditingTx(tx)
     setSelectedCustomerId(tx.clientId)
@@ -281,22 +266,11 @@ function TransactionsContent() {
       setManualAmount(Math.abs(tx.amount))
       setManualCurrency(tx.currency)
       setManualAccountId(tx.financialAccountId || "pending")
-      if (tx.type === 'adjustment') {
-        setAdjustmentSign(tx.amount >= 0 ? "1" : "-1")
-      }
+      if (tx.type === 'adjustment') setAdjustmentSign(tx.amount >= 0 ? "1" : "-1")
     } else {
-      if (tx.items && tx.items.length > 0) {
-        setSelectedItems(tx.items)
-      } else {
-        setSelectedItems([{
-          name: tx.description || txTypeMap[tx.type]?.label || "Ítem",
-          qty: 1,
-          price: Math.abs(tx.amount),
-          currency: tx.currency,
-          itemId: "manual"
-        }])
-      }
+      setSelectedItems(tx.items || [])
       setDestinationAccounts({ [tx.currency]: tx.financialAccountId || "pending" })
+      setPaidAmounts({ [tx.currency]: tx.paidAmount || tx.amount })
     }
     setMainView("register")
   }
@@ -304,38 +278,26 @@ function TransactionsContent() {
   const revertTxBalances = (tx: any) => {
     const client = customers?.find(c => c.id === tx.clientId)
     const acc = accounts?.find(a => a.id === tx.financialAccountId)
-    const amount = Number(tx.amount) || 0;
-    
-    // Reverse financial account impact
-    if (acc) {
-      updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { 
-        initialBalance: Number(acc.initialBalance || 0) - amount 
-      })
-    }
-    
-    // Reverse client balance impact
     const balanceField = tx.currency === 'ARS' ? 'saldoActual' : 'saldoUSD'
-    if (client) {
-      if (tx.type === 'cobro' || tx.type === 'adjustment') {
-        // These types ADDED to balance. Reverting means SUBTRACTING.
-        updateDocumentNonBlocking(doc(db, 'clients', client.id), { 
-          [balanceField]: Number(client[balanceField] || 0) - amount 
-        })
-      } else {
-        // sales/refill/service SUBTRACTED from balance. Reverting means ADDING.
-        updateDocumentNonBlocking(doc(db, 'clients', client.id), { 
-          [balanceField]: Number(client[balanceField] || 0) + amount 
-        })
-      }
+    
+    if (tx.type === 'cobro' || tx.type === 'adjustment') {
+      const amount = Number(tx.amount) || 0
+      if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: Number(acc.initialBalance || 0) - amount })
+      if (client) updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: Number(client[balanceField] || 0) - amount })
+    } else {
+      const total = Number(tx.amount) || 0
+      const paid = Number(tx.paidAmount) || 0
+      const debt = total - paid
+      if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: Number(acc.initialBalance || 0) - paid })
+      if (client) updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: Number(client[balanceField] || 0) + debt })
     }
   }
 
   const confirmDeleteTx = () => {
-    if (!txToDelete || !txToDelete.id) return
+    if (!txToDelete?.id) return
     revertTxBalances(txToDelete)
     deleteDocumentNonBlocking(doc(db, 'transactions', txToDelete.id))
     setTxToDelete(null)
-    setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100)
     toast({ title: "Operación eliminada" })
   }
 
@@ -349,14 +311,12 @@ function TransactionsContent() {
     if (!client) return
 
     if (editingTx) {
-      revertTxBalances(editingTx);
-      deleteDocumentNonBlocking(doc(db, 'transactions', editingTx.id));
-      setEditingTx(null);
+      revertTxBalances(editingTx)
+      deleteDocumentNonBlocking(doc(db, 'transactions', editingTx.id))
     }
 
     if (activeTab === 'cobro' || activeTab === 'adjustment') {
       if (manualAmount <= 0) return
-      
       const txId = Math.random().toString(36).substring(2, 11)
       const multiplier = activeTab === 'adjustment' ? Number(adjustmentSign) : 1
       const finalAmount = Number(manualAmount) * multiplier
@@ -368,37 +328,28 @@ function TransactionsContent() {
         type: activeTab,
         amount: finalAmount,
         currency: manualCurrency,
-        description: txDescription || `${txTypeMap[activeTab].label} manual - ${manualCurrency}`,
-        financialAccountId: manualAccountId === "pending" ? null : manualAccountId
+        description: txDescription || `${txTypeMap[activeTab].label} manual`,
+        financialAccountId: manualAccountId === "pending" ? null : manualAccountId,
+        paidAmount: activeTab === 'cobro' ? finalAmount : 0
       }
 
       setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
-      
-      // Update financial account if selected
-      const acc = accounts?.find(a => a.id === manualAccountId)
-      if (acc) {
-        updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { 
-          initialBalance: Number(acc.initialBalance || 0) + finalAmount 
-        })
+      if (manualAccountId !== "pending") {
+        const acc = accounts?.find(a => a.id === manualAccountId)
+        if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: Number(acc.initialBalance || 0) + finalAmount })
       }
-      
-      // Update client balance (A favor increases balance, A cargo decreases it)
       const balanceField = manualCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'
-      updateDocumentNonBlocking(doc(db, 'clients', client.id), { 
-        [balanceField]: Number(client[balanceField] || 0) + finalAmount 
-      })
-
-      toast({ title: `${txTypeMap[activeTab].label} registrado correctamente` })
+      updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: Number(client[balanceField] || 0) + finalAmount })
     } else {
       if (selectedItems.length === 0) return
 
       ['ARS', 'USD'].forEach(curr => {
         const total = cartTotals[curr as 'ARS' | 'USD']
-        const itemsOfCurrency = selectedItems.filter(item => item.currency === curr)
-
         if (total > 0) {
           const txId = Math.random().toString(36).substring(2, 11)
           const accId = destinationAccounts[curr]
+          const paid = Number(paidAmounts[curr] || 0)
+          const debt = total - paid
           const isPending = !accId || accId === "pending"
           
           const txData = {
@@ -407,28 +358,32 @@ function TransactionsContent() {
             clientId: selectedCustomerId,
             type: activeTab,
             amount: Number(total),
+            paidAmount: paid,
+            debtAmount: debt,
             currency: curr,
-            description: txDescription || `Operación ${txTypeMap[activeTab]?.label.toUpperCase()} - ${curr}`,
-            financialAccountId: isPending ? null : accId,
-            items: itemsOfCurrency
+            description: txDescription || `Operación ${txTypeMap[activeTab]?.label.toUpperCase()}`,
+            financialAccountId: (isPending || paid === 0) ? null : accId,
+            items: selectedItems.filter(item => item.currency === curr)
           }
 
           setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
 
-          if (!isPending) {
+          if (!isPending && paid > 0) {
             const acc = accounts?.find(a => a.id === accId)
-            if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: Number(acc.initialBalance || 0) + Number(total) })
-          } else {
+            if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: Number(acc.initialBalance || 0) + paid })
+          }
+          
+          if (debt !== 0) {
             const balanceField = curr === 'ARS' ? 'saldoActual' : 'saldoUSD'
-            updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: Number(client[balanceField] || 0) - Number(total) })
+            updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: Number(client[balanceField] || 0) - debt })
           }
         }
       })
-      toast({ title: "Operación registrada" })
     }
 
-    resetRegisterForm();
-    setMainView("history");
+    toast({ title: "Operación registrada" })
+    resetRegisterForm()
+    setMainView("history")
   }
 
   const resetRegisterForm = () => {
@@ -438,19 +393,14 @@ function TransactionsContent() {
     setTxDescription("")
     setManualAmount(0)
     setOperationDate(new Date().toISOString().split('T')[0])
+    setPaidAmounts({ ARS: 0, USD: 0 })
   }
 
   const resetFilters = () => {
     setFilterCustomer("all")
     setFilterAccount("all")
-    
-    // Reset dates to current month range
-    const now = new Date();
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-    setFilterStartDate(firstDay)
-    setFilterEndDate(lastDay)
-    
+    setFilterStartDate("")
+    setFilterEndDate("")
     setFilterOpType("all")
     setFilterCategory("all")
   }
@@ -473,9 +423,7 @@ function TransactionsContent() {
     if (!client?.mail || !processedEmail.subject || !processedEmail.body || !tpl) return
 
     let mailtoLink = `mailto:${client.mail}?subject=${encodeURIComponent(processedEmail.subject)}&body=${encodeURIComponent(processedEmail.body)}`
-    if (tpl.bcc) {
-      mailtoLink += `&bcc=${encodeURIComponent(tpl.bcc)}`
-    }
+    if (tpl.bcc) mailtoLink += `&bcc=${encodeURIComponent(tpl.bcc)}`
     window.location.href = mailtoLink
     setIsEmailDialogOpen(false)
   }
@@ -485,25 +433,20 @@ function TransactionsContent() {
     return transactions.filter((tx: any) => {
       const matchCustomer = filterCustomer === "all" || tx.clientId === filterCustomer
       const matchAccount = filterAccount === "all" || (filterAccount === "null" ? !tx.financialAccountId : tx.financialAccountId === filterAccount)
-      
       const txDateStr = tx.date.split('T')[0]
       const matchStart = !filterStartDate || txDateStr >= filterStartDate
       const matchEnd = !filterEndDate || txDateStr <= filterEndDate
-
       let matchType = true
       if (filterOpType === 'income') matchType = tx.amount > 0 || tx.type === 'cobro'
       if (filterOpType === 'expense') matchType = tx.amount < 0 && tx.type !== 'cobro'
-
       const matchCategory = filterCategory === "all" || tx.type === filterCategory
-
       return matchCustomer && matchAccount && matchStart && matchEnd && matchType && matchCategory
     }).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
   }, [transactions, filterCustomer, filterAccount, filterStartDate, filterEndDate, filterOpType, filterCategory])
 
   const filteredTotals = useMemo(() => {
     return filteredTransactions.reduce((acc, tx) => {
-      const amount = tx.amount || 0
-      acc[tx.currency as 'ARS' | 'USD'] = (acc[tx.currency as 'ARS' | 'USD'] || 0) + amount
+      acc[tx.currency as 'ARS' | 'USD'] = (acc[tx.currency as 'ARS' | 'USD'] || 0) + (tx.amount || 0)
       return acc
     }, { ARS: 0, USD: 0 })
   }, [filteredTransactions])
@@ -552,41 +495,15 @@ function TransactionsContent() {
                    {!editingTx && (
                     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
                       <TabsList className="grid grid-cols-5 w-full h-auto p-1 bg-muted/50 border shadow-inner">
-                          <TabsTrigger 
-                            value="sale" 
-                            className="data-[state=active]:bg-blue-600 data-[state=active]:text-white py-2 flex flex-col gap-1 transition-all"
-                          >
-                            <ShoppingBag className="h-4 w-4" />
-                            <span className="text-[9px] font-black tracking-tighter">VENTA</span>
-                          </TabsTrigger>
-                          <TabsTrigger 
-                            value="refill" 
-                            className="data-[state=active]:bg-cyan-600 data-[state=active]:text-white py-2 flex flex-col gap-1 transition-all"
-                          >
-                            <Droplet className="h-4 w-4" />
-                            <span className="text-[9px] font-black tracking-tighter">REPO</span>
-                          </TabsTrigger>
-                          <TabsTrigger 
-                            value="service" 
-                            className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white py-2 flex flex-col gap-1 transition-all"
-                          >
-                            <Wrench className="h-4 w-4" />
-                            <span className="text-[9px] font-black tracking-tighter">TÉCNICO</span>
-                          </TabsTrigger>
-                          <TabsTrigger 
-                            value="cobro" 
-                            className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white py-2 flex flex-col gap-1 transition-all"
-                          >
-                            <Receipt className="h-4 w-4" />
-                            <span className="text-[9px] font-black tracking-tighter">COBRO</span>
-                          </TabsTrigger>
-                          <TabsTrigger 
-                            value="adjustment" 
-                            className="data-[state=active]:bg-slate-600 data-[state=active]:text-white py-2 flex flex-col gap-1 transition-all"
-                          >
-                            <Settings2 className="h-4 w-4" />
-                            <span className="text-[9px] font-black tracking-tighter">AJUSTE</span>
-                          </TabsTrigger>
+                          {Object.entries(txTypeMap).map(([key, info]) => {
+                            const Icon = info.icon
+                            return (
+                              <TabsTrigger key={key} value={key} className={`data-[state=active]:bg-primary data-[state=active]:text-white py-2 flex flex-col gap-1`}>
+                                <Icon className="h-4 w-4" />
+                                <span className="text-[9px] font-black tracking-tighter uppercase">{info.label}</span>
+                              </TabsTrigger>
+                            )
+                          })}
                       </TabsList>
                     </Tabs>
                    )}
@@ -600,20 +517,10 @@ function TransactionsContent() {
                       <SelectTrigger className="bg-white"><SelectValue placeholder="Buscar cliente..." /></SelectTrigger>
                       <SelectContent>
                         {customers?.map((c: any) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.apellido}, {c.nombre}
-                          </SelectItem>
+                          <SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                    {selectedClient && (
-                      <div className="flex items-center gap-1 mt-1 px-1">
-                        <Fingerprint className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                          CUIT/DNI: {selectedClient.cuit_dni || 'S/D'}
-                        </span>
-                      </div>
-                    )}
                   </div>
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2 text-primary font-bold"><CalendarIcon className="h-4 w-4" /> Fecha</Label>
@@ -623,39 +530,21 @@ function TransactionsContent() {
 
                 <div className="space-y-2">
                   <Label className="font-bold">Descripción / Notas</Label>
-                  <Input 
-                    placeholder="Detalles adicionales de la operación..." 
-                    value={txDescription} 
-                    onChange={(e) => setTxDescription(e.target.value)} 
-                    className="bg-white"
-                  />
+                  <Input placeholder="Detalles adicionales..." value={txDescription} onChange={(e) => setTxDescription(e.target.value)} className="bg-white" />
                 </div>
 
                 {(activeTab === 'cobro' || activeTab === 'adjustment') ? (
-                  <div className={cn(
-                    "p-6 border rounded-xl space-y-4 animate-in slide-in-from-top-2 duration-300",
-                    activeTab === 'cobro' ? "bg-emerald-50 border-emerald-100" : "bg-slate-50 border-slate-100"
-                  )}>
-                    <h3 className={cn(
-                      "font-bold flex items-center gap-2",
-                      activeTab === 'cobro' ? "text-emerald-800" : "text-slate-800"
-                    )}>
-                      {activeTab === 'cobro' ? <Receipt className="h-4 w-4" /> : <Settings2 className="h-4 w-4" />}
-                      {activeTab === 'cobro' ? "Registrar Pago de Cliente" : "Registrar Ajuste Manual de Saldo"}
-                    </h3>
+                  <div className={cn("p-6 border rounded-xl space-y-4 bg-muted/5")}>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div className="space-y-2">
                         <Label>Monto</Label>
-                        <Input type="number" value={manualAmount} onChange={(e) => setManualAmount(Number(e.target.value))} className="bg-white font-bold text-lg" />
+                        <Input type="number" value={manualAmount} onChange={(e) => setManualAmount(Number(e.target.value))} className="bg-white font-bold" />
                       </div>
                       <div className="space-y-2">
                         <Label>Moneda</Label>
                         <Select value={manualCurrency} onValueChange={setManualCurrency} disabled={!!editingTx}>
                           <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="ARS">Pesos ($)</SelectItem>
-                            <SelectItem value="USD">Dólares (u$s)</SelectItem>
-                          </SelectContent>
+                          <SelectContent><SelectItem value="ARS">Pesos ($)</SelectItem><SelectItem value="USD">Dólares (u$s)</SelectItem></SelectContent>
                         </Select>
                       </div>
                       {activeTab === 'adjustment' && (
@@ -663,23 +552,18 @@ function TransactionsContent() {
                           <Label>Tipo de Ajuste</Label>
                           <Select value={adjustmentSign} onValueChange={(v: any) => setAdjustmentSign(v)}>
                             <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="1">A FAVOR del cliente (+)</SelectItem>
-                              <SelectItem value="-1">A CARGO del cliente (-)</SelectItem>
-                            </SelectContent>
+                            <SelectContent><SelectItem value="1">A FAVOR (+)</SelectItem><SelectItem value="-1">A CARGO (-)</SelectItem></SelectContent>
                           </Select>
                         </div>
                       )}
                       <div className="space-y-2">
                         <Label>Caja Destino / Origen</Label>
                         <Select value={manualAccountId} onValueChange={setManualAccountId}>
-                          <SelectTrigger className="bg-white"><SelectValue placeholder="Caja/Banco..." /></SelectTrigger>
+                          <SelectTrigger className="bg-white"><SelectValue placeholder="Caja..." /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="pending">A CUENTA (Solo saldo cliente)</SelectItem>
+                            <SelectItem value="pending">A CUENTA</SelectItem>
                             {accounts?.filter(a => a.currency === manualCurrency).map(a => (
-                              <SelectItem key={a.id} value={a.id}>
-                                {a.name} (${Number(a.initialBalance || 0).toLocaleString('es-AR')})
-                              </SelectItem>
+                              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -687,57 +571,48 @@ function TransactionsContent() {
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-300">
+                  <div className="space-y-4">
                     {!editingTx && (
                       <div className="space-y-2">
-                        <Label className="font-bold">Agregar ítems a la {txTypeMap[activeTab]?.label}</Label>
+                        <Label className="font-bold">Agregar ítems</Label>
                         <Select onValueChange={handleAddItem}>
-                          <SelectTrigger className="h-11"><SelectValue placeholder="Seleccionar producto o servicio..." /></SelectTrigger>
+                          <SelectTrigger className="h-11"><SelectValue placeholder="Seleccionar producto..." /></SelectTrigger>
                           <SelectContent>
                             {sortedCatalog?.map((i: any) => (
-                              <SelectItem key={i.id} value={i.id}>
-                                {i.name} (ARS: ${Number(i.priceARS || 0).toLocaleString('es-AR')} | USD: u$s {Number(i.priceUSD || 0).toLocaleString('es-AR')})
-                              </SelectItem>
+                              <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
                     )}
-                    <div className="border rounded-xl overflow-x-auto shadow-sm">
-                      <Table className="min-w-[600px]">
+                    <div className="border rounded-xl overflow-x-auto">
+                      <Table>
                         <TableHeader className="bg-muted/30">
                           <TableRow>
-                            <TableHead className="font-bold">Ítem</TableHead>
-                            <TableHead className="w-28 font-bold text-center">Cant.</TableHead>
-                            <TableHead className="w-36 font-bold text-center">Precio</TableHead>
-                            <TableHead className="w-28 font-bold text-center">Moneda</TableHead>
-                            <TableHead className="text-right font-bold">Subtotal</TableHead>
+                            <TableHead>Ítem</TableHead>
+                            <TableHead className="w-24 text-center">Cant.</TableHead>
+                            <TableHead className="w-32 text-center">Precio</TableHead>
+                            <TableHead className="w-24 text-center">Moneda</TableHead>
+                            <TableHead className="text-right">Subtotal</TableHead>
                             {!editingTx && <TableHead className="w-12"></TableHead>}
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {selectedItems.length === 0 ? (
-                            <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-12 italic">El carrito está vacío.</TableCell></TableRow>
-                          ) : (
-                            selectedItems.map((item, i) => (
-                              <TableRow key={i} className="hover:bg-muted/10">
-                                <TableCell className="font-medium">{item.name}</TableCell>
-                                <TableCell><Input type="number" value={item.qty} className="h-8 text-center" onChange={(e) => updateItem(i, 'qty', e.target.value)} /></TableCell>
-                                <TableCell><Input type="number" value={item.price} className="h-8 text-center" onChange={(e) => updateItem(i, 'price', e.target.value)} /></TableCell>
-                                <TableCell>
-                                  <Select value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)} disabled={!!editingTx}>
-                                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="ARS">$</SelectItem>
-                                      <SelectItem value="USD">u$s</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </TableCell>
-                                <TableCell className="text-right font-black text-sm">{item.currency === 'ARS' ? '$' : 'u$s'} {((Number(item.price) || 0) * (Number(item.qty) || 0)).toLocaleString('es-AR')}</TableCell>
-                                {!editingTx && <TableCell><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeItem(i)}><Trash2 className="h-4 w-4" /></Button></TableCell>}
-                              </TableRow>
-                            ))
-                          )}
+                          {selectedItems.map((item, i) => (
+                            <TableRow key={i}>
+                              <TableCell>{item.name}</TableCell>
+                              <TableCell><Input type="number" value={item.qty} className="h-8 text-center" onChange={(e) => updateItem(i, 'qty', e.target.value)} /></TableCell>
+                              <TableCell><Input type="number" value={item.price} className="h-8 text-center" onChange={(e) => updateItem(i, 'price', e.target.value)} /></TableCell>
+                              <TableCell>
+                                <Select value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)} disabled={!!editingTx}>
+                                  <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                                  <SelectContent><SelectItem value="ARS">$</SelectItem><SelectItem value="USD">u$s</SelectItem></SelectContent>
+                                </Select>
+                              </TableCell>
+                              <TableCell className="text-right font-black">{item.currency === 'ARS' ? '$' : 'u$s'} {(item.price * item.qty).toLocaleString('es-AR')}</TableCell>
+                              {!editingTx && <TableCell><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeItem(i)}><Trash2 className="h-4 w-4" /></Button></TableCell>}
+                            </TableRow>
+                          ))}
                         </TableBody>
                       </Table>
                     </div>
@@ -746,334 +621,161 @@ function TransactionsContent() {
               </CardContent>
             </Card>
 
-            <Card className="glass-card h-fit sticky top-8 shadow-lg">
-              <CardHeader className="bg-primary/5 border-b"><CardTitle className="text-base flex items-center gap-2"><ClipboardCheck className="h-4 w-4" /> Confirmación</CardTitle></CardHeader>
+            <Card className="glass-card h-fit sticky top-8">
+              <CardHeader className="bg-primary/5 border-b"><CardTitle className="text-base flex items-center gap-2"><ClipboardCheck className="h-4 w-4" /> Resumen</CardTitle></CardHeader>
               <CardContent className="space-y-6 pt-6">
                 {(activeTab !== 'cobro' && activeTab !== 'adjustment') && (
                   <div className="space-y-4">
-                    {cartTotals.ARS > 0 && (
-                      <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100 space-y-3">
-                        <div className="flex justify-between items-center">
-                          <p className="text-[10px] font-black text-blue-700 uppercase tracking-widest">Total en ARS</p>
-                          <p className="text-xl font-black text-blue-700">${cartTotals.ARS.toLocaleString('es-AR')}</p>
+                    {['ARS', 'USD'].map(curr => {
+                      const total = cartTotals[curr as 'ARS' | 'USD']
+                      if (total <= 0) return null
+                      return (
+                        <div key={curr} className="p-4 rounded-xl border space-y-3 bg-muted/5">
+                          <div className="flex justify-between items-center">
+                            <p className="text-[10px] font-black uppercase tracking-widest">Total {curr}</p>
+                            <p className="text-xl font-black">{curr === 'ARS' ? '$' : 'u$s'} {total.toLocaleString('es-AR')}</p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-[10px] font-bold uppercase">Monto a abonar</Label>
+                            <Input 
+                              type="number" 
+                              value={paidAmounts[curr]} 
+                              onChange={(e) => setPaidAmounts(prev => ({...prev, [curr]: Number(e.target.value)}))} 
+                              className="h-9 font-bold bg-white"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] font-bold uppercase">Caja de destino</Label>
+                            <Select value={destinationAccounts[curr]} onValueChange={(v) => setDestinationAccounts(p => ({...p, [curr]: v}))}>
+                              <SelectTrigger className="h-9 bg-white"><SelectValue placeholder="Pendiente / A Cuenta" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="pending">A CUENTA (Deuda)</SelectItem>
+                                {accounts?.filter((a: any) => a.currency === curr).map((a: any) => (
+                                  <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {paidAmounts[curr] < total && (
+                            <div className="text-[10px] font-bold text-rose-600 bg-rose-50 p-2 rounded border border-rose-100">
+                              Quedará a cuenta: {curr === 'ARS' ? '$' : 'u$s'} {(total - paidAmounts[curr]).toLocaleString('es-AR')}
+                            </div>
+                          )}
                         </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px] text-muted-foreground uppercase">Forma de pago</Label>
-                          <Select value={destinationAccounts.ARS} onValueChange={(v) => setDestinationAccounts(p => ({...p, ARS: v}))}>
-                            <SelectTrigger className="h-9 text-xs bg-white"><SelectValue placeholder="Pendiente / A Cuenta" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="pending">A CUENTA (Deuda del cliente)</SelectItem>
-                              {accounts?.filter((a: any) => a.currency === 'ARS').map((a: any) => (
-                                <SelectItem key={a.id} value={a.id}>
-                                  {a.name} (${Number(a.initialBalance || 0).toLocaleString('es-AR')})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    )}
-                    {cartTotals.USD > 0 && (
-                      <div className="p-4 bg-emerald-50/50 rounded-xl border border-emerald-100 space-y-3">
-                        <div className="flex justify-between items-center">
-                          <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Total en USD</p>
-                          <p className="text-xl font-black text-emerald-700">u$s {cartTotals.USD.toLocaleString('es-AR')}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px] text-muted-foreground uppercase">Forma de pago</Label>
-                          <Select value={destinationAccounts.USD} onValueChange={(v) => setDestinationAccounts(p => ({...p, USD: v}))}>
-                            <SelectTrigger className="h-9 text-xs bg-white"><SelectValue placeholder="Pendiente / A Cuenta" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="pending">A CUENTA (Deuda del cliente)</SelectItem>
-                              {accounts?.filter((a: any) => a.currency === 'USD').map((a: any) => (
-                                <SelectItem key={a.id} value={a.id}>
-                                  {a.name} (u$s {Number(a.initialBalance || 0).toLocaleString('es-AR')})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    )}
+                      )
+                    })}
                   </div>
                 )}
                 <Button 
-                  className="w-full h-14 font-black text-md shadow-xl transition-all hover:scale-[1.02]" 
+                  className="w-full h-14 font-black text-md shadow-xl" 
                   disabled={((activeTab !== 'cobro' && activeTab !== 'adjustment') && selectedItems.length === 0) || ((activeTab === 'cobro' || activeTab === 'adjustment') && manualAmount <= 0) || !selectedCustomerId} 
                   onClick={handleSaveTransaction}
                 >
-                  {editingTx ? 'GUARDAR CAMBIOS' : (activeTab === 'cobro' ? 'REGISTRAR PAGO RECIBIDO' : activeTab === 'adjustment' ? 'GUARDAR AJUSTE' : `GUARDAR ${txTypeMap[activeTab]?.label.toUpperCase()}`)}
+                  {editingTx ? 'GUARDAR CAMBIOS' : 'REGISTRAR OPERACIÓN'}
                 </Button>
-                {editingTx && (
-                  <Button variant="outline" className="w-full" onClick={() => { resetRegisterForm(); setMainView("history"); }}>
-                    CANCELAR EDICIÓN
-                  </Button>
-                )}
               </CardContent>
             </Card>
           </div>
         ) : (
-          <div className="space-y-6 animate-in fade-in duration-500">
+          <div className="space-y-6">
             <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card className="glass-card border-l-4 border-l-primary bg-primary/5">
                 <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] font-bold text-primary uppercase tracking-wider">Total Filtrado ARS</p>
-                      <h3 className="text-2xl font-black">${filteredTotals.ARS.toLocaleString('es-AR')}</h3>
-                    </div>
-                    <div className="p-2 bg-primary/10 rounded-full"><TrendingUp className="h-5 w-5 text-primary" /></div>
-                  </div>
+                  <p className="text-[10px] font-bold text-primary uppercase">Total Filtrado ARS</p>
+                  <h3 className="text-2xl font-black">${filteredTotals.ARS.toLocaleString('es-AR')}</h3>
                 </CardContent>
               </Card>
               <Card className="glass-card border-l-4 border-l-emerald-500 bg-emerald-50/50">
                 <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Total Filtrado USD</p>
-                      <h3 className="text-2xl font-black">u$s {filteredTotals.USD.toLocaleString('es-AR')}</h3>
-                    </div>
-                    <div className="p-2 bg-emerald-100 rounded-full"><Banknote className="h-5 w-5 text-emerald-600" /></div>
-                  </div>
+                  <p className="text-[10px] font-bold text-emerald-700 uppercase">Total Filtrado USD</p>
+                  <h3 className="text-2xl font-black">u$s {filteredTotals.USD.toLocaleString('es-AR')}</h3>
                 </CardContent>
               </Card>
             </section>
 
-            <Card className="glass-card">
-              <CardContent className="p-4 flex flex-wrap gap-4 items-end">
-                 <div className="space-y-1">
-                   <Label className="text-xs">Cliente</Label>
-                   <Select value={filterCustomer} onValueChange={setFilterCustomer}>
-                     <SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger>
-                     <SelectContent>
-                       <SelectItem value="all">Todos los clientes</SelectItem>
-                       {customers?.map((c: any) => (
-                         <SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>
-                       ))}
-                     </SelectContent>
-                   </Select>
-                 </div>
-                 <div className="space-y-1">
-                   <Label className="text-xs">Categoría</Label>
-                   <Select value={filterCategory} onValueChange={setFilterCategory}>
-                     <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
-                     <SelectContent>
-                       <SelectItem value="all">Todas</SelectItem>
-                       {Object.entries(txTypeMap).map(([key, info]) => (
-                         <SelectItem key={key} value={key}>{info.label}</SelectItem>
-                       ))}
-                     </SelectContent>
-                   </Select>
-                 </div>
-                 <div className="space-y-1">
-                   <Label className="text-xs">Movimiento</Label>
-                   <Select value={filterOpType} onValueChange={setFilterOpType}>
-                     <SelectTrigger className="w-[120px] h-9"><SelectValue /></SelectTrigger>
-                     <SelectContent>
-                       <SelectItem value="all">Flujo (Ing/Egr)</SelectItem>
-                       <SelectItem value="income">Solo Ingresos (+)</SelectItem>
-                       <SelectItem value="expense">Solo Egresos (-)</SelectItem>
-                     </SelectContent>
-                   </Select>
-                 </div>
-                 <div className="space-y-1">
-                   <Label className="text-xs">Forma de Pago</Label>
-                   <Select value={filterAccount} onValueChange={setFilterAccount}>
-                     <SelectTrigger className="w-[160px] h-9"><SelectValue /></SelectTrigger>
-                     <SelectContent>
-                       <SelectItem value="all">Cajas/Bancos</SelectItem>
-                       <SelectItem value="null">A Cuenta (Pendiente)</SelectItem>
-                       {accounts?.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
-                     </SelectContent>
-                   </Select>
-                 </div>
-                 <div className="space-y-1">
-                   <Label className="text-xs">Desde</Label>
-                   <Input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="w-[140px] h-9" />
-                 </div>
-                 <div className="space-y-1">
-                   <Label className="text-xs">Hasta</Label>
-                   <Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="w-[140px] h-9" />
-                 </div>
-                 <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary" onClick={resetFilters}>
-                   <FilterX className="h-4 w-4" />
-                 </Button>
-              </CardContent>
+            <Card className="glass-card p-4 flex flex-wrap gap-4 items-end">
+                 <div className="space-y-1"><Label className="text-xs">Cliente</Label><Select value={filterCustomer} onValueChange={setFilterCustomer}><SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem>{customers?.map((c: any) => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}</SelectContent></Select></div>
+                 <div className="space-y-1"><Label className="text-xs">Categoría</Label><Select value={filterCategory} onValueChange={setFilterCategory}><SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{Object.entries(txTypeMap).map(([k, v]) => (<SelectItem key={k} value={k}>{v.label}</SelectItem>))}</SelectContent></Select></div>
+                 <div className="space-y-1"><Label className="text-xs">Desde</Label><Input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="w-[140px] h-9" /></div>
+                 <div className="space-y-1"><Label className="text-xs">Hasta</Label><Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="w-[140px] h-9" /></div>
+                 <Button variant="ghost" size="icon" onClick={resetFilters}><FilterX className="h-4 w-4" /></Button>
             </Card>
 
-            <Card className="glass-card shadow-sm overflow-hidden">
-              <CardContent className="p-0 overflow-x-auto">
-                {loadingTx ? (
-                  <div className="p-12 text-center text-muted-foreground animate-pulse">Sincronizando operaciones...</div>
-                ) : filteredTransactions.length === 0 ? (
-                  <div className="p-12 text-center text-muted-foreground italic">No se encontraron registros con estos filtros.</div>
-                ) : (
-                  <Table className="min-w-[800px]">
-                    <TableHeader className="bg-muted/30">
-                      <TableRow>
-                        <TableHead className="font-bold">Fecha</TableHead>
-                        <TableHead className="font-bold">Cliente</TableHead>
-                        <TableHead className="font-bold">Categoría</TableHead>
-                        <TableHead className="font-bold">Detalle</TableHead>
-                        <TableHead className="text-right font-bold">Monto</TableHead>
-                        <TableHead className="w-12"></TableHead>
+            <Card className="glass-card overflow-hidden">
+              <Table>
+                <TableHeader className="bg-muted/30">
+                  <TableRow>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Operación</TableHead>
+                    <TableHead className="text-right">Monto Total</TableHead>
+                    <TableHead className="text-right">Abonado</TableHead>
+                    <TableHead className="w-12"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredTransactions.map((tx: any) => {
+                    const cust = customers?.find(c => c.id === tx.clientId);
+                    const info = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
+                    return (
+                      <TableRow key={tx.id}>
+                        <TableCell className="text-xs font-medium">{new Date(tx.date).toLocaleDateString('es-AR')}</TableCell>
+                        <TableCell className="font-bold">{cust ? `${cust.apellido}, ${cust.nombre}` : '---'}</TableCell>
+                        <TableCell><Badge variant="outline" className={cn("text-[10px] gap-1", info.color)}><info.icon className="h-3 w-3" />{info.label}</Badge></TableCell>
+                        <TableCell className="text-right font-black">{tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}</TableCell>
+                        <TableCell className="text-right">
+                          <span className={cn("text-xs font-bold", tx.paidAmount > 0 ? "text-emerald-600" : "text-muted-foreground")}>
+                            {tx.currency === 'USD' ? 'u$s' : '$'} {(tx.paidAmount || 0).toLocaleString('es-AR')}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleOpenEmailDialog(tx)}><Mail className="h-4 w-4 mr-2" /> Email</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleEditTx(tx)}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
+                              <DropdownMenuItem className="text-destructive" onClick={() => setTxToDelete(tx)}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredTransactions.map((tx: any) => {
-                        const customer = customers?.find(c => c.id === tx.clientId);
-                        const typeInfo = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
-                        const Icon = typeInfo.icon;
-                        const isIncome = tx.amount > 0 || tx.type === 'cobro' || (tx.type === 'adjustment' && tx.amount > 0);
-                        const itemsCount = tx.items?.length || 0;
-                        const account = accounts?.find(a => a.id === tx.financialAccountId);
-                        
-                        return (
-                          <TableRow key={tx.id} className={cn("group hover:bg-muted/5", (tx.type === 'cobro' || (tx.type === 'adjustment' && tx.amount > 0)) && "bg-emerald-50/10")}>
-                            <TableCell className="text-xs whitespace-nowrap font-medium">{new Date(tx.date).toLocaleDateString('es-AR')}</TableCell>
-                            <TableCell className="font-bold text-sm">{customer ? `${customer.apellido}, ${customer.nombre}` : 'Sin cliente'}</TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <div className={cn("p-1.5 rounded-full", typeInfo.color)}>
-                                  <Icon className="h-3.5 w-3.5" />
-                                </div>
-                                <span className="text-xs font-bold uppercase tracking-tighter">{typeInfo.label}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-[11px] max-w-[250px] truncate italic text-muted-foreground">
-                              {itemsCount > 0 ? tx.items.map((i: any) => `${i.qty}x ${i.name}`).join(', ') : tx.description}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className={cn("font-black text-sm", isIncome ? "text-emerald-600" : "text-rose-600")}>
-                                {tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}
-                              </div>
-                              <div className="mt-1">
-                                {!tx.financialAccountId ? (
-                                  <Badge variant="outline" className="text-[8px] h-3.5 px-1 border-amber-500 text-amber-600 bg-amber-50 leading-none">A CUENTA</Badge>
-                                ) : (
-                                  <Badge variant="outline" className="text-[8px] h-3.5 px-1 border-blue-200 text-blue-600 bg-blue-50 leading-none truncate max-w-[80px]">
-                                    {account?.name || 'COBRADO'}
-                                  </Badge>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-1 justify-end">
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10" 
-                                  onClick={() => handleOpenEmailDialog(tx)}
-                                  title="Enviar Email"
-                                >
-                                  <Mail className="h-4 w-4" />
-                                </Button>
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onSelect={() => handleOpenEmailDialog(tx)}>
-                                      <Mail className="h-4 w-4 mr-2" /> Enviar Mail
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onSelect={() => handleEditTx(tx)}>
-                                      <Edit className="h-4 w-4 mr-2" /> Editar
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem className="text-destructive" onSelect={() => setTxToDelete(tx)}>
-                                      <Trash2 className="h-4 w-4 mr-2" /> Eliminar
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
+                    )
+                  })}
+                </TableBody>
+              </Table>
             </Card>
           </div>
         )}
 
         <Dialog open={isEmailDialogOpen} onOpenChange={setIsEmailDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Mail className="h-5 w-5 text-primary" /> Enviar Factura / Notificación
-              </DialogTitle>
-              <DialogDescription>Selecciona una plantilla. Podrás revisar el mail en tu aplicación de correo antes de enviarlo.</DialogDescription>
-            </DialogHeader>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader><DialogTitle>Notificación al Cliente</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Seleccionar Plantilla</Label>
-                <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
-                  <SelectTrigger><SelectValue placeholder="Elige un formato..." /></SelectTrigger>
-                  <SelectContent>
-                    {templates?.map((t: any) => (
-                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
+              <Label>Plantilla</Label>
+              <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                <SelectContent>{templates?.map((t: any) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}</SelectContent>
+              </Select>
               {selectedTemplateId && (
-                <div className="space-y-4 animate-in fade-in duration-300">
-                  <div className="p-3 bg-muted/50 rounded-lg border space-y-2">
-                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Vista Previa del Asunto</p>
-                    <p className="text-sm font-bold">{processedEmail.subject || "Cargando..."}</p>
-                  </div>
-                  <div className="p-4 bg-white rounded-lg border shadow-inner space-y-2">
-                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Vista Previa del Cuerpo</p>
-                    <div className="text-xs whitespace-pre-wrap leading-relaxed italic text-slate-700">
-                      {processedEmail.body || "Cargando cuerpo del mensaje..."}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 rounded-lg">
-                    <Eye className="h-4 w-4 text-blue-600" />
-                    <p className="text-blue-800 text-[11px]">
-                      Al pulsar enviar, se abrirá tu gestor de correo para que puedas realizar la revisión final.
-                    </p>
-                  </div>
+                <div className="p-4 bg-muted/20 rounded border space-y-2">
+                  <p className="text-sm font-bold">{processedEmail.subject}</p>
+                  <p className="text-xs whitespace-pre-wrap italic">{processedEmail.body}</p>
                 </div>
               )}
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsEmailDialogOpen(false)}>Cancelar</Button>
-              <Button 
-                onClick={handleSendEmail} 
-                disabled={!selectedTemplateId} 
-                className="bg-primary font-bold shadow-lg shadow-primary/20"
-              >
-                <Send className="mr-2 h-4 w-4" /> Enviar al Cliente
-              </Button>
+              <Button onClick={handleSendEmail} disabled={!selectedTemplateId}>Enviar</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        <AlertDialog open={!!txToDelete} onOpenChange={(o) => {
-          if(!o) setTxToDelete(null);
-        }}>
-          <AlertDialogContent className="glass-card">
-            <AlertDialogHeader>
-              <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
-                <AlertTriangle className="h-5 w-5" /> ¿Confirmar eliminación?
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                Esta acción es irreversible. Se revertirán automáticamente los saldos del cliente y la caja financiera asociada a esta operación.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel className="font-bold">Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmDeleteTx} className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-bold">
-                Eliminar Definitivamente
-              </AlertDialogAction>
-            </AlertDialogFooter>
+        <AlertDialog open={!!txToDelete} onOpenChange={(o) => { if(!o) setTxToDelete(null); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader><AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle><AlertDialogDescription>Se revertirán todos los saldos asociados.</AlertDialogDescription></AlertDialogHeader>
+            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteTx} className="bg-destructive">Eliminar</AlertDialogAction></AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       </SidebarInset>
-
       <MobileNav />
     </div>
   )
@@ -1081,7 +783,7 @@ function TransactionsContent() {
 
 export default function TransactionsPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Cargando...</div>}>
+    <Suspense fallback={<div>Cargando...</div>}>
       <TransactionsContent />
     </Suspense>
   )

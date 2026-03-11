@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -27,6 +26,8 @@ const AVAILABLE_MARKERS = [
   "Moneda", 
   "Subtotal", 
   "Total",
+  "Monto_Abonado",
+  "Caja_Destino",
   "Saldo_Cuenta",
   "Metodo_Pago"
 ]
@@ -49,7 +50,6 @@ export default function TemplatesPage() {
     bcc: ""
   })
 
-  // Evitar bloqueo de puntero al cerrar diálogos
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -64,7 +64,7 @@ export default function TemplatesPage() {
 
   const handleOpenDialog = (template?: any) => {
     if (!isAdmin) {
-      toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos para gestionar plantillas de mail.", variant: "destructive" })
+      toast({ title: "Acceso denegado", description: "Su usuario no tiene permisos para gestionar plantillas.", variant: "destructive" })
       return
     }
     if (template) {
@@ -89,7 +89,6 @@ export default function TemplatesPage() {
     }
 
     const id = editingTemplateId || Math.random().toString(36).substr(2, 9)
-    
     setDocumentNonBlocking(doc(db, 'email_templates', id), { ...formData, id }, { merge: true })
     setIsDialogOpen(false)
     toast({ title: editingTemplateId ? "Plantilla actualizada" : "Plantilla creada" })
@@ -97,10 +96,10 @@ export default function TemplatesPage() {
 
   const handleDelete = (id: string) => {
     if (!isAdmin) {
-      toast({ title: "Acceso denegado", description: "No tienes permisos para eliminar plantillas.", variant: "destructive" })
+      toast({ title: "Acceso denegado", variant: "destructive" })
       return
     }
-    if (confirm("¿Estás seguro de eliminar esta plantilla?")) {
+    if (confirm("¿Estás seguro?")) {
       deleteDocumentNonBlocking(doc(db, 'email_templates', id))
       toast({ title: "Plantilla eliminada" })
     }
@@ -109,10 +108,7 @@ export default function TemplatesPage() {
   const copyMarker = (markerName: string) => {
     const text = `{{${markerName}}}`
     navigator.clipboard.writeText(text)
-    toast({
-      title: "Copiado",
-      description: `${text} copiado al portapapeles.`
-    })
+    toast({ title: "Copiado", description: `${text} copiado.` })
   }
 
   return (
@@ -123,14 +119,10 @@ export default function TemplatesPage() {
           <div className="flex items-center gap-3">
             <SidebarTrigger className="flex" />
             <div className="flex items-center gap-2 md:hidden pr-2 border-r">
-               <div className="bg-primary p-1.5 rounded-lg shadow-sm shadow-primary/20">
-                 <Droplets className="h-4 w-4 text-white" />
-               </div>
-               <span className="font-headline font-black text-primary text-sm tracking-tight uppercase">Dosimat<span className="text-accent-foreground">Pro</span></span>
+               <div className="bg-primary p-1.5 rounded-lg shadow-sm shadow-primary/20"><Droplets className="h-4 w-4 text-white" /></div>
+               <span className="font-headline font-black text-primary text-sm tracking-tight uppercase">DosimatPro</span>
             </div>
-            <div>
-              <h1 className="text-xl md:text-3xl font-bold text-primary font-headline">Plantillas</h1>
-            </div>
+            <h1 className="text-xl md:text-3xl font-bold text-primary font-headline">Plantillas</h1>
           </div>
           {isAdmin && (
             <Button onClick={() => handleOpenDialog()} className="shadow-lg font-bold">
@@ -141,64 +133,34 @@ export default function TemplatesPage() {
 
         <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {isLoading ? (
-            <div className="col-span-full flex flex-col items-center justify-center py-20 gap-3">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Cargando plantillas...</p>
-            </div>
-          ) : templates && templates.length > 0 ? (
-            templates.map((tpl: any) => (
-              <Card key={tpl.id} className="glass-card group relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-1 h-full bg-primary" />
-                <CardHeader className="pb-3">
-                  <div className="flex justify-between items-start">
-                    <FileText className="h-6 w-6 text-primary/40" />
-                    {isAdmin && (
-                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenDialog(tpl)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(tpl.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                  <CardTitle className="text-lg mt-2 truncate">{tpl.name}</CardTitle>
-                  <CardDescription className="truncate italic text-xs">Asunto: {tpl.subject}</CardDescription>
-                  {tpl.bcc && <CardDescription className="truncate italic text-[10px] text-blue-600">CCO: {tpl.bcc}</CardDescription>}
-                </CardHeader>
-                <CardContent>
-                  <p className="text-xs text-muted-foreground line-clamp-3 bg-muted/20 p-3 rounded-lg border">
-                    {tpl.body}
-                  </p>
-                </CardContent>
-              </Card>
-            ))
-          ) : (
-            <div className="col-span-full py-20 text-center border-2 border-dashed rounded-xl bg-muted/5">
-              <FileText className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
-              <p className="text-muted-foreground">No tienes plantillas creadas todavía.</p>
-              {isAdmin && <Button variant="link" onClick={() => handleOpenDialog()}>Crear la primera</Button>}
-            </div>
-          )}
+            <div className="col-span-full flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+          ) : (templates || []).map((tpl: any) => (
+            <Card key={tpl.id} className="glass-card group relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-1 h-full bg-primary" />
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-start">
+                  <FileText className="h-6 w-6 text-primary/40" />
+                  {isAdmin && (
+                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(tpl)}><Edit className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(tpl.id)}><Trash2 className="h-4 w-4" /></Button>
+                    </div>
+                  )}
+                </div>
+                <CardTitle className="text-lg mt-2 truncate">{tpl.name}</CardTitle>
+                <CardDescription className="truncate italic text-xs">Asunto: {tpl.subject}</CardDescription>
+              </CardHeader>
+              <CardContent><p className="text-xs text-muted-foreground line-clamp-3 bg-muted/20 p-3 rounded-lg border">{tpl.body}</p></CardContent>
+            </Card>
+          ))}
         </section>
 
         <Card className="bg-blue-50/50 border-blue-200">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2 text-blue-800">
-              <Info className="h-4 w-4" /> Marcadores Disponibles
-            </CardTitle>
-          </CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2 text-blue-800"><Info className="h-4 w-4" /> Marcadores Disponibles (Clic para copiar)</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-2">
             {AVAILABLE_MARKERS.map(m => (
-              <div 
-                key={m} 
-                onClick={() => copyMarker(m)}
-                className="text-[10px] font-mono bg-white border border-blue-100 rounded px-2 py-1 flex justify-between cursor-pointer hover:bg-blue-100 transition-colors group"
-                title="Clic para copiar"
-              >
+              <div key={m} onClick={() => copyMarker(m)} className="text-[10px] font-mono bg-white border border-blue-100 rounded px-2 py-1 flex justify-between cursor-pointer hover:bg-blue-100 transition-colors">
                 <span className="text-blue-600">{"{{"}{m}{"}}"}</span>
-                <Copy className="h-3 w-3 text-blue-300 opacity-0 group-hover:opacity-100" />
               </div>
             ))}
           </CardContent>
@@ -206,60 +168,14 @@ export default function TemplatesPage() {
 
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{editingTemplateId ? 'Editar Plantilla' : 'Nueva Plantilla'}</DialogTitle>
-              <DialogDescription>Configura el contenido del mensaje y usa marcadores para datos dinámicos.</DialogDescription>
-            </DialogHeader>
+            <DialogHeader><DialogTitle>{editingTemplateId ? 'Editar Plantilla' : 'Nueva Plantilla'}</DialogTitle></DialogHeader>
             <div className="space-y-6 py-4">
-              <div className="space-y-2">
-                <Label className="font-bold">Nombre Interno de la Plantilla</Label>
-                <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Factura de Reposición Semanal" />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="font-bold">CCO (Copia Oculta) - Separar con ;</Label>
-                <Input value={formData.bcc} onChange={(e) => setFormData({...formData, bcc: e.target.value})} placeholder="ejemplo@mail.com; admin@dosimat.pro" />
-              </div>
-              
-              <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl space-y-3">
-                <div className="flex items-center gap-2 text-primary font-bold text-sm">
-                  <HelpCircle className="h-4 w-4" /> Guía de Marcadores (Haz clic para copiar)
-                </div>
-                <p className="text-[10px] text-muted-foreground leading-tight">
-                  Copia y pega estos códigos en el Asunto o Cuerpo para que se completen automáticamente.
-                </p>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {AVAILABLE_MARKERS.map(m => (
-                    <span 
-                      key={m} 
-                      onClick={() => copyMarker(m)}
-                      className="text-[10px] font-mono px-2 py-1 bg-white border rounded text-primary border-primary/30 hover:bg-primary hover:text-white cursor-pointer transition-colors select-none"
-                    >
-                      {"{{"}{m}{"}}"}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="font-bold">Asunto del Mail</Label>
-                <Input value={formData.subject} onChange={(e) => setFormData({...formData, subject: e.target.value})} placeholder="Hola {{Nombre}}, aquí tienes tu factura..." />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="font-bold">Cuerpo del Mensaje</Label>
-                <Textarea 
-                  value={formData.body} 
-                  onChange={(e) => setFormData({...formData, body: e.target.value})} 
-                  placeholder="Escribe el mensaje aquí. Puedes usar los marcadores de arriba como {{Nombre}}, {{Detalle_Items}}, {{Total}}, etc..."
-                  className="min-h-[250px] font-body"
-                />
-              </div>
+              <div className="space-y-2"><Label className="font-bold">Nombre Interno</Label><Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Factura de Reposición" /></div>
+              <div className="space-y-2"><Label className="font-bold">CCO (Separar con ;)</Label><Input value={formData.bcc} onChange={(e) => setFormData({...formData, bcc: e.target.value})} placeholder="admin@dosimat.pro" /></div>
+              <div className="space-y-2"><Label className="font-bold">Asunto</Label><Input value={formData.subject} onChange={(e) => setFormData({...formData, subject: e.target.value})} placeholder="Hola {{Nombre}}, tu factura..." /></div>
+              <div className="space-y-2"><Label className="font-bold">Cuerpo</Label><Textarea value={formData.body} onChange={(e) => setFormData({...formData, body: e.target.value})} className="min-h-[250px]" /></div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="font-bold">Cancelar</Button>
-              <Button onClick={handleSave} className="font-bold px-8 shadow-lg shadow-primary/20">Guardar Plantilla</Button>
-            </DialogFooter>
+            <DialogFooter><Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button><Button onClick={handleSave}>Guardar</Button></DialogFooter>
           </DialogContent>
         </Dialog>
       </SidebarInset>
