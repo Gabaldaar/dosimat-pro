@@ -33,7 +33,8 @@ import {
   MapPinned,
   Send,
   Info,
-  Droplets
+  Droplets,
+  Loader2
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
