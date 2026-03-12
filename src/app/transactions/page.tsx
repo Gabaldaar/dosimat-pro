@@ -163,6 +163,7 @@ function TransactionsContent() {
   const [adjustmentSign, setAdjustmentSign] = useState<"1" | "-1">("1")
   const [selectedExpenseCategoryId, setSelectedExpenseCategoryId] = useState("")
   const [txDescription, setTxDescription] = useState("")
+  const [cobroSource, setCobroSource] = useState("sale")
 
   // Set default dates on mount: First day of current month to Today
   useEffect(() => {
@@ -304,6 +305,7 @@ function TransactionsContent() {
       setManualAccountId(tx.financialAccountId || "pending")
       if (tx.type === 'adjustment' || tx.type === 'Adjustment') setAdjustmentSign(tx.amount >= 0 ? "1" : "-1")
       setSelectedExpenseCategoryId(tx.expenseCategoryId || "")
+      if (tx.type === 'cobro') setCobroSource(tx.relatedType || 'sale')
     } else {
       setSelectedItems(tx.items || [])
       setDestinationAccounts({ [tx.currency]: tx.financialAccountId || "pending" })
@@ -375,7 +377,8 @@ function TransactionsContent() {
         description: txDescription || `${txTypeMap[activeTab]?.label || activeTab} manual`,
         financialAccountId: manualAccountId === "pending" ? null : manualAccountId,
         paidAmount: (activeTab === 'cobro' || activeTab === 'Expense') ? finalAmount : 0,
-        expenseCategoryId: (activeTab === 'Expense') ? (selectedExpenseCategoryId || null) : null
+        expenseCategoryId: (activeTab === 'Expense') ? (selectedExpenseCategoryId || null) : null,
+        relatedType: activeTab === 'cobro' ? cobroSource : null
       }
 
       setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
@@ -441,6 +444,7 @@ function TransactionsContent() {
     setPaidAmounts({ ARS: 0, USD: 0 })
     setDestinationAccounts({ ARS: "pending", USD: "pending" })
     setSelectedExpenseCategoryId("")
+    setCobroSource("sale")
   }
 
   const resetFilters = () => {
@@ -679,6 +683,20 @@ function TransactionsContent() {
                               {expenseCategories?.map(c => (
                                 <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                               ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      {activeTab === 'cobro' && (
+                        <div className="space-y-2">
+                          <Label className="text-emerald-700 font-bold">Origen del Ingreso</Label>
+                          <Select value={cobroSource} onValueChange={setCobroSource}>
+                            <SelectTrigger className="bg-white border-emerald-200"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="sale">VENTA</SelectItem>
+                              <SelectItem value="refill">REPOSICIÓN</SelectItem>
+                              <SelectItem value="service">SERVICIO TÉCNICO</SelectItem>
+                              <SelectItem value="adjustment">AJUSTES / OTROS</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -923,6 +941,11 @@ function TransactionsContent() {
                             <Badge variant="outline" className={cn("text-[10px] gap-1 w-fit", info.color)}>
                               <info.icon className="h-3 w-3" />{info.label}
                             </Badge>
+                            {tx.relatedType && (
+                              <span className="text-[9px] font-bold text-emerald-600 uppercase">
+                                {txTypeMap[tx.relatedType]?.label || tx.relatedType}
+                              </span>
+                            )}
                             {expenseCat && (
                               <span className="text-[9px] font-bold text-rose-600 flex items-center gap-1">
                                 <Tag className="h-2.5 w-2.5" /> {expenseCat.name}
@@ -1027,6 +1050,11 @@ function TransactionsContent() {
                         <Badge variant="outline" className={cn("text-[10px] gap-1", info.color)}>
                           <info.icon className="h-3 w-3" />{info.label}
                         </Badge>
+                        {tx.relatedType && (
+                          <Badge variant="outline" className="text-[9px] font-bold text-emerald-600 border-emerald-200 bg-emerald-50 px-2 h-5">
+                            {txTypeMap[tx.relatedType]?.label || tx.relatedType}
+                          </Badge>
+                        )}
                         {expenseCat && (
                           <Badge variant="outline" className="text-[9px] font-bold text-rose-600 border-rose-200 bg-rose-50 px-2 h-5">
                             <Tag className="h-2.5 w-2.5 mr-1" /> {expenseCat.name}

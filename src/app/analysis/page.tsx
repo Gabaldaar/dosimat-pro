@@ -43,6 +43,14 @@ import { cn } from "@/lib/utils"
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
+const LABEL_MAP: Record<string, string> = {
+  sale: 'Ventas',
+  refill: 'Reposiciones',
+  service: 'Servicio Técnico',
+  adjustment: 'Ajustes / Otros',
+  Expense: 'Gastos Generales'
+}
+
 export default function AnalysisPage() {
   const db = useFirestore()
   
@@ -88,12 +96,13 @@ export default function AnalysisPage() {
       const matchStart = !startDate || txDate >= startDate
       const matchEnd = !endDate || txDate <= endDate
       
-      const isIncome = tx.amount > 0 || tx.type === 'cobro'
-      const isExpense = tx.amount < 0 && tx.type !== 'cobro'
+      const isIncome = (tx.type !== 'Expense' && tx.type !== 'adjustment' && tx.type !== 'Adjustment') || tx.type === 'cobro'
+      const isExpense = tx.type === 'Expense' || (tx.type === 'adjustment' && tx.amount < 0)
 
       let matchCategory = true
       if (isIncome) {
-        matchCategory = incomeTypeFilter === 'all' || tx.type === incomeTypeFilter
+        const source = tx.type === 'cobro' ? (tx.relatedType || 'sale') : tx.type
+        matchCategory = incomeTypeFilter === 'all' || source === incomeTypeFilter
       } else if (isExpense) {
         matchCategory = expenseCatFilter === 'all' || tx.expenseCategoryId === expenseCatFilter
       }
@@ -102,15 +111,25 @@ export default function AnalysisPage() {
     })
   }, [transactions, startDate, endDate, incomeTypeFilter, expenseCatFilter])
 
-  // Summary Calculations
+  // Summary Calculations - CRITERIO DE CAJA
   const summary = useMemo(() => {
     return filteredTxs.reduce((acc, tx) => {
       const curr = tx.currency === 'USD' ? 'USD' : 'ARS'
-      if (tx.amount > 0 || tx.type === 'cobro') {
+      
+      // INGRESOS: (Monto abonado en venta/servicio) + (Monto total de cobros)
+      if (tx.type === 'cobro') {
         acc[curr].income += Math.abs(tx.amount)
-      } else {
+      } else if (tx.type === 'sale' || tx.type === 'refill' || tx.type === 'service') {
+        acc[curr].income += Number(tx.paidAmount || 0)
+      } else if ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount > 0) {
+        acc[curr].income += tx.amount
+      }
+
+      // GASTOS: Gastos explícitos + Ajustes negativos
+      if (tx.type === 'Expense' || ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount < 0)) {
         acc[curr].expense += Math.abs(tx.amount)
       }
+      
       return acc
     }, { 
       ARS: { income: 0, expense: 0 }, 
@@ -118,7 +137,7 @@ export default function AnalysisPage() {
     })
   }, [filteredTxs])
 
-  // Data for Annual Bar Chart (Always last 12 months, ARS only for simplicity or combined)
+  // Data for Annual Bar Chart (Always last 12 months, ARS only for simplicity)
   const annualData = useMemo(() => {
     if (!transactions) return []
     const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
@@ -139,8 +158,13 @@ export default function AnalysisPage() {
       const txDate = new Date(tx.date)
       const point = last12.find(p => p.month === txDate.getMonth() && p.year === txDate.getFullYear())
       if (point && tx.currency === 'ARS') {
-        if (tx.amount > 0 || tx.type === 'cobro') point.ingresos += Math.abs(tx.amount)
-        else point.gastos += Math.abs(tx.amount)
+        if (tx.type === 'cobro') point.ingresos += Math.abs(tx.amount)
+        else if (['sale', 'refill', 'service'].includes(tx.type)) point.ingresos += Number(tx.paidAmount || 0)
+        else if ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount > 0) point.ingresos += tx.amount
+        
+        if (tx.type === 'Expense' || ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount < 0)) {
+          point.gastos += Math.abs(tx.amount)
+        }
       }
     })
 
@@ -151,12 +175,23 @@ export default function AnalysisPage() {
   const incomePieData = useMemo(() => {
     const counts: Record<string, number> = {}
     filteredTxs.forEach(tx => {
-      if (tx.amount > 0 || tx.type === 'cobro') {
-        const label = tx.type === 'sale' ? 'Ventas' : 
-                      tx.type === 'refill' ? 'Reposiciones' : 
-                      tx.type === 'service' ? 'Servicio Técnico' : 
-                      tx.type === 'cobro' ? 'Cobros' : 'Otros';
-        counts[label] = (counts[label] || 0) + Math.abs(tx.amount)
+      let amount = 0
+      let source = ''
+
+      if (tx.type === 'cobro') {
+        amount = Math.abs(tx.amount)
+        source = tx.relatedType || 'sale'
+      } else if (['sale', 'refill', 'service'].includes(tx.type)) {
+        amount = Number(tx.paidAmount || 0)
+        source = tx.type
+      } else if ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount > 0) {
+        amount = tx.amount
+        source = 'adjustment'
+      }
+
+      if (amount > 0) {
+        const label = LABEL_MAP[source] || source
+        counts[label] = (counts[label] || 0) + amount
       }
     })
     return Object.entries(counts).map(([name, value]) => ({ name, value }))
@@ -166,9 +201,9 @@ export default function AnalysisPage() {
   const expensePieData = useMemo(() => {
     const counts: Record<string, number> = {}
     filteredTxs.forEach(tx => {
-      if (tx.amount < 0 && tx.type !== 'cobro') {
+      if (tx.type === 'Expense' || ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount < 0)) {
         const cat = expenseCategories?.find(c => c.id === tx.expenseCategoryId)
-        const label = cat ? cat.name : (tx.type === 'Adjustment' || tx.type === 'adjustment' ? 'Ajustes' : 'General');
+        const label = cat ? cat.name : 'Ajustes / General'
         counts[label] = (counts[label] || 0) + Math.abs(tx.amount)
       }
     })
@@ -179,11 +214,15 @@ export default function AnalysisPage() {
   const zoneRevenue = useMemo(() => {
     const revenue: Record<string, number> = {}
     filteredTxs.forEach(tx => {
-      if (tx.amount > 0 || tx.type === 'cobro') {
+      let amount = 0
+      if (tx.type === 'cobro') amount = Math.abs(tx.amount)
+      else if (['sale', 'refill', 'service'].includes(tx.type)) amount = Number(tx.paidAmount || 0)
+
+      if (amount > 0) {
         const client = clients?.find(c => c.id === tx.clientId)
         const zone = zones?.find(z => z.id === client?.zonaId)
         const label = zone ? zone.name : 'Sin Zona'
-        revenue[label] = (revenue[label] || 0) + Math.abs(tx.amount)
+        revenue[label] = (revenue[label] || 0) + amount
       }
     })
     return Object.entries(revenue)
@@ -237,7 +276,7 @@ export default function AnalysisPage() {
                   <SelectItem value="sale">Ventas</SelectItem>
                   <SelectItem value="refill">Reposiciones</SelectItem>
                   <SelectItem value="service">Servicio Técnico</SelectItem>
-                  <SelectItem value="cobro">Cobros</SelectItem>
+                  <SelectItem value="adjustment">Ajustes / Otros</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -262,7 +301,7 @@ export default function AnalysisPage() {
           <Card className="glass-card bg-emerald-50/30 border-l-4 border-l-emerald-500">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between mb-4">
-                 <p className="text-[10px] font-black uppercase text-emerald-700 tracking-widest">Total Ingresos</p>
+                 <p className="text-[10px] font-black uppercase text-emerald-700 tracking-widest">Ingresos Reales (Caja)</p>
                  <div className="bg-emerald-100 p-2 rounded-full text-emerald-600"><ArrowUpRight className="h-5 w-5" /></div>
               </div>
               <div className="space-y-1">
@@ -275,7 +314,7 @@ export default function AnalysisPage() {
           <Card className="glass-card bg-rose-50/30 border-l-4 border-l-rose-500">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between mb-4">
-                 <p className="text-[10px] font-black uppercase text-rose-700 tracking-widest">Total Gastos</p>
+                 <p className="text-[10px] font-black uppercase text-rose-700 tracking-widest">Gastos Reales</p>
                  <div className="bg-rose-100 p-2 rounded-full text-rose-600"><ArrowDownLeft className="h-5 w-5" /></div>
               </div>
               <div className="space-y-1">
@@ -309,7 +348,7 @@ export default function AnalysisPage() {
           <Card className="glass-card col-span-1 lg:col-span-2">
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><BarChart3 className="h-5 w-5 text-primary" /> Evolución Anual (ARS)</CardTitle>
-              <CardDescription>Comparativa de ingresos vs gastos últimos 12 meses</CardDescription>
+              <CardDescription>Comparativa de ingresos vs gastos reales últimos 12 meses</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[400px] w-full">
@@ -336,7 +375,7 @@ export default function AnalysisPage() {
           <Card className="glass-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><PieChartIcon className="h-5 w-5 text-emerald-500" /> Distribución de Ingresos</CardTitle>
-              <CardDescription>Basado en los filtros de fecha aplicados</CardDescription>
+              <CardDescription>Basado en el dinero real cobrado</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[300px] w-full">
@@ -408,7 +447,7 @@ export default function AnalysisPage() {
            <Card className="glass-card">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <MapPin className="h-5 w-5 text-primary" /> Top 5 Zonas por Ingresos
+                  <MapPin className="h-5 w-5 text-primary" /> Top 5 Zonas por Ingresos Reales
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -437,12 +476,12 @@ export default function AnalysisPage() {
                 <div>
                    <p className="text-[10px] font-black uppercase opacity-70 tracking-widest">Ticket Promedio (Periodo)</p>
                    <h3 className="text-3xl font-black mt-1">
-                     ${filteredTxs.length > 0 ? (summary.ARS.income / filteredTxs.filter(t => t.amount > 0).length || 1).toLocaleString('es-AR') : '0'}
+                     ${filteredTxs.length > 0 ? (summary.ARS.income / (filteredTxs.filter(t => t.amount > 0).length || 1)).toLocaleString('es-AR') : '0'}
                    </h3>
                 </div>
                 <div className="pt-4 border-t border-white/10">
                    <p className="text-xs leading-relaxed opacity-90">
-                     El ticket promedio te ayuda a entender cuánto estás cobrando en promedio por visita. Un aumento aquí suele indicar mayor rentabilidad por cliente.
+                     Este análisis utiliza el <b>Criterio de Caja</b>: los ingresos se cuentan cuando el dinero realmente entra, evitando duplicar ventas con cobros posteriores.
                    </p>
                 </div>
               </CardContent>
