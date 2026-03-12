@@ -558,6 +558,22 @@ function CustomersContent() {
                             </Link>
                           </Button>
                           <Button 
+                            variant="outline" 
+                            size="icon" 
+                            className="h-9 w-9 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (customer.telefono) {
+                                window.location.href = `tel:${customer.telefono}`;
+                              } else {
+                                toast({ title: "Sin Teléfono", description: "Este cliente no tiene número registrado.", variant: "destructive" });
+                              }
+                            }}
+                            title="Llamar"
+                          >
+                            <PhoneCall className="h-4 w-4" />
+                          </Button>
+                          <Button 
                             variant="secondary" 
                             size="icon" 
                             className="h-9 w-9"
