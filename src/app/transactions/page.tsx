@@ -834,7 +834,12 @@ function TransactionsContent() {
                     return (
                       <TableRow key={tx.id}>
                         <TableCell className="text-xs font-medium">{new Date(tx.date).toLocaleDateString('es-AR')}</TableCell>
-                        <TableCell className="font-bold">{cust ? `${cust.apellido}, ${cust.nombre}` : '---'}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-bold">{cust ? `${cust.apellido}, ${cust.nombre}` : '---'}</span>
+                            {cust?.cuit_dni && <span className="text-[10px] text-muted-foreground uppercase">ID: {cust.cuit_dni}</span>}
+                          </div>
+                        </TableCell>
                         <TableCell><Badge variant="outline" className={cn("text-[10px] gap-1", info.color)}><info.icon className="h-3 w-3" />{info.label}</Badge></TableCell>
                         <TableCell className="text-right font-black">{tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}</TableCell>
                         <TableCell className="text-right">
@@ -898,7 +903,10 @@ function TransactionsContent() {
                       </DropdownMenu>
                     </div>
                     <div className="mb-4">
-                      <h4 className="font-bold text-md leading-tight">{cust ? `${cust.apellido}, ${cust.nombre}` : 'Sin Cliente'}</h4>
+                      <h4 className="font-bold text-md leading-tight">
+                        {cust ? `${cust.apellido}, ${cust.nombre}` : 'Sin Cliente'}
+                        {cust?.cuit_dni && <span className="text-[10px] font-normal text-muted-foreground ml-2">({cust.cuit_dni})</span>}
+                      </h4>
                       <Badge variant="outline" className={cn("text-[10px] gap-1 mt-2", info.color)}>
                         <info.icon className="h-3 w-3" />{info.label}
                       </Badge>
