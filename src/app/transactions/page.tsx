@@ -262,22 +262,19 @@ function TransactionsContent() {
           body = body.replaceAll(marker, value)
         })
 
-        // Motor Mejorado de Marcadores Dinámicos de Catálogo (Soporta tildes, mayúsculas y espacios)
         const markerRegex = /{{Precio(ARS|USD)_([^}]+)}}/g;
         const combinedText = subject + " " + body;
         const seenMarkers = new Set<string>();
         let match;
 
-        // Extraemos todos los marcadores únicos del texto
         while ((match = markerRegex.exec(combinedText)) !== null) {
           const fullMarker = match[0];
           if (seenMarkers.has(fullMarker)) continue;
           seenMarkers.add(fullMarker);
 
-          const currencyPrefix = match[1]; // ARS o USD
+          const currencyPrefix = match[1];
           const productNameInTemplate = match[2].trim();
           
-          // Búsqueda insensible a mayúsculas y flexible con espacios/tildes
           const product = catalog.find(p => 
             p.name.trim().toLowerCase() === productNameInTemplate.toLowerCase()
           );
@@ -288,7 +285,6 @@ function TransactionsContent() {
             const symbol = isUSD ? 'u$s' : '$';
             const formatted = `${symbol} ${price.toLocaleString('es-AR')}`;
             
-            // Reemplazo en ambos campos
             subject = subject.split(fullMarker).join(formatted);
             body = body.split(fullMarker).join(formatted);
           }
@@ -752,7 +748,7 @@ function TransactionsContent() {
                           <SelectTrigger className="h-11"><SelectValue placeholder="Seleccionar producto..." /></SelectTrigger>
                           <SelectContent>
                             {sortedCatalog?.map((i: any) => {
-                              const priceStr = i.priceARS > 0 
+                              const priceStr = (i.priceARS || 0) > 0 
                                 ? `$${i.priceARS.toLocaleString('es-AR')}` 
                                 : `u$s ${i.priceUSD.toLocaleString('es-AR')}`;
                               return (
@@ -919,7 +915,8 @@ function TransactionsContent() {
                   <p className="text-[10px] font-bold text-emerald-700 uppercase">Total Filtrado USD</p>
                   <h3 className="text-2xl font-black">u$s {filteredTotals.USD.toLocaleString('es-AR')}</h3>
                 </CardContent>
-              </section>
+              </Card>
+            </section>
 
             <Card className="glass-card p-4 flex flex-wrap gap-4 items-end">
                  <div className="space-y-1"><Label className="text-xs">Cliente</Label><Select value={filterCustomer} onValueChange={setFilterCustomer}><SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem>{sortedCustomers.map((c: any) => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}</SelectContent></Select></div>

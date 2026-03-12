@@ -1,3 +1,4 @@
+
 import type {Metadata, Viewport} from 'next';
 import './globals.css';
 import {Toaster} from '@/components/ui/toaster';
@@ -10,13 +11,11 @@ export const metadata: Metadata = {
   title: 'Dosimat Pro | Gestión de Piscinas',
   description: 'Sistema inteligente para el mantenimiento de piscinas y control financiero',
   icons: {
-    icon: 'https://picsum.photos/seed/pool-water-v5/192/192',
-    apple: 'https://picsum.photos/seed/pool-water-v5/192/192',
-  },
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'default',
-    title: 'Dosimat Pro',
+    icon: [
+      { url: 'https://picsum.photos/seed/pool-water-drop-v6/192/192', sizes: '192x192', type: 'image/png' },
+      { url: 'https://picsum.photos/seed/pool-water-drop-v6/32/32', sizes: '32x32', type: 'image/png' }
+    ],
+    apple: 'https://picsum.photos/seed/pool-water-drop-v6/192/192',
   },
 };
 
@@ -39,8 +38,6 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-        <link rel="apple-touch-icon" href="https://picsum.photos/seed/pool-water-v5/192/192" />
-        <link rel="icon" href="https://picsum.photos/seed/pool-water-v5/192/192" />
       </head>
       <body className="font-body antialiased bg-background text-foreground min-h-screen">
         <FirebaseClientProvider>
