@@ -37,7 +37,8 @@ import {
   Droplets,
   RefreshCw,
   Copy,
-  Loader2
+  Loader2,
+  ArrowDownLeft
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -76,6 +77,8 @@ const txTypeMap: Record<string, { label: string, icon: any, color: string, descr
   service: { label: "Técnico", icon: Wrench, color: "text-indigo-600 bg-indigo-50", description: "Servicios técnicos, reparaciones o visitas de mantenimiento." },
   adjustment: { label: "Ajuste", icon: Settings2, color: "text-slate-600 bg-slate-50", description: "Corrección manual de saldo (Ingresos o Egresos) en la cuenta del cliente." },
   cobro: { label: "Cobro", icon: Receipt, color: "text-emerald-600 bg-emerald-50", description: "Registro de pago recibido del cliente para cancelar deuda." },
+  Adjustment: { label: "Ajuste", icon: RefreshCw, color: "text-slate-600 bg-slate-50", description: "Ajuste de saldo manual." },
+  Expense: { label: "Gasto", icon: ArrowDownLeft, color: "text-rose-600 bg-rose-50", description: "Gasto manual registrado." },
 }
 
 function TransactionsContent() {
@@ -561,7 +564,7 @@ function TransactionsContent() {
                    {!editingTx && (
                     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
                       <TabsList className="grid grid-cols-5 w-full h-auto p-1 bg-muted/50 border shadow-inner">
-                          {Object.entries(txTypeMap).map(([key, info]) => {
+                          {Object.entries(txTypeMap).filter(([k]) => !['Adjustment', 'Expense'].includes(k)).map(([key, info]) => {
                             const Icon = info.icon
                             return (
                               <TabsTrigger key={key} value={key} className={`data-[state=active]:bg-primary data-[state=active]:text-white py-2 flex flex-col gap-1`}>

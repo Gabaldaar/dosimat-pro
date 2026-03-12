@@ -68,8 +68,8 @@ const txTypeMap: Record<string, { label: string, icon: any, color: string }> = {
   adjustment: { label: "Ajuste", icon: RefreshCw, color: "text-slate-600 bg-slate-50" },
   FinancialTransferOut: { label: "Transferencia (Salida)", icon: ArrowRightLeft, color: "text-amber-600 bg-amber-50" },
   FinancialTransferIn: { label: "Transferencia (Entrada)", icon: ArrowRightLeft, color: "text-emerald-600 bg-emerald-50" },
-  Adjustment: { label: "Ajuste de Saldo", icon: RefreshCw, color: "text-slate-600 bg-slate-50" },
-  Expense: { label: "Gasto Manual", icon: ArrowDownLeft, color: "text-rose-600 bg-rose-50" },
+  Adjustment: { label: "Ajuste", icon: RefreshCw, color: "text-slate-600 bg-slate-50" },
+  Expense: { label: "Gasto", icon: ArrowDownLeft, color: "text-rose-600 bg-rose-50" },
 }
 
 export default function AccountsPage() {
