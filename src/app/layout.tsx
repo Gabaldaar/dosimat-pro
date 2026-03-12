@@ -9,18 +9,14 @@ import Script from 'next/script';
 export const metadata: Metadata = {
   title: 'Dosimat Pro | Gestión de Piscinas',
   description: 'Sistema inteligente para el mantenimiento de piscinas y control financiero',
-  manifest: '/manifest.json',
   icons: {
-    icon: 'https://picsum.photos/seed/pool-water-drop-v2/192/192',
-    apple: 'https://picsum.photos/seed/pool-water-drop-v2/192/192',
+    icon: 'https://picsum.photos/seed/pool-water-v5/192/192',
+    apple: 'https://picsum.photos/seed/pool-water-v5/192/192',
   },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
     title: 'Dosimat Pro',
-  },
-  formatDetection: {
-    telephone: false,
   },
 };
 
@@ -43,8 +39,8 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-        <link rel="apple-touch-icon" href="https://picsum.photos/seed/pool-water-drop-v2/192/192" />
-        <link rel="icon" href="https://picsum.photos/seed/pool-water-drop-v2/192/192" />
+        <link rel="apple-touch-icon" href="https://picsum.photos/seed/pool-water-v5/192/192" />
+        <link rel="icon" href="https://picsum.photos/seed/pool-water-v5/192/192" />
       </head>
       <body className="font-body antialiased bg-background text-foreground min-h-screen">
         <FirebaseClientProvider>
@@ -56,15 +52,14 @@ export default function RootLayout({
           </AuthGuard>
         </FirebaseClientProvider>
         
-        {/* Registro del Service Worker para PWA */}
         <Script id="register-sw" strategy="afterInteractive">
           {`
             if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
               window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/sw.js').then(function(registration) {
-                  console.log('ServiceWorker registrado con éxito:', registration.scope);
-                }).catch(function(err) {
-                  console.log('Error al registrar el ServiceWorker:', err);
+                navigator.serviceWorker.getRegistrations().then(registrations => {
+                  for(let registration of registrations) {
+                    registration.unregister();
+                  }
                 });
               });
             }

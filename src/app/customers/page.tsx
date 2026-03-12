@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
@@ -76,7 +75,6 @@ function CustomersContent() {
   const [newZoneName, setNewZoneName] = useState("")
   const [editingCustomer, setEditingCustomer] = useState<any>(null)
 
-  // Manejar filtros externos (desde el Dashboard)
   useEffect(() => {
     const balanceParam = searchParams.get('filterBalance')
     if (balanceParam) {
@@ -480,7 +478,6 @@ function CustomersContent() {
                   )} />
                   <CardContent className="p-5">
                     <div className="flex flex-col gap-4">
-                      {/* Name and Balances Row */}
                       <div className="flex justify-between items-start gap-4">
                         <div className="flex-1 min-w-0">
                           <h3 className="text-xl font-bold truncate leading-tight">
@@ -526,7 +523,6 @@ function CustomersContent() {
                         </div>
                       </div>
 
-                      {/* Address and Actions Row */}
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-2 border-t border-primary/5">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground flex-1 min-w-0">
                           <MapPin className="h-4 w-4 shrink-0 text-primary/60" />
@@ -557,22 +553,22 @@ function CustomersContent() {
                               <ArrowLeftRight className="h-4 w-4" />
                             </Link>
                           </Button>
-                          <Button 
-                            variant="outline" 
-                            size="icon" 
-                            className="h-9 w-9 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (customer.telefono) {
-                                window.location.href = `tel:${customer.telefono}`;
-                              } else {
-                                toast({ title: "Sin Teléfono", description: "Este cliente no tiene número registrado.", variant: "destructive" });
-                              }
-                            }}
-                            title="Llamar"
-                          >
-                            <PhoneCall className="h-4 w-4" />
-                          </Button>
+                          
+                          {customer.telefono && (
+                            <Button 
+                              variant="outline" 
+                              size="icon" 
+                              className="h-9 w-9 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                              asChild
+                              onClick={(e) => e.stopPropagation()}
+                              title="Llamar"
+                            >
+                              <a href={`tel:${customer.telefono}`}>
+                                <PhoneCall className="h-4 w-4" />
+                              </a>
+                            </Button>
+                          )}
+                          
                           <Button 
                             variant="secondary" 
                             size="icon" 
