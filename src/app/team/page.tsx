@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect, useState } from "react"
@@ -36,6 +37,11 @@ import { useToast } from "@/hooks/use-toast"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 
+const roleDisplay: Record<string, string> = {
+  'Admin': 'Administrador',
+  'Employee': 'Empleado'
+}
+
 export default function TeamPage() {
   const { toast } = useToast()
   const db = useFirestore()
@@ -59,7 +65,6 @@ export default function TeamPage() {
   }, [isInviteOpen]);
 
   const handleUpdateRole = (userId: string, newRole: string) => {
-    // Verificación de permisos en la aplicación
     if (!isAdmin) {
       toast({ 
         title: "Acceso denegado", 
@@ -69,7 +74,6 @@ export default function TeamPage() {
       return
     }
 
-    // Validar que no sea el último administrador quitándose el rol a sí mismo
     const adminCount = team?.filter((m: any) => m.role === 'Admin').length || 0;
     if (userId === currentUser?.uid && newRole !== 'Admin') {
       if (adminCount <= 1) {
@@ -83,13 +87,11 @@ export default function TeamPage() {
     }
 
     updateDocumentNonBlocking(doc(db, 'users', userId), { role: newRole })
-    
-    // También actualizamos el documento auxiliar de roles por si acaso
     setDocumentNonBlocking(doc(db, 'user_roles', userId), { 
       roleIds: [newRole.toLowerCase()] 
     }, { merge: true })
 
-    toast({ title: "Rol actualizado", description: `Usuario ahora es ${newRole}` })
+    toast({ title: "Rol actualizado", description: `Usuario ahora es ${roleDisplay[newRole] || newRole}` })
   }
 
   const handleDeleteUser = (userId: string) => {
@@ -168,7 +170,7 @@ export default function TeamPage() {
                         <h3 className="font-bold">{member.name || 'Usuario sin nombre'}</h3>
                         <Badge variant={member.role === 'Admin' ? 'default' : 'secondary'} className="text-[10px]">
                           {member.role === 'Admin' ? <ShieldCheck className="h-3 w-3 mr-1" /> : <UserCircle className="h-3 w-3 mr-1" />}
-                          {member.role}
+                          {roleDisplay[member.role] || member.role}
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">{member.email}</p>
@@ -182,7 +184,7 @@ export default function TeamPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => handleUpdateRole(member.id, 'Admin')}>
-                          <ShieldCheck className="mr-2 h-4 w-4" /> Hacer Admin
+                          <ShieldCheck className="mr-2 h-4 w-4" /> Hacer Administrador
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleUpdateRole(member.id, 'Employee')}>
                           <UserCircle className="mr-2 h-4 w-4" /> Hacer Empleado
@@ -208,13 +210,12 @@ export default function TeamPage() {
           <CardHeader>
             <CardTitle className="text-sm flex items-center gap-2">
               <ShieldAlert className="h-4 w-4 text-accent-foreground" />
-              Gestión de Permisos (App-Side)
+              Gestión de Permisos
             </CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground space-y-2">
-            <p>• Los <b>Administradores</b> tienen acceso total a la gestión financiera, catálogo y equipo.</p>
-            <p>• Los <b>Empleados</b> pueden operar y registrar, pero no borrar registros sensibles.</p>
-            <p>• Este sistema de permisos se gestiona directamente desde la aplicación para mayor flexibilidad.</p>
+            <p>• Los <b>Administradores</b> tienen acceso total a la gestión financiera, catálogo, equipo y pueden editar o eliminar cualquier registro.</p>
+            <p>• Los <b>Empleados</b> pueden operar y registrar nuevos movimientos, pero no tienen permiso para editar ni borrar registros existentes (Cajas, Clientes u Operaciones).</p>
           </CardContent>
         </Card>
 

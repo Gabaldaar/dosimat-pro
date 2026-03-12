@@ -51,7 +51,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 function CustomersContent() {
   const { toast } = useToast()
   const db = useFirestore()
-  const { user } = useUser()
+  const { user, userData } = useUser()
+  const isAdmin = userData?.role === 'Admin'
   const searchParams = useSearchParams()
   
   const [searchTerm, setSearchTerm] = useState("")
@@ -224,6 +225,10 @@ function CustomersContent() {
 
   const handleDelete = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
+    if (!isAdmin) {
+      toast({ title: "Acceso denegado", description: "Solo administradores pueden eliminar clientes.", variant: "destructive" })
+      return
+    }
     if (confirm("¿Estás seguro de eliminar este cliente?")) {
       deleteDocumentNonBlocking(doc(db, 'clients', id))
       toast({ title: "Cliente eliminado" })
@@ -275,6 +280,7 @@ function CustomersContent() {
   }
 
   const handleAddZone = () => {
+    if (!isAdmin) return
     if (!newZoneName.trim()) return
     const id = Math.random().toString(36).substring(2, 11)
     setDocumentNonBlocking(doc(db, 'zones', id), { id, name: newZoneName }, { merge: true })
@@ -283,6 +289,7 @@ function CustomersContent() {
   }
 
   const handleDeleteZone = (id: string) => {
+    if (!isAdmin) return
     if (confirm("¿Eliminar esta zona?")) {
       deleteDocumentNonBlocking(doc(db, 'zones', id))
       toast({ title: "Zona eliminada" })
@@ -339,9 +346,11 @@ function CustomersContent() {
             <Button variant="outline" onClick={() => setIsBulkEmailOpen(true)} className="border-primary text-primary hover:bg-primary/5">
               <Mail className="mr-2 h-4 w-4" /> Masivo
             </Button>
-            <Button variant="outline" onClick={() => setIsZoneManagerOpen(true)}>
-              <MapPinned className="mr-2 h-4 w-4" /> Zonas
-            </Button>
+            {isAdmin && (
+              <Button variant="outline" onClick={() => setIsZoneManagerOpen(true)}>
+                <MapPinned className="mr-2 h-4 w-4" /> Zonas
+              </Button>
+            )}
             <Button onClick={() => handleOpenDialog()} className="shadow-lg shadow-primary/20 font-bold">
               <Plus className="mr-2 h-5 w-5" /> Nuevo
             </Button>
@@ -561,14 +570,16 @@ function CustomersContent() {
                           >
                             <Copy className="h-4 w-4" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-9 w-9 text-destructive opacity-40 hover:opacity-100 hover:bg-destructive/10 transition-all" 
-                            onClick={(e) => handleDelete(customer.id, e)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {isAdmin && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-9 w-9 text-destructive opacity-40 hover:opacity-100 hover:bg-destructive/10 transition-all" 
+                              onClick={(e) => handleDelete(customer.id, e)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -628,11 +639,11 @@ function CustomersContent() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="font-bold">Saldo ARS ($)</Label>
-                    <Input type="number" value={formData.saldoActual} onChange={(e) => setFormData({...formData, saldoActual: Number(e.target.value)})} className="bg-muted/10 font-bold" />
+                    <Input type="number" value={formData.saldoActual} onChange={(e) => setFormData({...formData, saldoActual: Number(e.target.value)})} className="bg-muted/10 font-bold" disabled={!isAdmin} />
                   </div>
                   <div className="space-y-2">
                     <Label className="font-bold text-emerald-600">Saldo USD (u$s)</Label>
-                    <Input type="number" value={formData.saldoUSD} onChange={(e) => setFormData({...formData, saldoUSD: Number(e.target.value)})} className="bg-muted/10 font-bold" />
+                    <Input type="number" value={formData.saldoUSD} onChange={(e) => setFormData({...formData, saldoUSD: Number(e.target.value)})} className="bg-muted/10 font-bold" disabled={!isAdmin} />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">

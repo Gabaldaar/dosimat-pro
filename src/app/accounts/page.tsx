@@ -25,7 +25,8 @@ import {
   ExternalLink,
   Droplets,
   Settings,
-  Copy
+  Copy,
+  Edit
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -467,13 +468,17 @@ export default function AccountsPage() {
                           <DropdownMenuContent align="end">
                             {isAdmin && (
                               <>
-                                <DropdownMenuItem onSelect={() => handleOpenAccountDialog(account)}>Editar parámetros</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => handleOpenAccountDialog(account)}>
+                                  <Edit className="mr-2 h-4 w-4" /> Editar parámetros
+                                </DropdownMenuItem>
                                 <DropdownMenuItem className="text-destructive" onSelect={() => setAccountToDelete(account)}>
                                   <Trash2 className="mr-2 h-4 w-4" /> Eliminar caja
                                 </DropdownMenuItem>
                               </>
                             )}
-                            <DropdownMenuItem onSelect={() => router.push(`/transactions?accountId=${account.id}`)}>Ver movimientos</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => router.push(`/transactions?accountId=${account.id}`)}>
+                              <RefreshCw className="mr-2 h-4 w-4" /> Ver movimientos
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>

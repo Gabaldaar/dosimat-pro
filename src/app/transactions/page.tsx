@@ -67,7 +67,7 @@ import {
   DialogFooter,
   DialogDescription
 } from "@/components/ui/dialog"
-import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase"
+import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking, useUser } from "@/firebase"
 import { collection, doc } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
@@ -85,6 +85,8 @@ const txTypeMap: Record<string, { label: string, icon: any, color: string, descr
 function TransactionsContent() {
   const { toast } = useToast()
   const db = useFirestore()
+  const { userData } = useUser()
+  const isAdmin = userData?.role === 'Admin'
   const searchParams = useSearchParams()
   const clientIdParam = searchParams.get('clientId')
   const accountIdParam = searchParams.get('accountId')
@@ -155,9 +157,7 @@ function TransactionsContent() {
   useEffect(() => {
     const now = new Date()
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
-    
     const formatDate = (date: Date) => date.toISOString().split('T')[0]
-    
     setFilterStartDate(formatDate(firstDay))
     setFilterEndDate(formatDate(now))
   }, [])
@@ -277,6 +277,10 @@ function TransactionsContent() {
   }
 
   const handleEditTx = (tx: any) => {
+    if (!isAdmin) {
+      toast({ title: "Acceso denegado", description: "Solo administradores pueden editar operaciones.", variant: "destructive" })
+      return
+    }
     setEditingTx(tx)
     setSelectedCustomerId(tx.clientId)
     setOperationDate(tx.date.split('T')[0])
@@ -316,6 +320,10 @@ function TransactionsContent() {
 
   const confirmDeleteTx = () => {
     if (!txToDelete?.id) return
+    if (!isAdmin) {
+      toast({ title: "Acceso denegado", description: "Solo administradores pueden eliminar operaciones.", variant: "destructive" })
+      return
+    }
     revertTxBalances(txToDelete)
     deleteDocumentNonBlocking(doc(db, 'transactions', txToDelete.id))
     setTxToDelete(null)
@@ -906,8 +914,12 @@ function TransactionsContent() {
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem onClick={() => handleCopyWhatsApp(tx)}><Copy className="h-4 w-4 mr-2" /> Copiar</DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleOpenEmailDialog(tx)}><Mail className="h-4 w-4 mr-2" /> Email</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleEditTx(tx)}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
-                              <DropdownMenuItem className="text-destructive" onClick={() => setTxToDelete(tx)}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
+                              {isAdmin && (
+                                <>
+                                  <DropdownMenuItem onClick={() => handleEditTx(tx)}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
+                                  <DropdownMenuItem className="text-destructive" onClick={() => setTxToDelete(tx)}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
+                                </>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
@@ -942,8 +954,12 @@ function TransactionsContent() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => handleCopyWhatsApp(tx)}><Copy className="h-4 w-4 mr-2" /> Copiar</DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleOpenEmailDialog(tx)}><Mail className="h-4 w-4 mr-2" /> Email</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleEditTx(tx)}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
-                          <DropdownMenuItem className="text-destructive" onClick={() => setTxToDelete(tx)}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
+                          {isAdmin && (
+                            <>
+                              <DropdownMenuItem onClick={() => handleEditTx(tx)}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
+                              <DropdownMenuItem className="text-destructive" onClick={() => setTxToDelete(tx)}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
