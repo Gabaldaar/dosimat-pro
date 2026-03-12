@@ -39,7 +39,8 @@ import {
   Copy,
   Loader2,
   ArrowDownLeft,
-  Tag
+  Tag,
+  Info
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -105,6 +106,7 @@ function TransactionsContent() {
   
   const [editingTx, setEditingTx] = useState<any | null>(null)
   const [txToDelete, setTxToDelete] = useState<any | null>(null)
+  const [selectedTxForNote, setSelectedTxForNote] = useState<any | null>(null)
 
   // Email States
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false)
@@ -174,14 +176,14 @@ function TransactionsContent() {
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        if (!isEmailDialogOpen && !txToDelete) {
+        if (!isEmailDialogOpen && !txToDelete && !selectedTxForNote) {
           document.body.style.pointerEvents = 'auto';
         }
       }
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isEmailDialogOpen, txToDelete]);
+  }, [isEmailDialogOpen, txToDelete, selectedTxForNote]);
 
   const selectedClient = useMemo(() => {
     return customers?.find(c => c.id === (selectedCustomerId || editingTx?.clientId));
@@ -893,6 +895,7 @@ function TransactionsContent() {
                     <TableHead>Fecha</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead>Operación</TableHead>
+                    <TableHead>Descripción</TableHead>
                     <TableHead className="text-right">Monto Total</TableHead>
                     <TableHead className="text-right">Abonado</TableHead>
                     <TableHead>Caja</TableHead>
@@ -926,6 +929,19 @@ function TransactionsContent() {
                               </span>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell className="max-w-[200px]">
+                          {tx.description ? (
+                            <div 
+                              className="flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
+                              onClick={() => setSelectedTxForNote(tx)}
+                            >
+                              <span className="text-xs truncate">{tx.description}</span>
+                              <Info className="h-3 w-3 shrink-0 text-muted-foreground opacity-50" />
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground italic">Sin nota</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-right font-black">{tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}</TableCell>
                         <TableCell className="text-right">
@@ -1002,6 +1018,11 @@ function TransactionsContent() {
                         {cust ? `${cust.apellido}, ${cust.nombre}` : 'Sin Cliente'}
                         {cust?.cuit_dni && <span className="text-[10px] font-normal text-muted-foreground ml-2">({cust.cuit_dni})</span>}
                       </h4>
+                      {tx.description && (
+                        <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2 bg-muted/10 p-1.5 rounded" onClick={() => setSelectedTxForNote(tx)}>
+                          {tx.description}
+                        </p>
+                      )}
                       <div className="flex flex-wrap gap-2 mt-2">
                         <Badge variant="outline" className={cn("text-[10px] gap-1", info.color)}>
                           <info.icon className="h-3 w-3" />{info.label}
@@ -1042,6 +1063,38 @@ function TransactionsContent() {
             </div>
           </div>
         )}
+
+        {/* Note Dialog */}
+        <Dialog open={!!selectedTxForNote} onOpenChange={(o) => { if(!o) setSelectedTxForNote(null); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Info className="h-5 w-5 text-primary" /> Detalle de la Operación
+              </DialogTitle>
+              <DialogDescription>
+                Información adicional registrada.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <div className="p-4 bg-muted/30 rounded-lg border text-sm leading-relaxed whitespace-pre-wrap">
+                {selectedTxForNote?.description || "Sin descripción adicional."}
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-[10px] font-bold uppercase text-muted-foreground">
+                <div>
+                   <p>Fecha:</p>
+                   <p className="text-foreground">{selectedTxForNote && formatLocalDate(selectedTxForNote.date)}</p>
+                </div>
+                <div>
+                   <p>Operación:</p>
+                   <p className="text-foreground">{selectedTxForNote && txTypeMap[selectedTxForNote.type]?.label}</p>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setSelectedTxForNote(null)}>Cerrar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={isEmailDialogOpen} onOpenChange={setIsEmailDialogOpen}>
           <DialogContent className="max-w-2xl">
