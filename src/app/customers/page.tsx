@@ -485,6 +485,11 @@ function CustomersContent() {
                         <div className="flex-1 min-w-0">
                           <h3 className="text-xl font-bold truncate leading-tight">
                             {customer.apellido}, {customer.nombre}
+                            {customer.cuit_dni && (
+                              <span className="text-[10px] font-normal text-muted-foreground ml-2">
+                                ({customer.cuit_dni})
+                              </span>
+                            )}
                           </h3>
                           <div className="flex gap-1.5 mt-2 flex-wrap">
                             <Badge variant={customer.esClienteReposicion ? "default" : "secondary"} className="text-[9px] h-5 font-bold px-2">
