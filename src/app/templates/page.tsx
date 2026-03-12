@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -164,7 +165,6 @@ export default function TemplatesPage() {
             </DialogHeader>
             
             <div className="space-y-6 py-4">
-              {/* Bloque de marcadores en la parte superior de la edición */}
               <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl space-y-3">
                 <div className="flex items-center gap-2 text-blue-800 text-xs font-bold uppercase tracking-wider">
                   <Info className="h-4 w-4" /> Marcadores (Clic para copiar)
@@ -181,6 +181,11 @@ export default function TemplatesPage() {
                       <span className="text-blue-600">{"{{"}{m}{"}}"}</span>
                     </button>
                   ))}
+                </div>
+                <div className="pt-2 border-t border-blue-200 mt-2">
+                  <p className="text-[10px] text-blue-800 font-bold">
+                    🚀 DINÁMICOS: <code className="bg-white px-1">{"{{"}PrecioARS_Nombre del Producto{"}}"}</code> para precios automáticos del catálogo.
+                  </p>
                 </div>
               </div>
 

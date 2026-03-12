@@ -83,10 +83,9 @@ const txTypeMap: Record<string, { label: string, icon: any, color: string, descr
   Expense: { label: "Gasto", icon: ArrowDownLeft, color: "text-rose-600 bg-rose-50", description: "Gasto manual registrado." },
 }
 
-// Función auxiliar para formatear fechas sin desfase de zona horaria (evita el "día anterior")
+// Función auxiliar para formatear fechas sin desfase de zona horaria
 function formatLocalDate(dateString: string) {
   if (!dateString) return "---";
-  // Si viene solo fecha YYYY-MM-DD, forzamos mediodía para evitar saltos de día por UTC
   const date = dateString.includes('T') ? new Date(dateString) : new Date(dateString + 'T12:00:00');
   return date.toLocaleDateString('es-AR');
 }
@@ -165,7 +164,6 @@ function TransactionsContent() {
   const [txDescription, setTxDescription] = useState("")
   const [cobroSource, setCobroSource] = useState("sale")
 
-  // Set default dates on mount: First day of current month to Today
   useEffect(() => {
     const now = new Date()
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -202,7 +200,6 @@ function TransactionsContent() {
     }
   }, [clientIdParam, accountIdParam, modeParam])
 
-  // Cálculo de totales del carrito
   const cartTotals = useMemo(() => {
     return selectedItems.reduce((acc, item) => {
       const amount = (Number(item.price) || 0) * (Number(item.qty) || 0)
@@ -212,7 +209,7 @@ function TransactionsContent() {
   }, [selectedItems])
 
   useEffect(() => {
-    if (selectedTxForEmail && selectedTemplateId && templates && customers && accounts) {
+    if (selectedTxForEmail && selectedTemplateId && templates && customers && accounts && catalog) {
       const tpl = templates.find(t => t.id === selectedTemplateId)
       const client = customers.find(c => c.id === selectedTxForEmail.clientId)
       
@@ -265,10 +262,27 @@ function TransactionsContent() {
           body = body.replaceAll(marker, value)
         })
 
+        // Procesamiento de Marcadores Dinámicos de Catálogo {{PrecioARS_...}} o {{PrecioUSD_...}}
+        const dynamicMarkers = (subject + body).match(/{{Precio(ARS|USD)_[^}]+}}/g) || [];
+        dynamicMarkers.forEach(fullMarker => {
+          const content = fullMarker.replace('{{', '').replace('}}', '');
+          const isUSD = content.startsWith('PrecioUSD_');
+          const productName = content.replace(isUSD ? 'PrecioUSD_' : 'PrecioARS_', '');
+          
+          const product = catalog.find(p => p.name === productName);
+          if (product) {
+            const price = isUSD ? (product.priceUSD || 0) : (product.priceARS || 0);
+            const symbol = isUSD ? 'u$s' : '$';
+            const formatted = `${symbol} ${price.toLocaleString('es-AR')}`;
+            subject = subject.replaceAll(fullMarker, formatted);
+            body = body.replaceAll(fullMarker, formatted);
+          }
+        });
+
         setProcessedEmail({ subject, body })
       }
     }
-  }, [selectedTxForEmail, selectedTemplateId, templates, customers, accounts])
+  }, [selectedTxForEmail, selectedTemplateId, templates, customers, accounts, catalog])
 
   const handleAddItem = (itemId: string) => {
     const item = catalog?.find((i: any) => i.id === itemId)
@@ -358,7 +372,6 @@ function TransactionsContent() {
       deleteDocumentNonBlocking(doc(db, 'transactions', editingTx.id))
     }
 
-    // Usamos T12:00:00 para asegurar que la fecha guardada sea interpretada como el mismo día en cualquier zona horaria
     const finalDateStr = new Date(operationDate + 'T12:00:00').toISOString();
 
     if (activeTab === 'cobro' || activeTab === 'adjustment' || activeTab === 'Expense' || activeTab === 'Adjustment') {
@@ -738,7 +751,6 @@ function TransactionsContent() {
                       </div>
                     )}
                     
-                    {/* Items Desktop Table */}
                     <div className="hidden md:block border rounded-xl overflow-x-auto">
                       <Table className="min-w-[700px]">
                         <TableHeader className="bg-muted/30">
@@ -771,7 +783,6 @@ function TransactionsContent() {
                       </Table>
                     </div>
 
-                    {/* Items Mobile Cards */}
                     <div className="md:hidden space-y-3">
                       {selectedItems.map((item, i) => (
                         <Card key={i} className="p-4 bg-white/50 border-primary/10 relative">
@@ -905,7 +916,6 @@ function TransactionsContent() {
                  <Button variant="ghost" size="icon" onClick={resetFilters}><FilterX className="h-4 w-4" /></Button>
             </Card>
 
-            {/* Desktop History View */}
             <Card className="glass-card overflow-hidden hidden md:block">
               <Table className="min-w-[800px]">
                 <TableHeader className="bg-muted/30">
@@ -1003,7 +1013,6 @@ function TransactionsContent() {
               </Table>
             </Card>
 
-            {/* Mobile History View (Cards) */}
             <div className="grid grid-cols-1 gap-4 md:hidden">
               {filteredTransactions.map((tx: any) => {
                 const cust = customers?.find(c => c.id === tx.clientId);
@@ -1092,7 +1101,6 @@ function TransactionsContent() {
           </div>
         )}
 
-        {/* Note Dialog */}
         <Dialog open={!!selectedTxForNote} onOpenChange={(o) => { if(!o) setSelectedTxForNote(null); }}>
           <DialogContent>
             <DialogHeader>
