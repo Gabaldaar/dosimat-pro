@@ -184,7 +184,7 @@ export default function TemplatesPage() {
                 </div>
                 <div className="pt-2 border-t border-blue-200 mt-2">
                   <p className="text-[10px] text-blue-800 font-bold">
-                    🚀 DINÁMICOS: <code className="bg-white px-1">{"{{"}PrecioARS_Nombre del Producto{"}}"}</code> para precios automáticos del catálogo.
+                    🚀 PRODUCTOS: <code className="bg-white px-1">{"{{"}PrecioARS_Bidón de Cloro{"}}"}</code>. Ahora soporta tildes y no distingue entre mayúsculas o minúsculas.
                   </p>
                 </div>
               </div>

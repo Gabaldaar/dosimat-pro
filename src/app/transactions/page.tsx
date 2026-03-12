@@ -262,22 +262,37 @@ function TransactionsContent() {
           body = body.replaceAll(marker, value)
         })
 
-        // Procesamiento de Marcadores Dinámicos de Catálogo {{PrecioARS_...}} o {{PrecioUSD_...}}
-        const dynamicMarkers = (subject + body).match(/{{Precio(ARS|USD)_[^}]+}}/g) || [];
-        dynamicMarkers.forEach(fullMarker => {
-          const content = fullMarker.replace('{{', '').replace('}}', '');
-          const isUSD = content.startsWith('PrecioUSD_');
-          const productName = content.replace(isUSD ? 'PrecioUSD_' : 'PrecioARS_', '');
+        // Motor Mejorado de Marcadores Dinámicos de Catálogo (Soporta tildes, mayúsculas y espacios)
+        const markerRegex = /{{Precio(ARS|USD)_([^}]+)}}/g;
+        const combinedText = subject + " " + body;
+        const seenMarkers = new Set<string>();
+        let match;
+
+        // Extraemos todos los marcadores únicos del texto
+        while ((match = markerRegex.exec(combinedText)) !== null) {
+          const fullMarker = match[0];
+          if (seenMarkers.has(fullMarker)) continue;
+          seenMarkers.add(fullMarker);
+
+          const currencyPrefix = match[1]; // ARS o USD
+          const productNameInTemplate = match[2].trim();
           
-          const product = catalog.find(p => p.name === productName);
+          // Búsqueda insensible a mayúsculas y flexible con espacios/tildes
+          const product = catalog.find(p => 
+            p.name.trim().toLowerCase() === productNameInTemplate.toLowerCase()
+          );
+
           if (product) {
+            const isUSD = currencyPrefix === 'USD';
             const price = isUSD ? (product.priceUSD || 0) : (product.priceARS || 0);
             const symbol = isUSD ? 'u$s' : '$';
             const formatted = `${symbol} ${price.toLocaleString('es-AR')}`;
-            subject = subject.replaceAll(fullMarker, formatted);
-            body = body.replaceAll(fullMarker, formatted);
+            
+            // Reemplazo en ambos campos
+            subject = subject.split(fullMarker).join(formatted);
+            body = body.split(fullMarker).join(formatted);
           }
-        });
+        }
 
         setProcessedEmail({ subject, body })
       }
@@ -904,8 +919,7 @@ function TransactionsContent() {
                   <p className="text-[10px] font-bold text-emerald-700 uppercase">Total Filtrado USD</p>
                   <h3 className="text-2xl font-black">u$s {filteredTotals.USD.toLocaleString('es-AR')}</h3>
                 </CardContent>
-              </Card>
-            </section>
+              </section>
 
             <Card className="glass-card p-4 flex flex-wrap gap-4 items-end">
                  <div className="space-y-1"><Label className="text-xs">Cliente</Label><Select value={filterCustomer} onValueChange={setFilterCustomer}><SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem>{sortedCustomers.map((c: any) => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}</SelectContent></Select></div>
