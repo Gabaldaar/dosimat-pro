@@ -82,6 +82,14 @@ const txTypeMap: Record<string, { label: string, icon: any, color: string, descr
   Expense: { label: "Gasto", icon: ArrowDownLeft, color: "text-rose-600 bg-rose-50", description: "Gasto manual registrado." },
 }
 
+// Función auxiliar para formatear fechas sin desfase de zona horaria (evita el "día anterior")
+function formatLocalDate(dateString: string) {
+  if (!dateString) return "---";
+  // Si viene solo fecha YYYY-MM-DD, forzamos mediodía para evitar saltos de día por UTC
+  const date = dateString.includes('T') ? new Date(dateString) : new Date(dateString + 'T12:00:00');
+  return date.toLocaleDateString('es-AR');
+}
+
 function TransactionsContent() {
   const { toast } = useToast()
   const db = useFirestore()
@@ -234,7 +242,7 @@ function TransactionsContent() {
         const replacements: Record<string, string> = {
           "{{Apellido}}": client.apellido || "",
           "{{Nombre}}": client.nombre || "",
-          "{{Fecha}}": new Date(selectedTxForEmail.date).toLocaleDateString('es-AR'),
+          "{{Fecha}}": formatLocalDate(selectedTxForEmail.date),
           "{{Descripción}}": selectedTxForEmail.description || "",
           "{{Total}}": `${currencySymbol} ${Math.abs(selectedTxForEmail.amount).toLocaleString('es-AR')}`,
           "{{Monto_Abonado}}": `${currencySymbol} ${(selectedTxForEmail.paidAmount || 0).toLocaleString('es-AR')}`,
@@ -346,6 +354,9 @@ function TransactionsContent() {
       deleteDocumentNonBlocking(doc(db, 'transactions', editingTx.id))
     }
 
+    // Usamos T12:00:00 para asegurar que la fecha guardada sea interpretada como el mismo día en cualquier zona horaria
+    const finalDateStr = new Date(operationDate + 'T12:00:00').toISOString();
+
     if (activeTab === 'cobro' || activeTab === 'adjustment' || activeTab === 'Expense' || activeTab === 'Adjustment') {
       if (manualAmount <= 0) return
       const txId = Math.random().toString(36).substring(2, 11)
@@ -354,7 +365,7 @@ function TransactionsContent() {
 
       const txData = {
         id: txId,
-        date: new Date(operationDate).toISOString(),
+        date: finalDateStr,
         clientId: selectedCustomerId,
         type: activeTab,
         amount: finalAmount,
@@ -386,7 +397,7 @@ function TransactionsContent() {
           
           const txData = {
             id: txId,
-            date: new Date(operationDate).toISOString(),
+            date: finalDateStr,
             clientId: selectedCustomerId,
             type: activeTab,
             amount: Number(total),
@@ -469,7 +480,7 @@ function TransactionsContent() {
   const handleCopyWhatsApp = (tx: any) => {
     const client = customers?.find(c => c.id === tx.clientId);
     const info = txTypeMap[tx.type] || { label: tx.type };
-    const dateStr = new Date(tx.date).toLocaleDateString('es-AR');
+    const dateStr = formatLocalDate(tx.date);
     const currencySymbol = tx.currency === 'USD' ? 'u$s' : '$';
 
     let text = `*DOSIMAT PRO - DETALLE DE OPERACIÓN*\n\n`;
@@ -569,7 +580,7 @@ function TransactionsContent() {
           <Tabs value={mainView} onValueChange={(v) => { if(v === "register" && !editingTx) resetRegisterForm(); setMainView(v); }}>
             <TabsList>
               <TabsTrigger value="register">{editingTx ? "Modificando" : "Nueva"}</TabsTrigger>
-              <TabsTrigger value="history">Historial</TabsTrigger>
+              <TabsTrigger value="history">Operaciones</TabsTrigger>
             </TabsList>
           </Tabs>
         </header>
@@ -897,7 +908,7 @@ function TransactionsContent() {
                     
                     return (
                       <TableRow key={tx.id}>
-                        <TableCell className="text-xs font-medium">{new Date(tx.date).toLocaleDateString('es-AR')}</TableCell>
+                        <TableCell className="text-xs font-medium">{formatLocalDate(tx.date)}</TableCell>
                         <TableCell>
                           <div className="flex flex-col">
                             <span className="font-bold">{cust ? `${cust.apellido}, ${cust.nombre}` : '---'}</span>
@@ -966,7 +977,7 @@ function TransactionsContent() {
                   <Card key={tx.id} className="glass-card p-4 relative border-l-4 border-l-primary hover:shadow-md transition-shadow">
                     <div className="flex justify-between items-start mb-2">
                       <span className="text-[10px] font-bold text-muted-foreground uppercase bg-muted/50 px-2 py-0.5 rounded">
-                        {new Date(tx.date).toLocaleDateString('es-AR')}
+                        {formatLocalDate(tx.date)}
                       </span>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
