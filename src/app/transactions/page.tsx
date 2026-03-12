@@ -38,7 +38,8 @@ import {
   RefreshCw,
   Copy,
   Loader2,
-  ArrowDownLeft
+  ArrowDownLeft,
+  Tag
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -108,18 +109,21 @@ function TransactionsContent() {
   const [filterEndDate, setFilterEndDate] = useState("")
   const [filterOpType, setFilterOpType] = useState("all") 
   const [filterCategory, setFilterCategory] = useState("all") 
+  const [filterExpenseCategory, setFilterExpenseCategory] = useState("all")
 
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
   const txQuery = useMemoFirebase(() => collection(db, 'transactions'), [db])
   const templatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
+  const expenseCatsQuery = useMemoFirebase(() => collection(db, 'expense_categories'), [db])
 
   const { data: customers } = useCollection(clientsQuery)
   const { data: catalog } = useCollection(catalogQuery)
   const { data: accounts } = useCollection(accountsQuery)
   const { data: transactions, isLoading: loadingTx } = useCollection(txQuery)
   const { data: templates } = useCollection(templatesQuery)
+  const { data: expenseCategories } = useCollection(expenseCatsQuery)
 
   const sortedCatalog = useMemo(() => {
     if (!catalog) return []
@@ -417,7 +421,6 @@ function TransactionsContent() {
   const resetFilters = () => {
     setFilterCustomer("all")
     setFilterAccount("all")
-    // Re-apply defaults on reset
     const now = new Date()
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
     const formatDate = (date: Date) => date.toISOString().split('T')[0]
@@ -425,6 +428,7 @@ function TransactionsContent() {
     setFilterEndDate(formatDate(now))
     setFilterOpType("all")
     setFilterCategory("all")
+    setFilterExpenseCategory("all")
   }
 
   const handleOpenEmailDialog = (tx: any) => {
@@ -461,6 +465,11 @@ function TransactionsContent() {
     text += `👤 *Cliente:* ${client ? `${client.apellido}, ${client.nombre}` : 'N/A'}\n`;
     text += `📝 *Tipo:* ${info.label}\n`;
     
+    if (tx.expenseCategoryId && expenseCategories) {
+      const cat = expenseCategories.find(c => c.id === tx.expenseCategoryId);
+      if (cat) text += `🏷️ *Categoría:* ${cat.name}\n`;
+    }
+
     if (tx.description) {
       text += `ℹ️ *Nota:* ${tx.description}\n`;
     }
@@ -486,7 +495,7 @@ function TransactionsContent() {
     const acc = accounts?.find(a => a.id === tx.financialAccountId);
     if (acc) {
       text += `🏦 *Caja:* ${acc.name}\n`;
-    } else if (tx.type !== 'adjustment' && (!tx.paidAmount || tx.paidAmount === 0)) {
+    } else if (tx.type !== 'adjustment' && tx.type !== 'Adjustment' && tx.type !== 'Expense' && (!tx.paidAmount || tx.paidAmount === 0)) {
       text += `💳 *Estado:* A Cuenta\n`;
     }
 
@@ -508,10 +517,13 @@ function TransactionsContent() {
       let matchType = true
       if (filterOpType === 'income') matchType = tx.amount > 0 || tx.type === 'cobro'
       if (filterOpType === 'expense') matchType = tx.amount < 0 && tx.type !== 'cobro'
+      
       const matchCategory = filterCategory === "all" || tx.type === filterCategory
-      return matchCustomer && matchAccount && matchStart && matchEnd && matchType && matchCategory
+      const matchExpenseCat = filterExpenseCategory === "all" || tx.expenseCategoryId === filterExpenseCategory
+
+      return matchCustomer && matchAccount && matchStart && matchEnd && matchType && matchCategory && matchExpenseCat
     }).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  }, [transactions, filterCustomer, filterAccount, filterStartDate, filterEndDate, filterOpType, filterCategory])
+  }, [transactions, filterCustomer, filterAccount, filterStartDate, filterEndDate, filterOpType, filterCategory, filterExpenseCategory])
 
   const filteredTotals = useMemo(() => {
     return filteredTransactions.reduce((acc, tx) => {
@@ -824,7 +836,8 @@ function TransactionsContent() {
 
             <Card className="glass-card p-4 flex flex-wrap gap-4 items-end">
                  <div className="space-y-1"><Label className="text-xs">Cliente</Label><Select value={filterCustomer} onValueChange={setFilterCustomer}><SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem>{sortedCustomers.map((c: any) => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}</SelectContent></Select></div>
-                 <div className="space-y-1"><Label className="text-xs">Categoría</Label><Select value={filterCategory} onValueChange={setFilterCategory}><SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{Object.entries(txTypeMap).map(([k, v]) => (<SelectItem key={k} value={k}>{v.label}</SelectItem>))}</SelectContent></Select></div>
+                 <div className="space-y-1"><Label className="text-xs">Tipo Operación</Label><Select value={filterCategory} onValueChange={setFilterCategory}><SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{Object.entries(txTypeMap).map(([k, v]) => (<SelectItem key={k} value={k}>{v.label}</SelectItem>))}</SelectContent></Select></div>
+                 <div className="space-y-1"><Label className="text-xs">Rubro Gasto</Label><Select value={filterExpenseCategory} onValueChange={setFilterExpenseCategory}><SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Cualquiera</SelectItem>{expenseCategories?.map((c: any) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}</SelectContent></Select></div>
                  <div className="space-y-1"><Label className="text-xs">Desde</Label><Input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="w-[140px] h-9" /></div>
                  <div className="space-y-1"><Label className="text-xs">Hasta</Label><Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="w-[140px] h-9" /></div>
                  <Button variant="ghost" size="icon" onClick={resetFilters}><FilterX className="h-4 w-4" /></Button>
@@ -849,6 +862,8 @@ function TransactionsContent() {
                     const cust = customers?.find(c => c.id === tx.clientId);
                     const acc = accounts?.find(a => a.id === tx.financialAccountId);
                     const info = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
+                    const expenseCat = tx.expenseCategoryId ? expenseCategories?.find(ec => ec.id === tx.expenseCategoryId) : null;
+                    
                     return (
                       <TableRow key={tx.id}>
                         <TableCell className="text-xs font-medium">{new Date(tx.date).toLocaleDateString('es-AR')}</TableCell>
@@ -858,7 +873,18 @@ function TransactionsContent() {
                             {cust?.cuit_dni && <span className="text-[10px] text-muted-foreground uppercase">ID: {cust.cuit_dni}</span>}
                           </div>
                         </TableCell>
-                        <TableCell><Badge variant="outline" className={cn("text-[10px] gap-1", info.color)}><info.icon className="h-3 w-3" />{info.label}</Badge></TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <Badge variant="outline" className={cn("text-[10px] gap-1 w-fit", info.color)}>
+                              <info.icon className="h-3 w-3" />{info.label}
+                            </Badge>
+                            {expenseCat && (
+                              <span className="text-[9px] font-bold text-rose-600 flex items-center gap-1">
+                                <Tag className="h-2.5 w-2.5" /> {expenseCat.name}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell className="text-right font-black">{tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}</TableCell>
                         <TableCell className="text-right">
                           <span className={cn("text-xs font-bold", tx.paidAmount > 0 ? "text-emerald-600" : "text-muted-foreground")}>
@@ -899,6 +925,7 @@ function TransactionsContent() {
                 const acc = accounts?.find(a => a.id === tx.financialAccountId);
                 const info = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
                 const debt = (tx.amount || 0) - (tx.paidAmount || 0);
+                const expenseCat = tx.expenseCategoryId ? expenseCategories?.find(ec => ec.id === tx.expenseCategoryId) : null;
                 
                 return (
                   <Card key={tx.id} className="glass-card p-4 relative border-l-4 border-l-primary hover:shadow-md transition-shadow">
@@ -925,9 +952,16 @@ function TransactionsContent() {
                         {cust ? `${cust.apellido}, ${cust.nombre}` : 'Sin Cliente'}
                         {cust?.cuit_dni && <span className="text-[10px] font-normal text-muted-foreground ml-2">({cust.cuit_dni})</span>}
                       </h4>
-                      <Badge variant="outline" className={cn("text-[10px] gap-1 mt-2", info.color)}>
-                        <info.icon className="h-3 w-3" />{info.label}
-                      </Badge>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <Badge variant="outline" className={cn("text-[10px] gap-1", info.color)}>
+                          <info.icon className="h-3 w-3" />{info.label}
+                        </Badge>
+                        {expenseCat && (
+                          <Badge variant="outline" className="text-[9px] font-bold text-rose-600 border-rose-200 bg-rose-50 px-2 h-5">
+                            <Tag className="h-2.5 w-2.5 mr-1" /> {expenseCat.name}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4 border-t pt-3 mb-4">
                       <div>
