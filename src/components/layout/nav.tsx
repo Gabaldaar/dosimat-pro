@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -34,7 +35,7 @@ import {
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/customers", label: "Clientes", icon: Users },
-  { href: "/transactions", label: "Historial", icon: ArrowLeftRight },
+  { href: "/transactions", label: "Operaciones", icon: ArrowLeftRight },
   { href: "/accounts", label: "Cajas", icon: Wallet },
   { href: "/catalog", label: "Catálogo", icon: Package },
   { href: "/templates", label: "Plantillas Mail", icon: FileText },

@@ -144,6 +144,17 @@ function TransactionsContent() {
   const [adjustmentSign, setAdjustmentSign] = useState<"1" | "-1">("1")
   const [txDescription, setTxDescription] = useState("")
 
+  // Set default dates on mount: First day of current month to Today
+  useEffect(() => {
+    const now = new Date()
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
+    
+    const formatDate = (date: Date) => date.toISOString().split('T')[0]
+    
+    setFilterStartDate(formatDate(firstDay))
+    setFilterEndDate(formatDate(now))
+  }, [])
+
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -403,8 +414,12 @@ function TransactionsContent() {
   const resetFilters = () => {
     setFilterCustomer("all")
     setFilterAccount("all")
-    setFilterStartDate("")
-    setFilterEndDate("")
+    // Re-apply defaults on reset
+    const now = new Date()
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
+    const formatDate = (date: Date) => date.toISOString().split('T')[0]
+    setFilterStartDate(formatDate(firstDay))
+    setFilterEndDate(formatDate(now))
     setFilterOpType("all")
     setFilterCategory("all")
   }
