@@ -13,7 +13,8 @@ import {
   Droplets,
   LogOut,
   Shield,
-  FileText
+  FileText,
+  BarChart3
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -36,6 +37,7 @@ const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/customers", label: "Clientes", icon: Users },
   { href: "/transactions", label: "Operaciones", icon: ArrowLeftRight },
+  { href: "/analysis", label: "Análisis", icon: BarChart3 },
   { href: "/accounts", label: "Cajas", icon: Wallet },
   { href: "/catalog", label: "Catálogo", icon: Package },
   { href: "/templates", label: "Plantillas Mail", icon: FileText },
@@ -138,9 +140,18 @@ export function Sidebar({ className }: { className?: string }) {
 export function MobileNav() {
   const pathname = usePathname()
   
+  // Custom list for mobile to include the most important 5
+  const mobileItems = [
+    { href: "/", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/customers", label: "Clientes", icon: Users },
+    { href: "/transactions", label: "Operaciones", icon: ArrowLeftRight },
+    { href: "/analysis", label: "Análisis", icon: BarChart3 },
+    { href: "/accounts", label: "Cajas", icon: Wallet },
+  ]
+
   return (
     <div className="fixed bottom-0 left-0 right-0 z-[100] bg-background/60 backdrop-blur-xl border-t border-primary/10 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] flex items-center justify-around px-4 py-3 pb-[calc(1rem+env(safe-area-inset-bottom))] md:hidden">
-      {navItems.slice(0, 5).map((item) => (
+      {mobileItems.map((item) => (
         <Link
           key={item.href}
           href={item.href}
