@@ -36,7 +36,8 @@ import {
   Fingerprint,
   Droplets,
   RefreshCw,
-  Copy
+  Copy,
+  Loader2
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -775,15 +776,13 @@ function TransactionsContent() {
                   >
                     {editingTx ? 'GUARDAR CAMBIOS' : 'REGISTRAR OPERACIÓN'}
                   </Button>
-                  {editingTx && (
-                    <Button 
-                      variant="outline" 
-                      className="w-full h-12 font-bold border-rose-200 text-rose-600 hover:bg-rose-50" 
-                      onClick={() => { resetRegisterForm(); setMainView("history"); }}
-                    >
-                      CANCELAR EDICIÓN
-                    </Button>
-                  )}
+                  <Button 
+                    variant="outline" 
+                    className="w-full h-12 font-bold border-rose-200 text-rose-600 hover:bg-rose-50" 
+                    onClick={() => { resetRegisterForm(); setMainView("history"); }}
+                  >
+                    {editingTx ? 'CANCELAR EDICIÓN' : 'CANCELAR'}
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -973,7 +972,11 @@ function TransactionsContent() {
 
 export default function TransactionsPage() {
   return (
-    <Suspense fallback={<div>Cargando...</div>}>
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    }>
       <TransactionsContent />
     </Suspense>
   )
