@@ -23,6 +23,12 @@
       "description": "User profile avatar",
       "imageUrl": "https://picsum.photos/seed/user1/200/200",
       "imageHint": "person portrait"
+    },
+    {
+      "id": "app-logo",
+      "description": "Dosimat Pro App Logo",
+      "imageUrl": "https://picsum.photos/seed/pool-water/192/192",
+      "imageHint": "water drop"
     }
   ]
 }
