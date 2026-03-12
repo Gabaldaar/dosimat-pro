@@ -1,4 +1,3 @@
-
 import type {Metadata, Viewport} from 'next';
 import './globals.css';
 import {Toaster} from '@/components/ui/toaster';
@@ -12,7 +11,6 @@ export const metadata: Metadata = {
   description: 'Sistema inteligente para el mantenimiento de piscinas y control financiero',
   manifest: '/manifest.json',
   icons: {
-    // Para usar un ícono propio, reemplaza estas URLs por el enlace de tu imagen
     icon: 'https://picsum.photos/seed/pool-water-drop/192/192',
     apple: 'https://picsum.photos/seed/pool-water-drop/192/192',
   },
@@ -63,7 +61,7 @@ export default function RootLayout({
           {`
             if ('serviceWorker' in navigator) {
               window.addEventListener('load', function() {
-                navigator.worker.register('/sw.js').then(function(registration) {
+                navigator.serviceWorker.register('/sw.js').then(function(registration) {
                   console.log('ServiceWorker registrado con éxito:', registration.scope);
                 }).catch(function(err) {
                   console.log('Error al registrar el ServiceWorker:', err);
