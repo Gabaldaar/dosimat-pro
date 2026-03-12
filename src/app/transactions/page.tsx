@@ -151,6 +151,7 @@ function TransactionsContent() {
   const [manualCurrency, setManualCurrency] = useState("ARS")
   const [manualAccountId, setManualAccountId] = useState("pending")
   const [adjustmentSign, setAdjustmentSign] = useState<"1" | "-1">("1")
+  const [selectedExpenseCategoryId, setSelectedExpenseCategoryId] = useState("")
   const [txDescription, setTxDescription] = useState("")
 
   // Set default dates on mount: First day of current month to Today
@@ -287,11 +288,12 @@ function TransactionsContent() {
     setActiveTab(tx.type)
     setTxDescription(tx.description || "")
 
-    if (tx.type === 'cobro' || tx.type === 'adjustment') {
+    if (tx.type === 'cobro' || tx.type === 'adjustment' || tx.type === 'Expense' || tx.type === 'Adjustment') {
       setManualAmount(Math.abs(tx.amount))
       setManualCurrency(tx.currency)
       setManualAccountId(tx.financialAccountId || "pending")
-      if (tx.type === 'adjustment') setAdjustmentSign(tx.amount >= 0 ? "1" : "-1")
+      if (tx.type === 'adjustment' || tx.type === 'Adjustment') setAdjustmentSign(tx.amount >= 0 ? "1" : "-1")
+      setSelectedExpenseCategoryId(tx.expenseCategoryId || "")
     } else {
       setSelectedItems(tx.items || [])
       setDestinationAccounts({ [tx.currency]: tx.financialAccountId || "pending" })
@@ -305,7 +307,7 @@ function TransactionsContent() {
     const acc = accounts?.find(a => a.id === tx.financialAccountId)
     const balanceField = tx.currency === 'ARS' ? 'saldoActual' : 'saldoUSD'
     
-    if (tx.type === 'cobro' || tx.type === 'adjustment') {
+    if (tx.type === 'cobro' || tx.type === 'adjustment' || tx.type === 'Adjustment' || tx.type === 'Expense') {
       const amount = Number(tx.amount) || 0
       if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: Number(acc.initialBalance || 0) - amount })
       if (client) updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: Number(client[balanceField] || 0) - amount })
@@ -344,10 +346,10 @@ function TransactionsContent() {
       deleteDocumentNonBlocking(doc(db, 'transactions', editingTx.id))
     }
 
-    if (activeTab === 'cobro' || activeTab === 'adjustment') {
+    if (activeTab === 'cobro' || activeTab === 'adjustment' || activeTab === 'Expense' || activeTab === 'Adjustment') {
       if (manualAmount <= 0) return
       const txId = Math.random().toString(36).substring(2, 11)
-      const multiplier = activeTab === 'adjustment' ? Number(adjustmentSign) : 1
+      const multiplier = (activeTab === 'adjustment' || activeTab === 'Adjustment') ? Number(adjustmentSign) : (activeTab === 'Expense' ? -1 : 1)
       const finalAmount = Number(manualAmount) * multiplier
 
       const txData = {
@@ -357,9 +359,10 @@ function TransactionsContent() {
         type: activeTab,
         amount: finalAmount,
         currency: manualCurrency,
-        description: txDescription || `${txTypeMap[activeTab].label} manual`,
+        description: txDescription || `${txTypeMap[activeTab]?.label || activeTab} manual`,
         financialAccountId: manualAccountId === "pending" ? null : manualAccountId,
-        paidAmount: activeTab === 'cobro' ? finalAmount : 0
+        paidAmount: (activeTab === 'cobro' || activeTab === 'Expense') ? finalAmount : 0,
+        expenseCategoryId: (activeTab === 'Expense') ? (selectedExpenseCategoryId || null) : null
       }
 
       setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
@@ -424,6 +427,7 @@ function TransactionsContent() {
     setOperationDate(new Date().toISOString().split('T')[0])
     setPaidAmounts({ ARS: 0, USD: 0 })
     setDestinationAccounts({ ARS: "pending", USD: "pending" })
+    setSelectedExpenseCategoryId("")
   }
 
   const resetFilters = () => {
@@ -540,6 +544,11 @@ function TransactionsContent() {
     }, { ARS: 0, USD: 0 })
   }, [filteredTransactions])
 
+  const isManualForm = useMemo(() => {
+    const types = ['cobro', 'adjustment', 'Adjustment', 'Expense'];
+    return types.includes(activeTab);
+  }, [activeTab]);
+
   return (
     <div className="flex min-h-screen bg-background w-full">
       <Sidebar />
@@ -573,9 +582,10 @@ function TransactionsContent() {
                    <div className="space-y-1">
                      <CardTitle className="text-xl flex items-center gap-2">
                        {activeTab === 'cobro' ? <Receipt className="h-5 w-5 text-emerald-600" /> : 
-                        activeTab === 'adjustment' ? <Settings2 className="h-5 w-5 text-slate-600" /> :
+                        (activeTab === 'adjustment' || activeTab === 'Adjustment') ? <Settings2 className="h-5 w-5 text-slate-600" /> :
                         activeTab === 'sale' ? <ShoppingBag className="h-5 w-5 text-blue-600" /> :
                         activeTab === 'refill' ? <Droplet className="h-5 w-5 text-cyan-600" /> :
+                        activeTab === 'Expense' ? <ArrowDownLeft className="h-5 w-5 text-rose-600" /> :
                         <Wrench className="h-5 w-5 text-indigo-600" />}
                        {txTypeMap[activeTab]?.label || activeTab}
                      </CardTitle>
@@ -624,7 +634,7 @@ function TransactionsContent() {
                   <Input placeholder="Detalles adicionales..." value={txDescription} onChange={(e) => setTxDescription(e.target.value)} className="bg-white" />
                 </div>
 
-                {(activeTab === 'cobro' || activeTab === 'adjustment') ? (
+                {isManualForm ? (
                   <div className={cn("p-6 border rounded-xl space-y-4 bg-muted/5")}>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div className="space-y-2">
@@ -638,12 +648,25 @@ function TransactionsContent() {
                           <SelectContent><SelectItem value="ARS">Pesos ($)</SelectItem><SelectItem value="USD">Dólares (u$s)</SelectItem></SelectContent>
                         </Select>
                       </div>
-                      {activeTab === 'adjustment' && (
+                      {(activeTab === 'adjustment' || activeTab === 'Adjustment') && (
                         <div className="space-y-2">
                           <Label>Tipo de Ajuste</Label>
                           <Select value={adjustmentSign} onValueChange={(v: any) => setAdjustmentSign(v)}>
                             <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                             <SelectContent><SelectItem value="1">A FAVOR (+)</SelectItem><SelectItem value="-1">A CARGO (-)</SelectItem></SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      {activeTab === 'Expense' && (
+                        <div className="space-y-2">
+                          <Label>Categoría de Gasto</Label>
+                          <Select value={selectedExpenseCategoryId} onValueChange={setSelectedExpenseCategoryId}>
+                            <SelectTrigger className="bg-white"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                            <SelectContent>
+                              {expenseCategories?.map(c => (
+                                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                              ))}
+                            </SelectContent>
                           </Select>
                         </div>
                       )}
@@ -764,7 +787,7 @@ function TransactionsContent() {
             <Card className="glass-card h-fit sticky top-8">
               <CardHeader className="bg-primary/5 border-b"><CardTitle className="text-base flex items-center gap-2"><ClipboardCheck className="h-4 w-4" /> Resumen</CardTitle></CardHeader>
               <CardContent className="space-y-6 pt-6">
-                {(activeTab !== 'cobro' && activeTab !== 'adjustment') && (
+                {!isManualForm && (
                   <div className="space-y-4">
                     {['ARS', 'USD'].map(curr => {
                       const total = cartTotals[curr as 'ARS' | 'USD']
@@ -809,7 +832,7 @@ function TransactionsContent() {
                 <div className="flex flex-col gap-3">
                   <Button 
                     className="w-full h-14 font-black text-md shadow-xl" 
-                    disabled={((activeTab !== 'cobro' && activeTab !== 'adjustment') && selectedItems.length === 0) || ((activeTab === 'cobro' || activeTab === 'adjustment') && manualAmount <= 0) || !selectedCustomerId} 
+                    disabled={(!isManualForm && selectedItems.length === 0) || (isManualForm && manualAmount <= 0) || !selectedCustomerId} 
                     onClick={handleSaveTransaction}
                   >
                     {editingTx ? 'GUARDAR CAMBIOS' : 'REGISTRAR OPERACIÓN'}
