@@ -659,7 +659,7 @@ function TransactionsContent() {
                      </CardTitle>
                      <p className="text-xs text-muted-foreground">{txTypeMap[activeTab]?.description}</p>
                    </div>
-                   {!editingTx && (
+                   
                     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
                       <TabsList className="grid grid-cols-5 w-full h-auto p-1 bg-muted/50 border shadow-inner">
                           {Object.entries(txTypeMap).filter(([k]) => !['Adjustment', 'Expense'].includes(k)).map(([key, info]) => {
@@ -673,14 +673,14 @@ function TransactionsContent() {
                           })}
                       </TabsList>
                     </Tabs>
-                   )}
+                   
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-muted/20 rounded-xl">
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2 text-primary font-bold"><User className="h-4 w-4" /> Cliente</Label>
-                    <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId} disabled={!!editingTx}>
+                    <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
                       <SelectTrigger className="bg-white"><SelectValue placeholder="Buscar cliente..." /></SelectTrigger>
                       <SelectContent>
                         {sortedCustomers.map((c: any) => (
@@ -711,7 +711,7 @@ function TransactionsContent() {
                       </div>
                       <div className="space-y-2">
                         <Label>Moneda</Label>
-                        <Select value={manualCurrency} onValueChange={setManualCurrency} disabled={!!editingTx}>
+                        <Select value={manualCurrency} onValueChange={setManualCurrency}>
                           <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                           <SelectContent><SelectItem value="ARS">Pesos ($)</SelectItem><SelectItem value="USD">Dólares (u$s)</SelectItem></SelectContent>
                         </Select>
@@ -768,7 +768,7 @@ function TransactionsContent() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {!editingTx && (
+                    
                       <div className="space-y-2">
                         <Label className="font-bold">Agregar ítems</Label>
                         <Select onValueChange={handleAddItem}>
@@ -787,7 +787,7 @@ function TransactionsContent() {
                           </SelectContent>
                         </Select>
                       </div>
-                    )}
+                    
                     
                     <div className="hidden md:block border rounded-xl overflow-x-auto">
                       <Table className="min-w-[800px]">
@@ -799,7 +799,7 @@ function TransactionsContent() {
                             <TableHead className="w-24 text-center">Desc. (%)</TableHead>
                             <TableHead className="w-20 text-center">Moneda</TableHead>
                             <TableHead className="text-right">Subtotal</TableHead>
-                            {!editingTx && <TableHead className="w-12"></TableHead>}
+                            <TableHead className="w-12"></TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -817,13 +817,13 @@ function TransactionsContent() {
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  <Select value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)} disabled={!!editingTx}>
+                                  <Select value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)}>
                                     <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                                     <SelectContent><SelectItem value="ARS">$</SelectItem><SelectItem value="USD">u$s</SelectItem></SelectContent>
                                   </Select>
                                 </TableCell>
                                 <TableCell className="text-right font-black">{item.currency === 'ARS' ? '$' : 'u$s'} {sub.toLocaleString('es-AR')}</TableCell>
-                                {!editingTx && <TableCell><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeItem(i)}><Trash2 className="h-4 w-4" /></Button></TableCell>}
+                                <TableCell><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeItem(i)}><Trash2 className="h-4 w-4" /></Button></TableCell>
                               </TableRow>
                             );
                           })}
@@ -838,11 +838,11 @@ function TransactionsContent() {
                           <Card key={i} className="p-4 bg-white/50 border-primary/10 relative">
                             <div className="flex justify-between items-start mb-3 pr-8">
                               <div className="font-bold text-sm">{item.name}</div>
-                              {!editingTx && (
+                              
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive absolute top-2 right-2" onClick={() => removeItem(i)}>
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
-                              )}
+                              
                             </div>
                             <div className="grid grid-cols-3 gap-3">
                               <div className="space-y-1">
@@ -860,7 +860,7 @@ function TransactionsContent() {
                             </div>
                             <div className="flex justify-between items-center mt-3 pt-3 border-t">
                               <div className="w-24">
-                                <Select value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)} disabled={!!editingTx}>
+                                <Select value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)}>
                                   <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                                   <SelectContent><SelectItem value="ARS">$ (ARS)</SelectItem><SelectItem value="USD">u$s (USD)</SelectItem></SelectContent>
                                 </Select>
