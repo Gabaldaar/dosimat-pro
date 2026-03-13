@@ -28,6 +28,7 @@ const AVAILABLE_MARKERS = [
   "Moneda", 
   "Subtotal", 
   "Total",
+  "Total_Descuento",
   "Monto_Abonado",
   "Caja_Destino",
   "Saldo_Cuenta",
@@ -184,7 +185,7 @@ export default function TemplatesPage() {
                 </div>
                 <div className="pt-2 border-t border-blue-200 mt-2">
                   <p className="text-[10px] text-blue-800 font-bold">
-                    🚀 PRODUCTOS: <code className="bg-white px-1">{"{{"}PrecioARS_Bidón de Cloro{"}}"}</code>. Ahora soporta tildes y no distingue entre mayúsculas o minúsculas.
+                    🚀 PRODUCTOS: <code className="bg-white px-1">{"{{"}PrecioARS_Bidón de Cloro{"}}"}</code>. Soporta tildes y no distingue entre mayúsculas o minúsculas.
                   </p>
                 </div>
               </div>

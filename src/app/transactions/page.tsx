@@ -42,7 +42,8 @@ import {
   Tag,
   Info,
   ArrowUpCircle,
-  ArrowDownCircle
+  ArrowDownCircle,
+  Minus
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -204,7 +205,9 @@ function TransactionsContent() {
 
   const cartTotals = useMemo(() => {
     return selectedItems.reduce((acc, item) => {
-      const amount = (Number(item.price) || 0) * (Number(item.qty) || 0)
+      const subtotal = (Number(item.price) || 0) * (Number(item.qty) || 0)
+      const discount = (Number(item.discount) || 0)
+      const amount = subtotal - discount
       acc[item.currency as 'ARS' | 'USD'] = (acc[item.currency as 'ARS' | 'USD'] || 0) + amount
       return acc
     }, { ARS: 0, USD: 0 })
@@ -223,8 +226,18 @@ function TransactionsContent() {
         
         const listaItems = selectedTxForEmail.items?.map((i: any) => {
           const itemSubtotal = (Number(i.qty) || 0) * (Number(i.price) || 0);
-          return `- ${i.qty} x ${i.name} (${currencySymbol}${Number(i.price).toLocaleString('es-AR')}) - ${currencySymbol}${itemSubtotal.toLocaleString('es-AR')}`;
+          const itemDiscount = (Number(i.discount) || 0);
+          const itemTotal = itemSubtotal - itemDiscount;
+          
+          let line = `- ${i.qty} x ${i.name} (${currencySymbol}${Number(i.price).toLocaleString('es-AR')})`;
+          if (itemDiscount > 0) {
+            line += ` [Bonif: -${currencySymbol}${itemDiscount.toLocaleString('es-AR')}]`;
+          }
+          line += ` = ${currencySymbol}${itemTotal.toLocaleString('es-AR')}`;
+          return line;
         }).join('\n') || "N/A";
+
+        const totalDiscount = selectedTxForEmail.items?.reduce((sum: number, i: any) => sum + (Number(i.discount) || 0), 0) || 0;
 
         const balanceValue = selectedTxForEmail.currency === 'ARS' ? (client.saldoActual || 0) : (client.saldoUSD || 0);
         let balanceStatus = "(Sin Deuda)";
@@ -247,6 +260,7 @@ function TransactionsContent() {
           "{{Fecha}}": formatLocalDate(selectedTxForEmail.date),
           "{{Descripción}}": selectedTxForEmail.description || "",
           "{{Total}}": `${currencySymbol} ${Math.abs(selectedTxForEmail.amount).toLocaleString('es-AR')}`,
+          "{{Total_Descuento}}": `${currencySymbol} ${totalDiscount.toLocaleString('es-AR')}`,
           "{{Monto_Abonado}}": `${currencySymbol} ${(selectedTxForEmail.paidAmount || 0).toLocaleString('es-AR')}`,
           "{{Caja_Destino}}": acc ? acc.name : "A Cuenta",
           "{{Moneda}}": selectedTxForEmail.currency || "",
@@ -302,7 +316,7 @@ function TransactionsContent() {
     if (!item) return
     const defaultCurrency = (item.priceARS || 0) > 0 ? 'ARS' : 'USD'
     const defaultPrice = (item.priceARS || 0) > 0 ? item.priceARS : item.priceUSD
-    setSelectedItems(prev => [...prev, { itemId: item.id, name: item.name, qty: 1, price: defaultPrice, currency: defaultCurrency }])
+    setSelectedItems(prev => [...prev, { itemId: item.id, name: item.name, qty: 1, price: defaultPrice, currency: defaultCurrency, discount: 0 }])
   }
 
   const updateItem = (index: number, field: string, value: any) => {
@@ -532,8 +546,15 @@ function TransactionsContent() {
     if (tx.items && tx.items.length > 0) {
       text += `\n*Detalle:*\n`;
       tx.items.forEach((item: any) => {
-        const subtotal = (item.qty || 0) * (item.price || 0);
-        text += `- ${item.qty} x ${item.name} (${currencySymbol}${item.price.toLocaleString('es-AR')}) = ${currencySymbol}${subtotal.toLocaleString('es-AR')}\n`;
+        const lineSubtotal = (item.qty || 0) * (item.price || 0);
+        const lineDiscount = (item.discount || 0);
+        const lineTotal = lineSubtotal - lineDiscount;
+        
+        text += `- ${item.qty} x ${item.name} (${currencySymbol}${item.price.toLocaleString('es-AR')})`;
+        if (lineDiscount > 0) {
+          text += ` [Bonif: -${currencySymbol}${lineDiscount.toLocaleString('es-AR')}]`;
+        }
+        text += ` = ${currencySymbol}${lineTotal.toLocaleString('es-AR')}\n`;
       });
     }
 
@@ -766,74 +787,86 @@ function TransactionsContent() {
                     )}
                     
                     <div className="hidden md:block border rounded-xl overflow-x-auto">
-                      <Table className="min-w-[700px]">
+                      <Table className="min-w-[800px]">
                         <TableHeader className="bg-muted/30">
                           <TableRow>
                             <TableHead>Ítem</TableHead>
-                            <TableHead className="w-24 text-center">Cant.</TableHead>
+                            <TableHead className="w-20 text-center">Cant.</TableHead>
                             <TableHead className="w-32 text-center">Precio</TableHead>
-                            <TableHead className="w-24 text-center">Moneda</TableHead>
+                            <TableHead className="w-28 text-center">Desc. (-)</TableHead>
+                            <TableHead className="w-20 text-center">Moneda</TableHead>
                             <TableHead className="text-right">Subtotal</TableHead>
                             {!editingTx && <TableHead className="w-12"></TableHead>}
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {selectedItems.map((item, i) => (
-                            <TableRow key={i}>
-                              <TableCell>{item.name}</TableCell>
-                              <TableCell><Input type="number" value={item.qty} className="h-8 text-center" onChange={(e) => updateItem(i, 'qty', e.target.value)} /></TableCell>
-                              <TableCell><Input type="number" value={item.price} className="h-8 text-center" onChange={(e) => updateItem(i, 'price', e.target.value)} /></TableCell>
-                              <TableCell>
-                                <Select value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)} disabled={!!editingTx}>
-                                  <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                                  <SelectContent><SelectItem value="ARS">$</SelectItem><SelectItem value="USD">u$s</SelectItem></SelectContent>
-                                </Select>
-                              </TableCell>
-                              <TableCell className="text-right font-black">{item.currency === 'ARS' ? '$' : 'u$s'} {(item.price * item.qty).toLocaleString('es-AR')}</TableCell>
-                              {!editingTx && <TableCell><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeItem(i)}><Trash2 className="h-4 w-4" /></Button></TableCell>}
-                            </TableRow>
-                          ))}
+                          {selectedItems.map((item, i) => {
+                            const sub = (item.price * item.qty) - (item.discount || 0);
+                            return (
+                              <TableRow key={i}>
+                                <TableCell>{item.name}</TableCell>
+                                <TableCell><Input type="number" value={item.qty} className="h-8 text-center" onChange={(e) => updateItem(i, 'qty', e.target.value)} /></TableCell>
+                                <TableCell><Input type="number" value={item.price} className="h-8 text-center" onChange={(e) => updateItem(i, 'price', e.target.value)} /></TableCell>
+                                <TableCell><Input type="number" value={item.discount || 0} className="h-8 text-center border-rose-200 text-rose-600 font-bold" onChange={(e) => updateItem(i, 'discount', e.target.value)} /></TableCell>
+                                <TableCell>
+                                  <Select value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)} disabled={!!editingTx}>
+                                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                                    <SelectContent><SelectItem value="ARS">$</SelectItem><SelectItem value="USD">u$s</SelectItem></SelectContent>
+                                  </Select>
+                                </TableCell>
+                                <TableCell className="text-right font-black">{item.currency === 'ARS' ? '$' : 'u$s'} {sub.toLocaleString('es-AR')}</TableCell>
+                                {!editingTx && <TableCell><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeItem(i)}><Trash2 className="h-4 w-4" /></Button></TableCell>}
+                              </TableRow>
+                            );
+                          })}
                         </TableBody>
                       </Table>
                     </div>
 
                     <div className="md:hidden space-y-3">
-                      {selectedItems.map((item, i) => (
-                        <Card key={i} className="p-4 bg-white/50 border-primary/10 relative">
-                          <div className="flex justify-between items-start mb-3 pr-8">
-                            <div className="font-bold text-sm">{item.name}</div>
-                            {!editingTx && (
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive absolute top-2 right-2" onClick={() => removeItem(i)}>
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Cant.</Label>
-                              <Input type="number" value={item.qty} className="h-9" onChange={(e) => updateItem(i, 'qty', e.target.value)} />
+                      {selectedItems.map((item, i) => {
+                        const sub = (item.price * item.qty) - (item.discount || 0);
+                        return (
+                          <Card key={i} className="p-4 bg-white/50 border-primary/10 relative">
+                            <div className="flex justify-between items-start mb-3 pr-8">
+                              <div className="font-bold text-sm">{item.name}</div>
+                              {!editingTx && (
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive absolute top-2 right-2" onClick={() => removeItem(i)}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
                             </div>
-                            <div className="space-y-1">
-                              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Precio</Label>
-                              <Input type="number" value={item.price} className="h-9" onChange={(e) => updateItem(i, 'price', e.target.value)} />
+                            <div className="grid grid-cols-3 gap-3">
+                              <div className="space-y-1">
+                                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Cant.</Label>
+                                <Input type="number" value={item.qty} className="h-9" onChange={(e) => updateItem(i, 'qty', e.target.value)} />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Precio</Label>
+                                <Input type="number" value={item.price} className="h-9" onChange={(e) => updateItem(i, 'price', e.target.value)} />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-[10px] uppercase font-bold text-rose-600">Desc.</Label>
+                                <Input type="number" value={item.discount || 0} className="h-9 border-rose-200 text-rose-600" onChange={(e) => updateItem(i, 'discount', e.target.value)} />
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex justify-between items-center mt-3 pt-3 border-t">
-                            <div className="w-24">
-                              <Select value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)} disabled={!!editingTx}>
-                                <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                                <SelectContent><SelectItem value="ARS">$ (ARS)</SelectItem><SelectItem value="USD">u$s (USD)</SelectItem></SelectContent>
-                              </Select>
+                            <div className="flex justify-between items-center mt-3 pt-3 border-t">
+                              <div className="w-24">
+                                <Select value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)} disabled={!!editingTx}>
+                                  <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                                  <SelectContent><SelectItem value="ARS">$ (ARS)</SelectItem><SelectItem value="USD">u$s (USD)</SelectItem></SelectContent>
+                                </Select>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-[10px] font-bold text-muted-foreground uppercase">Subtotal</p>
+                                <p className="font-black text-primary">
+                                  {item.currency === 'ARS' ? '$' : 'u$s'} {sub.toLocaleString('es-AR')}
+                                </p>
+                              </div>
                             </div>
-                            <div className="text-right">
-                              <p className="text-[10px] font-bold text-muted-foreground uppercase">Subtotal</p>
-                              <p className="font-black text-primary">
-                                {item.currency === 'ARS' ? '$' : 'u$s'} {(item.price * item.qty).toLocaleString('es-AR')}
-                              </p>
-                            </div>
-                          </div>
-                        </Card>
-                      ))}
+                          </Card>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
