@@ -959,7 +959,8 @@ function TransactionsContent() {
                   <p className="text-[10px] font-bold text-emerald-700 uppercase">Total Filtrado USD</p>
                   <h3 className="text-2xl font-black">u$s {filteredTotals.USD.toLocaleString('es-AR')}</h3>
                 </CardContent>
-              </section>
+              </Card>
+            </section>
 
             <Card className="glass-card p-4 flex flex-wrap gap-4 items-end">
                  <div className="space-y-1">
