@@ -40,7 +40,9 @@ import {
   Loader2,
   ArrowDownLeft,
   Tag,
-  Info
+  Info,
+  ArrowUpCircle,
+  ArrowDownCircle
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -567,14 +569,15 @@ function TransactionsContent() {
       const txDateStr = tx.date.split('T')[0]
       const matchStart = !filterStartDate || txDateStr >= filterStartDate
       const matchEnd = !filterEndDate || txDateStr <= filterEndDate
-      let matchType = true
-      if (filterOpType === 'income') matchType = tx.amount > 0 || tx.type === 'cobro'
-      if (filterOpType === 'expense') matchType = tx.amount < 0 && tx.type !== 'cobro'
+      
+      let matchFlow = true
+      if (filterOpType === 'income') matchFlow = tx.amount > 0 || tx.type === 'cobro'
+      if (filterOpType === 'expense') matchFlow = tx.amount < 0 && tx.type !== 'cobro'
       
       const matchCategory = filterCategory === "all" || tx.type === filterCategory
       const matchExpenseCat = filterExpenseCategory === "all" || tx.expenseCategoryId === filterExpenseCategory
 
-      return matchCustomer && matchAccount && matchStart && matchEnd && matchType && matchCategory && matchExpenseCat
+      return matchCustomer && matchAccount && matchStart && matchEnd && matchFlow && matchCategory && matchExpenseCat
     }).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
   }, [transactions, filterCustomer, filterAccount, filterStartDate, filterEndDate, filterOpType, filterCategory, filterExpenseCategory])
 
@@ -919,12 +922,67 @@ function TransactionsContent() {
             </section>
 
             <Card className="glass-card p-4 flex flex-wrap gap-4 items-end">
-                 <div className="space-y-1"><Label className="text-xs">Cliente</Label><Select value={filterCustomer} onValueChange={setFilterCustomer}><SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem>{sortedCustomers.map((c: any) => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}</SelectContent></Select></div>
-                 <div className="space-y-1"><Label className="text-xs">Tipo Operación</Label><Select value={filterCategory} onValueChange={setFilterCategory}><SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{Object.entries(txTypeMap).map(([k, v]) => (<SelectItem key={k} value={k}>{v.label}</SelectItem>))}</SelectContent></Select></div>
-                 <div className="space-y-1"><Label className="text-xs">Rubro Gasto</Label><Select value={filterExpenseCategory} onValueChange={setFilterExpenseCategory}><SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Cualquiera</SelectItem>{expenseCategories?.map((c: any) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}</SelectContent></Select></div>
-                 <div className="space-y-1"><Label className="text-xs">Desde</Label><Input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="w-[140px] h-9" /></div>
-                 <div className="space-y-1"><Label className="text-xs">Hasta</Label><Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="w-[140px] h-9" /></div>
-                 <Button variant="ghost" size="icon" onClick={resetFilters}><FilterX className="h-4 w-4" /></Button>
+                 <div className="space-y-1">
+                   <Label className="text-xs">Cliente</Label>
+                   <Select value={filterCustomer} onValueChange={setFilterCustomer}>
+                     <SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger>
+                     <SelectContent>
+                       <SelectItem value="all">Todos</SelectItem>
+                       {sortedCustomers.map((c: any) => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}
+                     </SelectContent>
+                   </Select>
+                 </div>
+                 
+                 <div className="space-y-1">
+                   <Label className="text-xs">Caja / Destino</Label>
+                   <Select value={filterAccount} onValueChange={setFilterAccount}>
+                     <SelectTrigger className="w-[160px] h-9"><SelectValue /></SelectTrigger>
+                     <SelectContent>
+                       <SelectItem value="all">Todas las Cajas</SelectItem>
+                       <SelectItem value="null">A CUENTA (Deuda)</SelectItem>
+                       {accounts?.map((a: any) => (
+                         <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>
+                       ))}
+                     </SelectContent>
+                   </Select>
+                 </div>
+
+                 <div className="space-y-1">
+                   <Label className="text-xs">Flujo</Label>
+                   <Select value={filterOpType} onValueChange={setFilterOpType}>
+                     <SelectTrigger className="w-[120px] h-9"><SelectValue /></SelectTrigger>
+                     <SelectContent>
+                       <SelectItem value="all">Todos</SelectItem>
+                       <SelectItem value="income" className="text-emerald-600 font-bold">Ingresos</SelectItem>
+                       <SelectItem value="expense" className="text-rose-600 font-bold">Egresos</SelectItem>
+                     </SelectContent>
+                   </Select>
+                 </div>
+
+                 <div className="space-y-1">
+                   <Label className="text-xs">Operación</Label>
+                   <Select value={filterCategory} onValueChange={setFilterCategory}>
+                     <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
+                     <SelectContent>
+                       <SelectItem value="all">Cualquier Tipo</SelectItem>
+                       {Object.entries(txTypeMap).map(([k, v]) => (<SelectItem key={k} value={k}>{v.label}</SelectItem>))}
+                     </SelectContent>
+                   </Select>
+                 </div>
+
+                 <div className="space-y-1">
+                   <Label className="text-xs">Desde</Label>
+                   <Input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="w-[140px] h-9" />
+                 </div>
+                 
+                 <div className="space-y-1">
+                   <Label className="text-xs">Hasta</Label>
+                   <Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="w-[140px] h-9" />
+                 </div>
+
+                 <Button variant="ghost" size="icon" onClick={resetFilters} title="Limpiar Filtros">
+                   <FilterX className="h-4 w-4" />
+                 </Button>
             </Card>
 
             <Card className="glass-card overflow-hidden hidden md:block">
@@ -987,7 +1045,12 @@ function TransactionsContent() {
                             <span className="text-[10px] text-muted-foreground italic">Sin nota</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-right font-black">{tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}</TableCell>
+                        <TableCell className="text-right font-black">
+                          <span className="flex items-center justify-end gap-1">
+                            {tx.amount > 0 ? <ArrowUpCircle className="h-3 w-3 text-emerald-500" /> : <ArrowDownCircle className="h-3 w-3 text-rose-500" />}
+                            {tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}
+                          </span>
+                        </TableCell>
                         <TableCell className="text-right">
                           <span className={cn("text-xs font-bold", tx.paidAmount > 0 ? "text-emerald-600" : "text-muted-foreground")}>
                             {tx.currency === 'USD' ? 'u$s' : '$'} {(tx.paidAmount || 0).toLocaleString('es-AR')}
@@ -1085,7 +1148,10 @@ function TransactionsContent() {
                     <div className="grid grid-cols-2 gap-4 border-t pt-3 mb-4">
                       <div>
                         <p className="text-[10px] font-bold text-muted-foreground uppercase mb-0.5">Total</p>
-                        <p className="font-black text-sm">{tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}</p>
+                        <p className="font-black text-sm flex items-center gap-1">
+                          {tx.amount > 0 ? <ArrowUpCircle className="h-3 w-3 text-emerald-500" /> : <ArrowDownCircle className="h-3 w-3 text-rose-500" />}
+                          {tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}
+                        </p>
                       </div>
                       <div className="text-right">
                         <p className="text-[10px] font-bold text-muted-foreground uppercase mb-0.5">Abonado</p>
