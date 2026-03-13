@@ -104,7 +104,7 @@ function TransactionsContent() {
   const modeParam = searchParams.get('mode')
 
   const [mainView, setMainView] = useState("history")
-  const [activeTab, setActiveTab] = useState("sale")
+  const [activeTab, setActiveTab] = useState("refill")
   
   const [editingTx, setEditingTx] = useState<any | null>(null)
   const [txToDelete, setTxToDelete] = useState<any | null>(null)
@@ -164,14 +164,6 @@ function TransactionsContent() {
   const [selectedExpenseCategoryId, setSelectedExpenseCategoryId] = useState("")
   const [txDescription, setTxDescription] = useState("")
   const [cobroSource, setCobroSource] = useState("sale")
-
-  useEffect(() => {
-    const now = new Date()
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
-    const formatDate = (date: Date) => date.toISOString().split('T')[0]
-    setFilterStartDate(formatDate(firstDay))
-    setFilterEndDate(formatDate(now))
-  }, [])
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -513,11 +505,8 @@ function TransactionsContent() {
   const resetFilters = () => {
     setFilterCustomer("all")
     setFilterAccount("all")
-    const now = new Date()
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
-    const formatDate = (date: Date) => date.toISOString().split('T')[0]
-    setFilterStartDate(formatDate(firstDay))
-    setFilterEndDate(formatDate(now))
+    setFilterStartDate("")
+    setFilterEndDate("")
     setFilterOpType("all")
     setFilterCategory("all")
     setFilterExpenseCategory("all")
