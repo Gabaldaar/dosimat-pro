@@ -238,6 +238,16 @@ function CustomersContent() {
     window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank')
   }
 
+  const handleWhatsApp = (customer: any, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!customer.telefono) {
+      toast({ title: "Sin Teléfono", description: "Este cliente no tiene un número registrado.", variant: "destructive" })
+      return
+    }
+    const phone = customer.telefono.replace(/\D/g, '')
+    window.open(`https://wa.me/${phone}`, '_blank')
+  }
+
   const handleCopyClipboard = (customer: any, e?: React.MouseEvent) => {
     if (e) e.stopPropagation()
     const balanceARS = Number(customer.saldoActual || 0).toLocaleString('es-AR')
@@ -555,18 +565,31 @@ function CustomersContent() {
                           </Button>
                           
                           {customer.telefono && (
-                            <Button 
-                              variant="outline" 
-                              size="icon" 
-                              className="h-9 w-9 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
-                              asChild
-                              onClick={(e) => e.stopPropagation()}
-                              title="Llamar"
-                            >
-                              <a href={`tel:${customer.telefono}`}>
-                                <PhoneCall className="h-4 w-4" />
-                              </a>
-                            </Button>
+                            <div className="flex gap-1">
+                              <Button 
+                                variant="outline" 
+                                size="icon" 
+                                className="h-9 w-9 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                                onClick={(e) => handleWhatsApp(customer, e)}
+                                title="Enviar WhatsApp"
+                              >
+                                <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.353-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.05-.148-.471-1.138-.645-1.556-.17-.41-.344-.354-.471-.354-.121-.002-.261-.002-.401-.002-.14 0-.368.05-.56.269-.193.218-.735.718-.735 1.754 0 1.035.753 2.034.858 2.183.104.149 1.48 2.259 3.587 3.168.501.217.892.347 1.197.442.503.159.96.137 1.32.077.401-.067 1.23-.503 1.403-.989.173-.486.173-.902.122-.989-.05-.087-.185-.137-.482-.286zM12.004 20.122l-.001.001-3.112-.816a8.12 8.12 0 0 1-3.926-1.36l-.282-.167-3.71.972 1.003-3.61-.183-.291a8.13 8.13 0 0 1-1.247-4.34C3.547 6.01 7.34 2.122 12 2.122c2.258 0 4.382.88 5.978 2.477a8.41 8.41 0 0 1 2.474 5.979c-.004 4.656-3.846 8.544-8.448 8.544zm0-17.962C6.695 2.16 2.364 6.49 2.36 11.8c0 1.7.44 3.36 1.28 4.84l-1.36 4.89 5.01-1.31c1.43.78 3.04 1.2 4.7 1.2h.01c5.3 0 9.63-4.33 9.64-9.64 0-2.57-1.01-4.99-2.83-6.81-1.82-1.82-4.24-2.83-6.81-2.83z"/>
+                                </svg>
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="icon" 
+                                className="h-9 w-9 text-slate-600 border-slate-200 hover:bg-slate-50"
+                                asChild
+                                onClick={(e) => e.stopPropagation()}
+                                title="Llamar"
+                              >
+                                <a href={`tel:${customer.telefono}`}>
+                                  <PhoneCall className="h-4 w-4" />
+                                </a>
+                              </Button>
+                            </div>
                           )}
                           
                           <Button 
@@ -765,7 +788,7 @@ function CustomersContent() {
                 </div>
                 <div className="space-y-2">
                   <Label className="font-bold">Notas Técnicas / Equipo</Label>
-                  <Textarea value={formData.equipoInstalado.notas} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, notas: e.target.value}}))} placeholder="Detalles sobre la instalación, fallas técnicas, reparaciones..." className="min-h-[80px]" />
+                  <Textarea value={formData.equipoInstalado.notes} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, notas: e.target.value}}))} placeholder="Detalles sobre la instalación, fallas técnicas, reparaciones..." className="min-h-[80px]" />
                 </div>
               </TabsContent>
             </Tabs>
