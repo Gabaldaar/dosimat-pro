@@ -57,7 +57,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, setDocumentNonBlocking, addDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from "@/firebase"
-import { collection, doc, query, orderBy, limit } from "firebase/firestore"
+import { collection, doc, query, orderBy, limit, increment } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 
@@ -255,23 +255,24 @@ export default function AccountsPage() {
     if (!selectedAccount || txFormData.amount <= 0) return
     
     const multiplier = txType === 'income' ? 1 : -1
-    const currentBalance = Number(selectedAccount.initialBalance || 0)
-    const newBalance = currentBalance + (Number(txFormData.amount) * multiplier)
+    const amount = Number(txFormData.amount) * multiplier
 
     setIsTxDialogOpen(false)
 
+    // Usar increment para el saldo de la caja
     updateDocumentNonBlocking(doc(db, 'financial_accounts', selectedAccount.id), {
-      initialBalance: newBalance
+      initialBalance: increment(amount)
     })
 
     addDocumentNonBlocking(collection(db, 'transactions'), {
       date: new Date().toISOString(),
       type: txType === 'income' ? 'Adjustment' : 'Expense',
-      amount: Number(txFormData.amount) * multiplier,
+      amount: amount,
       currency: selectedAccount.currency,
       description: txFormData.description || (txType === 'income' ? 'Ingreso manual' : 'Gasto manual'),
       financialAccountId: selectedAccount.id,
-      expenseCategoryId: txFormData.categoryId || null
+      expenseCategoryId: txFormData.categoryId || null,
+      accountBalanceAfter: Number(selectedAccount.initialBalance || 0) + amount
     })
 
     toast({ title: "Operación procesada" })
@@ -292,8 +293,9 @@ export default function AccountsPage() {
       }
     }
 
-    updateDocumentNonBlocking(doc(db, 'financial_accounts', fromId), { initialBalance: Number(fromAcc.initialBalance || 0) - Number(amount) })
-    updateDocumentNonBlocking(doc(db, 'financial_accounts', toId), { initialBalance: Number(toAcc.initialBalance || 0) + finalAmountTo })
+    // Usar increment para transferencias
+    updateDocumentNonBlocking(doc(db, 'financial_accounts', fromId), { initialBalance: increment(-Number(amount)) })
+    updateDocumentNonBlocking(doc(db, 'financial_accounts', toId), { initialBalance: increment(finalAmountTo) })
 
     // Registrar salida
     addDocumentNonBlocking(collection(db, 'transactions'), {
@@ -302,7 +304,8 @@ export default function AccountsPage() {
       amount: -Number(amount),
       currency: fromAcc.currency,
       financialAccountId: fromId,
-      description: description || `Transferencia a ${toAcc.name} (${toAcc.currency})`
+      description: description || `Transferencia a ${toAcc.name} (${toAcc.currency})`,
+      accountBalanceAfter: Number(fromAcc.initialBalance || 0) - Number(amount)
     })
 
     // Registrar entrada
@@ -312,7 +315,8 @@ export default function AccountsPage() {
       amount: finalAmountTo,
       currency: toAcc.currency,
       financialAccountId: toId,
-      description: description || `Transferencia desde ${fromAcc.name} (${fromAcc.currency})`
+      description: description || `Transferencia desde ${fromAcc.name} (${fromAcc.currency})`,
+      accountBalanceAfter: Number(toAcc.initialBalance || 0) + finalAmountTo
     })
 
     toast({ title: "Transferencia completada" })

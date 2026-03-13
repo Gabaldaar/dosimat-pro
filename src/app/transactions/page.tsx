@@ -73,7 +73,7 @@ import {
   DialogDescription
 } from "@/components/ui/dialog"
 import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking, useUser } from "@/firebase"
-import { collection, doc } from "firebase/firestore"
+import { collection, doc, increment } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 
@@ -353,20 +353,24 @@ function TransactionsContent() {
   }
 
   const revertTxBalances = (tx: any) => {
-    const client = customers?.find(c => c.id === tx.clientId)
-    const acc = accounts?.find(a => a.id === tx.financialAccountId)
     const balanceField = tx.currency === 'ARS' ? 'saldoActual' : 'saldoUSD'
+    const type = tx.type?.toLowerCase()
     
-    if (tx.type === 'cobro' || tx.type === 'adjustment' || tx.type === 'Adjustment' || tx.type === 'Expense') {
+    if (['cobro', 'adjustment', 'expense'].includes(type)) {
       const amount = Number(tx.amount) || 0
-      if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: Number(acc.initialBalance || 0) - amount })
-      if (client) updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: Number(client[balanceField] || 0) - amount })
+      if (tx.financialAccountId) {
+        updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), { initialBalance: increment(-amount) })
+      }
+      updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [balanceField]: increment(-amount) })
     } else {
       const total = Number(tx.amount) || 0
       const paid = Number(tx.paidAmount) || 0
       const debt = total - paid
-      if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: Number(acc.initialBalance || 0) - paid })
-      if (client) updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: Number(client[balanceField] || 0) + debt })
+      if (tx.financialAccountId && paid !== 0) {
+        updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), { initialBalance: increment(-paid) })
+      }
+      // Revertir deuda: Si se restó al saldo del cliente, ahora se suma
+      updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [balanceField]: increment(debt) })
     }
   }
 
@@ -434,12 +438,13 @@ function TransactionsContent() {
       }
 
       setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
+      
       if (manualAccountId !== "pending") {
-        const acc = accounts?.find(a => a.id === manualAccountId)
-        if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: Number(acc.initialBalance || 0) + finalAmount })
+        updateDocumentNonBlocking(doc(db, 'financial_accounts', manualAccountId), { initialBalance: increment(finalAmount) })
       }
+      
       const balanceField = manualCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'
-      updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: Number(client[balanceField] || 0) + finalAmount })
+      updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: increment(finalAmount) })
     } else {
       if (selectedItems.length === 0) return
 
@@ -476,13 +481,12 @@ function TransactionsContent() {
           setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
 
           if (!isPending && paid !== 0) {
-            const acc = accounts?.find(a => a.id === accId)
-            if (acc) updateDocumentNonBlocking(doc(db, 'financial_accounts', acc.id), { initialBalance: Number(acc.initialBalance || 0) + paid })
+            updateDocumentNonBlocking(doc(db, 'financial_accounts', accId), { initialBalance: increment(paid) })
           }
           
           if (debt !== 0) {
             const balanceField = curr === 'ARS' ? 'saldoActual' : 'saldoUSD'
-            updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: Number(client[balanceField] || 0) - debt })
+            updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: increment(-debt) })
           }
         }
       })
