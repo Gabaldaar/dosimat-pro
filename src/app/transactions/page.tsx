@@ -206,8 +206,8 @@ function TransactionsContent() {
   const cartTotals = useMemo(() => {
     return selectedItems.reduce((acc, item) => {
       const subtotal = (Number(item.price) || 0) * (Number(item.qty) || 0)
-      const discount = (Number(item.discount) || 0)
-      const amount = subtotal - discount
+      const discountAmount = subtotal * ((Number(item.discount) || 0) / 100)
+      const amount = subtotal - discountAmount
       acc[item.currency as 'ARS' | 'USD'] = (acc[item.currency as 'ARS' | 'USD'] || 0) + amount
       return acc
     }, { ARS: 0, USD: 0 })
@@ -226,18 +226,21 @@ function TransactionsContent() {
         
         const listaItems = selectedTxForEmail.items?.map((i: any) => {
           const itemSubtotal = (Number(i.qty) || 0) * (Number(i.price) || 0);
-          const itemDiscount = (Number(i.discount) || 0);
-          const itemTotal = itemSubtotal - itemDiscount;
+          const itemDiscountAmt = itemSubtotal * ((Number(i.discount) || 0) / 100);
+          const itemTotal = itemSubtotal - itemDiscountAmt;
           
           let line = `- ${i.qty} x ${i.name} (${currencySymbol}${Number(i.price).toLocaleString('es-AR')})`;
-          if (itemDiscount > 0) {
-            line += ` [Bonif: -${currencySymbol}${itemDiscount.toLocaleString('es-AR')}]`;
+          if (i.discount > 0) {
+            line += ` [Bonif ${i.discount}%: -${currencySymbol}${itemDiscountAmt.toLocaleString('es-AR')}]`;
           }
           line += ` = ${currencySymbol}${itemTotal.toLocaleString('es-AR')}`;
           return line;
         }).join('\n') || "N/A";
 
-        const totalDiscount = selectedTxForEmail.items?.reduce((sum: number, i: any) => sum + (Number(i.discount) || 0), 0) || 0;
+        const totalDiscount = selectedTxForEmail.items?.reduce((sum: number, i: any) => {
+          const sub = (Number(i.qty) || 0) * (Number(i.price) || 0);
+          return sum + (sub * ((Number(i.discount) || 0) / 100));
+        }, 0) || 0;
 
         const balanceValue = selectedTxForEmail.currency === 'ARS' ? (client.saldoActual || 0) : (client.saldoUSD || 0);
         let balanceStatus = "(Sin Deuda)";
@@ -268,7 +271,7 @@ function TransactionsContent() {
           "{{Item}}": selectedTxForEmail.items?.[0]?.name || "N/A",
           "{{Cantidad}}": selectedTxForEmail.items?.[0]?.qty?.toString() || "N/A",
           "{{Precio}}": selectedTxForEmail.items?.[0]?.price?.toString() || "N/A",
-          "{{Subtotal}}": selectedTxForEmail.items?.[0] ? (selectedTxForEmail.items[0].qty * selectedTxForEmail.items[0].price).toLocaleString('es-AR') : "N/A",
+          "{{Subtotal}}": selectedTxForEmail.items?.[0] ? ((selectedTxForEmail.items[0].qty * selectedTxForEmail.items[0].price) * (1 - (selectedTxForEmail.items[0].discount / 100))).toLocaleString('es-AR') : "N/A",
           "{{Saldo_Cuenta}}": formattedBalance,
           "{{Metodo_Pago}}": metodoPago
         }
@@ -547,12 +550,12 @@ function TransactionsContent() {
       text += `\n*Detalle:*\n`;
       tx.items.forEach((item: any) => {
         const lineSubtotal = (item.qty || 0) * (item.price || 0);
-        const lineDiscount = (item.discount || 0);
-        const lineTotal = lineSubtotal - lineDiscount;
+        const lineDiscountAmt = lineSubtotal * ((item.discount || 0) / 100);
+        const lineTotal = lineSubtotal - lineDiscountAmt;
         
         text += `- ${item.qty} x ${item.name} (${currencySymbol}${item.price.toLocaleString('es-AR')})`;
-        if (lineDiscount > 0) {
-          text += ` [Bonif: -${currencySymbol}${lineDiscount.toLocaleString('es-AR')}]`;
+        if (item.discount > 0) {
+          text += ` [Bonif ${item.discount}%: -${currencySymbol}${lineDiscountAmt.toLocaleString('es-AR')}]`;
         }
         text += ` = ${currencySymbol}${lineTotal.toLocaleString('es-AR')}\n`;
       });
@@ -792,8 +795,8 @@ function TransactionsContent() {
                           <TableRow>
                             <TableHead>Ítem</TableHead>
                             <TableHead className="w-20 text-center">Cant.</TableHead>
-                            <TableHead className="w-32 text-center">Precio</TableHead>
-                            <TableHead className="w-28 text-center">Desc. (-)</TableHead>
+                            <TableHead className="w-28 text-center">Precio</TableHead>
+                            <TableHead className="w-24 text-center">Desc. (%)</TableHead>
                             <TableHead className="w-20 text-center">Moneda</TableHead>
                             <TableHead className="text-right">Subtotal</TableHead>
                             {!editingTx && <TableHead className="w-12"></TableHead>}
@@ -801,13 +804,18 @@ function TransactionsContent() {
                         </TableHeader>
                         <TableBody>
                           {selectedItems.map((item, i) => {
-                            const sub = (item.price * item.qty) - (item.discount || 0);
+                            const sub = (item.price * item.qty) * (1 - (item.discount || 0) / 100);
                             return (
                               <TableRow key={i}>
                                 <TableCell>{item.name}</TableCell>
                                 <TableCell><Input type="number" value={item.qty} className="h-8 text-center" onChange={(e) => updateItem(i, 'qty', e.target.value)} /></TableCell>
                                 <TableCell><Input type="number" value={item.price} className="h-8 text-center" onChange={(e) => updateItem(i, 'price', e.target.value)} /></TableCell>
-                                <TableCell><Input type="number" value={item.discount || 0} className="h-8 text-center border-rose-200 text-rose-600 font-bold" onChange={(e) => updateItem(i, 'discount', e.target.value)} /></TableCell>
+                                <TableCell>
+                                  <div className="relative">
+                                    <Input type="number" value={item.discount || 0} className="h-8 text-center pr-5 border-rose-200 text-rose-600 font-bold" onChange={(e) => updateItem(i, 'discount', e.target.value)} />
+                                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-rose-400">%</span>
+                                  </div>
+                                </TableCell>
                                 <TableCell>
                                   <Select value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)} disabled={!!editingTx}>
                                     <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
@@ -825,7 +833,7 @@ function TransactionsContent() {
 
                     <div className="md:hidden space-y-3">
                       {selectedItems.map((item, i) => {
-                        const sub = (item.price * item.qty) - (item.discount || 0);
+                        const sub = (item.price * item.qty) * (1 - (item.discount || 0) / 100);
                         return (
                           <Card key={i} className="p-4 bg-white/50 border-primary/10 relative">
                             <div className="flex justify-between items-start mb-3 pr-8">
@@ -846,7 +854,7 @@ function TransactionsContent() {
                                 <Input type="number" value={item.price} className="h-9" onChange={(e) => updateItem(i, 'price', e.target.value)} />
                               </div>
                               <div className="space-y-1">
-                                <Label className="text-[10px] uppercase font-bold text-rose-600">Desc.</Label>
+                                <Label className="text-[10px] uppercase font-bold text-rose-600">Desc. %</Label>
                                 <Input type="number" value={item.discount || 0} className="h-9 border-rose-200 text-rose-600" onChange={(e) => updateItem(i, 'discount', e.target.value)} />
                               </div>
                             </div>
@@ -951,8 +959,7 @@ function TransactionsContent() {
                   <p className="text-[10px] font-bold text-emerald-700 uppercase">Total Filtrado USD</p>
                   <h3 className="text-2xl font-black">u$s {filteredTotals.USD.toLocaleString('es-AR')}</h3>
                 </CardContent>
-              </Card>
-            </section>
+              </section>
 
             <Card className="glass-card p-4 flex flex-wrap gap-4 items-end">
                  <div className="space-y-1">
