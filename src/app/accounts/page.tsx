@@ -162,7 +162,8 @@ export default function AccountsPage() {
   const [txFormData, setTxFormData] = useState({
     amount: 0,
     description: "",
-    categoryId: ""
+    categoryId: "",
+    date: new Date().toISOString().split('T')[0]
   })
 
   const [transferFormData, setTransferFormData] = useState({
@@ -248,7 +249,12 @@ export default function AccountsPage() {
   const handleOpenTxDialog = (account: any, type: 'income' | 'expense') => {
     setSelectedAccountId(account.id)
     setTxType(type)
-    setTxFormData({ amount: 0, description: "", categoryId: "" })
+    setTxFormData({ 
+      amount: 0, 
+      description: "", 
+      categoryId: "", 
+      date: new Date().toISOString().split('T')[0] 
+    })
     setIsTxDialogOpen(true)
   }
 
@@ -257,6 +263,7 @@ export default function AccountsPage() {
     
     const multiplier = txType === 'income' ? 1 : -1
     const amount = Number(txFormData.amount) * multiplier
+    const finalDate = new Date(txFormData.date + 'T12:00:00').toISOString();
 
     setIsTxDialogOpen(false)
 
@@ -266,7 +273,7 @@ export default function AccountsPage() {
     })
 
     addDocumentNonBlocking(collection(db, 'transactions'), {
-      date: new Date().toISOString(),
+      date: finalDate,
       type: txType === 'income' ? 'Adjustment' : 'Expense',
       amount: amount,
       currency: selectedAccount.currency,
@@ -658,6 +665,10 @@ export default function AccountsPage() {
               )}
             </DialogHeader>
             <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Fecha</Label>
+                <Input type="date" value={txFormData.date} onChange={(e) => setTxFormData({...txFormData, date: e.target.value})} />
+              </div>
               <div className="space-y-2">
                 <Label>Monto</Label>
                 <Input type="number" value={txFormData.amount} onChange={(e) => setTxFormData({...txFormData, amount: Number(e.target.value)})} />
