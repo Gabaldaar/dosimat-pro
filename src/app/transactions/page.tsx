@@ -513,11 +513,6 @@ function TransactionsContent() {
   }
 
   const handleOpenEmailDialog = (tx: any) => {
-    const client = customers?.find(c => c.id === tx.clientId)
-    if (!client?.mail) {
-      toast({ title: "Sin Email", description: "El cliente no tiene un correo registrado.", variant: "destructive" })
-      return
-    }
     setSelectedTxForEmail(tx)
     setSelectedTemplateId("")
     setProcessedEmail({ subject: "", body: "" })
@@ -527,8 +522,9 @@ function TransactionsContent() {
   const handleSendEmail = () => {
     const client = customers?.find(c => c.id === selectedTxForEmail.clientId)
     const tpl = templates?.find(t => t.id === selectedTemplateId)
-    if (!client?.mail || !processedEmail.subject || !processedEmail.body || !tpl) return
-    let mailtoLink = `mailto:${client.mail}?subject=${encodeURIComponent(processedEmail.subject)}&body=${encodeURIComponent(processedEmail.body)}`
+    if (!processedEmail.subject || !processedEmail.body || !tpl) return
+    const recipient = client?.mail || ""
+    let mailtoLink = `mailto:${recipient}?subject=${encodeURIComponent(processedEmail.subject)}&body=${encodeURIComponent(processedEmail.body)}`
     if (tpl.bcc) mailtoLink += `&bcc=${encodeURIComponent(tpl.bcc)}`
     window.location.href = mailtoLink
     setIsEmailDialogOpen(false)
