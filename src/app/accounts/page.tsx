@@ -357,10 +357,15 @@ export default function AccountsPage() {
       return `*${acc.name}*\n${balance}`;
     }).join('\n\n');
 
+    // Agregar totales generales al final
+    text += `\n\n---\n`;
+    text += `*TOTAL ARS:* $${globalTotals.ARS.toLocaleString('es-AR')}\n`;
+    text += `*TOTAL USD:* u$s ${globalTotals.USD.toLocaleString('es-AR')}`;
+
     navigator.clipboard.writeText(text);
     toast({
       title: "Copiado",
-      description: "Resumen de saldos copiado al portapapeles."
+      description: "Resumen de saldos con totales copiado al portapapeles."
     });
   }
 
