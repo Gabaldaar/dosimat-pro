@@ -260,6 +260,9 @@ function TransactionsContent() {
           "{{Total_Descuento}}": `${currencySymbol} ${totalDiscount.toLocaleString('es-AR')}`,
           "{{Monto_Abonado}}": `${currencySymbol} ${(selectedTxForEmail.paidAmount || 0).toLocaleString('es-AR')}`,
           "{{Caja_Destino}}": acc ? acc.name : "A Cuenta",
+          "{{Saldo_Caja_Final}}": selectedTxForEmail.accountBalanceAfter !== undefined && selectedTxForEmail.accountBalanceAfter !== null 
+            ? `${currencySymbol} ${Number(selectedTxForEmail.accountBalanceAfter).toLocaleString('es-AR')}` 
+            : "N/A",
           "{{Moneda}}": selectedTxForEmail.currency || "",
           "{{Detalle_Items}}": listaItems,
           "{{Item}}": selectedTxForEmail.items?.[0]?.name || "N/A",

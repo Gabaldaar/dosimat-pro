@@ -33,6 +33,7 @@ const AVAILABLE_MARKERS = [
   "Total_Descuento",
   "Monto_Abonado",
   "Caja_Destino",
+  "Saldo_Caja_Final",
   "Saldo_Cuenta",
   "Metodo_Pago"
 ]
