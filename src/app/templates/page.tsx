@@ -20,6 +20,8 @@ const AVAILABLE_MARKERS = [
   "Apellido", 
   "Nombre", 
   "Fecha", 
+  "Tipo_Operacion",
+  "Categoria_Gasto",
   "Descripción", 
   "Detalle_Items", 
   "Item", 

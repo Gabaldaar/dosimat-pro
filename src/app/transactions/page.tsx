@@ -203,9 +203,8 @@ function TransactionsContent() {
     }, { ARS: 0, USD: 0 })
   }, [selectedItems])
 
-  // Lógica de reemplazo de marcadores para Email
   useEffect(() => {
-    if (selectedTxForEmail && selectedTemplateId && templates && customers && accounts && catalog) {
+    if (selectedTxForEmail && selectedTemplateId && templates && customers && accounts && catalog && expenseCategories) {
       const tpl = templates.find(t => t.id === selectedTemplateId)
       const client = customers.find(c => c.id === selectedTxForEmail.clientId)
       
@@ -243,10 +242,15 @@ function TransactionsContent() {
           else metodoPago = acc.name || "Otro";
         }
 
+        const info = txTypeMap[selectedTxForEmail.type] || { label: selectedTxForEmail.type };
+        const expenseCat = selectedTxForEmail.expenseCategoryId ? expenseCategories.find(ec => ec.id === selectedTxForEmail.expenseCategoryId) : null;
+
         const replacements: Record<string, string> = {
           "{{Apellido}}": client.apellido || "",
           "{{Nombre}}": client.nombre || "",
           "{{Fecha}}": formatLocalDate(selectedTxForEmail.date),
+          "{{Tipo_Operacion}}": info.label,
+          "{{Categoria_Gasto}}": expenseCat ? expenseCat.name : "N/A",
           "{{Descripción}}": selectedTxForEmail.description || "",
           "{{Total}}": `${currencySymbol} ${Math.abs(selectedTxForEmail.amount).toLocaleString('es-AR')}`,
           "{{Total_Descuento}}": `${currencySymbol} ${totalDiscount.toLocaleString('es-AR')}`,
@@ -282,7 +286,7 @@ function TransactionsContent() {
         setProcessedEmail({ subject: processCustomMarkers(subject), body: processCustomMarkers(body) });
       }
     }
-  }, [selectedTxForEmail, selectedTemplateId, templates, customers, accounts, catalog])
+  }, [selectedTxForEmail, selectedTemplateId, templates, customers, accounts, catalog, expenseCategories])
 
   const handleAddItem = (itemId: string) => {
     const item = catalog?.find((i: any) => i.id === itemId)
@@ -361,7 +365,6 @@ function TransactionsContent() {
       if (tx.financialAccountId && paid !== 0) {
         updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), { initialBalance: increment(-paid) })
       }
-      // Revertir deuda: Si se restó al saldo del cliente, ahora se suma
       updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [balanceField]: increment(debt) })
     }
   }
