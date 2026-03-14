@@ -81,8 +81,9 @@ const txTypeMap: Record<string, { label: string, icon: any, color: string, descr
   sale: { label: "Venta", icon: ShoppingBag, color: "text-blue-600 bg-blue-50", description: "Venta general de productos, insumos o accesorios de piscina." },
   refill: { label: "Reposición", icon: Droplet, color: "text-cyan-600 bg-cyan-50", description: "Registro de servicio de reposición de cloro y químicos." },
   service: { label: "Técnico", icon: Wrench, color: "text-indigo-600 bg-indigo-50", description: "Servicios técnicos, reparaciones o visitas de mantenimiento." },
-  adjustment: { label: "Ajuste", icon: Settings2, color: "text-slate-600 bg-slate-50", description: "Corrección manual de saldo (Ingresos o Egresos) en la cuenta del cliente." },
   cobro: { label: "Cobro", icon: Receipt, color: "text-emerald-600 bg-emerald-50", description: "Registro de pago recibido del cliente para cancelar deuda." },
+  adjustment: { label: "Ajuste", icon: Settings2, color: "text-slate-600 bg-slate-50", description: "Corrección manual de saldo (Ingresos o Egresos) en la cuenta del cliente." },
+  cobro_manual: { label: "Ingreso Manual", icon: Receipt, color: "text-emerald-600 bg-emerald-50", description: "Ingreso directo a caja." },
   Adjustment: { label: "Ajuste", icon: RefreshCw, color: "text-slate-600 bg-slate-50", description: "Ajuste de saldo manual." },
   Expense: { label: "Gasto", icon: ArrowDownLeft, color: "text-rose-600 bg-rose-50", description: "Gasto manual registrado." },
 }
@@ -206,9 +207,9 @@ function TransactionsContent() {
   useEffect(() => {
     if (selectedTxForEmail && selectedTemplateId && templates && customers && accounts && catalog && expenseCategories) {
       const tpl = templates.find(t => t.id === selectedTemplateId)
-      const client = customers.find(c => c.id === selectedTxForEmail.clientId)
+      const client = selectedTxForEmail.clientId ? customers.find(c => c.id === selectedTxForEmail.clientId) : null;
       
-      if (tpl && client) {
+      if (tpl) {
         let subject = tpl.subject
         let body = tpl.body
         const currencySymbol = selectedTxForEmail.currency === 'ARS' ? '$' : 'u$s';
@@ -228,11 +229,14 @@ function TransactionsContent() {
           return sum + (sub * ((Number(i.discount) || 0) / 100));
         }, 0) || 0;
 
-        const balanceValue = selectedTxForEmail.currency === 'ARS' ? (client.saldoActual || 0) : (client.saldoUSD || 0);
-        let balanceStatus = "(Sin Deuda)";
-        if (balanceValue > 0) balanceStatus = "(Acreedor)";
-        if (balanceValue < 0) balanceStatus = "(Deudor)";
-        const formattedBalance = `${currencySymbol} ${Math.abs(balanceValue).toLocaleString('es-AR')} ${balanceStatus}`;
+        let formattedBalance = "Global (Sin Cliente)";
+        if (client) {
+          const balanceValue = selectedTxForEmail.currency === 'ARS' ? (client.saldoActual || 0) : (client.saldoUSD || 0);
+          let balanceStatus = "(Sin Deuda)";
+          if (balanceValue > 0) balanceStatus = "(Acreedor)";
+          if (balanceValue < 0) balanceStatus = "(Deudor)";
+          formattedBalance = `${currencySymbol} ${Math.abs(balanceValue).toLocaleString('es-AR')} ${balanceStatus}`;
+        }
 
         const acc = accounts.find(a => a.id === selectedTxForEmail.financialAccountId);
         let metodoPago = "A Cuenta / Pendiente";
@@ -246,8 +250,8 @@ function TransactionsContent() {
         const expenseCat = selectedTxForEmail.expenseCategoryId ? expenseCategories.find(ec => ec.id === selectedTxForEmail.expenseCategoryId) : null;
 
         const replacements: Record<string, string> = {
-          "{{Apellido}}": client.apellido || "",
-          "{{Nombre}}": client.nombre || "",
+          "{{Apellido}}": client?.apellido || "Global",
+          "{{Nombre}}": client?.nombre || "Global",
           "{{Fecha}}": formatLocalDate(selectedTxForEmail.date),
           "{{Tipo_Operacion}}": info.label,
           "{{Categoria_Gasto}}": expenseCat ? expenseCat.name : "N/A",
@@ -357,7 +361,9 @@ function TransactionsContent() {
       if (tx.financialAccountId) {
         updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), { initialBalance: increment(-amount) })
       }
-      updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [balanceField]: increment(-amount) })
+      if (tx.clientId) {
+        updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [balanceField]: increment(-amount) })
+      }
     } else {
       const total = Number(tx.amount) || 0
       const paid = Number(tx.paidAmount) || 0
@@ -365,7 +371,9 @@ function TransactionsContent() {
       if (tx.financialAccountId && paid !== 0) {
         updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), { initialBalance: increment(-paid) })
       }
-      updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [balanceField]: increment(debt) })
+      if (tx.clientId && debt !== 0) {
+        updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [balanceField]: increment(debt) })
+      }
     }
   }
 
@@ -390,13 +398,7 @@ function TransactionsContent() {
   }
 
   const handleSaveTransaction = () => {
-    if (!selectedCustomerId) {
-      toast({ title: "Error", description: "Selecciona un cliente", variant: "destructive" })
-      return
-    }
-
-    const client = customers?.find(c => c.id === selectedCustomerId)
-    if (!client) return
+    const client = selectedCustomerId ? customers?.find(c => c.id === selectedCustomerId) : null;
 
     if (editingTx) {
       revertTxBalances(editingTx)
@@ -420,7 +422,7 @@ function TransactionsContent() {
       const txData = {
         id: txId,
         date: finalDateStr,
-        clientId: selectedCustomerId,
+        clientId: selectedCustomerId || null,
         type: activeTab,
         amount: finalAmount,
         currency: manualCurrency,
@@ -438,8 +440,10 @@ function TransactionsContent() {
         updateDocumentNonBlocking(doc(db, 'financial_accounts', manualAccountId), { initialBalance: increment(finalAmount) })
       }
       
-      const balanceField = manualCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'
-      updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: increment(finalAmount) })
+      if (client) {
+        const balanceField = manualCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'
+        updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: increment(finalAmount) })
+      }
     } else {
       if (selectedItems.length === 0) return
 
@@ -461,7 +465,7 @@ function TransactionsContent() {
           const txData = {
             id: txId,
             date: finalDateStr,
-            clientId: selectedCustomerId,
+            clientId: selectedCustomerId || null,
             type: activeTab,
             amount: Number(total),
             paidAmount: paid,
@@ -479,7 +483,7 @@ function TransactionsContent() {
             updateDocumentNonBlocking(doc(db, 'financial_accounts', accId), { initialBalance: increment(paid) })
           }
           
-          if (debt !== 0) {
+          if (client && debt !== 0) {
             const balanceField = curr === 'ARS' ? 'saldoActual' : 'saldoUSD'
             updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: increment(-debt) })
           }
@@ -523,7 +527,7 @@ function TransactionsContent() {
   }
 
   const handleSendEmail = () => {
-    const client = customers?.find(c => c.id === selectedTxForEmail.clientId)
+    const client = selectedTxForEmail.clientId ? customers?.find(c => c.id === selectedTxForEmail.clientId) : null;
     const tpl = templates?.find(t => t.id === selectedTemplateId)
     if (!processedEmail.subject || !processedEmail.body || !tpl) return
     const recipient = client?.mail || ""
@@ -534,13 +538,13 @@ function TransactionsContent() {
   }
 
   const handleCopyWhatsApp = (tx: any) => {
-    const client = customers?.find(c => c.id === tx.clientId);
+    const client = tx.clientId ? customers?.find(c => c.id === tx.clientId) : null;
     const info = txTypeMap[tx.type] || { label: tx.type };
     const dateStr = formatLocalDate(tx.date);
     const currencySymbol = tx.currency === 'USD' ? 'u$s' : '$';
     let text = `*DOSIMAT PRO - DETALLE DE OPERACIÓN*\n\n`;
     text += `📅 *Fecha:* ${dateStr}\n`;
-    text += `👤 *Cliente:* ${client ? `${client.apellido}, ${client.nombre}` : 'N/A'}\n`;
+    text += `👤 *Cliente:* ${client ? `${client.apellido}, ${client.nombre}` : 'Global'}\n`;
     text += `📝 *Tipo:* ${info.label}\n`;
     if (tx.expenseCategoryId && expenseCategories) {
       const cat = expenseCategories.find(c => c.id === tx.expenseCategoryId);
@@ -657,6 +661,7 @@ function TransactionsContent() {
                     <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
                       <SelectTrigger className="bg-white"><SelectValue placeholder="Buscar cliente..." /></SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="none">SIN CLIENTE (OPERACIÓN GLOBAL)</SelectItem>
                         {sortedCustomers.map((c: any) => (
                           <SelectItem key={c.id} value={c.id}>
                             {c.apellido}, {c.nombre} (Saldo: ${Number(c.saldoActual || 0).toLocaleString('es-AR')} / u$s {Number(c.saldoUSD || 0).toLocaleString('es-AR')})
@@ -867,7 +872,7 @@ function TransactionsContent() {
                   </div>
                 )}
                 <div className="flex flex-col gap-3">
-                  <Button className="w-full h-14 font-black text-md shadow-xl" disabled={(!isManualForm && selectedItems.length === 0) || (isManualForm && manualAmount <= 0) || !selectedCustomerId} onClick={handleSaveTransaction}>{editingTx ? 'GUARDAR CAMBIOS' : 'REGISTRAR OPERACIÓN'}</Button>
+                  <Button className="w-full h-14 font-black text-md shadow-xl" disabled={(!isManualForm && selectedItems.length === 0) || (isManualForm && manualAmount <= 0)} onClick={handleSaveTransaction}>{editingTx ? 'GUARDAR CAMBIOS' : 'REGISTRAR OPERACIÓN'}</Button>
                   <Button variant="outline" className="w-full h-12 font-bold border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => { resetRegisterForm(); setMainView("history"); }}>{editingTx ? 'CANCELAR EDICIÓN' : 'CANCELAR'}</Button>
                 </div>
               </CardContent>
@@ -970,7 +975,7 @@ function TransactionsContent() {
                         <TableCell className="text-xs font-medium">{formatLocalDate(tx.date)}</TableCell>
                         <TableCell>
                           <div className="flex flex-col">
-                            <span className="font-bold">{cust ? `${cust.apellido}, ${cust.nombre}` : '---'}</span>
+                            <span className="font-bold">{cust ? `${cust.apellido}, ${cust.nombre}` : 'Global'}</span>
                             {cust?.cuit_dni && <span className="text-[10px] text-muted-foreground uppercase">ID: {cust.cuit_dni}</span>}
                           </div>
                         </TableCell>
@@ -1076,7 +1081,7 @@ function TransactionsContent() {
                       </DropdownMenu>
                     </div>
                     <div className="mb-4">
-                      <h4 className="font-bold text-md leading-tight">{cust ? `${cust.apellido}, ${cust.nombre}` : 'Sin Cliente'}{cust?.cuit_dni && <span className="text-[10px] font-normal text-muted-foreground ml-2">({cust.cuit_dni})</span>}</h4>
+                      <h4 className="font-bold text-md leading-tight">{cust ? `${cust.apellido}, ${cust.nombre}` : 'Global'}{cust?.cuit_dni && <span className="text-[10px] font-normal text-muted-foreground ml-2">({cust.cuit_dni})</span>}</h4>
                       {tx.description && <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2 bg-muted/10 p-1.5 rounded" onClick={() => setSelectedTxForNote(tx)}>{tx.description}</p>}
                       <div className="flex flex-wrap gap-2 mt-2">
                         <Badge variant="outline" className={cn("text-[10px] gap-1", info.color)}><info.icon className="h-3 w-3" />{info.label}</Badge>
