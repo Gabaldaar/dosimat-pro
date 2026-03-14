@@ -40,6 +40,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog"
 import {
   AlertDialog,
@@ -649,6 +650,12 @@ export default function AccountsPage() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{txType === 'income' ? 'Ingreso Manual' : 'Gasto Manual'}</DialogTitle>
+              {selectedAccount && (
+                <DialogDescription className="font-bold text-primary flex items-center gap-2">
+                  <Wallet className="h-3 w-3" />
+                  {selectedAccount.name} • Saldo Actual: {selectedAccount.currency === 'USD' ? 'u$s' : '$'}{Number(selectedAccount.initialBalance || 0).toLocaleString('es-AR')}
+                </DialogDescription>
+              )}
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
