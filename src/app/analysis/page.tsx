@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   Bar, 
   BarChart, 
@@ -34,7 +35,8 @@ import {
   Loader2,
   Droplets,
   MapPin,
-  Target
+  Target,
+  Coins
 } from "lucide-react"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, query, orderBy } from "firebase/firestore"
@@ -70,6 +72,7 @@ export default function AnalysisPage() {
   const [endDate, setEndDate] = useState("")
   const [incomeTypeFilter, setIncomeTypeFilter] = useState("all")
   const [expenseCatFilter, setExpenseCatFilter] = useState("all")
+  const [analysisCurrency, setAnalysisCurrency] = useState("ARS")
 
   // Initialize dates
   useEffect(() => {
@@ -88,13 +91,21 @@ export default function AnalysisPage() {
     setExpenseCatFilter("all")
   }
 
-  // Filtered Transactions for Totals and Pie Charts
-  const filteredTxs = useMemo(() => {
+  // Filtered Transactions for Summary (Both currencies)
+  const filteredTxsForSummary = useMemo(() => {
     if (!transactions) return []
     return transactions.filter(tx => {
       const txDate = tx.date.split('T')[0]
       const matchStart = !startDate || txDate >= startDate
       const matchEnd = !endDate || txDate <= endDate
+      return matchStart && matchEnd
+    })
+  }, [transactions, startDate, endDate])
+
+  // Filtered Transactions specifically for the selected currency charts
+  const filteredTxsByCurrency = useMemo(() => {
+    return filteredTxsForSummary.filter(tx => {
+      if (tx.currency !== analysisCurrency) return false
       
       const isIncome = (tx.type !== 'Expense' && tx.type !== 'adjustment' && tx.type !== 'Adjustment') || tx.type === 'cobro'
       const isExpense = tx.type === 'Expense' || (tx.type === 'adjustment' && tx.amount < 0)
@@ -107,13 +118,13 @@ export default function AnalysisPage() {
         matchCategory = expenseCatFilter === 'all' || tx.expenseCategoryId === expenseCatFilter
       }
 
-      return matchStart && matchEnd && matchCategory
+      return matchCategory
     })
-  }, [transactions, startDate, endDate, incomeTypeFilter, expenseCatFilter])
+  }, [filteredTxsForSummary, analysisCurrency, incomeTypeFilter, expenseCatFilter])
 
   // Summary Calculations - CRITERIO DE CAJA
   const summary = useMemo(() => {
-    return filteredTxs.reduce((acc, tx) => {
+    return filteredTxsForSummary.reduce((acc, tx) => {
       const curr = tx.currency === 'USD' ? 'USD' : 'ARS'
       
       // INGRESOS: (Monto abonado en venta/servicio) + (Monto total de cobros)
@@ -135,9 +146,9 @@ export default function AnalysisPage() {
       ARS: { income: 0, expense: 0 }, 
       USD: { income: 0, expense: 0 } 
     })
-  }, [filteredTxs])
+  }, [filteredTxsForSummary])
 
-  // Data for Annual Bar Chart (Always last 12 months, ARS only for simplicity)
+  // Data for Annual Bar Chart (Reactive to selected currency)
   const annualData = useMemo(() => {
     if (!transactions) return []
     const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
@@ -157,7 +168,7 @@ export default function AnalysisPage() {
     transactions.forEach(tx => {
       const txDate = new Date(tx.date)
       const point = last12.find(p => p.month === txDate.getMonth() && p.year === txDate.getFullYear())
-      if (point && tx.currency === 'ARS') {
+      if (point && tx.currency === analysisCurrency) {
         if (tx.type === 'cobro') point.ingresos += Math.abs(tx.amount)
         else if (['sale', 'refill', 'service'].includes(tx.type)) point.ingresos += Number(tx.paidAmount || 0)
         else if ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount > 0) point.ingresos += tx.amount
@@ -169,12 +180,12 @@ export default function AnalysisPage() {
     })
 
     return last12.map(p => ({ ...p, saldo: p.ingresos - p.gastos }))
-  }, [transactions])
+  }, [transactions, analysisCurrency])
 
-  // Data for Income Distribution Pie
+  // Data for Income Distribution Pie (Reactive to selected currency)
   const incomePieData = useMemo(() => {
     const counts: Record<string, number> = {}
-    filteredTxs.forEach(tx => {
+    filteredTxsByCurrency.forEach(tx => {
       let amount = 0
       let source = ''
 
@@ -195,12 +206,12 @@ export default function AnalysisPage() {
       }
     })
     return Object.entries(counts).map(([name, value]) => ({ name, value }))
-  }, [filteredTxs])
+  }, [filteredTxsByCurrency])
 
-  // Data for Expense Distribution Pie
+  // Data for Expense Distribution Pie (Reactive to selected currency)
   const expensePieData = useMemo(() => {
     const counts: Record<string, number> = {}
-    filteredTxs.forEach(tx => {
+    filteredTxsByCurrency.forEach(tx => {
       if (tx.type === 'Expense' || ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount < 0)) {
         const cat = expenseCategories?.find(c => c.id === tx.expenseCategoryId)
         const label = cat ? cat.name : 'Ajustes / General'
@@ -208,12 +219,12 @@ export default function AnalysisPage() {
       }
     })
     return Object.entries(counts).map(([name, value]) => ({ name, value }))
-  }, [filteredTxs, expenseCategories])
+  }, [filteredTxsByCurrency, expenseCategories])
 
-  // Sugerencia: Ingresos por Zona
+  // Top 5 Zones (Reactive to selected currency)
   const zoneRevenue = useMemo(() => {
     const revenue: Record<string, number> = {}
-    filteredTxs.forEach(tx => {
+    filteredTxsByCurrency.forEach(tx => {
       let amount = 0
       if (tx.type === 'cobro') amount = Math.abs(tx.amount)
       else if (['sale', 'refill', 'service'].includes(tx.type)) amount = Number(tx.paidAmount || 0)
@@ -229,7 +240,7 @@ export default function AnalysisPage() {
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 5)
-  }, [filteredTxs, clients, zones])
+  }, [filteredTxsByCurrency, clients, zones])
 
   if (loadingTx) {
     return (
@@ -253,6 +264,15 @@ export default function AnalysisPage() {
             <h1 className="text-xl md:text-3xl font-bold text-primary font-headline flex items-center gap-2">
               <BarChart3 className="h-7 w-7" /> Análisis Financiero
             </h1>
+          </div>
+          <div className="flex items-center gap-2 bg-muted/50 p-1 rounded-lg border">
+            <Coins className="h-4 w-4 text-muted-foreground ml-2" />
+            <Tabs value={analysisCurrency} onValueChange={setAnalysisCurrency} className="w-auto">
+              <TabsList className="bg-transparent h-8">
+                <TabsTrigger value="ARS" className="text-[10px] font-bold h-7 px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm">PESOS (ARS)</TabsTrigger>
+                <TabsTrigger value="USD" className="text-[10px] font-bold h-7 px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm">DÓLARES (USD)</TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
         </header>
 
@@ -296,7 +316,7 @@ export default function AnalysisPage() {
           </div>
         </Card>
 
-        {/* Totals Section */}
+        {/* Totals Section - Always shows both currencies */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card className="glass-card bg-emerald-50/30 border-l-4 border-l-emerald-500">
             <CardContent className="pt-6">
@@ -342,13 +362,13 @@ export default function AnalysisPage() {
           </Card>
         </div>
 
-        {/* Charts Section */}
+        {/* Charts Section - Reactive to analysisCurrency */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Bar Chart Annual */}
           <Card className="glass-card col-span-1 lg:col-span-2">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><BarChart3 className="h-5 w-5 text-primary" /> Evolución Anual (ARS)</CardTitle>
-              <CardDescription>Comparativa de ingresos vs gastos reales últimos 12 meses</CardDescription>
+              <CardTitle className="flex items-center gap-2"><BarChart3 className="h-5 w-5 text-primary" /> Evolución Anual ({analysisCurrency})</CardTitle>
+              <CardDescription>Comparativa de ingresos vs gastos reales últimos 12 meses en {analysisCurrency === 'ARS' ? 'Pesos' : 'Dólares'}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[400px] w-full">
@@ -356,9 +376,9 @@ export default function AnalysisPage() {
                   <BarChart data={annualData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
                     <XAxis dataKey="name" axisLine={false} tickLine={false} fontSize={12} />
-                    <YAxis axisLine={false} tickLine={false} fontSize={10} tickFormatter={(v) => `$${v/1000}k`} />
+                    <YAxis axisLine={false} tickLine={false} fontSize={10} tickFormatter={(v) => analysisCurrency === 'ARS' ? `$${v/1000}k` : `u$s${v}`} />
                     <RechartsTooltip 
-                      formatter={(v: any) => [`$${v.toLocaleString('es-AR')}`, '']}
+                      formatter={(v: any) => [analysisCurrency === 'ARS' ? `$${v.toLocaleString('es-AR')}` : `u$s ${v.toLocaleString('es-AR')}`, '']}
                       contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                     />
                     <Legend verticalAlign="top" align="right" />
@@ -374,8 +394,8 @@ export default function AnalysisPage() {
           {/* Pie Chart Income */}
           <Card className="glass-card">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><PieChartIcon className="h-5 w-5 text-emerald-500" /> Distribución de Ingresos</CardTitle>
-              <CardDescription>Basado en el dinero real cobrado</CardDescription>
+              <CardTitle className="flex items-center gap-2"><PieChartIcon className="h-5 w-5 text-emerald-500" /> Ingresos por Rubro ({analysisCurrency})</CardTitle>
+              <CardDescription>Distribución del dinero real cobrado</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[300px] w-full">
@@ -395,12 +415,12 @@ export default function AnalysisPage() {
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
-                      <RechartsTooltip formatter={(v: any) => `$${v.toLocaleString('es-AR')}`} />
+                      <RechartsTooltip formatter={(v: any) => analysisCurrency === 'ARS' ? `$${v.toLocaleString('es-AR')}` : `u$s ${v.toLocaleString('es-AR')}`} />
                       <Legend />
                     </PieChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-full flex items-center justify-center italic text-muted-foreground">No hay datos de ingresos en este periodo.</div>
+                  <div className="h-full flex items-center justify-center italic text-muted-foreground">No hay datos en {analysisCurrency} para este periodo.</div>
                 )}
               </div>
             </CardContent>
@@ -409,8 +429,8 @@ export default function AnalysisPage() {
           {/* Pie Chart Expense */}
           <Card className="glass-card">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><PieChartIcon className="h-5 w-5 text-rose-500" /> Distribución de Gastos</CardTitle>
-              <CardDescription>Basado en los filtros de fecha aplicados</CardDescription>
+              <CardTitle className="flex items-center gap-2"><PieChartIcon className="h-5 w-5 text-rose-500" /> Gastos por Categoría ({analysisCurrency})</CardTitle>
+              <CardDescription>Distribución basada en rubros de gasto</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[300px] w-full">
@@ -430,12 +450,12 @@ export default function AnalysisPage() {
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
-                      <RechartsTooltip formatter={(v: any) => `$${v.toLocaleString('es-AR')}`} />
+                      <RechartsTooltip formatter={(v: any) => analysisCurrency === 'ARS' ? `$${v.toLocaleString('es-AR')}` : `u$s ${v.toLocaleString('es-AR')}`} />
                       <Legend />
                     </PieChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-full flex items-center justify-center italic text-muted-foreground">No hay datos de gastos en este periodo.</div>
+                  <div className="h-full flex items-center justify-center italic text-muted-foreground">No hay gastos en {analysisCurrency} para este periodo.</div>
                 )}
               </div>
             </CardContent>
@@ -447,8 +467,9 @@ export default function AnalysisPage() {
            <Card className="glass-card">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <MapPin className="h-5 w-5 text-primary" /> Top 5 Zonas por Ingresos Reales
+                  <MapPin className="h-5 w-5 text-primary" /> Top 5 Zonas ({analysisCurrency})
                 </CardTitle>
+                <CardDescription>Zonas con mayor recaudación real</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -458,10 +479,10 @@ export default function AnalysisPage() {
                         <span className="font-black text-primary/40">#{idx + 1}</span>
                         <span className="font-bold text-sm">{z.name}</span>
                       </div>
-                      <span className="font-black text-sm">${z.value.toLocaleString('es-AR')}</span>
+                      <span className="font-black text-sm">{analysisCurrency === 'ARS' ? '$' : 'u$s'} {z.value.toLocaleString('es-AR')}</span>
                     </div>
                   )) : (
-                    <p className="text-center italic text-muted-foreground py-10">Sin datos de zonas.</p>
+                    <p className="text-center italic text-muted-foreground py-10">Sin datos de zonas en {analysisCurrency}.</p>
                   )}
                 </div>
               </CardContent>
@@ -474,14 +495,15 @@ export default function AnalysisPage() {
               </CardHeader>
               <CardContent className="space-y-6">
                 <div>
-                   <p className="text-[10px] font-black uppercase opacity-70 tracking-widest">Ticket Promedio (Periodo)</p>
+                   <p className="text-[10px] font-black uppercase opacity-70 tracking-widest">Ticket Promedio ({analysisCurrency})</p>
                    <h3 className="text-3xl font-black mt-1">
-                     ${filteredTxs.length > 0 ? (summary.ARS.income / (filteredTxs.filter(t => t.amount > 0).length || 1)).toLocaleString('es-AR') : '0'}
+                     {analysisCurrency === 'ARS' ? '$' : 'u$s'} {filteredTxsByCurrency.length > 0 ? (summary[analysisCurrency as 'ARS'|'USD'].income / (filteredTxsByCurrency.filter(t => t.amount > 0).length || 1)).toLocaleString('es-AR') : '0'}
                    </h3>
                 </div>
                 <div className="pt-4 border-t border-white/10">
                    <p className="text-xs leading-relaxed opacity-90">
-                     Este análisis utiliza el <b>Criterio de Caja</b>: los ingresos se cuentan cuando el dinero realmente entra, evitando duplicar ventas con cobros posteriores.
+                     Estás viendo el análisis en <b>{analysisCurrency === 'ARS' ? 'Pesos' : 'Dólares'}</b>. <br/>
+                     Este panel utiliza el <b>Criterio de Caja</b>: solo se cuenta el dinero que realmente ingresó o egresó de tus cuentas.
                    </p>
                 </div>
               </CardContent>
