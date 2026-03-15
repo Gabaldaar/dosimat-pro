@@ -369,7 +369,14 @@ function CustomersContent() {
                <span className="font-headline font-black text-primary text-sm tracking-tight uppercase">Dosimat<span className="text-accent-foreground">Pro</span></span>
             </div>
             <div>
-              <h1 className="text-xl md:text-3xl font-bold text-primary font-headline">Clientes</h1>
+              <h1 className="text-xl md:text-3xl font-bold text-primary font-headline flex items-baseline gap-2">
+                Clientes
+                {!isLoading && customers && (
+                  <span className="text-xs md:text-sm font-medium text-muted-foreground opacity-70">
+                    ({filteredCustomers.length}/{customers.length})
+                  </span>
+                )}
+              </h1>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
