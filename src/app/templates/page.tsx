@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -15,6 +14,7 @@ import { collection, doc } from "firebase/firestore"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { cn } from "@/lib/utils"
 
 const AVAILABLE_MARKERS = [
   "Apellido", 
