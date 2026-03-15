@@ -308,16 +308,19 @@ function CustomersContent() {
     const template = templates?.find(t => t.id === selectedTemplateId)
     if (!template) return
 
-    let bccList = filteredCustomers
-      .map(c => c.mail)
+    // Recolectar todos los emails válidos, normalizarlos a minúsculas y quitar espacios
+    const customerEmails = filteredCustomers
+      .map(c => c.mail?.trim().toLowerCase())
       .filter(m => !!m && m.includes('@'))
     
+    let templateBccs: string[] = []
     if (template.bcc) {
-      const extraBccs = template.bcc.split(';').map((e: string) => e.trim()).filter((e: string) => !!e)
-      bccList = [...new Set([...bccList, ...extraBccs])]
+      templateBccs = template.bcc.split(';').map((e: string) => e.trim().toLowerCase()).filter((e: string) => !!e)
     }
 
-    const emails = bccList.join(';')
+    // Combinar y eliminar duplicados usando Set
+    const uniqueEmails = [...new Set([...customerEmails, ...templateBccs])]
+    const emails = uniqueEmails.join(';')
 
     if (!emails) {
       toast({ title: "Sin emails", description: "Ningún cliente filtrado tiene un email válido.", variant: "destructive" })
@@ -327,7 +330,7 @@ function CustomersContent() {
     const mailtoLink = `mailto:?bcc=${encodeURIComponent(emails)}&subject=${encodeURIComponent(template.subject)}&body=${encodeURIComponent(template.body)}`
     window.location.href = mailtoLink
     setIsBulkEmailOpen(false)
-    toast({ title: "Correo Masivo Preparado", description: "Se ha abierto tu gestor de correo con los clientes en CCO." })
+    toast({ title: "Correo Masivo Preparado", description: `Se han incluido ${uniqueEmails.length} direcciones únicas en CCO.` })
   }
 
   return (
@@ -840,7 +843,7 @@ function CustomersContent() {
                 <Mail className="h-5 w-5 text-primary" /> Envío Masivo a Filtrados
               </DialogTitle>
               <DialogDescription>
-                Se enviará un mail a {filteredCustomers.filter(c => c.mail).length} clientes usando CCO (Copia Oculta).
+                Se enviará un mail a los clientes filtrados usando CCO (Copia Oculta).
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -860,7 +863,7 @@ function CustomersContent() {
                 <div className="flex gap-2 text-amber-800">
                   <Info className="h-4 w-4 shrink-0" />
                   <p className="text-xs">
-                    <b>Nota:</b> En los envíos masivos, los marcadores dinámicos (como el nombre o saldo) no se personalizarán para cada cliente. Se recomienda usar plantillas con mensajes genéricos.
+                    <b>Nota:</b> En los envíos masivos, los marcadores dinámicos (como el nombre o saldo) no se personalizarán para cada cliente. Se recomienda usar plantillas con mensajes genéricos. Las direcciones duplicadas se omiten automáticamente.
                   </p>
                 </div>
               </Card>
