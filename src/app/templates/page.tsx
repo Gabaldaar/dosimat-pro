@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -110,17 +110,18 @@ export default function TemplatesPage() {
     toast({ title: editingTemplateId ? "Plantilla actualizada" : "Plantilla creada" })
   }
 
-  const handleDelete = (id: string) => {
+  const handleDelete = useCallback((id: string, type: "email" | "whatsapp") => {
     if (!isAdmin) {
       toast({ title: "Acceso denegado", variant: "destructive" })
       return
     }
-    if (confirm("¿Estás seguro?")) {
-      const collectionName = templateType === 'email' ? 'email_templates' : 'whatsapp_templates'
+    
+    if (window.confirm("¿Estás seguro de eliminar esta plantilla de forma permanente?")) {
+      const collectionName = type === 'email' ? 'email_templates' : 'whatsapp_templates'
       deleteDocumentNonBlocking(doc(db, collectionName, id))
       toast({ title: "Plantilla eliminada" })
     }
-  }
+  }, [isAdmin, db, toast]);
 
   const copyMarker = (markerName: string) => {
     const text = `{{${markerName}}}`
@@ -163,7 +164,7 @@ export default function TemplatesPage() {
               {isLoadingEmail ? (
                 <div className="col-span-full flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
               ) : (emailTemplates || []).map((tpl: any) => (
-                <TemplateCard key={tpl.id} tpl={tpl} isAdmin={isAdmin} onEdit={handleOpenDialog} onDelete={handleDelete} type="email" />
+                <TemplateCard key={tpl.id} tpl={tpl} isAdmin={isAdmin} onEdit={handleOpenDialog} onDelete={(id: string) => handleDelete(id, "email")} type="email" />
               ))}
             </section>
           </TabsContent>
@@ -173,7 +174,7 @@ export default function TemplatesPage() {
               {isLoadingWs ? (
                 <div className="col-span-full flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
               ) : (wsTemplates || []).map((tpl: any) => (
-                <TemplateCard key={tpl.id} tpl={tpl} isAdmin={isAdmin} onEdit={handleOpenDialog} onDelete={handleDelete} type="whatsapp" />
+                <TemplateCard key={tpl.id} tpl={tpl} isAdmin={isAdmin} onEdit={handleOpenDialog} onDelete={(id: string) => handleDelete(id, "whatsapp")} type="whatsapp" />
               ))}
             </section>
           </TabsContent>
