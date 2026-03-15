@@ -12,6 +12,16 @@ import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from "@/firebase"
 import { collection, doc } from "firebase/firestore"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
@@ -57,6 +67,8 @@ export default function TemplatesPage() {
   
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null)
+  const [templateToDelete, setTemplateToDelete] = useState<{ id: string, type: "email" | "whatsapp" } | null>(null)
+  
   const [formData, setFormData] = useState({
     name: "",
     subject: "",
@@ -64,17 +76,18 @@ export default function TemplatesPage() {
     bcc: ""
   })
 
+  // Fix for pointer-events stuck in 'none' after dialog closures
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        if (!isDialogOpen) {
+        if (!isDialogOpen && !templateToDelete) {
           document.body.style.pointerEvents = 'auto';
         }
       }
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isDialogOpen]);
+  }, [isDialogOpen, templateToDelete]);
 
   const handleOpenDialog = (template?: any) => {
     if (!isAdmin) {
@@ -110,18 +123,16 @@ export default function TemplatesPage() {
     toast({ title: editingTemplateId ? "Plantilla actualizada" : "Plantilla creada" })
   }
 
-  const handleDelete = useCallback((id: string, type: "email" | "whatsapp") => {
-    if (!isAdmin) {
-      toast({ title: "Acceso denegado", variant: "destructive" })
-      return
-    }
+  const confirmDelete = () => {
+    if (!isAdmin || !templateToDelete) return
     
-    if (window.confirm("¿Estás seguro de eliminar esta plantilla de forma permanente?")) {
-      const collectionName = type === 'email' ? 'email_templates' : 'whatsapp_templates'
-      deleteDocumentNonBlocking(doc(db, collectionName, id))
-      toast({ title: "Plantilla eliminada" })
-    }
-  }, [isAdmin, db, toast]);
+    const collectionName = templateToDelete.type === 'email' ? 'email_templates' : 'whatsapp_templates'
+    deleteDocumentNonBlocking(doc(db, collectionName, templateToDelete.id))
+    
+    setTemplateToDelete(null)
+    setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100)
+    toast({ title: "Plantilla eliminada" })
+  }
 
   const copyMarker = (markerName: string) => {
     const text = `{{${markerName}}}`
@@ -164,7 +175,14 @@ export default function TemplatesPage() {
               {isLoadingEmail ? (
                 <div className="col-span-full flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
               ) : (emailTemplates || []).map((tpl: any) => (
-                <TemplateCard key={tpl.id} tpl={tpl} isAdmin={isAdmin} onEdit={handleOpenDialog} onDelete={(id: string) => handleDelete(id, "email")} type="email" />
+                <TemplateCard 
+                  key={tpl.id} 
+                  tpl={tpl} 
+                  isAdmin={isAdmin} 
+                  onEdit={handleOpenDialog} 
+                  onDelete={() => setTemplateToDelete({ id: tpl.id, type: "email" })} 
+                  type="email" 
+                />
               ))}
             </section>
           </TabsContent>
@@ -174,12 +192,20 @@ export default function TemplatesPage() {
               {isLoadingWs ? (
                 <div className="col-span-full flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
               ) : (wsTemplates || []).map((tpl: any) => (
-                <TemplateCard key={tpl.id} tpl={tpl} isAdmin={isAdmin} onEdit={handleOpenDialog} onDelete={(id: string) => handleDelete(id, "whatsapp")} type="whatsapp" />
+                <TemplateCard 
+                  key={tpl.id} 
+                  tpl={tpl} 
+                  isAdmin={isAdmin} 
+                  onEdit={handleOpenDialog} 
+                  onDelete={() => setTemplateToDelete({ id: tpl.id, type: "whatsapp" })} 
+                  type="whatsapp" 
+                />
               ))}
             </section>
           </TabsContent>
         </Tabs>
 
+        {/* Create/Edit Dialog */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent className="max-w-3xl max-h-[95vh] overflow-y-auto">
             <DialogHeader>
@@ -249,6 +275,23 @@ export default function TemplatesPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={!!templateToDelete} onOpenChange={(o) => { if(!o) setTemplateToDelete(null) }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Esta acción no se puede deshacer. La plantilla se borrará permanentemente de la base de datos.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground">Eliminar</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
       </SidebarInset>
       <MobileNav />
     </div>
@@ -265,7 +308,7 @@ function TemplateCard({ tpl, isAdmin, onEdit, onDelete, type }: any) {
           {isAdmin && (
             <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
               <Button variant="ghost" size="icon" onClick={() => onEdit(tpl)}><Edit className="h-4 w-4" /></Button>
-              <Button variant="ghost" size="icon" className="text-destructive" onClick={() => onDelete(tpl.id)}><Trash2 className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="icon" className="text-destructive" onClick={onDelete}><Trash2 className="h-4 w-4" /></Button>
             </div>
           )}
         </div>
