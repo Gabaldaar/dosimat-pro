@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
@@ -33,7 +34,8 @@ import {
   Send,
   Info,
   Droplets,
-  Loader2
+  Loader2,
+  MessageSquare
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
@@ -62,18 +64,24 @@ function CustomersContent() {
   
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const zonesQuery = useMemoFirebase(() => collection(db, 'zones'), [db])
-  const templatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
+  const emailTemplatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
+  const wsTemplatesQuery = useMemoFirebase(() => collection(db, 'whatsapp_templates'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   
   const { data: customers, isLoading } = useCollection(clientsQuery)
   const { data: zones, isLoading: isLoadingZones } = useCollection(zonesQuery)
-  const { data: templates } = useCollection(templatesQuery)
+  const { data: emailTemplates } = useCollection(emailTemplatesQuery)
+  const { data: wsTemplates } = useCollection(wsTemplatesQuery)
   const { data: catalog } = useCollection(catalogQuery)
   
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isZoneManagerOpen, setIsZoneManagerOpen] = useState(false)
   const [isBulkEmailOpen, setIsBulkEmailOpen] = useState(false)
+  const [isWsDialogOpen, setIsWsDialogOpen] = useState(false)
+  const [selectedTxForWs, setSelectedTxForWs] = useState<any | null>(null)
+  
   const [selectedTemplateId, setSelectedTemplateId] = useState("")
+  const [selectedWsTemplateId, setSelectedWsTemplateId] = useState("")
   const [newZoneName, setNewZoneName] = useState("")
   const [editingCustomer, setEditingCustomer] = useState<any>(null)
 
@@ -87,14 +95,14 @@ function CustomersContent() {
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        if (!isDialogOpen && !isZoneManagerOpen && !isBulkEmailOpen) {
+        if (!isDialogOpen && !isZoneManagerOpen && !isBulkEmailOpen && !isWsDialogOpen) {
           document.body.style.pointerEvents = 'auto';
         }
       }
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isDialogOpen, isZoneManagerOpen, isBulkEmailOpen]);
+  }, [isDialogOpen, isZoneManagerOpen, isBulkEmailOpen, isWsDialogOpen]);
 
   const defaultFormData = {
     apellido: "",
@@ -306,25 +314,59 @@ function CustomersContent() {
     }
   }
 
-  // Lógica de procesamiento de marcadores de catálogo
-  const processCatalogMarkers = (text: string) => {
-    if (!text || !catalog) return text;
-    const markerRegex = /{{Precio(ARS|USD)_([^}]+)}}/gi;
-    return text.replace(markerRegex, (match, currency, prodName) => {
-      const product = catalog.find(p => p.name.trim().toLowerCase() === prodName.trim().toLowerCase());
-      if (product) {
-        const price = currency.toUpperCase() === 'USD' ? (product.priceUSD || 0) : (product.priceARS || 0);
-        return `${currency.toUpperCase() === 'USD' ? 'u$s' : '$'} ${price.toLocaleString('es-AR')}`;
-      }
-      return match;
+  const processMarkers = (text: string, customer: any) => {
+    if (!text) return text;
+    let result = text;
+    
+    const replacements: Record<string, string> = {
+      "{{Apellido}}": customer.apellido || "",
+      "{{Nombre}}": customer.nombre || "",
+      "{{Saldo_ARS}}": `$${(customer.saldoActual || 0).toLocaleString('es-AR')}`,
+      "{{Saldo_USD}}": `u$s ${(customer.saldoUSD || 0).toLocaleString('es-AR')}`,
+      "{{Direccion}}": customer.direccion || "",
+      "{{Localidad}}": customer.localidad || "",
+      "{{Fecha}}": new Date().toLocaleDateString('es-AR')
+    }
+
+    Object.entries(replacements).forEach(([marker, val]) => {
+      result = result.replaceAll(marker, val);
     });
+
+    if (catalog) {
+      const markerRegex = /{{Precio(ARS|USD)_([^}]+)}}/gi;
+      result = result.replace(markerRegex, (match, currency, prodName) => {
+        const product = catalog.find(p => p.name.trim().toLowerCase() === prodName.trim().toLowerCase());
+        if (product) {
+          const price = currency.toUpperCase() === 'USD' ? (product.priceUSD || 0) : (product.priceARS || 0);
+          return `${currency.toUpperCase() === 'USD' ? 'u$s' : '$'} ${price.toLocaleString('es-AR')}`;
+        }
+        return match;
+      });
+    }
+
+    return result;
   };
 
+  const handleSendWsTemplate = () => {
+    const template = wsTemplates?.find(t => t.id === selectedWsTemplateId)
+    if (!template || !selectedTxForWs) return
+
+    const message = processMarkers(template.body, selectedTxForWs)
+    const phone = selectedTxForWs.telefono?.replace(/\D/g, '')
+    
+    if (!phone) {
+      toast({ title: "Sin teléfono", description: "El cliente no tiene un número registrado.", variant: "destructive" })
+      return
+    }
+
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank')
+    setIsWsDialogOpen(false)
+  }
+
   const handleSendBulkEmail = () => {
-    const template = templates?.find(t => t.id === selectedTemplateId)
+    const template = emailTemplates?.find(t => t.id === selectedTemplateId)
     if (!template) return
 
-    // Recolectar todos los emails válidos, normalizarlos a minúsculas y quitar espacios
     const customerEmails = filteredCustomers
       .map(c => c.mail?.trim().toLowerCase())
       .filter(m => !!m && m.includes('@'))
@@ -334,7 +376,6 @@ function CustomersContent() {
       templateBccs = template.bcc.split(';').map((e: string) => e.trim().toLowerCase()).filter((e: string) => !!e)
     }
 
-    // Combinar y eliminar duplicados usando Set
     const uniqueEmails = [...new Set([...customerEmails, ...templateBccs])]
     const emails = uniqueEmails.join(';')
 
@@ -343,9 +384,8 @@ function CustomersContent() {
       return
     }
 
-    // Procesar marcadores de catálogo (precios) antes de enviar
-    const subject = processCatalogMarkers(template.subject);
-    const body = processCatalogMarkers(template.body);
+    const subject = processMarkers(template.subject, {});
+    const body = processMarkers(template.body, {});
 
     const mailtoLink = `mailto:?bcc=${encodeURIComponent(emails)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
     window.location.href = mailtoLink
@@ -353,7 +393,8 @@ function CustomersContent() {
     toast({ title: "Correo Masivo Preparado", description: `Se han incluido ${uniqueEmails.length} direcciones únicas en CCO.` })
   }
 
-  const currentTemplate = templates?.find(t => t.id === selectedTemplateId);
+  const currentTemplate = emailTemplates?.find(t => t.id === selectedTemplateId);
+  const currentWsTemplate = wsTemplates?.find(t => t.id === selectedWsTemplateId);
 
   return (
     <div className="flex min-h-screen bg-background w-full">
@@ -583,18 +624,6 @@ function CustomersContent() {
                               <PlusCircle className="h-4 w-4" /> Operar
                             </Link>
                           </Button>
-                          <Button 
-                            variant="outline" 
-                            size="icon" 
-                            className="h-9 w-9"
-                            asChild
-                            onClick={(e) => e.stopPropagation()}
-                            title="Historial"
-                          >
-                            <Link href={`/transactions?clientId=${customer.id}`}>
-                              <ArrowLeftRight className="h-4 w-4" />
-                            </Link>
-                          </Button>
                           
                           {customer.telefono && (
                             <div className="flex gap-1">
@@ -602,24 +631,21 @@ function CustomersContent() {
                                 variant="outline" 
                                 size="icon" 
                                 className="h-9 w-9 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
-                                onClick={(e) => handleWhatsApp(customer, e)}
-                                title="Enviar WhatsApp"
+                                onClick={(e) => { e.stopPropagation(); setSelectedTxForWs(customer); setSelectedWsTemplateId(""); setIsWsDialogOpen(true); }}
+                                title="WhatsApp con Plantilla"
                               >
-                                <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" xmlns="http://www.w3.org/2000/svg">
-                                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.353-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.05-.148-.471-1.138-.645-1.556-.17-.41-.344-.354-.471-.354-.121-.002-.261-.002-.401-.002-.14 0-.368.05-.56.269-.193.218-.735.718-.735 1.754 0 1.035.753 2.034.858 2.183.104.149 1.48 2.259 3.587 3.168.501.217.892.347 1.197.442.503.159.96.137 1.32.077.401-.067 1.23-.503 1.403-.989.173-.486.173-.902.122-.989-.05-.087-.185-.137-.482-.286zM12.004 20.122l-.001.001-3.112-.816a8.12 8.12 0 0 1-3.926-1.36l-.282-.167-3.71.972 1.003-3.61-.183-.291a8.13 8.13 0 0 1-1.247-4.34C3.547 6.01 7.34 2.122 12 2.122c2.258 0 4.382.88 5.978 2.477a8.41 8.41 0 0 1 2.474 5.979c-.004 4.656-3.846 8.544-8.448 8.544zm0-17.962C6.695 2.16 2.364 6.49 2.36 11.8c0 1.7.44 3.36 1.28 4.84l-1.36 4.89 5.01-1.31c1.43.78 3.04 1.2 4.7 1.2h.01c5.3 0 9.63-4.33 9.64-9.64 0-2.57-1.01-4.99-2.83-6.81-1.82-1.82-4.24-2.83-6.81-2.83z"/>
-                                </svg>
+                                <MessageSquare className="h-4 w-4" />
                               </Button>
                               <Button 
                                 variant="outline" 
                                 size="icon" 
-                                className="h-9 w-9 text-slate-600 border-slate-200 hover:bg-slate-50"
-                                asChild
-                                onClick={(e) => e.stopPropagation()}
-                                title="Llamar"
+                                className="h-9 w-9 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                                onClick={(e) => handleWhatsApp(customer, e)}
+                                title="WhatsApp Directo"
                               >
-                                <a href={`tel:${customer.telefono}`}>
-                                  <PhoneCall className="h-4 w-4" />
-                                </a>
+                                <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.353-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.05-.148-.471-1.138-.645-1.556-.17-.41-.344-.354-.471-.354-.121-.002-.261-.002-.401-.002-.14 0-.368.05-.56.269-.193.218-.735.718-.735 1.754 0 1.035.753 2.034.858 2.183.104.149 1.48 2.259 3.587 3.168.501.217.892.347 1.197.442.503.159.96.137 1.32.077.401-.067 1.23-.503 1.403-.989.173-.486.173-.902.122-.989-.05-.087-.185-.137-.482-.286zM12.004 20.122l-.001.001-3.112-.816a8.12 8.12 0 0 1-3.926-1.36l-.282-.167-3.71.972 1.003-3.61-.183-.291a8.13 8.13 0 0 1-1.247-4.34C3.547 6.01 7.34 2.122 12 2.122c2.258 0 4.382.88 5.978 2.477a8.41 8.41 0 0 1 2.474 5.979c-.004 4.656-3.846 8.544-8.448 8.544zm0-17.962C6.695 2.16 2.364 6.49 2.36 11.8c0 1.7.44 3.36 1.28 4.84l-1.36 4.89 5.01-1.31c1.43.78 3.04 1.2 4.7 1.2h.01c5.3 0 9.63-4.33 9.64-9.64 0-2.57-1.01-4.99-2.83-6.81-1.82-1.82-4.24-2.83-6.81-2.83z"/>
+                                </svg>
                               </Button>
                             </div>
                           )}
@@ -632,6 +658,18 @@ function CustomersContent() {
                             title="Ver en Mapa"
                           >
                             <MapPinned className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="icon" 
+                            className="h-9 w-9 text-slate-600 border-slate-200 hover:bg-slate-50"
+                            asChild
+                            onClick={(e) => e.stopPropagation()}
+                            title="Llamar"
+                          >
+                            <a href={`tel:${customer.telefono}`}>
+                              <PhoneCall className="h-4 w-4" />
+                            </a>
                           </Button>
                           <Button 
                             variant="outline" 
@@ -749,7 +787,7 @@ function CustomersContent() {
                 </div>
                 <div className="space-y-2">
                   <Label className="font-bold">Notas Generales</Label>
-                  <Textarea value={formData.notasGeneral} onChange={(e) => setFormData({...formData, notasGeneral: e.target.value})} placeholder="Notas sobre el perfil del cliente..." className="min-h-[80px]" />
+                  <Textarea value={formData.notes} onChange={(e) => setFormData({...formData, notasGeneral: e.target.value})} placeholder="Notas sobre el perfil del cliente..." className="min-h-[80px]" />
                 </div>
               </TabsContent>
 
@@ -881,7 +919,7 @@ function CustomersContent() {
                 <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
                   <SelectTrigger><SelectValue placeholder="Elige un formato..." /></SelectTrigger>
                   <SelectContent>
-                    {templates?.map((t: any) => (
+                    {emailTemplates?.map((t: any) => (
                       <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -900,7 +938,7 @@ function CustomersContent() {
               {selectedTemplateId && currentTemplate && (
                 <div className="space-y-3 animate-in fade-in duration-300">
                    <div className="p-2 bg-muted/50 rounded border text-sm font-bold truncate">
-                     Asunto: {processCatalogMarkers(currentTemplate.subject)}
+                     Asunto: {processMarkers(currentTemplate.subject, {})}
                    </div>
                    {currentTemplate.bcc && (
                      <div className="p-2 bg-blue-50 rounded border text-[10px] font-bold text-blue-700 truncate">
@@ -908,7 +946,7 @@ function CustomersContent() {
                      </div>
                    )}
                    <div className="p-3 bg-white rounded border text-xs whitespace-pre-wrap italic text-slate-600 max-h-[150px] overflow-y-auto">
-                     {processCatalogMarkers(currentTemplate.body)}
+                     {processMarkers(currentTemplate.body, {})}
                    </div>
                 </div>
               )}
@@ -921,6 +959,50 @@ function CustomersContent() {
                 className="bg-primary font-bold"
               >
                 <Send className="mr-2 h-4 w-4" /> Preparar Envío
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isWsDialogOpen} onOpenChange={setIsWsDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5 text-emerald-600" /> WhatsApp con Plantilla
+              </DialogTitle>
+              <DialogDescription>
+                Selecciona un formato para enviar a <b>{selectedTxForWs?.apellido}, {selectedTxForWs?.nombre}</b>.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Seleccionar Plantilla de WhatsApp</Label>
+                <Select value={selectedWsTemplateId} onValueChange={setSelectedWsTemplateId}>
+                  <SelectTrigger><SelectValue placeholder="Elige un mensaje..." /></SelectTrigger>
+                  <SelectContent>
+                    {wsTemplates?.map((t: any) => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {selectedWsTemplateId && currentWsTemplate && (
+                <div className="space-y-3 animate-in fade-in duration-300">
+                   <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-100 text-sm whitespace-pre-wrap italic text-slate-700 max-h-[250px] overflow-y-auto shadow-inner">
+                     {processMarkers(currentWsTemplate.body, selectedTxForWs)}
+                   </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsWsDialogOpen(false)}>Cancelar</Button>
+              <Button 
+                onClick={handleSendWsTemplate} 
+                disabled={!selectedWsTemplateId} 
+                className="bg-emerald-600 hover:bg-emerald-700 font-bold"
+              >
+                <Send className="mr-2 h-4 w-4" /> Abrir WhatsApp
               </Button>
             </DialogFooter>
           </DialogContent>

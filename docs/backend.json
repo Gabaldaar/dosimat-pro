@@ -51,6 +51,16 @@
         "body": { "type": "string" },
         "bcc": { "type": "string", "description": "Blind Carbon Copy emails separated by semicolon." }
       }
+    },
+    "WhatsAppTemplate": {
+      "title": "WhatsAppTemplate",
+      "type": "object",
+      "description": "Templates for WhatsApp messages.",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "body": { "type": "string" }
+      }
     }
   },
   "auth": {
@@ -89,6 +99,10 @@
       {
         "path": "/email_templates/{templateId}",
         "definition": { "entityName": "EmailTemplate", "description": "Message templates." }
+      },
+      {
+        "path": "/whatsapp_templates/{templateId}",
+        "definition": { "entityName": "WhatsAppTemplate", "description": "WhatsApp message templates." }
       }
     ]
   }

@@ -5,7 +5,7 @@ import { useState, useMemo, useEffect } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, Edit, Trash2, FileText, Info, Loader2, HelpCircle, Copy, Droplets } from "lucide-react"
+import { Plus, Edit, Trash2, FileText, Info, Loader2, MessageSquare, Copy, Droplets } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -14,7 +14,7 @@ import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, d
 import { collection, doc } from "firebase/firestore"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 const AVAILABLE_MARKERS = [
   "Apellido", 
@@ -34,7 +34,10 @@ const AVAILABLE_MARKERS = [
   "Monto_Abonado",
   "Caja_Destino",
   "Saldo_Caja_Final",
-  "Saldo_Cuenta",
+  "Saldo_ARS",
+  "Saldo_USD",
+  "Direccion",
+  "Localidad",
   "Metodo_Pago"
 ]
 
@@ -44,8 +47,13 @@ export default function TemplatesPage() {
   const { userData } = useUser()
   const isAdmin = userData?.role === 'Admin'
   
-  const templatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
-  const { data: templates, isLoading } = useCollection(templatesQuery)
+  const [templateType, setTemplateType] = useState<"email" | "whatsapp">("email")
+  
+  const emailTemplatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
+  const wsTemplatesQuery = useMemoFirebase(() => collection(db, 'whatsapp_templates'), [db])
+  
+  const { data: emailTemplates, isLoading: isLoadingEmail } = useCollection(emailTemplatesQuery)
+  const { data: wsTemplates, isLoading: isLoadingWs } = useCollection(wsTemplatesQuery)
   
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null)
@@ -77,7 +85,7 @@ export default function TemplatesPage() {
       setEditingTemplateId(template.id)
       setFormData({
         name: template.name,
-        subject: template.subject,
+        subject: template.subject || "",
         body: template.body,
         bcc: template.bcc || ""
       })
@@ -89,13 +97,15 @@ export default function TemplatesPage() {
   }
 
   const handleSave = () => {
-    if (!formData.name || !formData.subject || !formData.body) {
-      toast({ title: "Error", description: "Todos los campos son obligatorios", variant: "destructive" })
+    if (!formData.name || !formData.body || (templateType === 'email' && !formData.subject)) {
+      toast({ title: "Error", description: "Completa todos los campos requeridos", variant: "destructive" })
       return
     }
 
     const id = editingTemplateId || Math.random().toString(36).substr(2, 9)
-    setDocumentNonBlocking(doc(db, 'email_templates', id), { ...formData, id }, { merge: true })
+    const collectionName = templateType === 'email' ? 'email_templates' : 'whatsapp_templates'
+    
+    setDocumentNonBlocking(doc(db, collectionName, id), { ...formData, id }, { merge: true })
     setIsDialogOpen(false)
     toast({ title: editingTemplateId ? "Plantilla actualizada" : "Plantilla creada" })
   }
@@ -106,7 +116,8 @@ export default function TemplatesPage() {
       return
     }
     if (confirm("¿Estás seguro?")) {
-      deleteDocumentNonBlocking(doc(db, 'email_templates', id))
+      const collectionName = templateType === 'email' ? 'email_templates' : 'whatsapp_templates'
+      deleteDocumentNonBlocking(doc(db, collectionName, id))
       toast({ title: "Plantilla eliminada" })
     }
   }
@@ -137,34 +148,41 @@ export default function TemplatesPage() {
           )}
         </header>
 
-        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {isLoading ? (
-            <div className="col-span-full flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-          ) : (templates || []).map((tpl: any) => (
-            <Card key={tpl.id} className="glass-card group relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-1 h-full bg-primary" />
-              <CardHeader className="pb-3">
-                <div className="flex justify-between items-start">
-                  <FileText className="h-6 w-6 text-primary/40" />
-                  {isAdmin && (
-                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(tpl)}><Edit className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(tpl.id)}><Trash2 className="h-4 w-4" /></Button>
-                    </div>
-                  )}
-                </div>
-                <CardTitle className="text-lg mt-2 truncate">{tpl.name}</CardTitle>
-                <CardDescription className="truncate italic text-xs">Asunto: {tpl.subject}</CardDescription>
-              </CardHeader>
-              <CardContent><p className="text-xs text-muted-foreground line-clamp-3 bg-muted/20 p-3 rounded-lg border">{tpl.body}</p></CardContent>
-            </Card>
-          ))}
-        </section>
+        <Tabs value={templateType} onValueChange={(v: any) => setTemplateType(v)} className="w-full">
+          <TabsList className="bg-muted/50 p-1 mb-6">
+            <TabsTrigger value="email" className="font-bold flex items-center gap-2">
+              <FileText className="h-4 w-4" /> Emails
+            </TabsTrigger>
+            <TabsTrigger value="whatsapp" className="font-bold flex items-center gap-2">
+              <MessageSquare className="h-4 w-4" /> WhatsApp
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="email">
+            <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {isLoadingEmail ? (
+                <div className="col-span-full flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+              ) : (emailTemplates || []).map((tpl: any) => (
+                <TemplateCard key={tpl.id} tpl={tpl} isAdmin={isAdmin} onEdit={handleOpenDialog} onDelete={handleDelete} type="email" />
+              ))}
+            </section>
+          </TabsContent>
+
+          <TabsContent value="whatsapp">
+            <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {isLoadingWs ? (
+                <div className="col-span-full flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+              ) : (wsTemplates || []).map((tpl: any) => (
+                <TemplateCard key={tpl.id} tpl={tpl} isAdmin={isAdmin} onEdit={handleOpenDialog} onDelete={handleDelete} type="whatsapp" />
+              ))}
+            </section>
+          </TabsContent>
+        </Tabs>
 
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent className="max-w-3xl max-h-[95vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{editingTemplateId ? 'Editar Plantilla' : 'Nueva Plantilla'}</DialogTitle>
+              <DialogTitle>{editingTemplateId ? 'Editar Plantilla' : 'Nueva Plantilla'} ({templateType.toUpperCase()})</DialogTitle>
               <DialogDescription>Completa los datos de la plantilla. Haz clic en los marcadores para copiarlos.</DialogDescription>
             </DialogHeader>
             
@@ -188,7 +206,7 @@ export default function TemplatesPage() {
                 </div>
                 <div className="pt-2 border-t border-blue-200 mt-2">
                   <p className="text-[10px] text-blue-800 font-bold">
-                    🚀 PRODUCTOS: <code className="bg-white px-1">{"{{"}PrecioARS_Bidón de Cloro{"}}"}</code>. Soporta tildes y no distingue entre mayúsculas o minúsculas.
+                    🚀 PRODUCTOS: <code className="bg-white px-1">{"{{"}PrecioARS_Bidón de Cloro{"}}"}</code>.
                   </p>
                 </div>
               </div>
@@ -198,24 +216,28 @@ export default function TemplatesPage() {
                   <Label className="font-bold">Nombre Interno</Label>
                   <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Factura de Reposición" />
                 </div>
+                {templateType === 'email' && (
+                  <div className="space-y-2">
+                    <Label className="font-bold">CCO (Separar con ;)</Label>
+                    <Input value={formData.bcc} onChange={(e) => setFormData({...formData, bcc: e.target.value})} placeholder="admin@dosimat.pro" />
+                  </div>
+                )}
+              </div>
+
+              {templateType === 'email' && (
                 <div className="space-y-2">
-                  <Label className="font-bold">CCO (Separar con ;)</Label>
-                  <Input value={formData.bcc} onChange={(e) => setFormData({...formData, bcc: e.target.value})} placeholder="admin@dosimat.pro" />
+                  <Label className="font-bold">Asunto</Label>
+                  <Input value={formData.subject} onChange={(e) => setFormData({...formData, subject: e.target.value})} placeholder="Hola {{Nombre}}, tu factura de {{Fecha}}..." />
                 </div>
-              </div>
+              )}
 
               <div className="space-y-2">
-                <Label className="font-bold">Asunto</Label>
-                <Input value={formData.subject} onChange={(e) => setFormData({...formData, subject: e.target.value})} placeholder="Hola {{Nombre}}, tu factura de {{Fecha}}..." />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="font-bold">Cuerpo del Mensaje</Label>
+                <Label className="font-bold">Mensaje</Label>
                 <Textarea 
                   value={formData.body} 
                   onChange={(e) => setFormData({...formData, body: e.target.value})} 
                   className="min-h-[300px] font-sans text-sm leading-relaxed" 
-                  placeholder="Escribe el contenido aquí. Recuerda que no admite formato negrita en mailto."
+                  placeholder={templateType === 'whatsapp' ? "Ej: Hola *{{Nombre}}*! Te adjunto el detalle..." : "Escribe el contenido aquí..."}
                 />
               </div>
             </div>
@@ -229,5 +251,27 @@ export default function TemplatesPage() {
       </SidebarInset>
       <MobileNav />
     </div>
+  )
+}
+
+function TemplateCard({ tpl, isAdmin, onEdit, onDelete, type }: any) {
+  return (
+    <Card className="glass-card group relative overflow-hidden">
+      <div className={cn("absolute top-0 left-0 w-1 h-full", type === 'email' ? "bg-primary" : "bg-emerald-500")} />
+      <CardHeader className="pb-3">
+        <div className="flex justify-between items-start">
+          {type === 'email' ? <FileText className="h-6 w-6 text-primary/40" /> : <MessageSquare className="h-6 w-6 text-emerald-500/40" />}
+          {isAdmin && (
+            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button variant="ghost" size="icon" onClick={() => onEdit(tpl)}><Edit className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="icon" className="text-destructive" onClick={() => onDelete(tpl.id)}><Trash2 className="h-4 w-4" /></Button>
+            </div>
+          )}
+        </div>
+        <CardTitle className="text-lg mt-2 truncate">{tpl.name}</CardTitle>
+        {tpl.subject && <CardDescription className="truncate italic text-xs">Asunto: {tpl.subject}</CardDescription>}
+      </CardHeader>
+      <CardContent><p className="text-xs text-muted-foreground line-clamp-3 bg-muted/20 p-3 rounded-lg border">{tpl.body}</p></CardContent>
+    </Card>
   )
 }

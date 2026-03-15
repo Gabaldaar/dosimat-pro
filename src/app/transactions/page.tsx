@@ -44,7 +44,8 @@ import {
   ArrowUpCircle,
   ArrowDownCircle,
   Minus,
-  Lock
+  Lock,
+  MessageSquare
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -116,6 +117,11 @@ function TransactionsContent() {
   const [selectedTemplateId, setSelectedTemplateId] = useState("")
   const [processedEmail, setProcessedEmail] = useState({ subject: "", body: "" })
 
+  const [isWsDialogOpen, setIsWsDialogOpen] = useState(false)
+  const [selectedTxForWs, setSelectedTxForWs] = useState<any | null>(null)
+  const [selectedWsTemplateId, setSelectedWsTemplateId] = useState("")
+  const [processedWs, setProcessedWs] = useState("")
+
   const [filterCustomer, setFilterCustomer] = useState("all")
   const [filterAccount, setFilterAccount] = useState("all")
   const [filterStartDate, setFilterStartDate] = useState("")
@@ -128,14 +134,16 @@ function TransactionsContent() {
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
   const txQuery = useMemoFirebase(() => collection(db, 'transactions'), [db])
-  const templatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
+  const emailTemplatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
+  const wsTemplatesQuery = useMemoFirebase(() => collection(db, 'whatsapp_templates'), [db])
   const expenseCatsQuery = useMemoFirebase(() => collection(db, 'expense_categories'), [db])
 
   const { data: customers } = useCollection(clientsQuery)
   const { data: catalog } = useCollection(catalogQuery)
   const { data: accounts } = useCollection(accountsQuery)
   const { data: transactions, isLoading: loadingTx } = useCollection(txQuery)
-  const { data: templates } = useCollection(templatesQuery)
+  const { data: emailTemplates } = useCollection(emailTemplatesQuery)
+  const { data: wsTemplates } = useCollection(wsTemplatesQuery)
   const { data: expenseCategories } = useCollection(expenseCatsQuery)
 
   const sortedCatalog = useMemo(() => {
@@ -169,14 +177,14 @@ function TransactionsContent() {
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        if (!isEmailDialogOpen && !txToDelete && !selectedTxForNote) {
+        if (!isEmailDialogOpen && !txToDelete && !selectedTxForNote && !isWsDialogOpen) {
           document.body.style.pointerEvents = 'auto';
         }
       }
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isEmailDialogOpen, txToDelete, selectedTxForNote]);
+  }, [isEmailDialogOpen, txToDelete, selectedTxForNote, isWsDialogOpen]);
 
   const selectedClient = useMemo(() => {
     return customers?.find(c => c.id === (selectedCustomerId || editingTx?.clientId));
@@ -204,96 +212,112 @@ function TransactionsContent() {
     }, { ARS: 0, USD: 0 })
   }, [selectedItems])
 
+  const processMarkers = (text: string, tx: any, templateType: 'email' | 'whatsapp') => {
+    if (!text || !tx) return text;
+    let result = text;
+    const client = tx.clientId ? customers?.find(c => c.id === tx.clientId) : null;
+    const currencySymbol = tx.currency === 'ARS' ? '$' : 'u$s';
+    
+    const listaItems = tx.items?.map((i: any) => {
+      const itemSubtotal = (Number(i.qty) || 0) * (Number(i.price) || 0);
+      const itemDiscountAmt = itemSubtotal * ((Number(i.discount) || 0) / 100);
+      const itemTotal = itemSubtotal - itemDiscountAmt;
+      let line = `- ${i.qty} x ${i.name} (${currencySymbol}${Number(i.price).toLocaleString('es-AR')})`;
+      if (i.discount > 0) line += ` [Bonif ${i.discount}%: -${currencySymbol}${itemDiscountAmt.toLocaleString('es-AR')}]`;
+      line += ` = ${currencySymbol}${itemTotal.toLocaleString('es-AR')}`;
+      return line;
+    }).join('\n') || "N/A";
+
+    const totalDiscount = tx.items?.reduce((sum: number, i: any) => {
+      const sub = (Number(i.qty) || 0) * (Number(i.price) || 0);
+      return sum + (sub * ((Number(i.discount) || 0) / 100));
+    }, 0) || 0;
+
+    let formattedBalance = "Global";
+    if (client) {
+      const balanceValue = tx.currency === 'ARS' ? (client.saldoActual || 0) : (client.saldoUSD || 0);
+      let balanceStatus = "(Sin Deuda)";
+      if (balanceValue > 0) balanceStatus = "(Acreedor)";
+      if (balanceValue < 0) balanceStatus = "(Deudor)";
+      formattedBalance = `${currencySymbol} ${Math.abs(balanceValue).toLocaleString('es-AR')} ${balanceStatus}`;
+    }
+
+    const acc = accounts?.find(a => a.id === tx.financialAccountId);
+    let metodoPago = "A Cuenta / Pendiente";
+    if (acc) {
+      if (acc.type === 'Bank') metodoPago = "Transferencia/Depósito bancario";
+      else if (acc.type === 'Cash') metodoPago = "Efectivo";
+      else metodoPago = acc.name || "Otro";
+    }
+
+    const info = txTypeMap[tx.type] || { label: tx.type };
+    const expenseCat = tx.expenseCategoryId ? expenseCategories?.find(ec => ec.id === tx.expenseCategoryId) : null;
+
+    const replacements: Record<string, string> = {
+      "{{Apellido}}": client?.apellido || "Global",
+      "{{Nombre}}": client?.nombre || "Global",
+      "{{Fecha}}": formatLocalDate(tx.date),
+      "{{Tipo_Operacion}}": info.label,
+      "{{Categoria_Gasto}}": expenseCat ? expenseCat.name : "N/A",
+      "{{Descripción}}": tx.description || "",
+      "{{Total}}": `${currencySymbol} ${Math.abs(tx.amount).toLocaleString('es-AR')}`,
+      "{{Total_Descuento}}": `${currencySymbol} ${totalDiscount.toLocaleString('es-AR')}`,
+      "{{Monto_Abonado}}": `${currencySymbol} ${(tx.paidAmount || 0).toLocaleString('es-AR')}`,
+      "{{Caja_Destino}}": acc ? acc.name : "A Cuenta",
+      "{{Saldo_Caja_Final}}": tx.accountBalanceAfter !== undefined && tx.accountBalanceAfter !== null 
+        ? `${currencySymbol} ${Number(tx.accountBalanceAfter).toLocaleString('es-AR')}` 
+        : "N/A",
+      "{{Moneda}}": tx.currency || "",
+      "{{Detalle_Items}}": listaItems,
+      "{{Item}}": tx.items?.[0]?.name || "N/A",
+      "{{Cantidad}}": tx.items?.[0]?.qty?.toString() || "N/A",
+      "{{Precio}}": tx.items?.[0]?.price?.toString() || "N/A",
+      "{{Subtotal}}": tx.items?.[0] ? ((tx.items[0].qty * tx.items[0].price) * (1 - (tx.items[0].discount / 100))).toLocaleString('es-AR') : "N/A",
+      "{{Saldo_ARS}}": `$${(client?.saldoActual || 0).toLocaleString('es-AR')}`,
+      "{{Saldo_USD}}": `u$s ${(client?.saldoUSD || 0).toLocaleString('es-AR')}`,
+      "{{Saldo_Cuenta}}": formattedBalance,
+      "{{Direccion}}": client?.direccion || "N/A",
+      "{{Localidad}}": client?.localidad || "N/A",
+      "{{Metodo_Pago}}": metodoPago
+    }
+
+    Object.entries(replacements).forEach(([marker, value]) => {
+      result = result.replaceAll(marker, value);
+    });
+
+    const markerRegex = /{{Precio(ARS|USD)_([^}]+)}}/gi;
+    result = result.replace(markerRegex, (match, currency, prodName) => {
+      const product = catalog?.find(p => p.name.trim().toLowerCase() === prodName.trim().toLowerCase());
+      if (product) {
+        const price = currency.toUpperCase() === 'USD' ? (product.priceUSD || 0) : (product.priceARS || 0);
+        return `${currency.toUpperCase() === 'USD' ? 'u$s' : '$'} ${price.toLocaleString('es-AR')}`;
+      }
+      return match;
+    });
+
+    return result;
+  };
+
   useEffect(() => {
-    if (selectedTxForEmail && selectedTemplateId && templates && customers && accounts && catalog && expenseCategories) {
-      const tpl = templates.find(t => t.id === selectedTemplateId)
-      const client = selectedTxForEmail.clientId ? customers.find(c => c.id === selectedTxForEmail.clientId) : null;
-      
+    if (selectedTxForEmail && selectedTemplateId && emailTemplates) {
+      const tpl = emailTemplates.find(t => t.id === selectedTemplateId)
       if (tpl) {
-        let subject = tpl.subject
-        let body = tpl.body
-        const currencySymbol = selectedTxForEmail.currency === 'ARS' ? '$' : 'u$s';
-        
-        const listaItems = selectedTxForEmail.items?.map((i: any) => {
-          const itemSubtotal = (Number(i.qty) || 0) * (Number(i.price) || 0);
-          const itemDiscountAmt = itemSubtotal * ((Number(i.discount) || 0) / 100);
-          const itemTotal = itemSubtotal - itemDiscountAmt;
-          let line = `- ${i.qty} x ${i.name} (${currencySymbol}${Number(i.price).toLocaleString('es-AR')})`;
-          if (i.discount > 0) line += ` [Bonif ${i.discount}%: -${currencySymbol}${itemDiscountAmt.toLocaleString('es-AR')}]`;
-          line += ` = ${currencySymbol}${itemTotal.toLocaleString('es-AR')}`;
-          return line;
-        }).join('\n') || "N/A";
-
-        const totalDiscount = selectedTxForEmail.items?.reduce((sum: number, i: any) => {
-          const sub = (Number(i.qty) || 0) * (Number(i.price) || 0);
-          return sum + (sub * ((Number(i.discount) || 0) / 100));
-        }, 0) || 0;
-
-        let formattedBalance = "Global (Sin Cliente)";
-        if (client) {
-          const balanceValue = selectedTxForEmail.currency === 'ARS' ? (client.saldoActual || 0) : (client.saldoUSD || 0);
-          let balanceStatus = "(Sin Deuda)";
-          if (balanceValue > 0) balanceStatus = "(Acreedor)";
-          if (balanceValue < 0) balanceStatus = "(Deudor)";
-          formattedBalance = `${currencySymbol} ${Math.abs(balanceValue).toLocaleString('es-AR')} ${balanceStatus}`;
-        }
-
-        const acc = accounts.find(a => a.id === selectedTxForEmail.financialAccountId);
-        let metodoPago = "A Cuenta / Pendiente";
-        if (acc) {
-          if (acc.type === 'Bank') metodoPago = "Transferencia/Depósito bancario";
-          else if (acc.type === 'Cash') metodoPago = "Efectivo";
-          else metodoPago = acc.name || "Otro";
-        }
-
-        const info = txTypeMap[selectedTxForEmail.type] || { label: selectedTxForEmail.type };
-        const expenseCat = selectedTxForEmail.expenseCategoryId ? expenseCategories.find(ec => ec.id === selectedTxForEmail.expenseCategoryId) : null;
-
-        const replacements: Record<string, string> = {
-          "{{Apellido}}": client?.apellido || "Global",
-          "{{Nombre}}": client?.nombre || "Global",
-          "{{Fecha}}": formatLocalDate(selectedTxForEmail.date),
-          "{{Tipo_Operacion}}": info.label,
-          "{{Categoria_Gasto}}": expenseCat ? expenseCat.name : "N/A",
-          "{{Descripción}}": selectedTxForEmail.description || "",
-          "{{Total}}": `${currencySymbol} ${Math.abs(selectedTxForEmail.amount).toLocaleString('es-AR')}`,
-          "{{Total_Descuento}}": `${currencySymbol} ${totalDiscount.toLocaleString('es-AR')}`,
-          "{{Monto_Abonado}}": `${currencySymbol} ${(selectedTxForEmail.paidAmount || 0).toLocaleString('es-AR')}`,
-          "{{Caja_Destino}}": acc ? acc.name : "A Cuenta",
-          "{{Saldo_Caja_Final}}": selectedTxForEmail.accountBalanceAfter !== undefined && selectedTxForEmail.accountBalanceAfter !== null 
-            ? `${currencySymbol} ${Number(selectedTxForEmail.accountBalanceAfter).toLocaleString('es-AR')}` 
-            : "N/A",
-          "{{Moneda}}": selectedTxForEmail.currency || "",
-          "{{Detalle_Items}}": listaItems,
-          "{{Item}}": selectedTxForEmail.items?.[0]?.name || "N/A",
-          "{{Cantidad}}": selectedTxForEmail.items?.[0]?.qty?.toString() || "N/A",
-          "{{Precio}}": selectedTxForEmail.items?.[0]?.price?.toString() || "N/A",
-          "{{Subtotal}}": selectedTxForEmail.items?.[0] ? ((selectedTxForEmail.items[0].qty * selectedTxForEmail.items[0].price) * (1 - (selectedTxForEmail.items[0].discount / 100))).toLocaleString('es-AR') : "N/A",
-          "{{Saldo_Cuenta}}": formattedBalance,
-          "{{Metodo_Pago}}": metodoPago
-        }
-
-        Object.entries(replacements).forEach(([marker, value]) => {
-          subject = subject.replaceAll(marker, value);
-          body = body.replaceAll(marker, value);
+        setProcessedEmail({ 
+          subject: processMarkers(tpl.subject, selectedTxForEmail, 'email'), 
+          body: processMarkers(tpl.body, selectedTxForEmail, 'email') 
         });
-
-        const markerRegex = /{{Precio(ARS|USD)_([^}]+)}}/gi;
-        const processCustomMarkers = (text: string) => {
-          return text.replace(markerRegex, (match, currency, prodName) => {
-            const product = catalog.find(p => p.name.trim().toLowerCase() === prodName.trim().toLowerCase());
-            if (product) {
-              const price = currency.toUpperCase() === 'USD' ? (product.priceUSD || 0) : (product.priceARS || 0);
-              return `${currency.toUpperCase() === 'USD' ? 'u$s' : '$'} ${price.toLocaleString('es-AR')}`;
-            }
-            return match;
-          });
-        };
-
-        setProcessedEmail({ subject: processCustomMarkers(subject), body: processCustomMarkers(body) });
       }
     }
-  }, [selectedTxForEmail, selectedTemplateId, templates, customers, accounts, catalog, expenseCategories])
+  }, [selectedTxForEmail, selectedTemplateId, emailTemplates, customers, accounts, catalog, expenseCategories])
+
+  useEffect(() => {
+    if (selectedTxForWs && selectedWsTemplateId && wsTemplates) {
+      const tpl = wsTemplates.find(t => t.id === selectedWsTemplateId)
+      if (tpl) {
+        setProcessedWs(processMarkers(tpl.body, selectedTxForWs, 'whatsapp'));
+      }
+    }
+  }, [selectedTxForWs, selectedWsTemplateId, wsTemplates, customers, accounts, catalog, expenseCategories])
 
   const handleAddItem = (itemId: string) => {
     const item = catalog?.find((i: any) => i.id === itemId)
@@ -531,13 +555,28 @@ function TransactionsContent() {
 
   const handleSendEmail = () => {
     const client = selectedTxForEmail.clientId ? customers?.find(c => c.id === selectedTxForEmail.clientId) : null;
-    const tpl = templates?.find(t => t.id === selectedTemplateId)
+    const tpl = emailTemplates?.find(t => t.id === selectedTemplateId)
     if (!processedEmail.subject || !processedEmail.body || !tpl) return
     const recipient = client?.mail || ""
     let mailtoLink = `mailto:${recipient}?subject=${encodeURIComponent(processedEmail.subject)}&body=${encodeURIComponent(processedEmail.body)}`
     if (tpl.bcc) mailtoLink += `&bcc=${encodeURIComponent(tpl.bcc)}`
     window.location.href = mailtoLink
     setIsEmailDialogOpen(false)
+  }
+
+  const handleOpenWsDialog = (tx: any) => {
+    setSelectedTxForWs(tx)
+    setSelectedWsTemplateId("")
+    setProcessedWs("")
+    setIsWsDialogOpen(true)
+  }
+
+  const handleSendWs = () => {
+    const client = selectedTxForWs.clientId ? customers?.find(c => c.id === selectedTxForWs.clientId) : null;
+    const phone = client?.telefono?.replace(/\D/g, '')
+    if (!phone || !processedWs) return
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(processedWs)}`, '_blank')
+    setIsWsDialogOpen(false)
   }
 
   const handleCopyWhatsApp = (tx: any) => {
@@ -644,7 +683,7 @@ function TransactionsContent() {
                    </div>
                     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
                       <TabsList className="grid grid-cols-5 w-full h-auto p-1 bg-muted/50 border shadow-inner">
-                          {Object.entries(txTypeMap).filter(([k]) => !['Adjustment', 'Expense'].includes(k)).map(([key, info]) => {
+                          {Object.entries(txTypeMap).filter(([k]) => !['Adjustment', 'Expense', 'cobro_manual'].includes(k)).map(([key, info]) => {
                             const Icon = info.icon
                             return (
                               <TabsTrigger key={key} value={key} className={`data-[state=active]:bg-primary data-[state=active]:text-white py-2 flex flex-col gap-1`}>
@@ -1020,8 +1059,9 @@ function TransactionsContent() {
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleCopyWhatsApp(tx)}><Copy className="h-4 w-4 mr-2" /> Copiar</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleOpenEmailDialog(tx)}><Mail className="h-4 w-4 mr-2" /> Email</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleOpenWsDialog(tx)}><MessageSquare className="h-4 w-4 mr-2 text-emerald-600" /> WhatsApp (Plantilla)</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleCopyWhatsApp(tx)}><Copy className="h-4 w-4 mr-2" /> Copiar Detalle</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleOpenEmailDialog(tx)}><Mail className="h-4 w-4 mr-2" /> Enviar Email</DropdownMenuItem>
                               {isAdmin && (
                                 <>
                                   <DropdownMenuItem 
@@ -1067,6 +1107,7 @@ function TransactionsContent() {
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 -mt-1 -mr-1"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleOpenWsDialog(tx)}><MessageSquare className="h-4 w-4 mr-2 text-emerald-600" /> WhatsApp (Plantilla)</DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleCopyWhatsApp(tx)}><Copy className="h-4 w-4 mr-2" /> Copiar</DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleOpenEmailDialog(tx)}><Mail className="h-4 w-4 mr-2" /> Email</DropdownMenuItem>
                           {isAdmin && (
@@ -1137,12 +1178,12 @@ function TransactionsContent() {
 
         <Dialog open={isEmailDialogOpen} onOpenChange={setIsEmailDialogOpen}>
           <DialogContent className="max-w-2xl">
-            <DialogHeader><DialogTitle>Notificación al Cliente</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>Notificación por Email</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
-              <Label>Plantilla</Label>
+              <Label>Seleccionar Plantilla de Mail</Label>
               <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
                 <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                <SelectContent>{templates?.map((t: any) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}</SelectContent>
+                <SelectContent>{emailTemplates?.map((t: any) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}</SelectContent>
               </Select>
               {selectedTemplateId && (
                 <div className="p-4 bg-muted/20 rounded border space-y-2 max-h-[350px] overflow-y-auto">
@@ -1152,6 +1193,30 @@ function TransactionsContent() {
               )}
             </div>
             <DialogFooter><Button variant="outline" onClick={() => setIsEmailDialogOpen(false)}>Cerrar</Button><Button onClick={handleSendEmail} disabled={!selectedTemplateId}>Preparar Email</Button></DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isWsDialogOpen} onOpenChange={setIsWsDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader><DialogTitle className="flex items-center gap-2"><MessageSquare className="h-5 w-5 text-emerald-600" /> Notificación por WhatsApp</DialogTitle></DialogHeader>
+            <div className="space-y-4 py-4">
+              <Label>Seleccionar Plantilla de WhatsApp</Label>
+              <Select value={selectedWsTemplateId} onValueChange={setSelectedWsTemplateId}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                <SelectContent>{wsTemplates?.map((t: any) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}</SelectContent>
+              </Select>
+              {selectedWsTemplateId && (
+                <div className="p-4 bg-emerald-50/50 rounded-xl border border-emerald-100 space-y-2 max-h-[350px] overflow-y-auto shadow-inner">
+                  <p className="text-sm whitespace-pre-wrap italic leading-relaxed text-slate-700">{processedWs}</p>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsWsDialogOpen(false)}>Cerrar</Button>
+              <Button onClick={handleSendWs} disabled={!selectedWsTemplateId} className="bg-emerald-600 hover:bg-emerald-700">
+                <Send className="mr-2 h-4 w-4" /> Abrir WhatsApp
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
