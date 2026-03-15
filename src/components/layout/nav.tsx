@@ -40,7 +40,7 @@ const navItems = [
   { href: "/analysis", label: "Análisis", icon: BarChart3 },
   { href: "/accounts", label: "Cajas", icon: Wallet },
   { href: "/catalog", label: "Catálogo", icon: Package },
-  { href: "/templates", label: "Plantillas Mail", icon: FileText },
+  { href: "/templates", label: "Plantillas", icon: FileText },
   { href: "/team", label: "Equipo", icon: Shield },
 ]
 
