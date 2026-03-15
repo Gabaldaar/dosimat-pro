@@ -546,14 +546,14 @@ function TransactionsContent() {
     const dateStr = formatLocalDate(tx.date);
     const currencySymbol = tx.currency === 'USD' ? 'u$s' : '$';
     let text = `*DOSIMAT PRO - DETALLE DE OPERACIÓN*\n\n`;
-    text += `📅 *Fecha:* ${dateStr}\n`;
-    text += `👤 *Cliente:* ${client ? `${client.apellido}, ${client.nombre}` : 'Global'}\n`;
-    text += `📝 *Tipo:* ${info.label}\n`;
+    text += `*Fecha:* ${dateStr}\n`;
+    text += `*Cliente:* ${client ? `${client.apellido}, ${client.nombre}` : 'Global'}\n`;
+    text += `*Tipo:* ${info.label}\n`;
     if (tx.expenseCategoryId && expenseCategories) {
       const cat = expenseCategories.find(c => c.id === tx.expenseCategoryId);
-      if (cat) text += `🏷️ *Categoría:* ${cat.name}\n`;
+      if (cat) text += `*Categoría:* ${cat.name}\n`;
     }
-    if (tx.description) text += `ℹ️ *Nota:* ${tx.description}\n`;
+    if (tx.description) text += `*Nota:* ${tx.description}\n`;
     if (tx.items && tx.items.length > 0) {
       text += `\n*Detalle:*\n`;
       tx.items.forEach((item: any) => {
@@ -565,15 +565,15 @@ function TransactionsContent() {
         text += ` = ${currencySymbol}${lineTotal.toLocaleString('es-AR')}\n`;
       });
     }
-    text += `\n💰 *Total:* ${currencySymbol}${Math.abs(tx.amount || 0).toLocaleString('es-AR')}\n`;
+    text += `\n*Total:* ${currencySymbol}${Math.abs(tx.amount || 0).toLocaleString('es-AR')}\n`;
     if (tx.paidAmount !== undefined) {
-      text += `✅ *Abonado:* ${currencySymbol}${tx.paidAmount.toLocaleString('es-AR')}\n`;
+      text += `*Abonado:* ${currencySymbol}${tx.paidAmount.toLocaleString('es-AR')}\n`;
       const debt = (tx.amount || 0) - (tx.paidAmount || 0);
-      if (debt > 0) text += `⚖️ *Pendiente:* ${currencySymbol}${debt.toLocaleString('es-AR')}\n`;
+      if (debt > 0) text += `*Pendiente:* ${currencySymbol}${debt.toLocaleString('es-AR')}\n`;
     }
     const acc = accounts?.find(a => a.id === tx.financialAccountId);
-    if (acc) text += `🏦 *Caja:* ${acc.name}\n`;
-    else if (tx.type !== 'adjustment' && tx.type !== 'Adjustment' && tx.type !== 'Expense' && (!tx.paidAmount || tx.paidAmount === 0)) text += `💳 *Estado:* A Cuenta\n`;
+    if (acc) text += `*Caja:* ${acc.name}\n`;
+    else if (tx.type !== 'adjustment' && tx.type !== 'Adjustment' && tx.type !== 'Expense' && (!tx.paidAmount || tx.paidAmount === 0)) text += `*Estado:* A Cuenta\n`;
     navigator.clipboard.writeText(text);
     toast({ title: "Copiado", description: "Detalles de la operación copiados al portapapeles." });
   }
