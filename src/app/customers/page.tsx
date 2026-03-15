@@ -36,7 +36,9 @@ import {
   Droplets,
   Loader2,
   MessageSquare,
-  History
+  History,
+  ChevronLeft,
+  FastForward
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import {
@@ -59,6 +61,7 @@ import { collection, doc } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Progress } from "@/components/ui/progress"
 
 function CustomersContent() {
   const { toast } = useToast()
@@ -90,11 +93,16 @@ function CustomersContent() {
   const [isZoneManagerOpen, setIsZoneManagerOpen] = useState(false)
   const [isBulkEmailOpen, setIsBulkEmailOpen] = useState(false)
   const [isWsDialogOpen, setIsWsDialogOpen] = useState(false)
+  const [isBulkWsOpen, setIsBulkWsOpen] = useState(false)
+  
   const [selectedTxForWs, setSelectedTxForWs] = useState<any | null>(null)
   const [customerToDelete, setCustomerToDelete] = useState<any | null>(null)
   
   const [selectedTemplateId, setSelectedTemplateId] = useState("")
   const [selectedWsTemplateId, setSelectedWsTemplateId] = useState("")
+  const [selectedBulkWsTemplateId, setSelectedBulkWsTemplateId] = useState("")
+  const [bulkWsIndex, setBulkWsIndex] = useState(0)
+  
   const [newZoneName, setNewZoneName] = useState("")
   const [editingCustomer, setEditingCustomer] = useState<any>(null)
 
@@ -108,14 +116,15 @@ function CustomersContent() {
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        if (!isDialogOpen && !isZoneManagerOpen && !isBulkEmailOpen && !isWsDialogOpen && !customerToDelete) {
+        const anyOpen = isDialogOpen || isZoneManagerOpen || isBulkEmailOpen || isWsDialogOpen || !!customerToDelete || isBulkWsOpen;
+        if (!anyOpen) {
           document.body.style.pointerEvents = 'auto';
         }
       }
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isDialogOpen, isZoneManagerOpen, isBulkEmailOpen, isWsDialogOpen, customerToDelete]);
+  }, [isDialogOpen, isZoneManagerOpen, isBulkEmailOpen, isWsDialogOpen, customerToDelete, isBulkWsOpen]);
 
   const defaultFormData = {
     apellido: "",
@@ -408,6 +417,48 @@ function CustomersContent() {
     toast({ title: "Correo Masivo Preparado", description: `Se han incluido ${uniqueEmails.length} direcciones únicas en CCO.` })
   }
 
+  // Sequential WhatsApp Logic
+  const currentBulkCustomer = filteredCustomers[bulkWsIndex]
+  const currentBulkWsTemplate = wsTemplates?.find(t => t.id === selectedBulkWsTemplateId)
+
+  const handleStartBulkWs = () => {
+    if (filteredCustomers.length === 0) {
+      toast({ title: "Sin clientes", description: "No hay clientes en la lista filtrada.", variant: "destructive" })
+      return
+    }
+    setBulkWsIndex(0)
+    setSelectedBulkWsTemplateId("")
+    setIsBulkWsOpen(true)
+  }
+
+  const handleSendNextWs = () => {
+    if (!currentBulkCustomer || !currentBulkWsTemplate) return
+
+    const message = processMarkers(currentBulkWsTemplate.body, currentBulkCustomer)
+    const phone = currentBulkCustomer.telefono?.replace(/\D/g, '')
+    
+    if (phone) {
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank')
+    } else {
+      toast({ title: "Sin teléfono", description: `${currentBulkCustomer.apellido} no tiene teléfono.`, variant: "destructive" })
+    }
+
+    if (bulkWsIndex < filteredCustomers.length - 1) {
+      setBulkWsIndex(prev => prev + 1)
+    } else {
+      toast({ title: "Secuencia completada", description: "Has llegado al final de la lista." })
+      setIsBulkWsOpen(false)
+    }
+  }
+
+  const handleSkipWs = () => {
+    if (bulkWsIndex < filteredCustomers.length - 1) {
+      setBulkWsIndex(prev => prev + 1)
+    } else {
+      setIsBulkWsOpen(false)
+    }
+  }
+
   const currentTemplate = emailTemplates?.find(t => t.id === selectedTemplateId);
   const currentWsTemplate = wsTemplates?.find(t => t.id === selectedWsTemplateId);
 
@@ -439,9 +490,15 @@ function CustomersContent() {
             <Button variant="outline" onClick={handleCopyAllFiltered} className="border-primary text-primary hover:bg-primary/5">
               <Copy className="mr-2 h-4 w-4" /> Copiar Todo
             </Button>
-            <Button variant="outline" onClick={() => setIsBulkEmailOpen(true)} className="border-primary text-primary hover:bg-primary/5">
-              <Mail className="mr-2 h-4 w-4" /> Masivo
-            </Button>
+            <div className="flex gap-1 border rounded-lg p-1 bg-muted/20">
+              <Button variant="ghost" size="sm" onClick={() => setIsBulkEmailOpen(true)} className="text-[10px] font-bold h-8 gap-1.5">
+                <Mail className="h-3.5 w-3.5" /> MAIL MASIVO
+              </Button>
+              <div className="w-px h-4 bg-border self-center" />
+              <Button variant="ghost" size="sm" onClick={handleStartBulkWs} className="text-[10px] font-bold h-8 gap-1.5 text-emerald-700">
+                <MessageSquare className="h-3.5 w-3.5" /> WHATSAPP MASIVO
+              </Button>
+            </div>
             {isAdmin && !isCommunicator && (
               <Button variant="outline" onClick={() => setIsZoneManagerOpen(true)}>
                 <MapPinned className="mr-2 h-4 w-4" /> Zonas
@@ -573,7 +630,7 @@ function CustomersContent() {
                     "glass-card hover:shadow-md transition-all group relative overflow-hidden",
                     !isCommunicator && "cursor-pointer"
                   )}
-                  onClick={() => handleOpenDialog(customer)}
+                  onClick={() => !isCommunicator && handleOpenDialog(customer)}
                 >
                   <div className={cn(
                     "absolute top-0 left-0 w-1.5 h-full",
@@ -1043,6 +1100,97 @@ function CustomersContent() {
               >
                 <Send className="mr-2 h-4 w-4" /> Abrir WhatsApp
               </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Sequential Bulk WhatsApp Dialog */}
+        <Dialog open={isBulkWsOpen} onOpenChange={(o) => {
+          setIsBulkWsOpen(o);
+          if(!o) setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
+        }}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5 text-emerald-600" /> Secuencia Masiva de WhatsApp
+              </DialogTitle>
+              <DialogDescription>
+                Estás enviando a la lista de {filteredCustomers.length} clientes filtrados.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-6 py-4">
+              <div className="space-y-2">
+                <Label className="font-bold">1. Seleccionar Plantilla para la secuencia</Label>
+                <Select value={selectedBulkWsTemplateId} onValueChange={setSelectedBulkWsTemplateId}>
+                  <SelectTrigger><SelectValue placeholder="Elige el mensaje..." /></SelectTrigger>
+                  <SelectContent>
+                    {wsTemplates?.map((t: any) => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {selectedBulkWsTemplateId && currentBulkCustomer && (
+                <div className="space-y-4 animate-in fade-in duration-300">
+                  <div className="flex flex-col gap-2">
+                    <div className="flex justify-between items-center text-xs font-black uppercase tracking-widest text-muted-foreground">
+                      <span>Progreso del envío</span>
+                      <span>{bulkWsIndex + 1} de {filteredCustomers.length}</span>
+                    </div>
+                    <Progress value={((bulkWsIndex + 1) / filteredCustomers.length) * 100} className="h-2" />
+                  </div>
+
+                  <Card className="border-emerald-200 bg-emerald-50/30">
+                    <CardContent className="pt-6">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <p className="text-[10px] font-black uppercase text-emerald-700 tracking-widest">Destinatario Actual</p>
+                          <h3 className="text-xl font-bold">{currentBulkCustomer.apellido}, {currentBulkCustomer.nombre}</h3>
+                          <p className="text-xs text-muted-foreground">{currentBulkCustomer.telefono || "SIN TELÉFONO REGISTRADO"}</p>
+                        </div>
+                        <Badge variant="outline" className="bg-white text-emerald-700 border-emerald-200">
+                          {bulkWsIndex + 1}/{filteredCustomers.length}
+                        </Badge>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Vista previa del mensaje</p>
+                        <div className="p-4 bg-white rounded-xl border border-emerald-100 text-sm italic whitespace-pre-wrap leading-relaxed shadow-inner max-h-[200px] overflow-y-auto">
+                          {processMarkers(currentBulkWsTemplate.body, currentBulkCustomer)}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {!selectedBulkWsTemplateId && (
+                <div className="py-12 text-center border-2 border-dashed rounded-2xl bg-muted/5">
+                  <MessageSquare className="h-10 w-10 mx-auto text-muted-foreground opacity-20 mb-3" />
+                  <p className="text-sm text-muted-foreground">Selecciona una plantilla para comenzar a recorrer la lista.</p>
+                </div>
+              )}
+            </div>
+            <DialogFooter className="flex justify-between sm:justify-between items-center gap-2">
+              <Button variant="ghost" onClick={() => setIsBulkWsOpen(false)} className="font-bold">Finalizar</Button>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={handleSkipWs} 
+                  disabled={!selectedBulkWsTemplateId}
+                  className="gap-2"
+                >
+                  Omitir <FastForward className="h-4 w-4" />
+                </Button>
+                <Button 
+                  onClick={handleSendNextWs} 
+                  disabled={!selectedBulkWsTemplateId || !currentBulkCustomer?.telefono}
+                  className="bg-emerald-600 hover:bg-emerald-700 font-bold px-8 shadow-lg shadow-emerald-200 gap-2"
+                >
+                  <Send className="h-4 w-4" /> Enviar y Siguiente
+                </Button>
+              </div>
             </DialogFooter>
           </DialogContent>
         </Dialog>
