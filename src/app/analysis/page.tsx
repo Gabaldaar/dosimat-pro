@@ -59,7 +59,7 @@ export default function AnalysisPage() {
   const router = useRouter()
   const { userData, isUserLoading } = useUser()
 
-  // Redirección para el rol Comunicador (No puede ver análisis)
+  // Redirección para el rol Comunicador: No debe ver análisis
   useEffect(() => {
     if (!isUserLoading && userData?.role === 'Communicator') {
       router.replace('/customers')
@@ -101,7 +101,6 @@ export default function AnalysisPage() {
     setExpenseCatFilter("all")
   }
 
-  // Filtered Transactions for Summary (Both currencies)
   const filteredTxsForSummary = useMemo(() => {
     if (!transactions) return []
     return transactions.filter(tx => {
@@ -112,7 +111,6 @@ export default function AnalysisPage() {
     })
   }, [transactions, startDate, endDate])
 
-  // Filtered Transactions specifically for the selected currency charts
   const filteredTxsByCurrency = useMemo(() => {
     return filteredTxsForSummary.filter(tx => {
       if (tx.currency !== analysisCurrency) return false
@@ -132,12 +130,10 @@ export default function AnalysisPage() {
     })
   }, [filteredTxsForSummary, analysisCurrency, incomeTypeFilter, expenseCatFilter])
 
-  // Summary Calculations - CRITERIO DE CAJA
   const summary = useMemo(() => {
     return filteredTxsForSummary.reduce((acc, tx) => {
       const curr = tx.currency === 'USD' ? 'USD' : 'ARS'
       
-      // INGRESOS: (Monto abonado en venta/servicio) + (Monto total de cobros)
       if (tx.type === 'cobro') {
         acc[curr].income += Math.abs(tx.amount)
       } else if (tx.type === 'sale' || tx.type === 'refill' || tx.type === 'service') {
@@ -146,7 +142,6 @@ export default function AnalysisPage() {
         acc[curr].income += tx.amount
       }
 
-      // GASTOS: Gastos explícitos + Ajustes negativos
       if (tx.type === 'Expense' || ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount < 0)) {
         acc[curr].expense += Math.abs(tx.amount)
       }
@@ -158,7 +153,6 @@ export default function AnalysisPage() {
     })
   }, [filteredTxsForSummary])
 
-  // Data for Annual Bar Chart (Reactive to selected currency)
   const annualData = useMemo(() => {
     if (!transactions) return []
     const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
@@ -192,7 +186,6 @@ export default function AnalysisPage() {
     return last12.map(p => ({ ...p, saldo: p.ingresos - p.gastos }))
   }, [transactions, analysisCurrency])
 
-  // Data for Income Distribution Pie (Reactive to selected currency)
   const incomePieData = useMemo(() => {
     const counts: Record<string, number> = {}
     filteredTxsByCurrency.forEach(tx => {
@@ -218,7 +211,6 @@ export default function AnalysisPage() {
     return Object.entries(counts).map(([name, value]) => ({ name, value }))
   }, [filteredTxsByCurrency])
 
-  // Data for Expense Distribution Pie (Reactive to selected currency)
   const expensePieData = useMemo(() => {
     const counts: Record<string, number> = {}
     filteredTxsByCurrency.forEach(tx => {
@@ -231,7 +223,6 @@ export default function AnalysisPage() {
     return Object.entries(counts).map(([name, value]) => ({ name, value }))
   }, [filteredTxsByCurrency, expenseCategories])
 
-  // Top 5 Zones (Reactive to selected currency)
   const zoneRevenue = useMemo(() => {
     const revenue: Record<string, number> = {}
     filteredTxsByCurrency.forEach(tx => {
@@ -252,11 +243,13 @@ export default function AnalysisPage() {
       .slice(0, 5)
   }, [filteredTxsByCurrency, clients, zones])
 
-  if (isUserLoading || (userData?.role === 'Communicator')) {
+  if (isUserLoading || userData?.role === 'Communicator') {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="mt-4 text-sm text-muted-foreground">Accediendo...</p>
+        <p className="mt-4 text-sm text-muted-foreground font-medium">
+          {userData?.role === 'Communicator' ? 'Redirigiendo a Clientes...' : 'Accediendo...'}
+        </p>
       </div>
     )
   }
@@ -300,11 +293,11 @@ export default function AnalysisPage() {
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
             <div className="space-y-1">
               <Label className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> Desde</Label>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(startDate)} className="h-9" />
+              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-9" />
             </div>
             <div className="space-y-1">
               <Label className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> Hasta</Label>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(endDate)} className="h-9" />
+              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-9" />
             </div>
             <div className="space-y-1">
               <Label className="text-[10px] font-bold uppercase text-muted-foreground">Rubro Ingresos</Label>
@@ -335,7 +328,7 @@ export default function AnalysisPage() {
           </div>
         </Card>
 
-        {/* Totals Section - Always shows both currencies */}
+        {/* Totals Section */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card className="glass-card bg-emerald-50/30 border-l-4 border-l-emerald-500">
             <CardContent className="pt-6">
@@ -381,9 +374,8 @@ export default function AnalysisPage() {
           </Card>
         </div>
 
-        {/* Charts Section - Reactive to analysisCurrency */}
+        {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Bar Chart Annual */}
           <Card className="glass-card col-span-1 lg:col-span-2">
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><BarChart3 className="h-5 w-5 text-primary" /> Evolución Anual ({analysisCurrency})</CardTitle>
@@ -410,7 +402,6 @@ export default function AnalysisPage() {
             </CardContent>
           </Card>
 
-          {/* Pie Chart Income */}
           <Card className="glass-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><PieChartIcon className="h-5 w-5 text-emerald-500" /> Ingresos por Rubro ({analysisCurrency})</CardTitle>
@@ -445,7 +436,6 @@ export default function AnalysisPage() {
             </CardContent>
           </Card>
 
-          {/* Pie Chart Expense */}
           <Card className="glass-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><PieChartIcon className="h-5 w-5 text-rose-500" /> Gastos por Categoría ({analysisCurrency})</CardTitle>

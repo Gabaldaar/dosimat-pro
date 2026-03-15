@@ -81,7 +81,7 @@ export default function AccountsPage() {
   const { userData, isUserLoading } = useUser()
   const isAdmin = userData?.role === 'Admin'
 
-  // Redirección para el rol Comunicador (No puede ver cajas)
+  // Redirección para el rol Comunicador: No puede acceder a cajas
   useEffect(() => {
     if (!isUserLoading && userData?.role === 'Communicator') {
       router.replace('/customers')
@@ -102,11 +102,9 @@ export default function AccountsPage() {
   const sortedAccounts = useMemo(() => {
     if (!accounts) return []
     return [...accounts].sort((a: any, b: any) => {
-      // Primary Sort: Currency (ARS before USD)
       if (a.currency !== b.currency) {
         return (a.currency || "").localeCompare(b.currency || "")
       }
-      // Secondary Sort: Alphabetical Name
       return (a.name || "").localeCompare(b.name || "")
     })
   }, [accounts])
@@ -183,7 +181,6 @@ export default function AccountsPage() {
   const fromAcc = useMemo(() => accounts?.find(a => a.id === transferFormData.fromId), [accounts, transferFormData.fromId]);
   const toAcc = useMemo(() => accounts?.find(a => a.id === transferFormData.toId), [accounts, transferFormData.toId]);
 
-  // Fetch Exchange Rate when multi-currency transfer is detected
   useEffect(() => {
     if (isTransferDialogOpen && fromAcc && toAcc && fromAcc.currency !== toAcc.currency) {
       fetch('https://dolarapi.com/v1/dolares/oficial')
@@ -274,7 +271,6 @@ export default function AccountsPage() {
 
     setIsTxDialogOpen(false)
 
-    // Usar increment para el saldo de la caja
     updateDocumentNonBlocking(doc(db, 'financial_accounts', selectedAccount.id), {
       initialBalance: increment(amount)
     })
@@ -308,11 +304,9 @@ export default function AccountsPage() {
       }
     }
 
-    // Usar increment para transferencias
     updateDocumentNonBlocking(doc(db, 'financial_accounts', fromId), { initialBalance: increment(-Number(amount)) })
     updateDocumentNonBlocking(doc(db, 'financial_accounts', toId), { initialBalance: increment(finalAmountTo) })
 
-    // Registrar salida
     addDocumentNonBlocking(collection(db, 'transactions'), {
       date: new Date().toISOString(),
       type: 'FinancialTransferOut',
@@ -323,7 +317,6 @@ export default function AccountsPage() {
       accountBalanceAfter: Number(fromAcc.initialBalance || 0) - Number(amount)
     })
 
-    // Registrar entrada
     addDocumentNonBlocking(collection(db, 'transactions'), {
       date: new Date().toISOString(),
       type: 'FinancialTransferIn',
@@ -364,7 +357,6 @@ export default function AccountsPage() {
       return `*${acc.name}*\n${balance}`;
     }).join('\n\n');
 
-    // Agregar totales generales al final
     text += `\n\n---\n`;
     text += `*TOTAL ARS:* $${globalTotals.ARS.toLocaleString('es-AR')}\n`;
     text += `*TOTAL USD:* u$s ${globalTotals.USD.toLocaleString('es-AR')}`;
@@ -382,11 +374,13 @@ export default function AccountsPage() {
     return Number(transferFormData.amount) * exchangeRate;
   }, [fromAcc, toAcc, transferFormData.amount, exchangeRate]);
 
-  if (isUserLoading || (userData?.role === 'Communicator')) {
+  if (isUserLoading || userData?.role === 'Communicator') {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="mt-4 text-sm text-muted-foreground">Accediendo...</p>
+        <p className="mt-4 text-sm text-muted-foreground">
+          {userData?.role === 'Communicator' ? 'Redirigiendo a Clientes...' : 'Accediendo...'}
+        </p>
       </div>
     )
   }
@@ -424,7 +418,6 @@ export default function AccountsPage() {
           </div>
         </header>
 
-        {/* Global Totals Section */}
         {!loadingAccounts && accounts && accounts.length > 0 && (
           <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card className="glass-card bg-primary/5 border-l-4 border-l-primary overflow-hidden relative">

@@ -33,7 +33,7 @@ export default function Dashboard() {
   const router = useRouter()
   const { userData, isUserLoading } = useUser()
 
-  // Redirección para el rol Comunicador
+  // Redirección para el rol Comunicador: No debe ver el Dashboard
   useEffect(() => {
     if (!isUserLoading && userData?.role === 'Communicator') {
       router.replace('/customers')
@@ -58,7 +58,6 @@ export default function Dashboard() {
     }, { ARS: 0, USD: 0 })
   }, [accounts])
 
-  // Cálculo de Deudas a Cobrar (Suma de saldos negativos de clientes)
   const debtTotals = useMemo(() => {
     if (!clients) return { ARS: 0, USD: 0 }
     return clients.reduce((acc: any, curr: any) => {
@@ -104,11 +103,14 @@ export default function Dashboard() {
 
   const isLoading = loadingAccounts || loadingTx || loadingClients || isUserLoading
 
-  if (isUserLoading || (userData?.role === 'Communicator')) {
+  // Mientras carga o si es comunicador (esperando redirección), mostramos loader
+  if (isUserLoading || userData?.role === 'Communicator') {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="mt-4 text-sm text-muted-foreground font-medium">Cargando aplicación...</p>
+        <p className="mt-4 text-sm text-muted-foreground font-medium">
+          {userData?.role === 'Communicator' ? 'Accediendo a Clientes...' : 'Cargando aplicación...'}
+        </p>
       </div>
     )
   }
@@ -217,7 +219,6 @@ export default function Dashboard() {
               </Card>
             </section>
 
-            {/* Nueva sección: Cobranzas Pendientes (Deudas a Cobrar) */}
             <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
                <Card 
                 className="glass-card bg-rose-50 border-l-4 border-l-rose-500 cursor-pointer hover:bg-rose-100/80 transition-all group overflow-hidden relative"
