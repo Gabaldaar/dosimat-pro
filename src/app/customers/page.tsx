@@ -35,7 +35,8 @@ import {
   Info,
   Droplets,
   Loader2,
-  MessageSquare
+  MessageSquare,
+  History
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
@@ -622,6 +623,19 @@ function CustomersContent() {
                           >
                             <Link href={`/transactions?clientId=${customer.id}&mode=new`}>
                               <PlusCircle className="h-4 w-4" /> Operar
+                            </Link>
+                          </Button>
+
+                          <Button 
+                            variant="outline" 
+                            size="icon" 
+                            className="h-9 w-9 text-blue-600 border-blue-200 hover:bg-blue-50"
+                            asChild
+                            onClick={(e) => e.stopPropagation()}
+                            title="Ver Historial"
+                          >
+                            <Link href={`/transactions?clientId=${customer.id}`}>
+                              <History className="h-4 w-4" />
                             </Link>
                           </Button>
                           
