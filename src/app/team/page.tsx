@@ -2,6 +2,7 @@
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -56,8 +57,17 @@ const roleDisplay: Record<string, { label: string, icon: any, color: string }> =
 export default function TeamPage() {
   const { toast } = useToast()
   const db = useFirestore()
-  const { user: currentUser, userData } = useUser()
+  const router = useRouter()
+  const { user: currentUser, userData, isUserLoading } = useUser()
   const isAdmin = userData?.role === 'Admin'
+
+  // Redirección para el rol Comunicador (No puede ver equipo)
+  useEffect(() => {
+    if (!isUserLoading && userData?.role === 'Communicator') {
+      router.replace('/customers')
+    }
+  }, [userData, isUserLoading, router])
+
   const [isInviteOpen, setIsInviteOpen] = useState(false)
   
   const usersQuery = useMemoFirebase(() => collection(db, 'users'), [db])
@@ -125,6 +135,15 @@ export default function TeamPage() {
   }, [team]);
 
   const pendingCount = useMemo(() => team?.filter(m => m.role === 'Pending').length || 0, [team]);
+
+  if (isUserLoading || (userData?.role === 'Communicator')) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="mt-4 text-sm text-muted-foreground font-medium">Accediendo...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen w-full">

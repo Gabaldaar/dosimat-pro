@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -99,12 +99,20 @@ function formatLocalDate(dateString: string) {
 function TransactionsContent() {
   const { toast } = useToast()
   const db = useFirestore()
-  const { userData } = useUser()
+  const router = useRouter()
+  const { userData, isUserLoading } = useUser()
   const isAdmin = userData?.role === 'Admin'
   const searchParams = useSearchParams()
   const clientIdParam = searchParams.get('clientId')
   const accountIdParam = searchParams.get('accountId')
   const modeParam = searchParams.get('mode')
+
+  // Redirección para el rol Comunicador (No puede ver operaciones)
+  useEffect(() => {
+    if (!isUserLoading && userData?.role === 'Communicator') {
+      router.replace('/customers')
+    }
+  }, [userData, isUserLoading, router])
 
   const [mainView, setMainView] = useState("history")
   const [activeTab, setActiveTab] = useState("refill")
@@ -699,6 +707,15 @@ function TransactionsContent() {
   }, [filteredTransactions])
 
   const isManualForm = useMemo(() => ['cobro', 'adjustment', 'Adjustment', 'Expense'].includes(activeTab), [activeTab]);
+
+  if (isUserLoading || (userData?.role === 'Communicator')) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="mt-4 text-sm text-muted-foreground">Accediendo...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen bg-background w-full">

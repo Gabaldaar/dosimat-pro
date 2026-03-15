@@ -1,6 +1,8 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -42,8 +44,16 @@ import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 export default function CatalogPage() {
   const { toast } = useToast()
   const db = useFirestore()
-  const { userData } = useUser()
+  const router = useRouter()
+  const { userData, isUserLoading } = useUser()
   const isAdmin = userData?.role === 'Admin'
+
+  // Redirección para el rol Comunicador (No puede ver catálogo)
+  useEffect(() => {
+    if (!isUserLoading && userData?.role === 'Communicator') {
+      router.replace('/customers')
+    }
+  }, [userData, isUserLoading, router])
 
   const [searchTerm, setSearchTerm] = useState("")
   
@@ -128,6 +138,15 @@ export default function CatalogPage() {
     setItemToDelete(null)
     setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100)
     toast({ title: "Item eliminado" })
+  }
+
+  if (isUserLoading || (userData?.role === 'Communicator')) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="mt-4 text-sm text-muted-foreground">Accediendo...</p>
+      </div>
+    )
   }
 
   return (

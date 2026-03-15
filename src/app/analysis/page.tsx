@@ -2,6 +2,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -38,7 +39,7 @@ import {
   Target,
   Coins
 } from "lucide-react"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebase"
 import { collection, query, orderBy } from "firebase/firestore"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
@@ -55,6 +56,15 @@ const LABEL_MAP: Record<string, string> = {
 
 export default function AnalysisPage() {
   const db = useFirestore()
+  const router = useRouter()
+  const { userData, isUserLoading } = useUser()
+
+  // Redirección para el rol Comunicador (No puede ver análisis)
+  useEffect(() => {
+    if (!isUserLoading && userData?.role === 'Communicator') {
+      router.replace('/customers')
+    }
+  }, [userData, isUserLoading, router])
   
   // Queries
   const txQuery = useMemoFirebase(() => query(collection(db, 'transactions'), orderBy('date', 'desc')), [db])
@@ -242,6 +252,15 @@ export default function AnalysisPage() {
       .slice(0, 5)
   }, [filteredTxsByCurrency, clients, zones])
 
+  if (isUserLoading || (userData?.role === 'Communicator')) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="mt-4 text-sm text-muted-foreground">Accediendo...</p>
+      </div>
+    )
+  }
+
   if (loadingTx) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -281,11 +300,11 @@ export default function AnalysisPage() {
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
             <div className="space-y-1">
               <Label className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> Desde</Label>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-9" />
+              <Input type="date" value={startDate} onChange={(e) => setStartDate(startDate)} className="h-9" />
             </div>
             <div className="space-y-1">
               <Label className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> Hasta</Label>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-9" />
+              <Input type="date" value={endDate} onChange={(e) => setEndDate(endDate)} className="h-9" />
             </div>
             <div className="space-y-1">
               <Label className="text-[10px] font-bold uppercase text-muted-foreground">Rubro Ingresos</Label>

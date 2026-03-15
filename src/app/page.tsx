@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useEffect } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
@@ -23,7 +23,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid } from "recharts"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebase"
 import { collection, query, orderBy, limit } from "firebase/firestore"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
@@ -31,6 +31,14 @@ import { cn } from "@/lib/utils"
 export default function Dashboard() {
   const db = useFirestore()
   const router = useRouter()
+  const { userData, isUserLoading } = useUser()
+
+  // Redirección para el rol Comunicador
+  useEffect(() => {
+    if (!isUserLoading && userData?.role === 'Communicator') {
+      router.replace('/customers')
+    }
+  }, [userData, isUserLoading, router])
 
   // Queries
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
@@ -94,7 +102,16 @@ export default function Dashboard() {
     expenses: { label: "Gastos (ARS)", color: "hsl(var(--accent))" },
   } satisfies ChartConfig
 
-  const isLoading = loadingAccounts || loadingTx || loadingClients
+  const isLoading = loadingAccounts || loadingTx || loadingClients || isUserLoading
+
+  if (isUserLoading || (userData?.role === 'Communicator')) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="mt-4 text-sm text-muted-foreground font-medium">Cargando aplicación...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen bg-background w-full">

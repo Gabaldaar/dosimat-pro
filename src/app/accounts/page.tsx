@@ -78,8 +78,15 @@ export default function AccountsPage() {
   const { toast } = useToast()
   const db = useFirestore()
   const router = useRouter()
-  const { userData } = useUser()
+  const { userData, isUserLoading } = useUser()
   const isAdmin = userData?.role === 'Admin'
+
+  // Redirección para el rol Comunicador (No puede ver cajas)
+  useEffect(() => {
+    if (!isUserLoading && userData?.role === 'Communicator') {
+      router.replace('/customers')
+    }
+  }, [userData, isUserLoading, router])
   
   // Queries
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
@@ -374,6 +381,15 @@ export default function AccountsPage() {
     if (fromAcc.currency === 'ARS') return Number(transferFormData.amount) / exchangeRate;
     return Number(transferFormData.amount) * exchangeRate;
   }, [fromAcc, toAcc, transferFormData.amount, exchangeRate]);
+
+  if (isUserLoading || (userData?.role === 'Communicator')) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="mt-4 text-sm text-muted-foreground">Accediendo...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen bg-background w-full">

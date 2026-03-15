@@ -2,6 +2,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -55,8 +56,16 @@ const AVAILABLE_MARKERS = [
 export default function TemplatesPage() {
   const { toast } = useToast()
   const db = useFirestore()
-  const { userData } = useUser()
+  const router = useRouter()
+  const { userData, isUserLoading } = useUser()
   const isAdmin = userData?.role === 'Admin'
+
+  // Redirección para el rol Comunicador (No puede ver plantillas)
+  useEffect(() => {
+    if (!isUserLoading && userData?.role === 'Communicator') {
+      router.replace('/customers')
+    }
+  }, [userData, isUserLoading, router])
   
   const [templateType, setTemplateType] = useState<"email" | "whatsapp">("email")
   
@@ -139,6 +148,15 @@ export default function TemplatesPage() {
     const text = `{{${markerName}}}`
     navigator.clipboard.writeText(text)
     toast({ title: "Copiado", description: `${text} listo para pegar.` })
+  }
+
+  if (isUserLoading || (userData?.role === 'Communicator')) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="mt-4 text-sm text-muted-foreground">Accediendo...</p>
+      </div>
+    )
   }
 
   return (
