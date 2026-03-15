@@ -167,6 +167,12 @@ function CustomersContent() {
     });
   }, [selectedTemplateId, selectedWsTemplateId, selectedBulkWsTemplateId, isBulkEmailOpen, isWsDialogOpen, isBulkWsOpen, emailTemplates, wsTemplates]);
 
+  // Check if all dynamic fields are filled
+  const allDynamicFieldsFilled = useMemo(() => {
+    if (dynamicKeys.length === 0) return true;
+    return dynamicKeys.every(key => dynamicValues[key]?.trim() !== "");
+  }, [dynamicKeys, dynamicValues]);
+
   const defaultFormData = {
     apellido: "",
     nombre: "",
@@ -419,6 +425,10 @@ function CustomersContent() {
   };
 
   const handleSendWsTemplate = () => {
+    if (!allDynamicFieldsFilled) {
+      toast({ title: "Campos incompletos", description: "Por favor completa todos los datos dinámicos requeridos.", variant: "destructive" });
+      return;
+    }
     const template = wsTemplates?.find(t => t.id === selectedWsTemplateId)
     if (!template || !selectedTxForWs) return
 
@@ -435,6 +445,10 @@ function CustomersContent() {
   }
 
   const handleSendBulkEmail = () => {
+    if (!allDynamicFieldsFilled) {
+      toast({ title: "Campos incompletos", description: "Por favor completa todos los datos dinámicos requeridos.", variant: "destructive" });
+      return;
+    }
     const template = emailTemplates?.find(t => t.id === selectedTemplateId)
     if (!template) return
 
@@ -480,6 +494,10 @@ function CustomersContent() {
   }
 
   const handleSendNextWs = () => {
+    if (!allDynamicFieldsFilled) {
+      toast({ title: "Campos incompletos", description: "Por favor completa todos los datos dinámicos antes de enviar.", variant: "destructive" });
+      return;
+    }
     if (!currentBulkCustomer || !currentBulkWsTemplate) return
 
     const message = processMarkers(currentBulkWsTemplate.body, currentBulkCustomer)
@@ -1001,7 +1019,7 @@ function CustomersContent() {
                   </div>
                   <div className="space-y-2">
                     <Label className="font-bold">Notas Técnicas / Equipo</Label>
-                    <Textarea value={formData.equipoInstalado.notas} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, notas: e.target.value}}))} placeholder="Detalles sobre la instalación, fallas técnicas, reparaciones..." className="min-h-[80px]" />
+                    <Textarea value={formData.equipoInstalado.notes} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, notes: e.target.value}}))} placeholder="Detalles sobre la instalación, fallas técnicas, reparaciones..." className="min-h-[80px]" />
                   </div>
                 </TabsContent>
               </Tabs>
@@ -1120,7 +1138,7 @@ function CustomersContent() {
               <Button variant="outline" onClick={() => setIsBulkEmailOpen(false)}>Cancelar</Button>
               <Button 
                 onClick={handleSendBulkEmail} 
-                disabled={!selectedTemplateId} 
+                disabled={!selectedTemplateId || !allDynamicFieldsFilled} 
                 className="bg-primary font-bold"
               >
                 <Send className="mr-2 h-4 w-4" /> Preparar Envío
@@ -1185,7 +1203,7 @@ function CustomersContent() {
               <Button variant="outline" onClick={() => setIsWsDialogOpen(false)}>Cancelar</Button>
               <Button 
                 onClick={handleSendWsTemplate} 
-                disabled={!selectedWsTemplateId} 
+                disabled={!selectedWsTemplateId || !allDynamicFieldsFilled} 
                 className="bg-emerald-600 hover:bg-emerald-700 font-bold"
               >
                 <Send className="mr-2 h-4 w-4" /> Abrir WhatsApp
@@ -1296,7 +1314,7 @@ function CustomersContent() {
                 </Button>
                 <Button 
                   onClick={handleSendNextWs} 
-                  disabled={!selectedBulkWsTemplateId || !currentBulkCustomer?.telefono}
+                  disabled={!selectedBulkWsTemplateId || !currentBulkCustomer?.telefono || !allDynamicFieldsFilled}
                   className="bg-emerald-600 hover:bg-emerald-700 font-bold px-8 shadow-lg shadow-emerald-200 gap-2"
                 >
                   <Send className="h-4 w-4" /> Enviar y Siguiente

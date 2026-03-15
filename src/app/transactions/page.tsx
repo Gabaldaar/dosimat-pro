@@ -247,6 +247,12 @@ function TransactionsContent() {
     });
   }, [selectedTemplateId, selectedWsTemplateId, isEmailDialogOpen, isWsDialogOpen, emailTemplates, wsTemplates]);
 
+  // Check if all dynamic fields are filled
+  const allDynamicFieldsFilled = useMemo(() => {
+    if (dynamicKeys.length === 0) return true;
+    return dynamicKeys.every(key => dynamicValues[key]?.trim() !== "");
+  }, [dynamicKeys, dynamicValues]);
+
   const processMarkers = (text: string, tx: any, templateType: 'email' | 'whatsapp') => {
     if (!text || !tx) return text;
     let result = text;
@@ -596,6 +602,10 @@ function TransactionsContent() {
   }
 
   const handleSendEmail = () => {
+    if (!allDynamicFieldsFilled) {
+      toast({ title: "Campos incompletos", description: "Por favor completa todos los datos dinámicos requeridos.", variant: "destructive" });
+      return;
+    }
     const client = selectedTxForEmail.clientId ? customers?.find(c => c.id === selectedTxForEmail.clientId) : null;
     const tpl = emailTemplates?.find(t => t.id === selectedTemplateId)
     if (!processedEmail.subject || !processedEmail.body || !tpl) return
@@ -615,6 +625,10 @@ function TransactionsContent() {
   }
 
   const handleSendWs = () => {
+    if (!allDynamicFieldsFilled) {
+      toast({ title: "Campos incompletos", description: "Por favor completa todos los datos dinámicos requeridos.", variant: "destructive" });
+      return;
+    }
     const client = selectedTxForWs.clientId ? customers?.find(c => c.id === selectedTxForWs.clientId) : null;
     const phone = client?.telefono?.replace(/\D/g, '')
     if (!phone || !processedWs) return
@@ -1179,7 +1193,7 @@ function TransactionsContent() {
                     <div className="grid grid-cols-2 gap-4 border-t pt-3 mb-4">
                       <div>
                         <p className="text-[10px] font-bold text-muted-foreground uppercase mb-0.5">Total</p>
-                        <p className="font-black text-sm flex items-center gap-1">{tx.amount > 0 ? <ArrowUpCircle className="h-3 w-3 text-emerald-500" /> : <ArrowDownCircle className="h-3 w-3 text-rose-500" />}{tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}</p>
+                        <p className="font-black text-sm flex items-center gap-1">{tx.amount > 0 ? <ArrowUpCircle className="h-3 w-3 text-emerald-500" /> : <ArrowDownCircle className="h-3 w-3 text-rose-500" luxury-text />}{tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-[10px] font-bold text-muted-foreground uppercase mb-0.5">Abonado</p>
@@ -1257,7 +1271,15 @@ function TransactionsContent() {
                 </div>
               )}
             </div>
-            <DialogFooter><Button variant="outline" onClick={() => setIsEmailDialogOpen(false)}>Cerrar</Button><Button onClick={handleSendEmail} disabled={!selectedTemplateId}>Preparar Email</Button></DialogFooter>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEmailDialogOpen(false)}>Cerrar</Button>
+              <Button 
+                onClick={handleSendEmail} 
+                disabled={!selectedTemplateId || !allDynamicFieldsFilled}
+              >
+                Preparar Email
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
@@ -1300,7 +1322,7 @@ function TransactionsContent() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsWsDialogOpen(false)}>Cerrar</Button>
-              <Button onClick={handleSendWs} disabled={!selectedWsTemplateId} className="bg-emerald-600 hover:bg-emerald-700">
+              <Button onClick={handleSendWs} disabled={!selectedWsTemplateId || !allDynamicFieldsFilled} className="bg-emerald-600 hover:bg-emerald-700">
                 <Send className="mr-2 h-4 w-4" /> Abrir WhatsApp
               </Button>
             </DialogFooter>
