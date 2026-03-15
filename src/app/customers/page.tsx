@@ -39,6 +39,16 @@ import {
   History
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
@@ -81,6 +91,7 @@ function CustomersContent() {
   const [isBulkEmailOpen, setIsBulkEmailOpen] = useState(false)
   const [isWsDialogOpen, setIsWsDialogOpen] = useState(false)
   const [selectedTxForWs, setSelectedTxForWs] = useState<any | null>(null)
+  const [customerToDelete, setCustomerToDelete] = useState<any | null>(null)
   
   const [selectedTemplateId, setSelectedTemplateId] = useState("")
   const [selectedWsTemplateId, setSelectedWsTemplateId] = useState("")
@@ -97,14 +108,14 @@ function CustomersContent() {
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        if (!isDialogOpen && !isZoneManagerOpen && !isBulkEmailOpen && !isWsDialogOpen) {
+        if (!isDialogOpen && !isZoneManagerOpen && !isBulkEmailOpen && !isWsDialogOpen && !customerToDelete) {
           document.body.style.pointerEvents = 'auto';
         }
       }
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isDialogOpen, isZoneManagerOpen, isBulkEmailOpen, isWsDialogOpen]);
+  }, [isDialogOpen, isZoneManagerOpen, isBulkEmailOpen, isWsDialogOpen, customerToDelete]);
 
   const defaultFormData = {
     apellido: "",
@@ -192,7 +203,7 @@ function CustomersContent() {
   }
 
   const handleOpenDialog = (customer?: any) => {
-    if (isCommunicator) return; // Comunicador no puede abrir el diálogo de edición
+    if (isCommunicator) return;
     if (customer) {
       setEditingCustomer(customer)
       setFormData({
@@ -235,17 +246,16 @@ function CustomersContent() {
     toast({ title: editingCustomer ? "Cliente actualizado" : "Cliente creado" })
   }
 
-  const handleDelete = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (isCommunicator) return;
+  const confirmDelete = () => {
+    if (!customerToDelete || isCommunicator) return;
     if (!isAdmin) {
       toast({ title: "Acceso denegado", description: "Solo administradores pueden eliminar clientes.", variant: "destructive" })
       return
     }
-    if (confirm("¿Estás seguro de eliminar este cliente?")) {
-      deleteDocumentNonBlocking(doc(db, 'clients', id))
-      toast({ title: "Cliente eliminado" })
-    }
+    deleteDocumentNonBlocking(doc(db, 'clients', customerToDelete.id))
+    setCustomerToDelete(null)
+    setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100)
+    toast({ title: "Cliente eliminado" })
   }
 
   const handleOpenMaps = (address: string, city: string) => {
@@ -303,7 +313,7 @@ function CustomersContent() {
   }
 
   const handleAddZone = () => {
-    if (!isAdmin) return
+    if (!isAdmin || isCommunicator) return
     if (!newZoneName.trim()) return
     const id = Math.random().toString(36).substring(2, 11)
     setDocumentNonBlocking(doc(db, 'zones', id), { id, name: newZoneName }, { merge: true })
@@ -312,7 +322,7 @@ function CustomersContent() {
   }
 
   const handleDeleteZone = (id: string) => {
-    if (!isAdmin) return
+    if (!isAdmin || isCommunicator) return
     if (confirm("¿Eliminar esta zona?")) {
       deleteDocumentNonBlocking(doc(db, 'zones', id))
       toast({ title: "Zona eliminada" })
@@ -657,7 +667,7 @@ function CustomersContent() {
                               <Button 
                                 variant="outline" 
                                 size="icon" 
-                                className="h-9 w-9 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                                className="h-9 w-9 text-emerald-600 border-emerald-200 hover:bg-blue-50"
                                 onClick={(e) => { e.stopPropagation(); setSelectedTxForWs(customer); setSelectedWsTemplateId(""); setIsWsDialogOpen(true); }}
                                 title="WhatsApp con Plantilla"
                               >
@@ -728,7 +738,7 @@ function CustomersContent() {
                               variant="ghost" 
                               size="icon" 
                               className="h-9 w-9 text-destructive opacity-40 hover:opacity-100 hover:bg-destructive/10 transition-all" 
-                              onClick={(e) => handleDelete(customer.id, e)}
+                              onClick={(e) => { e.stopPropagation(); setCustomerToDelete(customer); }}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -815,7 +825,7 @@ function CustomersContent() {
                   </div>
                   <div className="space-y-2">
                     <Label className="font-bold">Notas Generales</Label>
-                    <Textarea value={formData.notes} onChange={(e) => setFormData({...formData, notasGeneral: e.target.value})} placeholder="Notas sobre el perfil del cliente..." className="min-h-[80px]" />
+                    <Textarea value={formData.notasGeneral} onChange={(e) => setFormData({...formData, notasGeneral: e.target.value})} placeholder="Notas sobre el perfil del cliente..." className="min-h-[80px]" />
                   </div>
                 </TabsContent>
 
@@ -886,7 +896,7 @@ function CustomersContent() {
                   </div>
                   <div className="space-y-2">
                     <Label className="font-bold">Notas Técnicas / Equipo</Label>
-                    <Textarea value={formData.equipoInstalado.notes} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, notas: e.target.value}}))} placeholder="Detalles sobre la instalación, fallas técnicas, reparaciones..." className="min-h-[80px]" />
+                    <Textarea value={formData.equipoInstalado.notas} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, notas: e.target.value}}))} placeholder="Detalles sobre la instalación, fallas técnicas, reparaciones..." className="min-h-[80px]" />
                   </div>
                 </TabsContent>
               </Tabs>
@@ -1036,6 +1046,21 @@ function CustomersContent() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <AlertDialog open={!!customerToDelete} onOpenChange={(o) => { if(!o) setCustomerToDelete(null); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Confirmar eliminación de cliente?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Se borrará permanentemente a <b>{customerToDelete?.apellido}, {customerToDelete?.nombre}</b> y todos sus datos de contacto. Asegúrate de haber revisado sus cuentas antes.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground">Eliminar permanentemente</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
       </SidebarInset>
       <MobileNav />
