@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from "react"
@@ -40,8 +41,8 @@ export default function LoginPage() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password)
         const user = userCredential.user
         
-        // El primer usuario es Admin, los demás son Employee por defecto (pueden ser cambiados por el admin)
-        const initialRole = isFirstUser ? 'Admin' : 'Employee'
+        // El primer usuario es Admin, los demás entran como 'Pending' para aprobación
+        const initialRole = isFirstUser ? 'Admin' : 'Pending'
 
         setDocumentNonBlocking(doc(firestore, 'users', user.uid), {
           id: user.uid,
@@ -52,17 +53,21 @@ export default function LoginPage() {
           updatedAt: new Date().toISOString()
         }, { merge: true })
 
-        // No dependemos de user_roles para las reglas, pero lo mantenemos por si acaso
         setDocumentNonBlocking(doc(firestore, 'user_roles', user.uid), {
           roleIds: [initialRole.toLowerCase()]
         }, { merge: true })
         
-        toast({ 
-          title: isFirstUser ? "Cuenta de Administrador creada" : "Cuenta creada", 
-          description: isFirstUser 
-            ? "Has sido registrado como el primer administrador del sistema." 
-            : "Has sido registrado como Empleado." 
-        })
+        if (isFirstUser) {
+          toast({ 
+            title: "Administrador creado", 
+            description: "Has sido registrado como el primer administrador del sistema." 
+          })
+        } else {
+          toast({ 
+            title: "Cuenta creada", 
+            description: "Tu acceso está pendiente de aprobación por un administrador." 
+          })
+        }
         router.push("/")
       }
     } catch (error: any) {

@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -14,14 +14,18 @@ import {
   Trash2,
   ShieldAlert,
   UserPlus,
-  Info,
-  Droplets
+  Clock,
+  Ban,
+  CheckCircle2,
+  Droplets,
+  Loader2
 } from "lucide-react"
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
   DropdownMenuItem, 
-  DropdownMenuTrigger 
+  DropdownMenuTrigger,
+  DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu"
 import {
   Dialog,
@@ -36,10 +40,13 @@ import { collection, doc } from "firebase/firestore"
 import { useToast } from "@/hooks/use-toast"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-const roleDisplay: Record<string, string> = {
-  'Admin': 'Administrador',
-  'Employee': 'Empleado'
+const roleDisplay: Record<string, { label: string, icon: any, color: string }> = {
+  'Admin': { label: 'Administrador', icon: ShieldCheck, color: 'default' },
+  'Employee': { label: 'Empleado', icon: UserCircle, color: 'secondary' },
+  'Pending': { label: 'Pendiente', icon: Clock, color: 'outline' },
+  'Blocked': { label: 'Bloqueado', icon: Ban, color: 'destructive' }
 }
 
 export default function TeamPage() {
@@ -68,7 +75,7 @@ export default function TeamPage() {
     if (!isAdmin) {
       toast({ 
         title: "Acceso denegado", 
-        description: "Su usuario no tiene permisos de Administrador para realizar esta acción.", 
+        description: "Solo administradores pueden gestionar roles.", 
         variant: "destructive" 
       })
       return
@@ -79,55 +86,43 @@ export default function TeamPage() {
       if (adminCount <= 1) {
         toast({ 
           title: "Acción no permitida", 
-          description: "Debe haber al menos un administrador activo en el sistema.", 
+          description: "Debe haber al menos un administrador activo.", 
           variant: "destructive" 
         });
         return;
       }
     }
 
-    updateDocumentNonBlocking(doc(db, 'users', userId), { role: newRole })
+    updateDocumentNonBlocking(doc(db, 'users', userId), { 
+      role: newRole,
+      updatedAt: new Date().toISOString()
+    })
     setDocumentNonBlocking(doc(db, 'user_roles', userId), { 
       roleIds: [newRole.toLowerCase()] 
     }, { merge: true })
 
-    toast({ title: "Rol actualizado", description: `Usuario ahora es ${roleDisplay[newRole] || newRole}` })
+    const msg = newRole === 'Employee' ? "Usuario aprobado como Empleado" : 
+                newRole === 'Admin' ? "Usuario promovido a Administrador" : 
+                "Rol actualizado";
+    toast({ title: msg })
   }
 
-  const handleDeleteUser = (userId: string) => {
-    if (!isAdmin) {
-      toast({ 
-        title: "Acceso denegado", 
-        description: "Su usuario no tiene permisos de Administrador.", 
-        variant: "destructive" 
-      })
-      return
-    }
-    
+  const handleBlockUser = (userId: string) => {
+    if (!isAdmin) return;
     if (userId === currentUser?.uid) {
-      toast({ title: "Error", description: "No puedes eliminar tu propio usuario", variant: "destructive" })
-      return
+      toast({ title: "Error", description: "No puedes bloquearte a ti mismo", variant: "destructive" });
+      return;
     }
-
-    const memberToDelete = team?.find((m: any) => m.id === userId);
-    if (memberToDelete?.role === 'Admin') {
-      const adminCount = team?.filter((m: any) => m.role === 'Admin').length || 0;
-      if (adminCount <= 1) {
-        toast({ 
-          title: "Acción no permitida", 
-          description: "No se puede eliminar al único administrador.", 
-          variant: "destructive" 
-        });
-        return;
-      }
-    }
-
-    if (confirm("¿Estás seguro de eliminar a este usuario del sistema?")) {
-      deleteDocumentNonBlocking(doc(db, 'users', userId))
-      deleteDocumentNonBlocking(doc(db, 'user_roles', userId))
-      toast({ title: "Usuario eliminado" })
-    }
+    handleUpdateRole(userId, 'Blocked');
+    toast({ title: "Usuario bloqueado", description: "El acceso ha sido revocado." });
   }
+
+  const sortedTeam = useMemo(() => {
+    if (!team) return [];
+    return [...team].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  }, [team]);
+
+  const pendingCount = useMemo(() => team?.filter(m => m.role === 'Pending').length || 0, [team]);
 
   return (
     <div className="flex min-h-screen w-full">
@@ -147,75 +142,72 @@ export default function TeamPage() {
             </div>
           </div>
           {isAdmin && (
-            <Button onClick={() => setIsInviteOpen(true)} className="font-bold">
-              <UserPlus className="mr-2 h-4 w-4" /> Invitar
+            <Button onClick={() => setIsInviteOpen(true)} className="font-bold gap-2">
+              <UserPlus className="h-4 w-4" /> Invitar
             </Button>
           )}
         </header>
 
-        <div className="grid grid-cols-1 gap-4">
-          {isLoading ? (
-            <p className="text-center py-10 text-muted-foreground">Cargando equipo...</p>
-          ) : (team && team.length > 0) ? (
-            team.map((member: any) => (
-              <Card key={member.id} className="glass-card">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <Avatar className="h-12 w-12 border-2 border-primary/10">
-                      <AvatarImage src={`https://picsum.photos/seed/${member.id}/100/100`} />
-                      <AvatarFallback>{member.name ? member.name[0] : (member.email ? member.email[0] : '?')}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-bold">{member.name || 'Usuario sin nombre'}</h3>
-                        <Badge variant={member.role === 'Admin' ? 'default' : 'secondary'} className="text-[10px]">
-                          {member.role === 'Admin' ? <ShieldCheck className="h-3 w-3 mr-1" /> : <UserCircle className="h-3 w-3 mr-1" />}
-                          {roleDisplay[member.role] || member.role}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-muted-foreground">{member.email}</p>
-                    </div>
-                  </div>
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center h-64 gap-2">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-muted-foreground text-sm">Cargando colaboradores...</p>
+          </div>
+        ) : (
+          <Tabs defaultValue="active" className="w-full">
+            <TabsList className="bg-muted/50 p-1 mb-6">
+              <TabsTrigger value="active" className="font-bold">Activos</TabsTrigger>
+              <TabsTrigger value="pending" className="font-bold relative">
+                Pendientes 
+                {pendingCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
+                    {pendingCount}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="blocked" className="font-bold">Bloqueados</TabsTrigger>
+            </TabsList>
 
-                  {isAdmin && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleUpdateRole(member.id, 'Admin')}>
-                          <ShieldCheck className="mr-2 h-4 w-4" /> Hacer Administrador
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleUpdateRole(member.id, 'Employee')}>
-                          <UserCircle className="mr-2 h-4 w-4" /> Hacer Empleado
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteUser(member.id)}>
-                          <Trash2 className="mr-2 h-4 w-4" /> Eliminar
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </CardContent>
-              </Card>
-            ))
-          ) : (
-            <Card className="p-12 text-center border-dashed">
-              <Users className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
-              <h3 className="text-lg font-semibold">No hay usuarios registrados</h3>
-            </Card>
-          )}
-        </div>
+            <TabsContent value="active" className="space-y-4">
+              {sortedTeam.filter(m => m.role === 'Admin' || m.role === 'Employee').map((member: any) => (
+                <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onBlock={handleBlockUser} />
+              ))}
+              {sortedTeam.filter(m => m.role === 'Admin' || m.role === 'Employee').length === 0 && (
+                <EmptyState icon={Users} text="No hay colaboradores activos." />
+              )}
+            </TabsContent>
 
-        <Card className="bg-accent/5 border-accent/20">
+            <TabsContent value="pending" className="space-y-4">
+              {sortedTeam.filter(m => m.role === 'Pending').map((member: any) => (
+                <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onBlock={handleBlockUser} />
+              ))}
+              {sortedTeam.filter(m => m.role === 'Pending').length === 0 && (
+                <EmptyState icon={Clock} text="No hay solicitudes pendientes de aprobación." />
+              )}
+            </TabsContent>
+
+            <TabsContent value="blocked" className="space-y-4">
+              {sortedTeam.filter(m => m.role === 'Blocked').map((member: any) => (
+                <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onBlock={handleBlockUser} />
+              ))}
+              {sortedTeam.filter(m => m.role === 'Blocked').length === 0 && (
+                <EmptyState icon={Ban} text="No hay usuarios bloqueados." />
+              )}
+            </TabsContent>
+          </Tabs>
+        )}
+
+        <Card className="bg-accent/5 border-accent/20 mt-8">
           <CardHeader>
             <CardTitle className="text-sm flex items-center gap-2">
               <ShieldAlert className="h-4 w-4 text-accent-foreground" />
-              Gestión de Permisos
+              Gestión de Seguridad
             </CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground space-y-2">
-            <p>• Los <b>Administradores</b> tienen acceso total a la gestión financiera, catálogo, equipo y pueden editar o eliminar cualquier registro.</p>
-            <p>• Los <b>Empleados</b> pueden operar y registrar nuevos movimientos, pero no tienen permiso para editar ni borrar registros existentes (Cajas, Clientes u Operaciones).</p>
+            <p>• <b>Pendientes</b>: Usuarios que se registraron pero no tienen permiso para ver nada aún. Debes aprobarlos.</p>
+            <p>• <b>Empleados</b>: Pueden operar y ver registros, pero no pueden borrar cajas ni gestionar el equipo.</p>
+            <p>• <b>Bloqueados</b>: El acceso se revoca inmediatamente. No podrán entrar aunque conozcan su contraseña.</p>
           </CardContent>
         </Card>
 
@@ -228,8 +220,11 @@ export default function TeamPage() {
               <DialogDescription asChild>
                 <div className="pt-4 space-y-4">
                   <p className="text-sm text-foreground">
-                    Pide a tu colaborador que se registre con su email. Una vez registrado, aparecerá en esta lista y podrás asignarle el rol necesario.
+                    Pide a tu colaborador que se registre con su email en la pantalla de inicio.
                   </p>
+                  <div className="p-3 bg-muted/50 rounded-lg border text-xs italic">
+                    Una vez registrado, aparecerá en la pestaña de <b>"Pendientes"</b> y podrás habilitar su acceso.
+                  </div>
                 </div>
               </DialogDescription>
             </DialogHeader>
@@ -242,4 +237,88 @@ export default function TeamPage() {
       <MobileNav />
     </div>
   )
+}
+
+function MemberCard({ member, isAdmin, currentUid, onUpdateRole, onBlock }: any) {
+  const roleInfo = roleDisplay[member.role] || { label: member.role, icon: UserCircle, color: 'secondary' };
+  const Icon = roleInfo.icon;
+  const isMe = member.id === currentUid;
+
+  return (
+    <Card className={cn(
+      "glass-card border-l-4 transition-all",
+      member.role === 'Pending' ? "border-l-amber-400" : 
+      member.role === 'Blocked' ? "border-l-rose-500" : "border-l-primary"
+    )}>
+      <CardContent className="p-4 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Avatar className="h-12 w-12 border-2 border-primary/10">
+            <AvatarImage src={`https://picsum.photos/seed/${member.id}/100/100`} />
+            <AvatarFallback>{member.name ? member.name[0] : (member.email ? member.email[0] : '?')}</AvatarFallback>
+          </Avatar>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-bold truncate max-w-[150px] md:max-w-none">{member.name || 'Sin nombre'} {isMe && "(Tú)"}</h3>
+              <Badge variant={roleInfo.color as any} className="text-[9px] uppercase font-black tracking-widest px-2 h-5">
+                <Icon className="h-2.5 w-2.5 mr-1" />
+                {roleInfo.label}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground truncate">{member.email}</p>
+          </div>
+        </div>
+
+        {isAdmin && !isMe && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-9 w-9"><MoreVertical className="h-4 w-4" /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              {member.role === 'Pending' && (
+                <>
+                  <DropdownMenuItem className="text-emerald-600 font-bold" onClick={() => onUpdateRole(member.id, 'Employee')}>
+                    <CheckCircle2 className="mr-2 h-4 w-4" /> Aprobar como Empleado
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Admin')}>
+                    <ShieldCheck className="mr-2 h-4 w-4" /> Aprobar como Administrador
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              
+              {(member.role === 'Admin' || member.role === 'Employee') && (
+                <>
+                  <DropdownMenuItem onClick={() => onUpdateRole(member.id, member.role === 'Admin' ? 'Employee' : 'Admin')}>
+                    {member.role === 'Admin' ? (
+                      <><UserCircle className="mr-2 h-4 w-4" /> Degradar a Empleado</>
+                    ) : (
+                      <><ShieldCheck className="mr-2 h-4 w-4" /> Promover a Admin</>
+                    )}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="text-rose-600" onClick={() => onBlock(member.id)}>
+                    <Ban className="mr-2 h-4 w-4" /> Bloquear acceso
+                  </DropdownMenuItem>
+                </>
+              )}
+
+              {member.role === 'Blocked' && (
+                <DropdownMenuItem className="text-emerald-600" onClick={() => onUpdateRole(member.id, 'Employee')}>
+                  <CheckCircle2 className="mr-2 h-4 w-4" /> Desbloquear (Hacer Empleado)
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function EmptyState({ icon: Icon, text }: any) {
+  return (
+    <div className="p-12 text-center border-2 border-dashed rounded-3xl bg-muted/5">
+      <Icon className="h-10 w-10 mx-auto text-muted-foreground opacity-20 mb-3" />
+      <p className="text-sm text-muted-foreground italic">{text}</p>
+    </div>
+  );
 }
