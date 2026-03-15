@@ -311,6 +311,7 @@ function TransactionsContent() {
       "{{Categoria_Gasto}}": expenseCat ? expenseCat.name : "N/A",
       "{{Descripción}}": tx.description || "",
       "{{Total}}": `${currencySymbol} ${Math.abs(tx.amount).toLocaleString('es-AR')}`,
+      "{{Pendiente_Operacion}}": `${currencySymbol} ${Math.max(0, Math.abs(tx.amount || 0) - (tx.paidAmount || 0)).toLocaleString('es-AR')}`,
       "{{Total_Descuento}}": `${currencySymbol} ${totalDiscount.toLocaleString('es-AR')}`,
       "{{Monto_Abonado}}": `${currencySymbol} ${(tx.paidAmount || 0).toLocaleString('es-AR')}`,
       "{{Caja_Destino}}": acc ? acc.name : "A Cuenta",
@@ -672,7 +673,7 @@ function TransactionsContent() {
     text += `\n*Total:* ${currencySymbol}${Math.abs(tx.amount || 0).toLocaleString('es-AR')}\n`;
     if (tx.paidAmount !== undefined) {
       text += `*Abonado:* ${currencySymbol}${tx.paidAmount.toLocaleString('es-AR')}\n`;
-      const debt = (tx.amount || 0) - (tx.paidAmount || 0);
+      const debt = Math.max(0, Math.abs(tx.amount || 0) - (tx.paidAmount || 0));
       if (debt > 0) text += `*Pendiente:* ${currencySymbol}${debt.toLocaleString('es-AR')}\n`;
     }
     const acc = accounts?.find(a => a.id === tx.financialAccountId);
@@ -1171,7 +1172,7 @@ function TransactionsContent() {
                 const cust = customers?.find(c => c.id === tx.clientId);
                 const acc = accounts?.find(a => a.id === tx.financialAccountId);
                 const info = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
-                const debt = (tx.amount || 0) - (tx.paidAmount || 0);
+                const debt = Math.max(0, Math.abs(tx.amount || 0) - (tx.paidAmount || 0));
                 const expenseCat = tx.expenseCategoryId ? expenseCategories?.find(ec => ec.id === tx.expenseCategoryId) : null;
                 const isLatest = isLatestForAccount(tx);
                 

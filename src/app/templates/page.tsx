@@ -36,6 +36,7 @@ const AVAILABLE_MARKERS = [
   "Categoria_Gasto",
   "Descripción", 
   "Total",
+  "Pendiente_Operacion",
   "Detalle_Items", 
   "Item", 
   "Cantidad", 
@@ -48,6 +49,7 @@ const AVAILABLE_MARKERS = [
   "Saldo_Caja_Final",
   "Saldo_ARS",
   "Saldo_USD",
+  "Saldo_Cuenta",
   "Direccion",
   "Localidad",
   "Metodo_Pago"
