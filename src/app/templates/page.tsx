@@ -1,10 +1,11 @@
+
 "use client"
 
 import { useState, useMemo, useEffect, useCallback } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, Edit, Trash2, FileText, Info, Loader2, MessageSquare, Copy, Droplets } from "lucide-react"
+import { Plus, Edit, Trash2, FileText, Info, Loader2, MessageSquare, Copy, Droplets, Sparkles } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -214,9 +215,9 @@ export default function TemplatesPage() {
             </DialogHeader>
             
             <div className="space-y-6 py-4">
-              <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl space-y-3">
+              <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl space-y-4">
                 <div className="flex items-center gap-2 text-blue-800 text-xs font-bold uppercase tracking-wider">
-                  <Info className="h-4 w-4" /> Marcadores (Clic para copiar)
+                  <Info className="h-4 w-4" /> Marcadores Estándar (Clic para copiar)
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
                   {AVAILABLE_MARKERS.map(m => (
@@ -231,7 +232,18 @@ export default function TemplatesPage() {
                     </button>
                   ))}
                 </div>
-                <div className="pt-2 border-t border-blue-200 mt-2">
+                
+                <div className="pt-4 border-t border-blue-200">
+                  <div className="flex items-center gap-2 text-emerald-800 text-xs font-bold uppercase tracking-wider mb-2">
+                    <Sparkles className="h-4 w-4" /> Marcadores de Entrada (Dinámicos)
+                  </div>
+                  <div className="p-3 bg-white rounded-lg border border-blue-100 text-xs space-y-2">
+                    <p>Usa <b>{"{{"}?Nombre del dato{"}}"}</b> para que el sistema te pida el valor al momento de enviar.</p>
+                    <p className="italic text-muted-foreground">Ejemplo: "Pasaremos el día <b>{"{{"}?Día de visita{"}}"}</b> a las <b>{"{{"}?Horario{"}}"}</b>"</p>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-blue-200">
                   <p className="text-[10px] text-blue-800 font-bold">
                     🚀 PRODUCTOS: <code className="bg-white px-1">{"{{"}PrecioARS_Bidón de Cloro{"}}"}</code>.
                   </p>

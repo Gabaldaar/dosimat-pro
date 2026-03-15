@@ -45,7 +45,8 @@ import {
   ArrowDownCircle,
   Minus,
   Lock,
-  MessageSquare
+  MessageSquare,
+  Sparkles
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -121,6 +122,9 @@ function TransactionsContent() {
   const [selectedTxForWs, setSelectedTxForWs] = useState<any | null>(null)
   const [selectedWsTemplateId, setSelectedWsTemplateId] = useState("")
   const [processedWs, setProcessedWs] = useState("")
+
+  const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({})
+  const [dynamicKeys, setDynamicKeys] = useState<string[]>([])
 
   const [filterCustomer, setFilterCustomer] = useState("all")
   const [filterAccount, setFilterAccount] = useState("all")
@@ -212,6 +216,37 @@ function TransactionsContent() {
     }, { ARS: 0, USD: 0 })
   }, [selectedItems])
 
+  const extractDynamicKeys = (text: string) => {
+    const regex = /\{\{\?([^}]+)\}\}/g;
+    const keys = new Set<string>();
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      keys.add(match[1]);
+    }
+    return Array.from(keys);
+  };
+
+  useEffect(() => {
+    let combinedText = "";
+    if (isEmailDialogOpen && selectedTemplateId) {
+      const tpl = emailTemplates?.find(t => t.id === selectedTemplateId);
+      if (tpl) combinedText = (tpl.subject || "") + " " + (tpl.body || "");
+    } else if (isWsDialogOpen && selectedWsTemplateId) {
+      const tpl = wsTemplates?.find(t => t.id === selectedWsTemplateId);
+      if (tpl) combinedText = tpl.body || "";
+    }
+
+    const keys = extractDynamicKeys(combinedText);
+    setDynamicKeys(keys);
+    setDynamicValues(prev => {
+      const next: Record<string, string> = {};
+      keys.forEach(k => {
+        next[k] = prev[k] || "";
+      });
+      return next;
+    });
+  }, [selectedTemplateId, selectedWsTemplateId, isEmailDialogOpen, isWsDialogOpen, emailTemplates, wsTemplates]);
+
   const processMarkers = (text: string, tx: any, templateType: 'email' | 'whatsapp') => {
     if (!text || !tx) return text;
     let result = text;
@@ -295,6 +330,12 @@ function TransactionsContent() {
       return match;
     });
 
+    // Process dynamic inputs {{?Label}}
+    const dynamicRegex = /\{\{\?([^}]+)\}\}/g;
+    result = result.replace(dynamicRegex, (match, key) => {
+      return dynamicValues[key] || match;
+    });
+
     return result;
   };
 
@@ -308,7 +349,7 @@ function TransactionsContent() {
         });
       }
     }
-  }, [selectedTxForEmail, selectedTemplateId, emailTemplates, customers, accounts, catalog, expenseCategories])
+  }, [selectedTxForEmail, selectedTemplateId, emailTemplates, customers, accounts, catalog, expenseCategories, dynamicValues])
 
   useEffect(() => {
     if (selectedTxForWs && selectedWsTemplateId && wsTemplates) {
@@ -317,7 +358,7 @@ function TransactionsContent() {
         setProcessedWs(processMarkers(tpl.body, selectedTxForWs, 'whatsapp'));
       }
     }
-  }, [selectedTxForWs, selectedWsTemplateId, wsTemplates, customers, accounts, catalog, expenseCategories])
+  }, [selectedTxForWs, selectedWsTemplateId, wsTemplates, customers, accounts, catalog, expenseCategories, dynamicValues])
 
   const handleAddItem = (itemId: string) => {
     const item = catalog?.find((i: any) => i.id === itemId)
@@ -549,6 +590,7 @@ function TransactionsContent() {
   const handleOpenEmailDialog = (tx: any) => {
     setSelectedTxForEmail(tx)
     setSelectedTemplateId("")
+    setDynamicValues({})
     setProcessedEmail({ subject: "", body: "" })
     setIsEmailDialogOpen(true)
   }
@@ -567,6 +609,7 @@ function TransactionsContent() {
   const handleOpenWsDialog = (tx: any) => {
     setSelectedTxForWs(tx)
     setSelectedWsTemplateId("")
+    setDynamicValues({})
     setProcessedWs("")
     setIsWsDialogOpen(true)
   }
@@ -1185,6 +1228,28 @@ function TransactionsContent() {
                 <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
                 <SelectContent>{emailTemplates?.map((t: any) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}</SelectContent>
               </Select>
+
+              {dynamicKeys.length > 0 && (
+                <Card className="border-primary/20 bg-primary/5 p-4 space-y-4">
+                  <div className="flex items-center gap-2 text-xs font-black uppercase text-primary tracking-widest">
+                    <Sparkles className="h-4 w-4" /> Datos de la plantilla
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {dynamicKeys.map(key => (
+                      <div key={key} className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase">{key}</Label>
+                        <Input 
+                          value={dynamicValues[key] || ""} 
+                          onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})}
+                          placeholder={`Ingresar ${key}...`}
+                          className="h-9 bg-white"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
               {selectedTemplateId && (
                 <div className="p-4 bg-muted/20 rounded border space-y-2 max-h-[350px] overflow-y-auto">
                   <div className="sticky top-0 bg-muted/20 pb-2 border-b mb-4"><p className="text-sm font-bold text-primary">Asunto: {processedEmail.subject}</p></div>
@@ -1205,6 +1270,28 @@ function TransactionsContent() {
                 <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
                 <SelectContent>{wsTemplates?.map((t: any) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}</SelectContent>
               </Select>
+
+              {dynamicKeys.length > 0 && (
+                <Card className="border-emerald-200 bg-emerald-50/30 p-4 space-y-4">
+                  <div className="flex items-center gap-2 text-xs font-black uppercase text-emerald-700 tracking-widest">
+                    <Sparkles className="h-4 w-4" /> Datos de la plantilla
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {dynamicKeys.map(key => (
+                      <div key={key} className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase">{key}</Label>
+                        <Input 
+                          value={dynamicValues[key] || ""} 
+                          onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})}
+                          placeholder={`Ingresar ${key}...`}
+                          className="h-9 bg-white border-emerald-100"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
               {selectedWsTemplateId && (
                 <div className="p-4 bg-emerald-50/50 rounded-xl border border-emerald-100 space-y-2 max-h-[350px] overflow-y-auto shadow-inner">
                   <p className="text-sm whitespace-pre-wrap italic leading-relaxed text-slate-700">{processedWs}</p>

@@ -38,7 +38,8 @@ import {
   MessageSquare,
   History,
   ChevronLeft,
-  FastForward
+  FastForward,
+  Sparkles
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import {
@@ -103,6 +104,10 @@ function CustomersContent() {
   const [selectedBulkWsTemplateId, setSelectedBulkWsTemplateId] = useState("")
   const [bulkWsIndex, setBulkWsIndex] = useState(0)
   
+  // New state for dynamic inputs {{?Label}}
+  const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({})
+  const [dynamicKeys, setDynamicKeys] = useState<string[]>([])
+
   const [newZoneName, setNewZoneName] = useState("")
   const [editingCustomer, setEditingCustomer] = useState<any>(null)
 
@@ -125,6 +130,42 @@ function CustomersContent() {
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
   }, [isDialogOpen, isZoneManagerOpen, isBulkEmailOpen, isWsDialogOpen, customerToDelete, isBulkWsOpen]);
+
+  // Logic to detect dynamic markers {{?Label}}
+  const extractDynamicKeys = (text: string) => {
+    const regex = /\{\{\?([^}]+)\}\}/g;
+    const keys = new Set<string>();
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      keys.add(match[1]);
+    }
+    return Array.from(keys);
+  };
+
+  useEffect(() => {
+    let combinedText = "";
+    if (isBulkEmailOpen && selectedTemplateId) {
+      const tpl = emailTemplates?.find(t => t.id === selectedTemplateId);
+      if (tpl) combinedText = (tpl.subject || "") + " " + (tpl.body || "");
+    } else if (isWsDialogOpen && selectedWsTemplateId) {
+      const tpl = wsTemplates?.find(t => t.id === selectedWsTemplateId);
+      if (tpl) combinedText = tpl.body || "";
+    } else if (isBulkWsOpen && selectedBulkWsTemplateId) {
+      const tpl = wsTemplates?.find(t => t.id === selectedBulkWsTemplateId);
+      if (tpl) combinedText = tpl.body || "";
+    }
+
+    const keys = extractDynamicKeys(combinedText);
+    setDynamicKeys(keys);
+    // Preservar valores si la llave ya existe, sino inicializar vacía
+    setDynamicValues(prev => {
+      const next: Record<string, string> = {};
+      keys.forEach(k => {
+        next[k] = prev[k] || "";
+      });
+      return next;
+    });
+  }, [selectedTemplateId, selectedWsTemplateId, selectedBulkWsTemplateId, isBulkEmailOpen, isWsDialogOpen, isBulkWsOpen, emailTemplates, wsTemplates]);
 
   const defaultFormData = {
     apellido: "",
@@ -368,6 +409,12 @@ function CustomersContent() {
       });
     }
 
+    // New: Process dynamic input markers {{?Label}}
+    const dynamicRegex = /\{\{\?([^}]+)\}\}/g;
+    result = result.replace(dynamicRegex, (match, key) => {
+      return dynamicValues[key] || match;
+    });
+
     return result;
   };
 
@@ -428,6 +475,7 @@ function CustomersContent() {
     }
     setBulkWsIndex(0)
     setSelectedBulkWsTemplateId("")
+    setDynamicValues({})
     setIsBulkWsOpen(true)
   }
 
@@ -725,7 +773,7 @@ function CustomersContent() {
                                 variant="outline" 
                                 size="icon" 
                                 className="h-9 w-9 text-emerald-600 border-emerald-200 hover:bg-blue-50"
-                                onClick={(e) => { e.stopPropagation(); setSelectedTxForWs(customer); setSelectedWsTemplateId(""); setIsWsDialogOpen(true); }}
+                                onClick={(e) => { e.stopPropagation(); setSelectedTxForWs(customer); setSelectedWsTemplateId(""); setDynamicValues({}); setIsWsDialogOpen(true); }}
                                 title="WhatsApp con Plantilla"
                               >
                                 <MessageSquare className="h-4 w-4" />
@@ -1000,7 +1048,7 @@ function CustomersContent() {
         </Dialog>
 
         <Dialog open={isBulkEmailOpen} onOpenChange={setIsBulkEmailOpen}>
-          <DialogContent>
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Mail className="h-5 w-5 text-primary" /> Envío Masivo a Filtrados
@@ -1022,11 +1070,32 @@ function CustomersContent() {
                 </Select>
               </div>
 
+              {dynamicKeys.length > 0 && (
+                <Card className="border-primary/20 bg-primary/5 p-4 space-y-4">
+                  <div className="flex items-center gap-2 text-xs font-black uppercase text-primary tracking-widest">
+                    <Sparkles className="h-4 w-4" /> Datos requeridos para esta plantilla
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {dynamicKeys.map(key => (
+                      <div key={key} className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase">{key}</Label>
+                        <Input 
+                          value={dynamicValues[key] || ""} 
+                          onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})}
+                          placeholder={`Completar ${key}...`}
+                          className="h-9 bg-white"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
               <Card className="bg-amber-50 border-amber-200 p-3">
                 <div className="flex gap-2 text-amber-800">
                   <Info className="h-4 w-4 shrink-0" />
                   <p className="text-xs">
-                    <b>Nota:</b> En los envíos masivos, los marcadores dinámicos (como el nombre o saldo) no se personalizarán para cada cliente. Sin embargo, los <b>precios de productos</b> sí se actualizarán automáticamente.
+                    <b>Nota:</b> En los envíos masivos, los marcadores dinámicos (como el nombre o saldo) no se personalizarán para cada cliente. Sin embargo, los <b>precios de productos</b> y los <b>datos que ingreses arriba</b> sí se actualizarán automáticamente.
                   </p>
                 </div>
               </Card>
@@ -1083,6 +1152,27 @@ function CustomersContent() {
                 </Select>
               </div>
 
+              {dynamicKeys.length > 0 && (
+                <Card className="border-emerald-200 bg-emerald-50/30 p-4 space-y-4">
+                  <div className="flex items-center gap-2 text-xs font-black uppercase text-emerald-700 tracking-widest">
+                    <Sparkles className="h-4 w-4" /> Completar datos de la plantilla
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {dynamicKeys.map(key => (
+                      <div key={key} className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase">{key}</Label>
+                        <Input 
+                          value={dynamicValues[key] || ""} 
+                          onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})}
+                          placeholder={`Completar ${key}...`}
+                          className="h-9 bg-white border-emerald-100"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
               {selectedWsTemplateId && currentWsTemplate && (
                 <div className="space-y-3 animate-in fade-in duration-300">
                    <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-100 text-sm whitespace-pre-wrap italic text-slate-700 max-h-[250px] overflow-y-auto shadow-inner">
@@ -1130,6 +1220,27 @@ function CustomersContent() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {dynamicKeys.length > 0 && (
+                <Card className="border-emerald-200 bg-emerald-50/30 p-4 space-y-4">
+                  <div className="flex items-center gap-2 text-xs font-black uppercase text-emerald-700 tracking-widest">
+                    <Sparkles className="h-4 w-4" /> Datos para toda la secuencia
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {dynamicKeys.map(key => (
+                      <div key={key} className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase">{key}</Label>
+                        <Input 
+                          value={dynamicValues[key] || ""} 
+                          onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})}
+                          placeholder={`Ej: Este viernes, $500, etc...`}
+                          className="h-9 bg-white border-emerald-100"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
 
               {selectedBulkWsTemplateId && currentBulkCustomer && (
                 <div className="space-y-4 animate-in fade-in duration-300">
