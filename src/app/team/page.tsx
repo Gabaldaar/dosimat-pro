@@ -282,7 +282,7 @@ function MemberCard({ member, isAdmin, currentUid, onUpdateRole, onBlock }: any)
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Admin')}>
                     <ShieldCheck className="mr-2 h-4 w-4" /> Aprobar como Administrador
-                  </DropdownMenuItem>
+                  </DropdownMenuSeparator>
                   <DropdownMenuSeparator />
                 </>
               )}
