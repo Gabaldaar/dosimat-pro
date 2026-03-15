@@ -46,7 +46,9 @@ import {
   Minus,
   Lock,
   MessageSquare,
-  Sparkles
+  Sparkles,
+  ChevronRight,
+  History
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -78,6 +80,7 @@ import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, d
 import { collection, doc, increment } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 const txTypeMap: Record<string, { label: string, icon: any, color: string, description: string }> = {
   sale: { label: "Venta", icon: ShoppingBag, color: "text-blue-600 bg-blue-50", description: "Venta general de productos, insumos o accesorios de piscina." },
@@ -118,7 +121,7 @@ function TransactionsContent() {
   
   const [editingTx, setEditingTx] = useState<any | null>(null)
   const [txToDelete, setTxToDelete] = useState<any | null>(null)
-  const [selectedTxForNote, setSelectedTxForNote] = useState<any | null>(null)
+  const [selectedTxDetails, setSelectedTxDetails] = useState<any | null>(null)
 
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false)
   const [selectedTxForEmail, setSelectedTxForEmail] = useState<any | null>(null)
@@ -188,14 +191,14 @@ function TransactionsContent() {
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        if (!isEmailDialogOpen && !txToDelete && !selectedTxForNote && !isWsDialogOpen) {
+        if (!isEmailDialogOpen && !txToDelete && !selectedTxDetails && !isWsDialogOpen) {
           document.body.style.pointerEvents = 'auto';
         }
       }
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isEmailDialogOpen, txToDelete, selectedTxForNote, isWsDialogOpen]);
+  }, [isEmailDialogOpen, txToDelete, selectedTxDetails, isWsDialogOpen]);
 
   const selectedClient = useMemo(() => {
     return customers?.find(c => c.id === (selectedCustomerId || editingTx?.clientId));
@@ -1084,7 +1087,7 @@ function TransactionsContent() {
                     const isLatest = isLatestForAccount(tx);
                     
                     return (
-                      <TableRow key={tx.id}>
+                      <TableRow key={tx.id} className="cursor-pointer hover:bg-primary/5 transition-colors group" onClick={() => setSelectedTxDetails(tx)}>
                         <TableCell className="text-xs font-medium">{formatLocalDate(tx.date)}</TableCell>
                         <TableCell>
                           <div className="flex flex-col">
@@ -1101,11 +1104,11 @@ function TransactionsContent() {
                         </TableCell>
                         <TableCell className="max-w-[200px]">
                           {tx.description ? (
-                            <div className="flex items-center gap-2 cursor-pointer hover:text-primary transition-colors" onClick={() => setSelectedTxForNote(tx)}>
+                            <div className="flex items-center gap-2">
                               <span className="text-xs truncate">{tx.description}</span>
-                              <Info className="h-3 w-3 shrink-0 text-muted-foreground opacity-50" />
+                              <Info className="h-3 w-3 shrink-0 text-muted-foreground opacity-50 group-hover:text-primary transition-colors" />
                             </div>
-                          ) : <span className="text-[10px] text-muted-foreground italic">Sin nota</span>}
+                          ) : <span className="text-[10px] text-muted-foreground italic">Ver detalle</span>}
                         </TableCell>
                         <TableCell className="text-right font-black">
                           <span className="flex items-center justify-end gap-1">
@@ -1119,17 +1122,18 @@ function TransactionsContent() {
                           </span>
                         </TableCell>
                         <TableCell>
-                          {acc ? <Badge variant="secondary" className="text-[9px] font-bold bg-slate-100 hover:bg-slate-200"><Wallet className="h-3 w-3 mr-1 text-slate-500" /> {acc.name}</Badge> : <span className="text-[10px] text-muted-foreground italic">A Cuenta</span>}
+                          {acc ? <Badge variant="secondary" className="text-[9px] font-bold bg-slate-100 group-hover:bg-white"><Wallet className="h-3 w-3 mr-1 text-slate-500" /> {acc.name}</Badge> : <span className="text-[10px] text-muted-foreground italic">A Cuenta</span>}
                         </TableCell>
                         <TableCell className="text-right">
                           {tx.accountBalanceAfter !== undefined && tx.accountBalanceAfter !== null ? (
                             <span className="text-xs font-black text-slate-600">{tx.currency === 'USD' ? 'u$s' : '$'} {Number(tx.accountBalanceAfter).toLocaleString('es-AR')}</span>
                           ) : <span className="text-[10px] text-muted-foreground">---</span>}
                         </TableCell>
-                        <TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => setSelectedTxDetails(tx)}><Info className="h-4 w-4 mr-2" /> Ficha Completa</DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleOpenWsDialog(tx)}><MessageSquare className="h-4 w-4 mr-2 text-emerald-600" /> WhatsApp (Plantilla)</DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleCopyWhatsApp(tx)}><Copy className="h-4 w-4 mr-2" /> Copiar Detalle</DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleOpenEmailDialog(tx)}><Mail className="h-4 w-4 mr-2" /> Enviar Email</DropdownMenuItem>
@@ -1172,32 +1176,35 @@ function TransactionsContent() {
                 const isLatest = isLatestForAccount(tx);
                 
                 return (
-                  <Card key={tx.id} className="glass-card p-4 relative border-l-4 border-l-primary hover:shadow-md transition-shadow">
+                  <Card key={tx.id} className="glass-card p-4 relative border-l-4 border-l-primary hover:shadow-md transition-shadow cursor-pointer" onClick={() => setSelectedTxDetails(tx)}>
                     <div className="flex justify-between items-start mb-2">
                       <span className="text-[10px] font-bold text-muted-foreground uppercase bg-muted/50 px-2 py-0.5 rounded">{formatLocalDate(tx.date)}</span>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 -mt-1 -mr-1"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleOpenWsDialog(tx)}><MessageSquare className="h-4 w-4 mr-2 text-emerald-600" /> WhatsApp (Plantilla)</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleCopyWhatsApp(tx)}><Copy className="h-4 w-4 mr-2" /> Copiar</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleOpenEmailDialog(tx)}><Mail className="h-4 w-4 mr-2" /> Email</DropdownMenuItem>
-                          {isAdmin && (
-                            <>
-                              <DropdownMenuItem onClick={() => handleEditTx(tx)} disabled={!isLatest} className={!isLatest ? "opacity-50" : ""}>
-                                {isLatest ? <Edit className="h-4 w-4 mr-2" /> : <Lock className="h-4 w-4 mr-2" />}
-                                Editar
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className={cn("text-destructive", !isLatest && "opacity-50")} onClick={() => setTxToDelete(tx)} disabled={!isLatest}>
-                                <Trash2 className="h-4 w-4 mr-2" /> Eliminar
-                              </DropdownMenuItem>
-                            </>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 -mt-1 -mr-1"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setSelectedTxDetails(tx)}><Info className="h-4 w-4 mr-2" /> Ver Ficha</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleOpenWsDialog(tx)}><MessageSquare className="h-4 w-4 mr-2 text-emerald-600" /> WhatsApp (Plantilla)</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleCopyWhatsApp(tx)}><Copy className="h-4 w-4 mr-2" /> Copiar</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleOpenEmailDialog(tx)}><Mail className="h-4 w-4 mr-2" /> Email</DropdownMenuItem>
+                            {isAdmin && (
+                              <>
+                                <DropdownMenuItem onClick={() => handleEditTx(tx)} disabled={!isLatest} className={!isLatest ? "opacity-50" : ""}>
+                                  {isLatest ? <Edit className="h-4 w-4 mr-2" /> : <Lock className="h-4 w-4 mr-2" />}
+                                  Editar
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className={cn("text-destructive", !isLatest && "opacity-50")} onClick={() => setTxToDelete(tx)} disabled={!isLatest}>
+                                  <Trash2 className="h-4 w-4 mr-2" /> Eliminar
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
                     <div className="mb-4">
                       <h4 className="font-bold text-md leading-tight">{cust ? `${cust.apellido}, ${cust.nombre}` : 'Global'}{cust?.cuit_dni && <span className="text-[10px] font-normal text-muted-foreground ml-2">({cust.cuit_dni})</span>}</h4>
-                      {tx.description && <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2 bg-muted/10 p-1.5 rounded" onClick={() => setSelectedTxForNote(tx)}>{tx.description}</p>}
+                      {tx.description && <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2 bg-muted/10 p-1.5 rounded">{tx.description}</p>}
                       <div className="flex flex-wrap gap-2 mt-2">
                         <Badge variant="outline" className={cn("text-[10px] gap-1", info.color)}><info.icon className="h-3 w-3" />{info.label}</Badge>
                         {tx.relatedType && <Badge variant="outline" className="text-[9px] font-bold text-emerald-600 border-emerald-200 bg-emerald-50 px-2 h-5">{txTypeMap[tx.relatedType]?.label || tx.relatedType}</Badge>}
@@ -1233,17 +1240,146 @@ function TransactionsContent() {
           </div>
         )}
 
-        <Dialog open={!!selectedTxForNote} onOpenChange={(o) => { if(!o) setSelectedTxForNote(null); }}>
-          <DialogContent>
-            <DialogHeader><DialogTitle className="flex items-center gap-2"><Info className="h-5 w-5 text-primary" /> Detalle de la Operación</DialogTitle><DialogDescription>Información adicional registrada.</DialogDescription></DialogHeader>
-            <div className="py-4">
-              <div className="p-4 bg-muted/30 rounded-lg border text-sm leading-relaxed whitespace-pre-wrap">{selectedTxForNote?.description || "Sin descripción adicional."}</div>
-              <div className="mt-4 grid grid-cols-2 gap-2 text-[10px] font-bold uppercase text-muted-foreground">
-                <div><p>Fecha:</p><p className="text-foreground">{selectedTxForNote && formatLocalDate(selectedTxForNote.date)}</p></div>
-                <div><p>Operación:</p><p className="text-foreground">{selectedTxForNote && txTypeMap[selectedTxForNote.type]?.label}</p></div>
+        <Dialog open={!!selectedTxDetails} onOpenChange={(o) => { if(!o) setSelectedTxDetails(null); }}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <div className="flex justify-between items-start pr-8">
+                <div className="space-y-1">
+                  <DialogTitle className="text-2xl font-black font-headline text-primary">Ficha de Operación</DialogTitle>
+                  <DialogDescription className="font-bold flex items-center gap-2">
+                    <CalendarIcon className="h-3 w-3" /> {selectedTxDetails && formatLocalDate(selectedTxDetails.date)}
+                  </DialogDescription>
+                </div>
+                {selectedTxDetails && (
+                  <Badge variant="outline" className={cn("text-[10px] font-black uppercase tracking-widest px-3 py-1", txTypeMap[selectedTxDetails.type]?.color)}>
+                    {txTypeMap[selectedTxDetails.type]?.label}
+                  </Badge>
+                )}
               </div>
-            </div>
-            <DialogFooter><Button onClick={() => setSelectedTxForNote(null)}>Cerrar</Button></DialogFooter>
+            </DialogHeader>
+            
+            {selectedTxDetails && (
+              <div className="space-y-6 py-4 animate-in fade-in duration-300">
+                <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-bold uppercase text-muted-foreground">Cliente</Label>
+                    <div className="p-3 bg-muted/20 rounded-xl border flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-black">
+                        <User className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm">
+                          {customers?.find(c => c.id === selectedTxDetails.clientId)?.apellido || 'Global'}, {customers?.find(c => c.id === selectedTxDetails.clientId)?.nombre || ''}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground uppercase font-medium">
+                          {customers?.find(c => c.id === selectedTxDetails.clientId)?.mail || 'Sin correo registrado'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-bold uppercase text-muted-foreground">Caja / Destino</Label>
+                    <div className="p-3 bg-muted/20 rounded-xl border flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
+                        <Wallet className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm">
+                          {accounts?.find(a => a.id === selectedTxDetails.financialAccountId)?.name || 'A Cuenta / Deuda'}
+                        </p>
+                        {selectedTxDetails.accountBalanceAfter !== undefined && selectedTxDetails.accountBalanceAfter !== null && (
+                          <p className="text-[10px] text-slate-500 font-bold">
+                            SALDO FINAL: {selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Number(selectedTxDetails.accountBalanceAfter).toLocaleString('es-AR')}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <Card className="border-none bg-primary/5 shadow-none">
+                  <CardContent className="p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-black uppercase text-primary tracking-widest">Monto Total</p>
+                        <p className="text-2xl font-black">
+                          {selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Math.abs(selectedTxDetails.amount).toLocaleString('es-AR')}
+                        </p>
+                      </div>
+                      <div className="space-y-1 border-x border-primary/10">
+                        <p className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Abonado</p>
+                        <p className="text-2xl font-black text-emerald-600">
+                          {selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {(selectedTxDetails.paidAmount || 0).toLocaleString('es-AR')}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-black uppercase text-rose-600 tracking-widest">Pendiente</p>
+                        <p className="text-2xl font-black text-rose-600">
+                          {selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Math.max(0, Math.abs(selectedTxDetails.amount) - (selectedTxDetails.paidAmount || 0)).toLocaleString('es-AR')}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {selectedTxDetails.items && selectedTxDetails.items.length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold uppercase text-muted-foreground px-1">Detalle de Ítems</Label>
+                    <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
+                      <Table>
+                        <TableHeader className="bg-muted/30">
+                          <TableRow>
+                            <TableHead className="h-8 text-[10px] font-bold">CONCEPTO</TableHead>
+                            <TableHead className="h-8 text-[10px] font-bold text-center">CANT.</TableHead>
+                            <TableHead className="h-8 text-[10px] font-bold text-right">PRECIO UNIT.</TableHead>
+                            <TableHead className="h-8 text-[10px] font-bold text-right">SUBTOTAL</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {selectedTxDetails.items.map((item: any, idx: number) => {
+                            const sub = (item.price * item.qty) * (1 - (item.discount || 0) / 100);
+                            return (
+                              <TableRow key={idx} className="h-10">
+                                <TableCell className="text-xs font-medium">
+                                  {item.name}
+                                  {item.discount > 0 && <span className="block text-[9px] text-rose-500 font-bold">Bonif. {item.discount}%</span>}
+                                </TableCell>
+                                <TableCell className="text-center text-xs font-bold">{item.qty}</TableCell>
+                                <TableCell className="text-right text-xs">
+                                  {selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Number(item.price).toLocaleString('es-AR')}
+                                </TableCell>
+                                <TableCell className="text-right text-xs font-black">
+                                  {selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {sub.toLocaleString('es-AR')}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-bold uppercase text-muted-foreground px-1">Notas y Descripción</Label>
+                  <div className="p-4 bg-muted/30 rounded-xl border text-sm leading-relaxed whitespace-pre-wrap italic text-slate-700 min-h-[80px]">
+                    {selectedTxDetails.description || "Sin descripción adicional registrada."}
+                  </div>
+                </div>
+
+                <div className="flex gap-2 justify-center pt-2">
+                   <Button variant="outline" size="sm" className="h-10 font-bold gap-2" onClick={() => handleCopyWhatsApp(selectedTxDetails)}>
+                     <Copy className="h-4 w-4" /> COPIAR DETALLE
+                   </Button>
+                   <Button variant="outline" size="sm" className="h-10 font-bold gap-2 text-emerald-700 border-emerald-200 hover:bg-emerald-50" onClick={() => handleOpenWsDialog(selectedTxDetails)}>
+                     <MessageSquare className="h-4 w-4" /> ENVIAR WHATSAPP
+                   </Button>
+                </div>
+              </div>
+            )}
+            <DialogFooter className="mt-4 border-t pt-4">
+              <Button onClick={() => setSelectedTxDetails(null)} className="w-full h-12 font-black uppercase tracking-widest shadow-lg">Cerrar Ficha</Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
