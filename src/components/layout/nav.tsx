@@ -68,6 +68,15 @@ export function Sidebar({ className }: { className?: string }) {
     }
   }
 
+  // Filtrar items según el rol del usuario
+  const filteredNavItems = React.useMemo(() => {
+    if (!userData) return [];
+    if (userData.role === 'Communicator') {
+      return navItems.filter(item => item.href === '/customers');
+    }
+    return navItems;
+  }, [userData]);
+
   return (
     <SidebarUI collapsible="icon" className={cn("border-r", className)}>
       <SidebarHeader className="p-4 flex flex-row items-center gap-2 overflow-hidden">
@@ -83,7 +92,7 @@ export function Sidebar({ className }: { className?: string }) {
       
       <SidebarContent className="px-2">
         <SidebarMenu>
-          {navItems.map((item) => (
+          {filteredNavItems.map((item) => (
             <SidebarMenuItem key={item.href}>
               <SidebarMenuButton
                 asChild
@@ -139,15 +148,22 @@ export function Sidebar({ className }: { className?: string }) {
 
 export function MobileNav() {
   const pathname = usePathname()
+  const { userData } = useUser()
   
-  // Custom list for mobile to include the most important 5
-  const mobileItems = [
-    { href: "/", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/customers", label: "Clientes", icon: Users },
-    { href: "/transactions", label: "Operaciones", icon: ArrowLeftRight },
-    { href: "/analysis", label: "Análisis", icon: BarChart3 },
-    { href: "/accounts", label: "Cajas", icon: Wallet },
-  ]
+  // Custom list for mobile based on role
+  const mobileItems = React.useMemo(() => {
+    if (!userData) return [];
+    if (userData.role === 'Communicator') {
+      return [{ href: "/customers", label: "Clientes", icon: Users }];
+    }
+    return [
+      { href: "/", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/customers", label: "Clientes", icon: Users },
+      { href: "/transactions", label: "Operaciones", icon: ArrowLeftRight },
+      { href: "/analysis", label: "Análisis", icon: BarChart3 },
+      { href: "/accounts", label: "Cajas", icon: Wallet },
+    ];
+  }, [userData]);
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-[100] bg-background/60 backdrop-blur-xl border-t border-primary/10 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] flex items-center justify-around px-4 py-3 pb-[calc(1rem+env(safe-area-inset-bottom))] md:hidden">

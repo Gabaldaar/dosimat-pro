@@ -106,8 +106,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Solo renderizamos la aplicación si el usuario está aprobado (Admin o Employee)
-  if (role === 'Admin' || role === 'Employee') {
+  // Solo renderizamos la aplicación si el usuario está aprobado (Admin, Employee o Communicator)
+  if (role === 'Admin' || role === 'Employee' || role === 'Communicator') {
     return <>{children}</>;
   }
 

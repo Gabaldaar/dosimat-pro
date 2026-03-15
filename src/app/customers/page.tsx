@@ -55,6 +55,7 @@ function CustomersContent() {
   const db = useFirestore()
   const { user, userData } = useUser()
   const isAdmin = userData?.role === 'Admin'
+  const isCommunicator = userData?.role === 'Communicator'
   const searchParams = useSearchParams()
   
   const [searchTerm, setSearchTerm] = useState("")
@@ -191,6 +192,7 @@ function CustomersContent() {
   }
 
   const handleOpenDialog = (customer?: any) => {
+    if (isCommunicator) return; // Comunicador no puede abrir el diálogo de edición
     if (customer) {
       setEditingCustomer(customer)
       setFormData({
@@ -209,6 +211,7 @@ function CustomersContent() {
   }
 
   const handleSave = () => {
+    if (isCommunicator) return;
     if (!formData.nombre || !formData.apellido) {
       toast({ title: "Error", description: "Nombre y Apellido son obligatorios", variant: "destructive" })
       return
@@ -234,6 +237,7 @@ function CustomersContent() {
 
   const handleDelete = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
+    if (isCommunicator) return;
     if (!isAdmin) {
       toast({ title: "Acceso denegado", description: "Solo administradores pueden eliminar clientes.", variant: "destructive" })
       return
@@ -428,14 +432,16 @@ function CustomersContent() {
             <Button variant="outline" onClick={() => setIsBulkEmailOpen(true)} className="border-primary text-primary hover:bg-primary/5">
               <Mail className="mr-2 h-4 w-4" /> Masivo
             </Button>
-            {isAdmin && (
+            {isAdmin && !isCommunicator && (
               <Button variant="outline" onClick={() => setIsZoneManagerOpen(true)}>
                 <MapPinned className="mr-2 h-4 w-4" /> Zonas
               </Button>
             )}
-            <Button onClick={() => handleOpenDialog()} className="shadow-lg shadow-primary/20 font-bold">
-              <Plus className="mr-2 h-5 w-5" /> Nuevo
-            </Button>
+            {!isCommunicator && (
+              <Button onClick={() => handleOpenDialog()} className="shadow-lg shadow-primary/20 font-bold">
+                <Plus className="mr-2 h-5 w-5" /> Nuevo
+              </Button>
+            )}
           </div>
         </header>
 
@@ -553,7 +559,10 @@ function CustomersContent() {
               return (
                 <Card 
                   key={customer.id} 
-                  className="glass-card hover:shadow-md transition-all cursor-pointer group relative overflow-hidden" 
+                  className={cn(
+                    "glass-card hover:shadow-md transition-all group relative overflow-hidden",
+                    !isCommunicator && "cursor-pointer"
+                  )}
                   onClick={() => handleOpenDialog(customer)}
                 >
                   <div className={cn(
@@ -614,30 +623,34 @@ function CustomersContent() {
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0">
-                          <Button 
-                            variant="default" 
-                            size="sm" 
-                            className="h-9 gap-2 font-bold px-4"
-                            asChild
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Link href={`/transactions?clientId=${customer.id}&mode=new`}>
-                              <PlusCircle className="h-4 w-4" /> Operar
-                            </Link>
-                          </Button>
+                          {!isCommunicator && (
+                            <>
+                              <Button 
+                                variant="default" 
+                                size="sm" 
+                                className="h-9 gap-2 font-bold px-4"
+                                asChild
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Link href={`/transactions?clientId=${customer.id}&mode=new`}>
+                                  <PlusCircle className="h-4 w-4" /> Operar
+                                </Link>
+                              </Button>
 
-                          <Button 
-                            variant="outline" 
-                            size="icon" 
-                            className="h-9 w-9 text-blue-600 border-blue-200 hover:bg-blue-50"
-                            asChild
-                            onClick={(e) => e.stopPropagation()}
-                            title="Ver Historial"
-                          >
-                            <Link href={`/transactions?clientId=${customer.id}`}>
-                              <History className="h-4 w-4" />
-                            </Link>
-                          </Button>
+                              <Button 
+                                variant="outline" 
+                                size="icon" 
+                                className="h-9 w-9 text-blue-600 border-blue-200 hover:bg-blue-50"
+                                asChild
+                                onClick={(e) => e.stopPropagation()}
+                                title="Ver Historial"
+                              >
+                                <Link href={`/transactions?clientId=${customer.id}`}>
+                                  <History className="h-4 w-4" />
+                                </Link>
+                              </Button>
+                            </>
+                          )}
                           
                           {customer.telefono && (
                             <div className="flex gap-1">
@@ -710,7 +723,7 @@ function CustomersContent() {
                           >
                             <Copy className="h-4 w-4" />
                           </Button>
-                          {isAdmin && (
+                          {isAdmin && !isCommunicator && (
                             <Button 
                               variant="ghost" 
                               size="icon" 
@@ -732,157 +745,159 @@ function CustomersContent() {
 
         <div className="h-40" />
 
-        <Dialog open={isDialogOpen} onOpenChange={(o) => {
-          setIsDialogOpen(o);
-          if(!o) setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
-        }}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-                <User className="h-6 w-6 text-primary" />
-                {editingCustomer ? 'Perfil de Cliente' : 'Nuevo Cliente'}
-              </DialogTitle>
-            </DialogHeader>
-            
-            <Tabs defaultValue="general" className="w-full mt-4">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="general" className="font-bold">General</TabsTrigger>
-                <TabsTrigger value="address" className="font-bold">Ubicación</TabsTrigger>
-                <TabsTrigger value="equipment" className="font-bold">Equipo</TabsTrigger>
-              </TabsList>
+        {!isCommunicator && (
+          <Dialog open={isDialogOpen} onOpenChange={(o) => {
+            setIsDialogOpen(o);
+            if(!o) setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
+          }}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+                  <User className="h-6 w-6 text-primary" />
+                  {editingCustomer ? 'Perfil de Cliente' : 'Nuevo Cliente'}
+                </DialogTitle>
+              </DialogHeader>
+              
+              <Tabs defaultValue="general" className="w-full mt-4">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="general" className="font-bold">General</TabsTrigger>
+                  <TabsTrigger value="address" className="font-bold">Ubicación</TabsTrigger>
+                  <TabsTrigger value="equipment" className="font-bold">Equipo</TabsTrigger>
+                </TabsList>
 
-              <TabsContent value="general" className="space-y-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Apellido</Label>
-                    <Input value={formData.apellido} onChange={(e) => setFormData({...formData, apellido: e.target.value})} placeholder="Pérez" />
+                <TabsContent value="general" className="space-y-4 py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Apellido</Label>
+                      <Input value={formData.apellido} onChange={(e) => setFormData({...formData, apellido: e.target.value})} placeholder="Pérez" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Nombre</Label>
+                      <Input value={formData.nombre} onChange={(e) => setFormData({...formData, nombre: e.target.value})} placeholder="Juan" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>CUIT / DNI</Label>
+                      <Input value={formData.cuit_dni} onChange={(e) => setFormData({...formData, cuit_dni: e.target.value})} placeholder="20-XXXXXXXX-X" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Teléfono</Label>
+                      <Input value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: e.target.value})} placeholder="+54 9 11 ..." />
+                    </div>
                   </div>
                   <div className="space-y-2">
-                    <Label>Nombre</Label>
-                    <Input value={formData.nombre} onChange={(e) => setFormData({...formData, nombre: e.target.value})} placeholder="Juan" />
+                    <Label>Email</Label>
+                    <Input value={formData.mail} onChange={(e) => setFormData({...formData, mail: e.target.value})} placeholder="cliente@ejemplo.com" />
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="font-bold">Saldo ARS ($)</Label>
+                      <Input type="number" value={formData.saldoActual} onChange={(e) => setFormData({...formData, saldoActual: Number(e.target.value)})} className="bg-muted/10 font-bold" disabled={!isAdmin} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold text-emerald-600">Saldo USD (u$s)</Label>
+                      <Input type="number" value={formData.saldoUSD} onChange={(e) => setFormData({...formData, saldoUSD: Number(e.target.value)})} className="bg-muted/10 font-bold" disabled={!isAdmin} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                    <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
+                      <Label className="font-bold">Cliente de Reposición</Label>
+                      <Switch checked={formData.esClienteReposicion} onCheckedChange={(v) => setFormData(prev => ({ ...prev, esClienteReposicion: v }))} />
+                    </div>
+                    <div className="flex items-center justify-between p-3 border rounded-lg bg-amber-50/50 border-amber-200">
+                      <Label className="font-bold text-amber-700">Equipo en Comodato</Label>
+                      <Switch 
+                        checked={formData.equipoInstalado?.enComodato} 
+                        onCheckedChange={(v) => setFormData(prev => ({ ...prev, equipoInstalado: { ...prev.equipoInstalado, enComodato: v } }))} 
+                      />
+                    </div>
+                  </div>
                   <div className="space-y-2">
-                    <Label>CUIT / DNI</Label>
-                    <Input value={formData.cuit_dni} onChange={(e) => setFormData({...formData, cuit_dni: e.target.value})} placeholder="20-XXXXXXXX-X" />
+                    <Label className="font-bold">Notas Generales</Label>
+                    <Textarea value={formData.notes} onChange={(e) => setFormData({...formData, notasGeneral: e.target.value})} placeholder="Notas sobre el perfil del cliente..." className="min-h-[80px]" />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Teléfono</Label>
-                    <Input value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: e.target.value})} placeholder="+54 9 11 ..." />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Email</Label>
-                  <Input value={formData.mail} onChange={(e) => setFormData({...formData, mail: e.target.value})} placeholder="cliente@ejemplo.com" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="font-bold">Saldo ARS ($)</Label>
-                    <Input type="number" value={formData.saldoActual} onChange={(e) => setFormData({...formData, saldoActual: Number(e.target.value)})} className="bg-muted/10 font-bold" disabled={!isAdmin} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="font-bold text-emerald-600">Saldo USD (u$s)</Label>
-                    <Input type="number" value={formData.saldoUSD} onChange={(e) => setFormData({...formData, saldoUSD: Number(e.target.value)})} className="bg-muted/10 font-bold" disabled={!isAdmin} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                  <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
-                    <Label className="font-bold">Cliente de Reposición</Label>
-                    <Switch checked={formData.esClienteReposicion} onCheckedChange={(v) => setFormData(prev => ({ ...prev, esClienteReposicion: v }))} />
-                  </div>
-                  <div className="flex items-center justify-between p-3 border rounded-lg bg-amber-50/50 border-amber-200">
-                    <Label className="font-bold text-amber-700">Equipo en Comodato</Label>
-                    <Switch 
-                      checked={formData.equipoInstalado?.enComodato} 
-                      onCheckedChange={(v) => setFormData(prev => ({ ...prev, equipoInstalado: { ...prev.equipoInstalado, enComodato: v } }))} 
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-bold">Notas Generales</Label>
-                  <Textarea value={formData.notes} onChange={(e) => setFormData({...formData, notasGeneral: e.target.value})} placeholder="Notas sobre el perfil del cliente..." className="min-h-[80px]" />
-                </div>
-              </TabsContent>
+                </TabsContent>
 
-              <TabsContent value="address" className="space-y-4 py-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="font-bold text-primary">Dirección</Label>
-                    <Input 
-                      value={formData.direccion} 
-                      onChange={(e) => setFormData({...formData, direccion: e.target.value})} 
-                      placeholder="Calle y altura" 
-                    />
+                <TabsContent value="address" className="space-y-4 py-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="font-bold text-primary">Dirección</Label>
+                      <Input 
+                        value={formData.direccion} 
+                        onChange={(e) => setFormData({...formData, direccion: e.target.value})} 
+                        placeholder="Calle y altura" 
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold text-primary">Zona</Label>
+                      <Select value={formData.zonaId} onValueChange={(v) => setFormData({...formData, zonaId: v})}>
+                        <SelectTrigger><SelectValue placeholder="Seleccionar zona..." /></SelectTrigger>
+                        <SelectContent>
+                          {zones?.map((z: any) => (
+                            <SelectItem key={z.id} value={z.id}>{z.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Localidad</Label>
+                      <Input value={formData.localidad} onChange={(e) => setFormData({...formData, localidad: e.target.value})} placeholder="Ej: Pilar" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Provincia</Label>
+                      <Input value={formData.provincia} onChange={(e) => setFormData({...formData, provincia: e.target.value})} placeholder="Buenos Aires" />
+                    </div>
                   </div>
                   <div className="space-y-2">
-                    <Label className="font-bold text-primary">Zona</Label>
-                    <Select value={formData.zonaId} onValueChange={(v) => setFormData({...formData, zonaId: v})}>
-                      <SelectTrigger><SelectValue placeholder="Seleccionar zona..." /></SelectTrigger>
-                      <SelectContent>
-                        {zones?.map((z: any) => (
-                          <SelectItem key={z.id} value={z.id}>{z.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Observaciones de Ubicación</Label>
+                    <Textarea value={formData.observaciones} onChange={(e) => setFormData({...formData, observaciones: e.target.value})} placeholder="Detalles de acceso, perros, etc..." className="min-h-[100px]" />
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Localidad</Label>
-                    <Input value={formData.localidad} onChange={(e) => setFormData({...formData, localidad: e.target.value})} placeholder="Ej: Pilar" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Provincia</Label>
-                    <Input value={formData.provincia} onChange={(e) => setFormData({...formData, provincia: e.target.value})} placeholder="Buenos Aires" />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Observaciones de Ubicación</Label>
-                  <Textarea value={formData.observaciones} onChange={(e) => setFormData({...formData, observaciones: e.target.value})} placeholder="Detalles de acceso, perros, etc..." className="min-h-[100px]" />
-                </div>
-              </TabsContent>
+                </TabsContent>
 
-              <TabsContent value="equipment" className="space-y-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Modelo del Dosificador</Label>
-                    <Input value={formData.equipoInstalado.modeloEquipo} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, modeloEquipo: e.target.value}}))} placeholder="Ej: Dosimat G4" />
+                <TabsContent value="equipment" className="space-y-4 py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Modelo del Dosificador</Label>
+                      <Input value={formData.equipoInstalado.modeloEquipo} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, modeloEquipo: e.target.value}}))} placeholder="Ej: Dosimat G4" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Volumen de Piscina (Litros)</Label>
+                      <Input type="number" value={formData.equipoInstalado.volumen} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, volumen: Number(e.target.value)}}))} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Medidas de la Pileta</Label>
+                      <Input value={formData.equipoInstalado.medidasPileta} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, medidasPileta: e.target.value}}))} placeholder="Ej: 8x4 metros" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Dosis de Cloro (L/día)</Label>
+                      <Input value={formData.equipoInstalado.dosisCloro} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, dosisCloro: e.target.value}}))} placeholder="Ej: 2 Litros" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Cantidad de Bidones</Label>
+                      <Input type="number" value={formData.equipoInstalado.cantidadBidones} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, cantidadBidones: Number(e.target.value)}}))} />
+                    </div>
                   </div>
                   <div className="space-y-2">
-                    <Label>Volumen de Piscina (Litros)</Label>
-                    <Input type="number" value={formData.equipoInstalado.volumen} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, volumen: Number(e.target.value)}}))} />
+                    <Label className="font-bold">Notas Técnicas / Equipo</Label>
+                    <Textarea value={formData.equipoInstalado.notes} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, notas: e.target.value}}))} placeholder="Detalles sobre la instalación, fallas técnicas, reparaciones..." className="min-h-[80px]" />
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Medidas de la Pileta</Label>
-                    <Input value={formData.equipoInstalado.medidasPileta} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, medidasPileta: e.target.value}}))} placeholder="Ej: 8x4 metros" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Dosis de Cloro (L/día)</Label>
-                    <Input value={formData.equipoInstalado.dosisCloro} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, dosisCloro: e.target.value}}))} placeholder="Ej: 2 Litros" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Cantidad de Bidones</Label>
-                    <Input type="number" value={formData.equipoInstalado.cantidadBidones} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, cantidadBidones: Number(e.target.value)}}))} />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-bold">Notas Técnicas / Equipo</Label>
-                  <Textarea value={formData.equipoInstalado.notes} onChange={(e) => setFormData(prev => ({...prev, equipoInstalado: {...prev.equipoInstalado, notas: e.target.value}}))} placeholder="Detalles sobre la instalación, fallas técnicas, reparaciones..." className="min-h-[80px]" />
-                </div>
-              </TabsContent>
-            </Tabs>
+                </TabsContent>
+              </Tabs>
 
-            <DialogFooter className="mt-6 border-t pt-4">
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="font-bold">Cancelar</Button>
-              <Button onClick={handleSave} className="px-8 font-bold shadow-lg shadow-primary/20"><CheckCircle2 className="mr-2 h-4 w-4" /> Guardar Cambios</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter className="mt-6 border-t pt-4">
+                <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="font-bold">Cancelar</Button>
+                <Button onClick={handleSave} className="px-8 font-bold shadow-lg shadow-primary/20"><CheckCircle2 className="mr-2 h-4 w-4" /> Guardar Cambios</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
 
         <Dialog open={isZoneManagerOpen} onOpenChange={setIsZoneManagerOpen}>
           <DialogContent>

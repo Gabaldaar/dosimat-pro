@@ -18,7 +18,9 @@ import {
   Ban,
   CheckCircle2,
   Droplets,
-  Loader2
+  Loader2,
+  MessageSquare,
+  Shield
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -46,6 +48,7 @@ import { cn } from "@/lib/utils"
 const roleDisplay: Record<string, { label: string, icon: any, color: string }> = {
   'Admin': { label: 'Administrador', icon: ShieldCheck, color: 'default' },
   'Employee': { label: 'Empleado', icon: UserCircle, color: 'secondary' },
+  'Communicator': { label: 'Comunicador', icon: MessageSquare, color: 'outline' },
   'Pending': { label: 'Pendiente', icon: Clock, color: 'outline' },
   'Blocked': { label: 'Bloqueado', icon: Ban, color: 'destructive' }
 }
@@ -102,9 +105,7 @@ export default function TeamPage() {
       roleIds: [newRole.toLowerCase()] 
     }, { merge: true })
 
-    const msg = newRole === 'Employee' ? "Usuario aprobado como Empleado" : 
-                newRole === 'Admin' ? "Usuario promovido a Administrador" : 
-                "Rol actualizado";
+    const msg = `Rol actualizado a ${roleDisplay[newRole]?.label || newRole}`;
     toast({ title: msg })
   }
 
@@ -170,10 +171,10 @@ export default function TeamPage() {
             </TabsList>
 
             <TabsContent value="active" className="space-y-4">
-              {sortedTeam.filter(m => m.role === 'Admin' || m.role === 'Employee').map((member: any) => (
+              {sortedTeam.filter(m => m.role === 'Admin' || m.role === 'Employee' || m.role === 'Communicator').map((member: any) => (
                 <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onBlock={handleBlockUser} />
               ))}
-              {sortedTeam.filter(m => m.role === 'Admin' || m.role === 'Employee').length === 0 && (
+              {sortedTeam.filter(m => m.role === 'Admin' || m.role === 'Employee' || m.role === 'Communicator').length === 0 && (
                 <EmptyState icon={Users} text="No hay colaboradores activos." />
               )}
             </TabsContent>
@@ -206,9 +207,10 @@ export default function TeamPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground space-y-2">
-            <p>• <b>Pendientes</b>: Usuarios que se registraron pero no tienen permiso para ver nada aún. Debes aprobarlos.</p>
-            <p>• <b>Empleados</b>: Pueden operar y ver registros, pero no pueden borrar cajas ni gestionar el equipo.</p>
-            <p>• <b>Bloqueados</b>: El acceso se revoca inmediatamente. No podrán entrar aunque conozcan su contraseña.</p>
+            <p>• <b>Pendientes</b>: Usuarios que se registraron pero no tienen permiso aún. Debes aprobarlos.</p>
+            <p>• <b>Comunicadores</b>: Solo pueden ver la sección de Clientes para contactarlos. No ven operaciones ni cajas.</p>
+            <p>• <b>Empleados</b>: Pueden operar y ver registros financieros.</p>
+            <p>• <b>Administradores</b>: Control total, gestión de equipo y eliminación de cajas/registros.</p>
           </CardContent>
         </Card>
 
@@ -224,7 +226,7 @@ export default function TeamPage() {
                     Pide a tu colaborador que se registre con su email en la pantalla de inicio.
                   </p>
                   <div className="p-3 bg-muted/50 rounded-lg border text-xs italic">
-                    Una vez registrado, aparecerá en la pestaña de <b>"Pendientes"</b> y podrás habilitar su acceso.
+                    Una vez registrado, aparecerá en la pestaña de <b>"Pendientes"</b> y podrás habilitar su acceso con el rol correspondiente.
                   </div>
                 </div>
               </DialogDescription>
@@ -249,7 +251,8 @@ function MemberCard({ member, isAdmin, currentUid, onUpdateRole, onBlock }: any)
     <Card className={cn(
       "glass-card border-l-4 transition-all",
       member.role === 'Pending' ? "border-l-amber-400" : 
-      member.role === 'Blocked' ? "border-l-rose-500" : "border-l-primary"
+      member.role === 'Blocked' ? "border-l-rose-500" : 
+      member.role === 'Communicator' ? "border-l-cyan-500" : "border-l-primary"
     )}>
       <CardContent className="p-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -277,6 +280,9 @@ function MemberCard({ member, isAdmin, currentUid, onUpdateRole, onBlock }: any)
             <DropdownMenuContent align="end" className="w-56">
               {member.role === 'Pending' && (
                 <>
+                  <DropdownMenuItem className="text-cyan-600 font-bold" onClick={() => onUpdateRole(member.id, 'Communicator')}>
+                    <MessageSquare className="mr-2 h-4 w-4" /> Aprobar como Comunicador
+                  </DropdownMenuItem>
                   <DropdownMenuItem className="text-emerald-600 font-bold" onClick={() => onUpdateRole(member.id, 'Employee')}>
                     <CheckCircle2 className="mr-2 h-4 w-4" /> Aprobar como Empleado
                   </DropdownMenuItem>
@@ -287,15 +293,18 @@ function MemberCard({ member, isAdmin, currentUid, onUpdateRole, onBlock }: any)
                 </>
               )}
               
-              {(member.role === 'Admin' || member.role === 'Employee') && (
+              {(member.role === 'Admin' || member.role === 'Employee' || member.role === 'Communicator') && (
                 <>
-                  <DropdownMenuItem onClick={() => onUpdateRole(member.id, member.role === 'Admin' ? 'Employee' : 'Admin')}>
-                    {member.role === 'Admin' ? (
-                      <><UserCircle className="mr-2 h-4 w-4" /> Degradar a Empleado</>
-                    ) : (
-                      <><ShieldCheck className="mr-2 h-4 w-4" /> Promover a Admin</>
-                    )}
+                  <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Communicator')}>
+                    <MessageSquare className="mr-2 h-4 w-4" /> Cambiar a Comunicador
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Employee')}>
+                    <UserCircle className="mr-2 h-4 w-4" /> Cambiar a Empleado
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Admin')}>
+                    <ShieldCheck className="mr-2 h-4 w-4" /> Cambiar a Administrador
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem className="text-rose-600" onClick={() => onBlock(member.id)}>
                     <Ban className="mr-2 h-4 w-4" /> Bloquear acceso
                   </DropdownMenuItem>
