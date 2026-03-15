@@ -41,6 +41,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { cn } from "@/lib/utils"
 
 const roleDisplay: Record<string, { label: string, icon: any, color: string }> = {
   'Admin': { label: 'Administrador', icon: ShieldCheck, color: 'default' },
