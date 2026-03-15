@@ -63,10 +63,12 @@ function CustomersContent() {
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const zonesQuery = useMemoFirebase(() => collection(db, 'zones'), [db])
   const templatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
+  const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   
   const { data: customers, isLoading } = useCollection(clientsQuery)
   const { data: zones, isLoading: isLoadingZones } = useCollection(zonesQuery)
   const { data: templates } = useCollection(templatesQuery)
+  const { data: catalog } = useCollection(catalogQuery)
   
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isZoneManagerOpen, setIsZoneManagerOpen] = useState(false)
@@ -304,6 +306,20 @@ function CustomersContent() {
     }
   }
 
+  // Lógica de procesamiento de marcadores de catálogo
+  const processCatalogMarkers = (text: string) => {
+    if (!text || !catalog) return text;
+    const markerRegex = /{{Precio(ARS|USD)_([^}]+)}}/gi;
+    return text.replace(markerRegex, (match, currency, prodName) => {
+      const product = catalog.find(p => p.name.trim().toLowerCase() === prodName.trim().toLowerCase());
+      if (product) {
+        const price = currency.toUpperCase() === 'USD' ? (product.priceUSD || 0) : (product.priceARS || 0);
+        return `${currency.toUpperCase() === 'USD' ? 'u$s' : '$'} ${price.toLocaleString('es-AR')}`;
+      }
+      return match;
+    });
+  };
+
   const handleSendBulkEmail = () => {
     const template = templates?.find(t => t.id === selectedTemplateId)
     if (!template) return
@@ -327,11 +343,17 @@ function CustomersContent() {
       return
     }
 
-    const mailtoLink = `mailto:?bcc=${encodeURIComponent(emails)}&subject=${encodeURIComponent(template.subject)}&body=${encodeURIComponent(template.body)}`
+    // Procesar marcadores de catálogo (precios) antes de enviar
+    const subject = processCatalogMarkers(template.subject);
+    const body = processCatalogMarkers(template.body);
+
+    const mailtoLink = `mailto:?bcc=${encodeURIComponent(emails)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
     window.location.href = mailtoLink
     setIsBulkEmailOpen(false)
     toast({ title: "Correo Masivo Preparado", description: `Se han incluido ${uniqueEmails.length} direcciones únicas en CCO.` })
   }
+
+  const currentTemplate = templates?.find(t => t.id === selectedTemplateId);
 
   return (
     <div className="flex min-h-screen bg-background w-full">
@@ -863,23 +885,23 @@ function CustomersContent() {
                 <div className="flex gap-2 text-amber-800">
                   <Info className="h-4 w-4 shrink-0" />
                   <p className="text-xs">
-                    <b>Nota:</b> En los envíos masivos, los marcadores dinámicos (como el nombre o saldo) no se personalizarán para cada cliente. Se recomienda usar plantillas con mensajes genéricos. Las direcciones duplicadas se omiten automáticamente.
+                    <b>Nota:</b> En los envíos masivos, los marcadores dinámicos (como el nombre o saldo) no se personalizarán para cada cliente. Sin embargo, los <b>precios de productos</b> sí se actualizarán automáticamente.
                   </p>
                 </div>
               </Card>
 
-              {selectedTemplateId && (
+              {selectedTemplateId && currentTemplate && (
                 <div className="space-y-3 animate-in fade-in duration-300">
                    <div className="p-2 bg-muted/50 rounded border text-sm font-bold truncate">
-                     Asunto: {templates?.find(t => t.id === selectedTemplateId)?.subject}
+                     Asunto: {processCatalogMarkers(currentTemplate.subject)}
                    </div>
-                   {templates?.find((t: any) => t.id === selectedTemplateId)?.bcc && (
+                   {currentTemplate.bcc && (
                      <div className="p-2 bg-blue-50 rounded border text-[10px] font-bold text-blue-700 truncate">
-                       CCO Fijo: {templates.find((t: any) => t.id === selectedTemplateId).bcc}
+                       CCO Fijo: {currentTemplate.bcc}
                      </div>
                    )}
                    <div className="p-3 bg-white rounded border text-xs whitespace-pre-wrap italic text-slate-600 max-h-[150px] overflow-y-auto">
-                     {templates?.find(t => t.id === selectedTemplateId)?.body}
+                     {processCatalogMarkers(currentTemplate.body)}
                    </div>
                 </div>
               )}
