@@ -104,7 +104,6 @@ function CustomersContent() {
   const [selectedBulkWsTemplateId, setSelectedBulkWsTemplateId] = useState("")
   const [bulkWsIndex, setBulkWsIndex] = useState(0)
   
-  // New state for dynamic inputs {{?Label}}
   const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({})
   const [dynamicKeys, setDynamicKeys] = useState<string[]>([])
 
@@ -131,7 +130,6 @@ function CustomersContent() {
     return () => observer.disconnect();
   }, [isDialogOpen, isZoneManagerOpen, isBulkEmailOpen, isWsDialogOpen, customerToDelete, isBulkWsOpen]);
 
-  // Logic to detect dynamic markers {{?Label}}
   const extractDynamicKeys = (text: string) => {
     const regex = /\{\{\?([^}]+)\}\}/g;
     const keys = new Set<string>();
@@ -157,7 +155,6 @@ function CustomersContent() {
 
     const keys = extractDynamicKeys(combinedText);
     setDynamicKeys(keys);
-    // Preservar valores si la llave ya existe, sino inicializar vacía
     setDynamicValues(prev => {
       const next: Record<string, string> = {};
       keys.forEach(k => {
@@ -167,7 +164,6 @@ function CustomersContent() {
     });
   }, [selectedTemplateId, selectedWsTemplateId, selectedBulkWsTemplateId, isBulkEmailOpen, isWsDialogOpen, isBulkWsOpen, emailTemplates, wsTemplates]);
 
-  // Check if all dynamic fields are filled
   const allDynamicFieldsFilled = useMemo(() => {
     if (dynamicKeys.length === 0) return true;
     return dynamicKeys.every(key => dynamicValues[key]?.trim() !== "");
@@ -316,7 +312,7 @@ function CustomersContent() {
 
   const handleOpenMaps = (address: string, city: string) => {
     const query = encodeURIComponent(`${address}, ${city}, Argentina`)
-    window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank')
+    window.open(`https://google.com/maps/search/?api=1&query=${query}`, '_blank')
   }
 
   const handleWhatsApp = (customer: any, e: React.MouseEvent) => {
@@ -415,7 +411,6 @@ function CustomersContent() {
       });
     }
 
-    // New: Process dynamic input markers {{?Label}}
     const dynamicRegex = /\{\{\?([^}]+)\}\}/g;
     result = result.replace(dynamicRegex, (match, key) => {
       return dynamicValues[key] || match;
@@ -478,7 +473,6 @@ function CustomersContent() {
     toast({ title: "Correo Masivo Preparado", description: `Se han incluido ${uniqueEmails.length} direcciones únicas en CCO.` })
   }
 
-  // Sequential WhatsApp Logic
   const currentBulkCustomer = filteredCustomers[bulkWsIndex]
   const currentBulkWsTemplate = wsTemplates?.find(t => t.id === selectedBulkWsTemplateId)
 
@@ -1066,7 +1060,7 @@ function CustomersContent() {
         </Dialog>
 
         <Dialog open={isBulkEmailOpen} onOpenChange={setIsBulkEmailOpen}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Mail className="h-5 w-5 text-primary" /> Envío Masivo a Filtrados
@@ -1128,7 +1122,7 @@ function CustomersContent() {
                        CCO Fijo: {currentTemplate.bcc}
                      </div>
                    )}
-                   <div className="p-3 bg-white rounded border text-xs whitespace-pre-wrap italic text-slate-600 max-h-[150px] overflow-y-auto">
+                   <div className="p-3 bg-white rounded border text-xs whitespace-pre-wrap italic text-slate-600 max-h-[150px] overflow-y-auto shadow-inner">
                      {processMarkers(currentTemplate.body, {})}
                    </div>
                 </div>
@@ -1148,7 +1142,7 @@ function CustomersContent() {
         </Dialog>
 
         <Dialog open={isWsDialogOpen} onOpenChange={setIsWsDialogOpen}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <MessageSquare className="h-5 w-5 text-emerald-600" /> WhatsApp con Plantilla
@@ -1193,7 +1187,7 @@ function CustomersContent() {
 
               {selectedWsTemplateId && currentWsTemplate && (
                 <div className="space-y-3 animate-in fade-in duration-300">
-                   <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-100 text-sm whitespace-pre-wrap italic text-slate-700 max-h-[250px] overflow-y-auto shadow-inner">
+                   <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-100 text-sm whitespace-pre-wrap italic text-slate-700 max-h-[200px] overflow-y-auto shadow-inner">
                      {processMarkers(currentWsTemplate.body, selectedTxForWs)}
                    </div>
                 </div>
@@ -1212,12 +1206,11 @@ function CustomersContent() {
           </DialogContent>
         </Dialog>
 
-        {/* Sequential Bulk WhatsApp Dialog */}
         <Dialog open={isBulkWsOpen} onOpenChange={(o) => {
           setIsBulkWsOpen(o);
           if(!o) setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
         }}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <MessageSquare className="h-5 w-5 text-emerald-600" /> Secuencia Masiva de WhatsApp
@@ -1285,7 +1278,7 @@ function CustomersContent() {
                       
                       <div className="space-y-2">
                         <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Vista previa del mensaje</p>
-                        <div className="p-4 bg-white rounded-xl border border-emerald-100 text-sm italic whitespace-pre-wrap leading-relaxed shadow-inner max-h-[200px] overflow-y-auto">
+                        <div className="p-4 bg-white rounded-xl border border-emerald-100 text-sm italic whitespace-pre-wrap leading-relaxed shadow-inner max-h-[150px] overflow-y-auto">
                           {processMarkers(currentBulkWsTemplate.body, currentBulkCustomer)}
                         </div>
                       </div>
@@ -1301,23 +1294,23 @@ function CustomersContent() {
                 </div>
               )}
             </div>
-            <DialogFooter className="flex justify-between sm:justify-between items-center gap-2">
-              <Button variant="ghost" onClick={() => setIsBulkWsOpen(false)} className="font-bold">Finalizar</Button>
-              <div className="flex gap-2">
+            <DialogFooter className="flex flex-col sm:flex-row justify-between items-center gap-4 border-t pt-4">
+              <Button variant="ghost" onClick={() => setIsBulkWsOpen(false)} className="font-bold w-full sm:w-auto">Finalizar</Button>
+              <div className="flex gap-2 w-full sm:w-auto">
                 <Button 
                   variant="outline" 
                   onClick={handleSkipWs} 
                   disabled={!selectedBulkWsTemplateId}
-                  className="gap-2"
+                  className="gap-2 flex-1 sm:flex-none"
                 >
                   Omitir <FastForward className="h-4 w-4" />
                 </Button>
                 <Button 
                   onClick={handleSendNextWs} 
                   disabled={!selectedBulkWsTemplateId || !currentBulkCustomer?.telefono || !allDynamicFieldsFilled}
-                  className="bg-emerald-600 hover:bg-emerald-700 font-bold px-8 shadow-lg shadow-emerald-200 gap-2"
+                  className="bg-emerald-600 hover:bg-emerald-700 font-bold px-8 shadow-lg shadow-emerald-200 gap-2 flex-1 sm:flex-none"
                 >
-                  <Send className="h-4 w-4" /> Enviar y Siguiente
+                  <Send className="h-4 w-4" /> Enviar
                 </Button>
               </div>
             </DialogFooter>

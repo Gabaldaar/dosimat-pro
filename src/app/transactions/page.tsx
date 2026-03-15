@@ -107,7 +107,6 @@ function TransactionsContent() {
   const accountIdParam = searchParams.get('accountId')
   const modeParam = searchParams.get('mode')
 
-  // Redirección para el rol Comunicador (No puede ver operaciones)
   useEffect(() => {
     if (!isUserLoading && userData?.role === 'Communicator') {
       router.replace('/customers')
@@ -255,7 +254,6 @@ function TransactionsContent() {
     });
   }, [selectedTemplateId, selectedWsTemplateId, isEmailDialogOpen, isWsDialogOpen, emailTemplates, wsTemplates]);
 
-  // Check if all dynamic fields are filled
   const allDynamicFieldsFilled = useMemo(() => {
     if (dynamicKeys.length === 0) return true;
     return dynamicKeys.every(key => dynamicValues[key]?.trim() !== "");
@@ -344,7 +342,6 @@ function TransactionsContent() {
       return match;
     });
 
-    // Process dynamic inputs {{?Label}}
     const dynamicRegex = /\{\{\?([^}]+)\}\}/g;
     result = result.replace(dynamicRegex, (match, key) => {
       return dynamicValues[key] || match;
@@ -1210,7 +1207,7 @@ function TransactionsContent() {
                     <div className="grid grid-cols-2 gap-4 border-t pt-3 mb-4">
                       <div>
                         <p className="text-[10px] font-bold text-muted-foreground uppercase mb-0.5">Total</p>
-                        <p className="font-black text-sm flex items-center gap-1">{tx.amount > 0 ? <ArrowUpCircle className="h-3 w-3 text-emerald-500" /> : <ArrowDownCircle className="h-3 w-3 text-rose-500" luxury-text />}{tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}</p>
+                        <p className="font-black text-sm flex items-center gap-1">{tx.amount > 0 ? <ArrowUpCircle className="h-3 w-3 text-emerald-500" /> : <ArrowDownCircle className="h-3 w-3 text-rose-500" />}{tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-[10px] font-bold text-muted-foreground uppercase mb-0.5">Abonado</p>
@@ -1251,7 +1248,7 @@ function TransactionsContent() {
         </Dialog>
 
         <Dialog open={isEmailDialogOpen} onOpenChange={setIsEmailDialogOpen}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Notificación por Email</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
               <Label>Seleccionar Plantilla de Mail</Label>
@@ -1282,13 +1279,13 @@ function TransactionsContent() {
               )}
 
               {selectedTemplateId && (
-                <div className="p-4 bg-muted/20 rounded border space-y-2 max-h-[350px] overflow-y-auto">
+                <div className="p-4 bg-muted/20 rounded border space-y-2 max-h-[300px] overflow-y-auto shadow-inner">
                   <div className="sticky top-0 bg-muted/20 pb-2 border-b mb-4"><p className="text-sm font-bold text-primary">Asunto: {processedEmail.subject}</p></div>
                   <p className="text-xs whitespace-pre-wrap italic leading-relaxed">{processedEmail.body}</p>
                 </div>
               )}
             </div>
-            <DialogFooter>
+            <DialogFooter className="border-t pt-4">
               <Button variant="outline" onClick={() => setIsEmailDialogOpen(false)}>Cerrar</Button>
               <Button 
                 onClick={handleSendEmail} 
@@ -1301,7 +1298,7 @@ function TransactionsContent() {
         </Dialog>
 
         <Dialog open={isWsDialogOpen} onOpenChange={setIsWsDialogOpen}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle className="flex items-center gap-2"><MessageSquare className="h-5 w-5 text-emerald-600" /> Notificación por WhatsApp</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
               <Label>Seleccionar Plantilla de WhatsApp</Label>
@@ -1332,12 +1329,12 @@ function TransactionsContent() {
               )}
 
               {selectedWsTemplateId && (
-                <div className="p-4 bg-emerald-50/50 rounded-xl border border-emerald-100 space-y-2 max-h-[350px] overflow-y-auto shadow-inner">
+                <div className="p-4 bg-emerald-50/50 rounded-xl border border-emerald-100 space-y-2 max-h-[300px] overflow-y-auto shadow-inner">
                   <p className="text-sm whitespace-pre-wrap italic leading-relaxed text-slate-700">{processedWs}</p>
                 </div>
               )}
             </div>
-            <DialogFooter>
+            <DialogFooter className="border-t pt-4">
               <Button variant="outline" onClick={() => setIsWsDialogOpen(false)}>Cerrar</Button>
               <Button onClick={handleSendWs} disabled={!selectedWsTemplateId || !allDynamicFieldsFilled} className="bg-emerald-600 hover:bg-emerald-700">
                 <Send className="mr-2 h-4 w-4" /> Abrir WhatsApp
