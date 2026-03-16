@@ -53,6 +53,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking, useUser } from "@/firebase"
 import { collection, doc, increment } from "firebase/firestore"
@@ -192,7 +193,7 @@ export default function CatalogPage() {
         return p?.components?.some((c: any) => isCircular(c.productId, targetId)) || false;
       };
       
-      const hasCircle = formData.components.some(c => isCircular(c.productId, id));
+      const hasCircle = formData.components.some(c => iCircular(c.productId, id));
       if (hasCircle) {
         toast({ title: "Error de estructura", description: "No se puede crear un bucle circular de componentes.", variant: "destructive" });
         return;
