@@ -27,7 +27,8 @@ import {
   Settings,
   Filter,
   ChevronRight,
-  X
+  X,
+  Check
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -108,6 +109,7 @@ export default function CatalogPage() {
   const [selectedForAssembly, setSelectedForAssembly] = useState<any | null>(null)
   const [assemblyQty, setAssemblyQty] = useState(1)
   const [newCategoryName, setNewCategoryName] = useState("")
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
   
   // States for BOM creation
   const [bomFilterCategory, setBomFilterCategory] = useState("all")
@@ -277,10 +279,22 @@ export default function CatalogPage() {
     toast({ title: "Ensamblado completado", description: `Se fabricaron ${assemblyQty} unidades.` });
   }
 
-  const handleAddCategory = () => {
+  const handleSaveCategory = () => {
     if (!newCategoryName.trim()) return
-    const id = Math.random().toString(36).substr(2, 9)
+    const id = editingCategoryId || Math.random().toString(36).substr(2, 9)
     setDocumentNonBlocking(doc(db, 'product_categories', id), { id, name: newCategoryName }, { merge: true })
+    setNewCategoryName("")
+    setEditingCategoryId(null)
+    toast({ title: editingCategoryId ? "Categoría actualizada" : "Categoría creada" })
+  }
+
+  const handleEditCategory = (cat: any) => {
+    setEditingCategoryId(cat.id)
+    setNewCategoryName(cat.name)
+  }
+
+  const cancelEditCategory = () => {
+    setEditingCategoryId(null)
     setNewCategoryName("")
   }
 
@@ -707,19 +721,35 @@ export default function CatalogPage() {
           <div className="space-y-4 py-4">
             <div className="flex gap-2">
               <Input 
-                placeholder="Nueva categoría..." 
+                placeholder={editingCategoryId ? "Editar nombre..." : "Nueva categoría..."} 
                 value={newCategoryName} 
                 onChange={(e) => setNewCategoryName(e.target.value)} 
               />
-              <Button onClick={handleAddCategory}><Plus className="h-4 w-4" /></Button>
+              {editingCategoryId ? (
+                <div className="flex gap-1">
+                  <Button onClick={handleSaveCategory} className="bg-emerald-600 hover:bg-emerald-700">
+                    <Check className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" onClick={cancelEditCategory}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <Button onClick={handleSaveCategory}><Plus className="h-4 w-4" /></Button>
+              )}
             </div>
             <ScrollArea className="h-[250px] border rounded-md p-2">
               {categories.map((cat: any) => (
-                <div key={cat.id} className="flex justify-between items-center p-2 border-b last:border-0 hover:bg-muted/20">
+                <div key={cat.id} className="flex justify-between items-center p-2 border-b last:border-0 hover:bg-muted/20 group">
                   <span className="text-sm font-medium">{cat.name}</span>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteDocumentNonBlocking(doc(db, 'product_categories', cat.id))}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-primary" onClick={() => handleEditCategory(cat)}>
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteDocumentNonBlocking(doc(db, 'product_categories', cat.id))}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
               {categories.length === 0 && <p className="text-center py-10 text-xs text-muted-foreground italic">Sin categorías creadas.</p>}
