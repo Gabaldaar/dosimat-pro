@@ -78,7 +78,7 @@ import {
   DialogDescription
 } from "@/components/ui/dialog"
 import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking, useUser } from "@/firebase"
-import { collection, doc, increment } from "firebase/firestore"
+import { collection, doc, increment, query, orderBy } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
