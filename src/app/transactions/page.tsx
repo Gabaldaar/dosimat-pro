@@ -48,7 +48,8 @@ import {
   MessageSquare,
   Sparkles,
   ChevronRight,
-  History
+  History,
+  Star
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -148,7 +149,7 @@ function TransactionsContent() {
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
-  const txQuery = useMemoFirebase(() => collection(db, 'transactions'), [db])
+  const txQuery = useMemoFirebase(() => query(collection(db, 'transactions'), orderBy('date', 'desc')), [db])
   const emailTemplatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
   const wsTemplatesQuery = useMemoFirebase(() => collection(db, 'whatsapp_templates'), [db])
   const expenseCatsQuery = useMemoFirebase(() => collection(db, 'expense_categories'), [db])
@@ -167,6 +168,15 @@ function TransactionsContent() {
     if (!catalog) return []
     return [...catalog].sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""))
   }, [catalog])
+
+  const sortedProductCategories = useMemo(() => {
+    if (!productCategories) return []
+    return [...productCategories].sort((a: any, b: any) => {
+      if (a.isFavorite && !b.isFavorite) return -1;
+      if (!a.isFavorite && b.isFavorite) return 1;
+      return (a.name || "").localeCompare(b.name || "");
+    });
+  }, [productCategories]);
 
   const filteredCatalogItems = useMemo(() => {
     if (!sortedCatalog) return []
@@ -868,8 +878,13 @@ function TransactionsContent() {
                             <SelectTrigger className="h-11 bg-white/50"><SelectValue placeholder="Todas las categorías" /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem>
-                              {productCategories?.sort((a,b) => a.name.localeCompare(b.name)).map(c => (
-                                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                              {sortedProductCategories?.map(c => (
+                                <SelectItem key={c.id} value={c.id} className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    {c.name}
+                                    {c.isFavorite && <Star className="h-3 w-3 fill-amber-400 text-amber-400 inline" />}
+                                  </div>
+                                </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
