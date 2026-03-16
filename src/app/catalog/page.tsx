@@ -111,7 +111,6 @@ export default function CatalogPage() {
   const [newCategoryName, setNewCategoryName] = useState("")
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
   
-  // States for BOM creation
   const [bomFilterCategory, setBomFilterCategory] = useState("all")
 
   const [formData, setFormData] = useState({
@@ -179,6 +178,16 @@ export default function CatalogPage() {
       })
       .sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""))
   }, [items, searchTerm, selectedCategories, calculateCost])
+
+  // Componentes ordenados por nombre para el listado del BOM
+  const sortedAddedComponents = useMemo(() => {
+    if (!items || !formData.components) return []
+    return [...formData.components].sort((a, b) => {
+      const nameA = items.find(i => i.id === a.productId)?.name || ""
+      const nameB = items.find(i => i.id === b.productId)?.name || ""
+      return nameA.localeCompare(nameB)
+    })
+  }, [formData.components, items])
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -331,7 +340,6 @@ export default function CatalogPage() {
       </div>
       
       <div className="space-y-1">
-        {/* Sin Categoría Option */}
         {categoryCounts["uncategorized"] > 0 && (
           <div 
             className={cn(
@@ -429,12 +437,10 @@ export default function CatalogPage() {
         </header>
 
         <div className="flex flex-col md:flex-row gap-8 items-start">
-          {/* Sidebar Filters - Desktop */}
           <Card className="hidden md:block w-64 glass-card p-4 shrink-0 sticky top-8">
             <FilterPanel />
           </Card>
 
-          {/* Main Content */}
           <div className="flex-1 space-y-6 w-full">
             <div className="relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -547,7 +553,6 @@ export default function CatalogPage() {
         </div>
       </SidebarInset>
 
-      {/* Item Config Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -649,6 +654,9 @@ export default function CatalogPage() {
                     <span className="text-xs font-black text-amber-800 uppercase tracking-widest flex items-center gap-2">
                       <Layers className="h-4 w-4" /> Estructura de Armado (BOM)
                     </span>
+                    <Badge variant="outline" className="bg-white text-amber-700 border-amber-200 font-bold text-[10px]">
+                      {formData.components.length} PIEZAS
+                    </Badge>
                   </div>
                   
                   <div className="p-3 border-b space-y-3">
@@ -671,7 +679,9 @@ export default function CatalogPage() {
                             i.id !== editingItemId && 
                             !i.isService && 
                             (bomFilterCategory === "all" || i.categoryId === bomFilterCategory)
-                          ).map(i => (
+                          )
+                          .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+                          .map(i => (
                             <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
                           ))}
                         </SelectContent>
@@ -684,10 +694,11 @@ export default function CatalogPage() {
                       <div className="py-10 text-center text-xs text-muted-foreground italic">Agrega componentes para armar este producto.</div>
                     ) : (
                       <div className="space-y-2">
-                        {formData.components.map((comp, idx) => {
+                        {sortedAddedComponents.map((comp, idx) => {
                           const product = items?.find(i => i.id === comp.productId);
+                          const actualIdx = formData.components.findIndex(c => c.productId === comp.productId);
                           return (
-                            <div key={idx} className="flex items-center justify-between p-2 rounded bg-muted/20 border border-muted/30">
+                            <div key={comp.productId} className="flex items-center justify-between p-2 rounded bg-muted/20 border border-muted/30">
                               <div className="flex flex-col min-w-0">
                                 <span className="text-xs font-bold truncate">{product?.name || 'Cargando...'}</span>
                                 <span className="text-[9px] text-muted-foreground">Stock actual: {product?.stock || 0}</span>
@@ -698,11 +709,11 @@ export default function CatalogPage() {
                                   <input 
                                     type="number" 
                                     value={comp.quantity} 
-                                    onChange={(e) => updateComponentQty(idx, Number(e.target.value))}
+                                    onChange={(e) => updateComponentQty(actualIdx, Number(e.target.value))}
                                     className="w-10 h-7 text-xs font-bold text-center focus:outline-none"
                                   />
                                 </div>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeComponent(idx)}><Minus className="h-4 w-4" /></Button>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeComponent(actualIdx)}><Minus className="h-4 w-4" /></Button>
                               </div>
                             </div>
                           );
@@ -729,7 +740,6 @@ export default function CatalogPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Category Manager Dialog */}
       <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
         <DialogContent>
           <DialogHeader>
@@ -781,7 +791,6 @@ export default function CatalogPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Assembly Dialog */}
       <Dialog open={isAssemblyOpen} onOpenChange={setIsAssemblyOpen}>
         <DialogContent>
           <DialogHeader>
