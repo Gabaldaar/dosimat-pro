@@ -28,7 +28,9 @@ import {
   Filter,
   ChevronRight,
   X,
-  Check
+  Check,
+  TrendingUp,
+  TrendingDown
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -179,7 +181,6 @@ export default function CatalogPage() {
       .sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""))
   }, [items, searchTerm, selectedCategories, calculateCost])
 
-  // Componentes ordenados por nombre para el listado del BOM
   const sortedAddedComponents = useMemo(() => {
     if (!items || !formData.components) return []
     return [...formData.components].sort((a, b) => {
@@ -326,6 +327,27 @@ export default function CatalogPage() {
     setSearchTerm("")
   }
 
+  const getMarginInfo = (salePrice: number, cost: number) => {
+    if (!salePrice || salePrice <= 0) return null;
+    const margin = ((salePrice - cost) / salePrice) * 100;
+    let color = "text-emerald-600";
+    let icon = <TrendingUp className="h-3 w-3" />;
+    
+    if (margin < 0) {
+      color = "text-rose-600";
+      icon = <TrendingDown className="h-3 w-3" />;
+    } else if (margin < 20) {
+      color = "text-amber-600";
+      icon = <AlertTriangle className="h-3 w-3" />;
+    }
+    
+    return { 
+      value: margin.toFixed(0), 
+      color,
+      icon
+    };
+  }
+
   const FilterPanel = () => (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -376,9 +398,6 @@ export default function CatalogPage() {
             </Badge>
           </div>
         ))}
-        {categories.length === 0 && !loadingCats && categoryCounts["uncategorized"] === 0 && (
-          <p className="text-xs text-muted-foreground italic p-2">Sin categorías creadas.</p>
-        )}
       </div>
 
       {isAdmin && (
@@ -471,8 +490,9 @@ export default function CatalogPage() {
               <section className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6">
                 {filteredItems.map((item: any) => {
                   const isLowStock = !item.isService && (item.stock || 0) <= (item.minStock || 0);
-                  const marginARS = item.priceARS > 0 ? ((item.priceARS - item.calculatedCostARS) / item.priceARS * 100).toFixed(0) : null;
                   const catName = categoryMap[item.categoryId] || "Sin Categoría";
+                  const marginARS = getMarginInfo(item.priceARS, item.calculatedCostARS);
+                  const marginUSD = getMarginInfo(item.priceUSD, item.calculatedCostUSD);
 
                   return (
                     <Card key={item.id} className={cn(
@@ -521,25 +541,41 @@ export default function CatalogPage() {
                         )}
 
                         <div className="grid grid-cols-2 gap-2">
-                          <div className="p-2 bg-primary/5 rounded-lg border border-primary/10">
+                          <div className="p-2 bg-primary/5 rounded-lg border border-primary/10 relative overflow-hidden">
                             <span className="text-[9px] font-black text-primary uppercase block">Venta ARS</span>
                             <span className="text-md font-black">${(item.priceARS || 0).toLocaleString('es-AR')}</span>
+                            {isAdmin && marginARS && (
+                              <div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginARS.color)}>
+                                {marginARS.icon} {marginARS.value}%
+                              </div>
+                            )}
                           </div>
-                          <div className="p-2 bg-emerald-50 rounded-lg border border-emerald-100">
+                          <div className="p-2 bg-emerald-50 rounded-lg border border-emerald-100 relative overflow-hidden">
                             <span className="text-[9px] font-black text-emerald-700 uppercase block">Venta USD</span>
                             <span className="text-md font-black">u$s {(item.priceUSD || 0).toLocaleString('es-AR')}</span>
+                            {isAdmin && marginUSD && (
+                              <div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginUSD.color)}>
+                                {marginUSD.icon} {marginUSD.value}%
+                              </div>
+                            )}
                           </div>
                         </div>
 
                         {isAdmin && (
                           <div className="pt-2 border-t border-dashed">
-                            <div className="flex justify-between text-[10px] font-bold text-muted-foreground mb-1">
-                              <span>COSTO ESTIMADO</span>
-                              {marginARS && <span className="text-emerald-600">MARGEN: {marginARS}%</span>}
+                            <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground mb-1.5">
+                              <span className="uppercase tracking-widest">Costo Estimado</span>
+                              <Badge variant="outline" className="h-4 text-[8px] font-black bg-white uppercase">Costo real</Badge>
                             </div>
-                            <div className="flex gap-3 text-xs font-bold italic opacity-70">
-                              <span>${(item.calculatedCostARS || 0).toLocaleString('es-AR')}</span>
-                              <span>u$s {(item.calculatedCostUSD || 0).toLocaleString('es-AR')}</span>
+                            <div className="grid grid-cols-2 gap-3 text-xs font-bold italic opacity-80">
+                              <div className="flex flex-col">
+                                <span className="text-[9px] not-italic text-muted-foreground uppercase">Costo ARS</span>
+                                <span>${(item.calculatedCostARS || 0).toLocaleString('es-AR')}</span>
+                              </div>
+                              <div className="flex flex-col text-right">
+                                <span className="text-[9px] not-italic text-muted-foreground uppercase">Costo USD</span>
+                                <span>u$s {(item.calculatedCostUSD || 0).toLocaleString('es-AR')}</span>
+                              </div>
                             </div>
                           </div>
                         )}
