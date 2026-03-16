@@ -88,7 +88,6 @@ const txTypeMap: Record<string, { label: string, icon: any, color: string, descr
   service: { label: "Técnico", icon: Wrench, color: "text-indigo-600 bg-indigo-50", description: "Servicios técnicos, reparaciones o visitas de mantenimiento." },
   cobro: { label: "Cobro", icon: Receipt, color: "text-emerald-600 bg-emerald-50", description: "Registro de pago recibido del cliente para cancelar deuda." },
   adjustment: { label: "Ajuste", icon: Settings2, color: "text-slate-600 bg-slate-50", description: "Corrección manual de saldo (Ingresos o Egresos) en la cuenta del cliente." },
-  cobro_manual: { label: "Ingreso Manual", icon: Receipt, color: "text-emerald-600 bg-emerald-50", description: "Ingreso directo a caja." },
   Adjustment: { label: "Ajuste", icon: RefreshCw, color: "text-slate-600 bg-slate-50", description: "Ajuste de saldo manual." },
   Expense: { label: "Gasto", icon: ArrowDownLeft, color: "text-rose-600 bg-rose-50", description: "Gasto manual registrado." },
 }
@@ -199,10 +198,6 @@ function TransactionsContent() {
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
   }, [isEmailDialogOpen, txToDelete, selectedTxDetails, isWsDialogOpen]);
-
-  const selectedClient = useMemo(() => {
-    return customers?.find(c => c.id === (selectedCustomerId || editingTx?.clientId));
-  }, [customers, selectedCustomerId, editingTx]);
 
   useEffect(() => {
     if (clientIdParam) {
@@ -336,16 +331,6 @@ function TransactionsContent() {
       result = result.replaceAll(marker, value);
     });
 
-    const markerRegex = /{{Precio(ARS|USD)_([^}]+)}}/gi;
-    result = result.replace(markerRegex, (match, currency, prodName) => {
-      const product = catalog?.find(p => p.name.trim().toLowerCase() === prodName.trim().toLowerCase());
-      if (product) {
-        const price = currency.toUpperCase() === 'USD' ? (product.priceUSD || 0) : (product.priceARS || 0);
-        return `${currency.toUpperCase() === 'USD' ? 'u$s' : '$'} ${price.toLocaleString('es-AR')}`;
-      }
-      return match;
-    });
-
     const dynamicRegex = /\{\{\?([^}]+)\}\}/g;
     result = result.replace(dynamicRegex, (match, key) => {
       return dynamicValues[key] || match;
@@ -403,13 +388,13 @@ function TransactionsContent() {
 
   const handleEditTx = (tx: any) => {
     if (!isAdmin) {
-      toast({ title: "Acceso denegado", description: "Solo administradores pueden editar operaciones.", variant: "destructive" })
+      toast({ title: "Acceso denegado", variant: "destructive" })
       return
     }
     if (!isLatestForAccount(tx)) {
       toast({ 
         title: "Operación bloqueada", 
-        description: "Solo se puede editar el último movimiento de esta caja para mantener la integridad del saldo acumulado.", 
+        description: "Solo se puede editar el último movimiento de esta caja.", 
         variant: "destructive" 
       })
       return
@@ -437,9 +422,17 @@ function TransactionsContent() {
 
   const revertTxBalances = (tx: any) => {
     const balanceField = tx.currency === 'ARS' ? 'saldoActual' : 'saldoUSD'
-    const type = tx.type?.toLowerCase()
     
-    if (['cobro', 'adjustment', 'expense'].includes(type)) {
+    // Revert stock if items existed
+    if (tx.items) {
+      tx.items.forEach((item: any) => {
+        updateDocumentNonBlocking(doc(db, 'products_services', item.itemId), {
+          stock: increment(item.qty)
+        });
+      });
+    }
+
+    if (['cobro', 'adjustment', 'Expense', 'Adjustment'].includes(tx.type)) {
       const amount = Number(tx.amount) || 0
       if (tx.financialAccountId) {
         updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), { initialBalance: increment(-amount) })
@@ -462,16 +455,8 @@ function TransactionsContent() {
 
   const confirmDeleteTx = () => {
     if (!txToDelete?.id) return
-    if (!isAdmin) {
-      toast({ title: "Acceso denegado", description: "Solo administradores pueden eliminar operaciones.", variant: "destructive" })
-      return
-    }
     if (!isLatestForAccount(txToDelete)) {
-      toast({ 
-        title: "Eliminación bloqueada", 
-        description: "Solo se puede eliminar el último movimiento de esta caja.", 
-        variant: "destructive" 
-      })
+      toast({ title: "Eliminación bloqueada", variant: "destructive" })
       return
     }
     revertTxBalances(txToDelete)
@@ -545,6 +530,8 @@ function TransactionsContent() {
             if (acc) balanceAfter = Number(acc.initialBalance || 0) + paid;
           }
 
+          const currentItems = selectedItems.filter(item => item.currency === curr);
+
           const txData = {
             id: txId,
             date: finalDateStr,
@@ -556,11 +543,18 @@ function TransactionsContent() {
             currency: curr,
             description: txDescription || `Operación ${txTypeMap[activeTab]?.label.toUpperCase()}`,
             financialAccountId: (isPending || paid === 0) ? null : accId,
-            items: selectedItems.filter(item => item.currency === curr),
+            items: currentItems,
             accountBalanceAfter: balanceAfter
           }
 
           setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
+
+          // Update Stock for each item sold
+          currentItems.forEach(item => {
+            updateDocumentNonBlocking(doc(db, 'products_services', item.itemId), {
+              stock: increment(-item.qty)
+            });
+          });
 
           if (!isPending && paid !== 0) {
             updateDocumentNonBlocking(doc(db, 'financial_accounts', accId), { initialBalance: increment(paid) })
@@ -611,10 +605,7 @@ function TransactionsContent() {
   }
 
   const handleSendEmail = () => {
-    if (!allDynamicFieldsFilled) {
-      toast({ title: "Campos incompletos", description: "Por favor completa todos los datos dinámicos requeridos.", variant: "destructive" });
-      return;
-    }
+    if (!allDynamicFieldsFilled) return;
     const client = selectedTxForEmail.clientId ? customers?.find(c => c.id === selectedTxForEmail.clientId) : null;
     const tpl = emailTemplates?.find(t => t.id === selectedTemplateId)
     if (!processedEmail.subject || !processedEmail.body || !tpl) return
@@ -634,10 +625,7 @@ function TransactionsContent() {
   }
 
   const handleSendWs = () => {
-    if (!allDynamicFieldsFilled) {
-      toast({ title: "Campos incompletos", description: "Por favor completa todos los datos dinámicos requeridos.", variant: "destructive" });
-      return;
-    }
+    if (!allDynamicFieldsFilled) return;
     const client = selectedTxForWs.clientId ? customers?.find(c => c.id === selectedTxForWs.clientId) : null;
     const phone = client?.telefono?.replace(/\D/g, '')
     if (!phone || !processedWs) return
@@ -678,9 +666,8 @@ function TransactionsContent() {
     }
     const acc = accounts?.find(a => a.id === tx.financialAccountId);
     if (acc) text += `*Caja:* ${acc.name}\n`;
-    else if (tx.type !== 'adjustment' && tx.type !== 'Adjustment' && tx.type !== 'Expense' && (!tx.paidAmount || tx.paidAmount === 0)) text += `*Estado:* A Cuenta\n`;
     navigator.clipboard.writeText(text);
-    toast({ title: "Copiado", description: "Detalles de la operación copiados al portapapeles." });
+    toast({ title: "Copiado" });
   }
 
   const filteredTransactions = useMemo(() => {
@@ -709,11 +696,10 @@ function TransactionsContent() {
 
   const isManualForm = useMemo(() => ['cobro', 'adjustment', 'Adjustment', 'Expense'].includes(activeTab), [activeTab]);
 
-  if (isUserLoading || (userData?.role === 'Communicator')) {
+  if (isUserLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="mt-4 text-sm text-muted-foreground">Accediendo...</p>
       </div>
     )
   }
@@ -727,7 +713,7 @@ function TransactionsContent() {
             <SidebarTrigger className="flex" />
             <div className="flex items-center gap-2 md:hidden pr-2 border-r">
                <div className="bg-primary p-1.5 rounded-lg shadow-sm shadow-primary/20"><Droplets className="h-4 w-4 text-white" /></div>
-               <span className="font-headline font-black text-primary text-sm tracking-tight uppercase">Dosimat<span className="text-accent-foreground">Pro</span></span>
+               <span className="font-headline font-black text-primary text-sm tracking-tight uppercase">DosimatPro</span>
             </div>
             <h1 className="text-xl md:text-3xl font-bold text-primary font-headline">{editingTx ? "Editar" : "Operaciones"}</h1>
           </div>
@@ -758,7 +744,7 @@ function TransactionsContent() {
                    </div>
                     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
                       <TabsList className="grid grid-cols-5 w-full h-auto p-1 bg-muted/50 border shadow-inner">
-                          {Object.entries(txTypeMap).filter(([k]) => !['Adjustment', 'Expense', 'cobro_manual'].includes(k)).map(([key, info]) => {
+                          {Object.entries(txTypeMap).filter(([k]) => !['Adjustment', 'Expense'].includes(k)).map(([key, info]) => {
                             const Icon = info.icon
                             return (
                               <TabsTrigger key={key} value={key} className={`data-[state=active]:bg-primary data-[state=active]:text-white py-2 flex flex-col gap-1`}>
@@ -865,7 +851,8 @@ function TransactionsContent() {
                           <SelectContent>
                             {sortedCatalog?.map((i: any) => {
                               const priceStr = (i.priceARS || 0) > 0 ? `$${i.priceARS.toLocaleString('es-AR')}` : `u$s ${i.priceUSD.toLocaleString('es-AR')}`;
-                              return <SelectItem key={i.id} value={i.id}>{i.name} ({priceStr})</SelectItem>;
+                              const stockInfo = i.stock !== undefined ? ` [Stock: ${i.stock}]` : "";
+                              return <SelectItem key={i.id} value={i.id}>{i.name} ({priceStr}){stockInfo}</SelectItem>;
                             })}
                           </SelectContent>
                         </Select>

@@ -31,13 +31,30 @@
     "ProductService": {
       "title": "ProductService",
       "type": "object",
-      "description": "Items in the catalog.",
+      "description": "Items in the catalog including parts and assemblies.",
       "properties": {
         "id": { "type": "string" },
         "name": { "type": "string" },
-        "priceARS": { "type": "number" },
-        "priceUSD": { "type": "number" },
-        "isService": { "type": "boolean" }
+        "priceARS": { "type": "number", "description": "Venta ARS" },
+        "priceUSD": { "type": "number", "description": "Venta USD" },
+        "costARS": { "type": "number", "description": "Costo calculado ARS" },
+        "costUSD": { "type": "number", "description": "Costo calculado USD" },
+        "laborCostARS": { "type": "number", "description": "Mano de obra ARS" },
+        "laborCostUSD": { "type": "number", "description": "Mano de obra USD" },
+        "isService": { "type": "boolean" },
+        "isCompuesto": { "type": "boolean" },
+        "stock": { "type": "number" },
+        "minStock": { "type": "number" },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string" },
+              "quantity": { "type": "number" }
+            }
+          }
+        }
       }
     },
     "EmailTemplate": {
