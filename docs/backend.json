@@ -44,6 +44,7 @@
         "laborCostUSD": { "type": "number", "description": "Mano de obra USD" },
         "isService": { "type": "boolean" },
         "isCompuesto": { "type": "boolean" },
+        "trackStock": { "type": "boolean", "description": "Whether this item moves inventory." },
         "stock": { "type": "number" },
         "minStock": { "type": "number" },
         "components": {
@@ -64,7 +65,8 @@
       "description": "Categories for catalog items.",
       "properties": {
         "id": { "type": "string" },
-        "name": { "type": "string" }
+        "name": { "type": "string" },
+        "isFavorite": { "type": "boolean" }
       }
     },
     "EmailTemplate": {
@@ -134,6 +136,10 @@
       {
         "path": "/whatsapp_templates/{templateId}",
         "definition": { "entityName": "WhatsAppTemplate", "description": "WhatsApp message templates." }
+      },
+      {
+        "path": "/expense_categories/{categoryId}",
+        "definition": { "entityName": "ProductCategory", "description": "Categories for expenses." }
       }
     ]
   }

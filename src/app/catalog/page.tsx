@@ -32,7 +32,9 @@ import {
   TrendingUp,
   TrendingDown,
   Star,
-  StarOff
+  StarOff,
+  History,
+  Box
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -98,15 +100,12 @@ export default function CatalogPage() {
   const categories = useMemo(() => {
     if (!rawCategories) return []
     return [...rawCategories].sort((a: any, b: any) => {
-      // Prioritize favorites
       if (a.isFavorite && !b.isFavorite) return -1;
       if (!a.isFavorite && b.isFavorite) return 1;
-      // Then alphabetical
       return (a.name || "").localeCompare(b.name || "")
     })
   }, [rawCategories])
 
-  // Initialize favorite categories on first load
   useEffect(() => {
     if (!loadingCats && categories.length > 0 && !hasInitializedFavorites) {
       const favorites = categories.filter((c: any) => c.isFavorite).map((c: any) => c.id);
@@ -146,6 +145,7 @@ export default function CatalogPage() {
     laborCostUSD: 0,
     isService: false,
     isCompuesto: false,
+    trackStock: true,
     description: "",
     stock: 0,
     minStock: 0,
@@ -237,6 +237,7 @@ export default function CatalogPage() {
         laborCostUSD: item.laborCostUSD || 0,
         isService: item.isService || false,
         isCompuesto: item.isCompuesto || false,
+        trackStock: item.trackStock !== undefined ? item.trackStock : !item.isService,
         description: item.description || "",
         stock: item.stock || 0,
         minStock: item.minStock || 0,
@@ -247,7 +248,7 @@ export default function CatalogPage() {
       setFormData({ 
         name: "", categoryId: "", priceARS: 0, priceUSD: 0, costARS: 0, costUSD: 0, 
         laborCostARS: 0, laborCostUSD: 0, isService: false, 
-        isCompuesto: false, description: "", stock: 0, minStock: 0, components: [] 
+        isCompuesto: false, trackStock: true, description: "", stock: 0, minStock: 0, components: [] 
       })
     }
     setIsDialogOpen(true)
@@ -286,8 +287,8 @@ export default function CatalogPage() {
     selectedForAssembly.components.forEach((comp: any) => {
       const child = items?.find(i => i.id === comp.productId);
       const needed = comp.quantity * assemblyQty;
-      if (!child || (child.stock || 0) < needed) {
-        shortages.push(child?.name || "Parte desconocida");
+      if (!child || (child.trackStock !== false && (child.stock || 0) < needed)) {
+        if (child?.trackStock !== false) shortages.push(child?.name || "Parte desconocida");
       }
     });
 
@@ -297,14 +298,19 @@ export default function CatalogPage() {
     }
 
     selectedForAssembly.components.forEach((comp: any) => {
-      updateDocumentNonBlocking(doc(db, 'products_services', comp.productId), {
-        stock: increment(-(comp.quantity * assemblyQty))
-      });
+      const child = items?.find(i => i.id === comp.productId);
+      if (child?.trackStock !== false) {
+        updateDocumentNonBlocking(doc(db, 'products_services', comp.productId), {
+          stock: increment(-(comp.quantity * assemblyQty))
+        });
+      }
     });
 
-    updateDocumentNonBlocking(doc(db, 'products_services', selectedForAssembly.id), {
-      stock: increment(assemblyQty)
-    });
+    if (selectedForAssembly.trackStock !== false) {
+      updateDocumentNonBlocking(doc(db, 'products_services', selectedForAssembly.id), {
+        stock: increment(assemblyQty)
+      });
+    }
 
     setIsAssemblyOpen(false);
     toast({ title: "Ensamblado completado", description: `Se fabricaron ${assemblyQty} unidades.` });
@@ -518,7 +524,8 @@ export default function CatalogPage() {
             ) : (
               <section className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6">
                 {filteredItems.map((item: any) => {
-                  const isLowStock = !item.isService && (item.stock || 0) <= (item.minStock || 0);
+                  const tracksStock = item.trackStock !== false;
+                  const isLowStock = tracksStock && !item.isService && (item.stock || 0) <= (item.minStock || 0);
                   const catName = categoryMap[item.categoryId] || "Sin Categoría";
                   const marginARS = getMarginInfo(item.priceARS, item.calculatedCostARS);
                   const marginUSD = getMarginInfo(item.priceUSD, item.calculatedCostUSD);
@@ -535,6 +542,7 @@ export default function CatalogPage() {
                               {item.isService ? 'SERVICIO' : 'PRODUCTO'}
                             </Badge>
                             {item.isCompuesto && <Badge className="text-[9px] font-black uppercase bg-amber-500 hover:bg-amber-600"><Layers className="h-2 w-2 mr-1" /> COMPUESTO</Badge>}
+                            {!tracksStock && <Badge variant="outline" className="text-[9px] font-black uppercase text-blue-600 border-blue-200 bg-blue-50">ENTREGA DIRECTA</Badge>}
                             <Badge variant="outline" className="text-[9px] font-bold bg-white text-muted-foreground border-muted-foreground/20">{catName}</Badge>
                           </div>
                           {isAdmin && (
@@ -557,7 +565,7 @@ export default function CatalogPage() {
                         <CardTitle className="text-lg mt-2 truncate font-bold">{item.name}</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4">
-                        {!item.isService && (
+                        {tracksStock && !item.isService && (
                           <div className="flex items-center justify-between p-2 bg-white rounded-lg border shadow-sm">
                             <div className="flex flex-col">
                               <span className="text-[9px] font-black text-muted-foreground uppercase tracking-wider">Stock Actual</span>
@@ -679,8 +687,44 @@ export default function CatalogPage() {
                 </div>
               )}
 
-              {!formData.isService && (
-                <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-3 pt-2">
+                <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/10">
+                  <Switch checked={formData.isService} onCheckedChange={(v) => {
+                    setFormData({...formData, isService: v, trackStock: !v && formData.trackStock, isCompuesto: v ? false : formData.isCompuesto});
+                  }} />
+                  <div>
+                    <Label className="font-bold">Es un servicio técnico</Label>
+                    <p className="text-[10px] text-muted-foreground">No controla stock ni tiene armado.</p>
+                  </div>
+                </div>
+
+                {!formData.isService && (
+                  <div className={cn("flex items-center gap-3 p-3 border rounded-lg transition-colors", formData.trackStock ? "bg-emerald-50/50 border-emerald-200" : "bg-blue-50/50 border-blue-200")}>
+                    <Switch checked={formData.trackStock} onCheckedChange={(v) => setFormData({...formData, trackStock: v})} />
+                    <div>
+                      <Label className={cn("font-bold", formData.trackStock ? "text-emerald-800" : "text-blue-800")}>Controlar Stock de este ítem</Label>
+                      <p className={cn("text-[10px]", formData.trackStock ? "text-emerald-600" : "text-blue-600")}>
+                        {formData.trackStock ? "Descuenta unidades en cada venta." : "Producto de entrega directa (sin inventario)."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {!formData.isService && (
+                  <div className="flex items-center gap-3 p-3 border rounded-lg bg-amber-50/50 border-amber-200">
+                    <Switch checked={formData.isCompuesto} onCheckedChange={(v) => {
+                      setFormData({...formData, isCompuesto: v, trackStock: v ? true : formData.trackStock});
+                    }} />
+                    <div>
+                      <Label className="font-bold text-amber-800">Es un producto compuesto</Label>
+                      <p className="text-[10px] text-amber-600">Se fabrica a partir de otros ítems.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {!formData.isService && formData.trackStock && (
+                <div className="grid grid-cols-2 gap-4 animate-in fade-in zoom-in duration-200">
                   <div className="space-y-2">
                     <Label className="font-bold">Stock Inicial</Label>
                     <Input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} />
@@ -691,25 +735,6 @@ export default function CatalogPage() {
                   </div>
                 </div>
               )}
-
-              <div className="flex flex-col gap-3 pt-2">
-                <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/10">
-                  <Switch checked={formData.isService} onCheckedChange={(v) => setFormData({...formData, isService: v})} />
-                  <div>
-                    <Label className="font-bold">Es un servicio técnico</Label>
-                    <p className="text-[10px] text-muted-foreground">No controla stock ni tiene armado.</p>
-                  </div>
-                </div>
-                {!formData.isService && (
-                  <div className="flex items-center gap-3 p-3 border rounded-lg bg-amber-50/50 border-amber-200">
-                    <Switch checked={formData.isCompuesto} onCheckedChange={(v) => setFormData({...formData, isCompuesto: v})} />
-                    <div>
-                      <Label className="font-bold text-amber-800">Es un producto compuesto</Label>
-                      <p className="text-[10px] text-amber-600">Se fabrica a partir de otros ítems.</p>
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
 
             <div className="space-y-4">
@@ -766,7 +791,9 @@ export default function CatalogPage() {
                             <div key={comp.productId} className="flex items-center justify-between p-2 rounded bg-muted/20 border border-muted/30">
                               <div className="flex flex-col min-w-0">
                                 <span className="text-xs font-bold truncate">{product?.name || 'Cargando...'}</span>
-                                <span className="text-[9px] text-muted-foreground">Stock actual: {product?.stock || 0}</span>
+                                {product?.trackStock !== false && (
+                                  <span className="text-[9px] text-muted-foreground">Stock actual: {product?.stock || 0}</span>
+                                )}
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
                                 <div className="flex items-center gap-1 border rounded bg-white px-1">
@@ -885,10 +912,14 @@ export default function CatalogPage() {
               {selectedForAssembly?.components?.map((comp: any, idx: number) => {
                 const child = items?.find(i => i.id === comp.productId);
                 const totalNeeded = comp.quantity * assemblyQty;
-                const hasStock = (child?.stock || 0) >= totalNeeded;
+                const tracksStock = child?.trackStock !== false;
+                const hasStock = !tracksStock || (child?.stock || 0) >= totalNeeded;
                 return (
                   <div key={idx} className="flex justify-between items-center text-xs">
-                    <span className="font-bold">{child?.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold">{child?.name}</span>
+                      {!tracksStock && <Badge variant="outline" className="text-[8px] h-4 bg-blue-50 text-blue-600 border-blue-100">Directo</Badge>}
+                    </div>
                     <div className="flex gap-2 items-center">
                       <span className={cn("font-black", hasStock ? "text-emerald-600" : "text-rose-600")}>
                         {totalNeeded} {hasStock ? '✓' : '(Falta stock)'}

@@ -143,7 +143,6 @@ function TransactionsContent() {
   const [filterCategory, setFilterCategory] = useState("all") 
   const [filterExpenseCategory, setFilterExpenseCategory] = useState("all")
 
-  // Nuevo estado para filtrar ítems en el registro
   const [itemFilterCategory, setItemFilterCategory] = useState("all")
 
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
@@ -434,12 +433,15 @@ function TransactionsContent() {
   const revertTxBalances = (tx: any) => {
     const balanceField = tx.currency === 'ARS' ? 'saldoActual' : 'saldoUSD'
     
-    // Revert stock if items existed
+    // Revert stock if items existed and they track stock
     if (tx.items) {
       tx.items.forEach((item: any) => {
-        updateDocumentNonBlocking(doc(db, 'products_services', item.itemId), {
-          stock: increment(item.qty)
-        });
+        const catalogItem = catalog?.find(ci => ci.id === item.itemId);
+        if (catalogItem?.trackStock !== false) {
+          updateDocumentNonBlocking(doc(db, 'products_services', item.itemId), {
+            stock: increment(item.qty)
+          });
+        }
       });
     }
 
@@ -560,11 +562,14 @@ function TransactionsContent() {
 
           setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
 
-          // Update Stock for each item sold
+          // Update Stock only for items that track stock
           currentItems.forEach(item => {
-            updateDocumentNonBlocking(doc(db, 'products_services', item.itemId), {
-              stock: increment(-item.qty)
-            });
+            const catalogItem = catalog?.find(ci => ci.id === item.itemId);
+            if (catalogItem?.trackStock !== false) {
+              updateDocumentNonBlocking(doc(db, 'products_services', item.itemId), {
+                stock: increment(-item.qty)
+              });
+            }
           });
 
           if (!isPending && paid !== 0) {
@@ -879,7 +884,8 @@ function TransactionsContent() {
                               ) : (
                                 filteredCatalogItems?.map((i: any) => {
                                   const priceStr = (i.priceARS || 0) > 0 ? `$${i.priceARS.toLocaleString('es-AR')}` : `u$s ${i.priceUSD.toLocaleString('es-AR')}`;
-                                  const stockInfo = i.stock !== undefined && !i.isService ? ` [Stock: ${i.stock}]` : "";
+                                  const tracksStock = i.trackStock !== false;
+                                  const stockInfo = tracksStock && i.stock !== undefined && !i.isService ? ` [Stock: ${i.stock}]` : "";
                                   return <SelectItem key={i.id} value={i.id}>{i.name} ({priceStr}){stockInfo}</SelectItem>;
                                 })
                               )}
