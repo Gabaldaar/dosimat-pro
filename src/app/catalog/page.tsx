@@ -30,7 +30,9 @@ import {
   X,
   Check,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Star,
+  StarOff
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -85,6 +87,7 @@ export default function CatalogPage() {
 
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
+  const [hasInitializedFavorites, setHasInitializedFavorites] = useState(false)
   
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   const categoriesQuery = useMemoFirebase(() => collection(db, 'product_categories'), [db])
@@ -96,6 +99,17 @@ export default function CatalogPage() {
     if (!rawCategories) return []
     return [...rawCategories].sort((a, b) => (a.name || "").localeCompare(b.name || ""))
   }, [rawCategories])
+
+  // Initialize favorite categories on first load
+  useEffect(() => {
+    if (!loadingCats && categories.length > 0 && !hasInitializedFavorites) {
+      const favorites = categories.filter((c: any) => c.isFavorite).map((c: any) => c.id);
+      if (favorites.length > 0) {
+        setSelectedCategories(favorites);
+      }
+      setHasInitializedFavorites(true);
+    }
+  }, [categories, loadingCats, hasInitializedFavorites]);
 
   const categoryMap = useMemo(() => {
     const map: Record<string, string> = {}
@@ -309,6 +323,12 @@ export default function CatalogPage() {
     setNewCategoryName("")
   }
 
+  const toggleFavoriteCategory = (cat: any) => {
+    updateDocumentNonBlocking(doc(db, 'product_categories', cat.id), {
+      isFavorite: !cat.isFavorite
+    });
+  }
+
   const confirmDelete = () => {
     if (!itemToDelete) return
     deleteDocumentNonBlocking(doc(db, 'products_services', itemToDelete.id))
@@ -391,7 +411,10 @@ export default function CatalogPage() {
           >
             <div className="flex items-center gap-3">
               <Checkbox checked={selectedCategories.includes(cat.id)} />
-              <span className="text-sm font-bold truncate max-w-[120px]">{cat.name}</span>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-sm font-bold truncate max-w-[120px]">{cat.name}</span>
+                {cat.isFavorite && <Star className="h-3 w-3 fill-amber-400 text-amber-400 shrink-0" />}
+              </div>
             </div>
             <Badge variant="secondary" className="text-[10px] h-5 bg-white border font-bold">
               {categoryCounts[cat.id] || 0}
@@ -782,7 +805,7 @@ export default function CatalogPage() {
             <DialogTitle className="flex items-center gap-2 text-primary font-bold">
               <Tag className="h-5 w-5" /> Categorías de Productos
             </DialogTitle>
-            <DialogDescription>Administra los grupos para organizar tu catálogo.</DialogDescription>
+            <DialogDescription>Administra los grupos y marca tus favoritos para el filtro inicial.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="flex gap-2">
@@ -807,7 +830,17 @@ export default function CatalogPage() {
             <ScrollArea className="h-[250px] border rounded-md p-2">
               {categories.map((cat: any) => (
                 <div key={cat.id} className="flex justify-between items-center p-2 border-b last:border-0 hover:bg-muted/20 group">
-                  <span className="text-sm font-medium">{cat.name}</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className={cn("h-7 w-7", cat.isFavorite ? "text-amber-500" : "text-muted-foreground opacity-40 hover:opacity-100")}
+                      onClick={() => toggleFavoriteCategory(cat)}
+                    >
+                      <Star className={cn("h-4 w-4", cat.isFavorite && "fill-amber-500")} />
+                    </Button>
+                    <span className="text-sm font-medium truncate">{cat.name}</span>
+                  </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-primary" onClick={() => handleEditCategory(cat)}>
                       <Edit className="h-4 w-4" />
