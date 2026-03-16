@@ -97,7 +97,13 @@ export default function CatalogPage() {
   
   const categories = useMemo(() => {
     if (!rawCategories) return []
-    return [...rawCategories].sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+    return [...rawCategories].sort((a: any, b: any) => {
+      // Prioritize favorites
+      if (a.isFavorite && !b.isFavorite) return -1;
+      if (!a.isFavorite && b.isFavorite) return 1;
+      // Then alphabetical
+      return (a.name || "").localeCompare(b.name || "")
+    })
   }, [rawCategories])
 
   // Initialize favorite categories on first load
