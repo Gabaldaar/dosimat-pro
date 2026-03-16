@@ -169,7 +169,8 @@ export default function CatalogPage() {
     return items
       .filter((item: any) => {
         const matchSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchCategory = selectedCategories.length === 0 || selectedCategories.includes(item.categoryId);
+        const itemCat = item.categoryId || "uncategorized";
+        const matchCategory = selectedCategories.length === 0 || selectedCategories.includes(itemCat);
         return matchSearch && matchCategory;
       })
       .map(item => {
@@ -330,6 +331,25 @@ export default function CatalogPage() {
       </div>
       
       <div className="space-y-1">
+        {/* Sin Categoría Option */}
+        {categoryCounts["uncategorized"] > 0 && (
+          <div 
+            className={cn(
+              "flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors group",
+              selectedCategories.includes("uncategorized") ? "bg-primary/10 text-primary" : "hover:bg-muted/50"
+            )}
+            onClick={() => toggleCategory("uncategorized")}
+          >
+            <div className="flex items-center gap-3">
+              <Checkbox checked={selectedCategories.includes("uncategorized")} />
+              <span className="text-sm font-bold truncate max-w-[120px]">Sin Categoría</span>
+            </div>
+            <Badge variant="secondary" className="text-[10px] h-5 bg-white border font-bold">
+              {categoryCounts["uncategorized"]}
+            </Badge>
+          </div>
+        )}
+
         {categories.map((cat: any) => (
           <div 
             key={cat.id} 
@@ -348,7 +368,7 @@ export default function CatalogPage() {
             </Badge>
           </div>
         ))}
-        {categories.length === 0 && !loadingCats && (
+        {categories.length === 0 && !loadingCats && categoryCounts["uncategorized"] === 0 && (
           <p className="text-xs text-muted-foreground italic p-2">Sin categorías creadas.</p>
         )}
       </div>
