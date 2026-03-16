@@ -143,6 +143,9 @@ function TransactionsContent() {
   const [filterCategory, setFilterCategory] = useState("all") 
   const [filterExpenseCategory, setFilterExpenseCategory] = useState("all")
 
+  // Nuevo estado para filtrar ítems en el registro
+  const [itemFilterCategory, setItemFilterCategory] = useState("all")
+
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
@@ -150,6 +153,7 @@ function TransactionsContent() {
   const emailTemplatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
   const wsTemplatesQuery = useMemoFirebase(() => collection(db, 'whatsapp_templates'), [db])
   const expenseCatsQuery = useMemoFirebase(() => collection(db, 'expense_categories'), [db])
+  const productCatsQuery = useMemoFirebase(() => collection(db, 'product_categories'), [db])
 
   const { data: customers } = useCollection(clientsQuery)
   const { data: catalog } = useCollection(catalogQuery)
@@ -158,11 +162,18 @@ function TransactionsContent() {
   const { data: emailTemplates } = useCollection(emailTemplatesQuery)
   const { data: wsTemplates } = useCollection(wsTemplatesQuery)
   const { data: expenseCategories } = useCollection(expenseCatsQuery)
+  const { data: productCategories } = useCollection(productCatsQuery)
 
   const sortedCatalog = useMemo(() => {
     if (!catalog) return []
     return [...catalog].sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""))
   }, [catalog])
+
+  const filteredCatalogItems = useMemo(() => {
+    if (!sortedCatalog) return []
+    if (itemFilterCategory === "all") return sortedCatalog
+    return sortedCatalog.filter((item: any) => item.categoryId === itemFilterCategory)
+  }, [sortedCatalog, itemFilterCategory])
 
   const sortedCustomers = useMemo(() => {
     if (!customers) return []
@@ -584,6 +595,7 @@ function TransactionsContent() {
     setDestinationAccounts({ ARS: "pending", USD: "pending" })
     setSelectedExpenseCategoryId("")
     setCobroSource("sale")
+    setItemFilterCategory("all")
   }
 
   const resetFilters = () => {
@@ -844,18 +856,36 @@ function TransactionsContent() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label className="font-bold">Agregar ítems</Label>
-                        <Select onValueChange={handleAddItem}>
-                          <SelectTrigger className="h-11"><SelectValue placeholder="Seleccionar producto..." /></SelectTrigger>
-                          <SelectContent>
-                            {sortedCatalog?.map((i: any) => {
-                              const priceStr = (i.priceARS || 0) > 0 ? `$${i.priceARS.toLocaleString('es-AR')}` : `u$s ${i.priceUSD.toLocaleString('es-AR')}`;
-                              const stockInfo = i.stock !== undefined ? ` [Stock: ${i.stock}]` : "";
-                              return <SelectItem key={i.id} value={i.id}>{i.name} ({priceStr}){stockInfo}</SelectItem>;
-                            })}
-                          </SelectContent>
-                        </Select>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-[10px] font-bold uppercase text-muted-foreground">1. Filtrar por Categoría</Label>
+                          <Select value={itemFilterCategory} onValueChange={setItemFilterCategory}>
+                            <SelectTrigger className="h-11 bg-white/50"><SelectValue placeholder="Todas las categorías" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem>
+                              {productCategories?.sort((a,b) => a.name.localeCompare(b.name)).map(c => (
+                                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-[10px] font-bold uppercase text-muted-foreground">2. Agregar ítems</Label>
+                          <Select onValueChange={handleAddItem}>
+                            <SelectTrigger className="h-11"><SelectValue placeholder="Seleccionar producto..." /></SelectTrigger>
+                            <SelectContent>
+                              {filteredCatalogItems?.length === 0 ? (
+                                <SelectItem value="none" disabled>Sin productos en esta categoría</SelectItem>
+                              ) : (
+                                filteredCatalogItems?.map((i: any) => {
+                                  const priceStr = (i.priceARS || 0) > 0 ? `$${i.priceARS.toLocaleString('es-AR')}` : `u$s ${i.priceUSD.toLocaleString('es-AR')}`;
+                                  const stockInfo = i.stock !== undefined && !i.isService ? ` [Stock: ${i.stock}]` : "";
+                                  return <SelectItem key={i.id} value={i.id}>{i.name} ({priceStr}){stockInfo}</SelectItem>;
+                                })
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
                     <div className="hidden md:block border rounded-xl overflow-x-auto">
                       <Table className="min-w-[800px]">
