@@ -86,46 +86,42 @@
 }
 
 @media print {
-  .no-print, 
-  [data-sidebar="sidebar"], 
-  header, 
-  .mobile-nav,
-  button:not(.print-only-btn) {
-    display: none !important;
+  /* Hide EVERYTHING by default */
+  body * {
+    visibility: hidden;
   }
   
+  /* Show only the print container and its contents */
+  .print-only, .print-only * {
+    visibility: visible;
+  }
+
   .print-only {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
     display: block !important;
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-    padding: 0 !important;
-    margin: 0 !important;
     background: white !important;
     color: black !important;
-    visibility: visible !important;
   }
 
-  body {
+  /* Reset layout for print */
+  body, html {
     background: white !important;
     padding: 0 !important;
     margin: 0 !important;
-    overflow: visible !important;
-    height: auto !important;
-  }
-
-  html {
     overflow: visible !important;
     height: auto !important;
   }
 
   @page {
-    margin: 1cm;
-    size: auto;
+    margin: 1.5cm;
+    size: A4;
   }
 }
 
+/* Base state for print-only should be hidden in browser */
 .print-only {
   display: none;
 }

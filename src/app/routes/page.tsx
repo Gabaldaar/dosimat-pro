@@ -496,7 +496,7 @@ function RoutesContent() {
                             )}>
                               <CardContent className="p-4 md:p-6">
                                 <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
-                                  <div className="md:col-span-3 space-y-1">
+                                  <div className="md:col-span-4 space-y-1">
                                     <div className="flex items-center gap-2 mb-1">
                                       <h4 className="font-black text-lg leading-tight truncate">{client.apellido}, {client.nombre}</h4>
                                       {zone && <Badge variant="outline" className="text-[8px] h-4 bg-primary/5 text-primary border-primary/20">{zone.name}</Badge>}
@@ -525,59 +525,61 @@ function RoutesContent() {
                                     </div>
                                   </div>
 
-                                  <div className="md:col-span-6 grid grid-cols-2 md:grid-cols-3 gap-4">
+                                  <div className="md:col-span-5 grid grid-cols-2 md:grid-cols-2 gap-4">
                                     {selectedSheet.status === 'planned' ? (
                                       <>
                                         <div className="space-y-1">
-                                          <Label className="text-[10px] font-bold uppercase">Cloro (Pedido)</Label>
+                                          <Label className="text-[10px] font-bold uppercase text-blue-700">Cloro (Pedido)</Label>
                                           <input 
                                             type="number" 
-                                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                            className="flex h-10 w-full rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-800"
                                             value={item.plannedChlorine} 
                                             onChange={(e) => updateItemField(item.clientId, 'plannedChlorine', Number(e.target.value))} 
                                           />
                                         </div>
                                         <div className="space-y-1">
-                                          <Label className="text-[10px] font-bold uppercase">Ácido (Pedido)</Label>
+                                          <Label className="text-[10px] font-bold uppercase text-rose-700">Ácido (Pedido)</Label>
                                           <input 
                                             type="number" 
-                                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                            className="flex h-10 w-full rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-800"
                                             value={item.plannedAcid} 
                                             onChange={(e) => updateItemField(item.clientId, 'plannedAcid', Number(e.target.value))} 
                                           />
                                         </div>
-                                        <div className="space-y-1 col-span-2 md:col-span-1">
-                                          <Label className="text-[10px] font-bold uppercase">Otros / Notas</Label>
-                                          <Input value={item.others} onChange={(e) => updateItemField(item.clientId, 'others', e.target.value)} placeholder="..." />
-                                        </div>
                                       </>
                                     ) : (
-                                      <div className="bg-muted/30 p-2 rounded-lg border border-dashed text-center">
-                                        <p className="text-[9px] font-black text-muted-foreground uppercase mb-1">Pedido Ref.</p>
-                                        <p className="text-xs font-bold text-slate-600">{item.plannedChlorine} Cl / {item.plannedAcid} Ác</p>
-                                      </div>
+                                      <>
+                                        <div className="bg-blue-50 p-2 rounded-lg border border-blue-100 text-center">
+                                          <p className="text-[9px] font-black text-blue-700 uppercase mb-1">PEDIDO CLORO</p>
+                                          <p className="text-xl font-black text-blue-800">{item.plannedChlorine}</p>
+                                        </div>
+                                        <div className="bg-rose-50 p-2 rounded-lg border border-rose-100 text-center">
+                                          <p className="text-[9px] font-black text-rose-700 uppercase mb-1">PEDIDO ÁCIDO</p>
+                                          <p className="text-xl font-black text-rose-800">{item.plannedAcid}</p>
+                                        </div>
+                                      </>
                                     )}
 
                                     {selectedSheet.status === 'active' && (
                                       <>
                                         <div className="space-y-1">
-                                          <Label className="text-[10px] font-bold text-emerald-700">Entregado Cloro</Label>
+                                          <Label className="text-[10px] font-bold text-emerald-700 uppercase">Entregó Cloro</Label>
                                           <Input 
                                             type="number" 
                                             disabled={item.processed || (!isAdmin && !isReplenisher)}
                                             value={item.realChlorine} 
                                             onChange={(e) => updateItemField(item.clientId, 'realChlorine', Number(e.target.value))} 
-                                            className="h-10 font-black text-emerald-700 bg-white"
+                                            className="h-10 w-20 font-black text-emerald-700 bg-white border-emerald-300 mx-auto text-center"
                                           />
                                         </div>
                                         <div className="space-y-1">
-                                          <Label className="text-[10px] font-bold text-rose-700">Entregado Ácido</Label>
+                                          <Label className="text-[10px] font-bold text-rose-700 uppercase">Entregó Ácido</Label>
                                           <Input 
                                             type="number" 
                                             disabled={item.processed || (!isAdmin && !isReplenisher)}
                                             value={item.realAcid} 
                                             onChange={(e) => updateItemField(item.clientId, 'realAcid', Number(e.target.value))} 
-                                            className="h-10 font-black text-rose-700 bg-white"
+                                            className="h-10 w-20 font-black text-rose-700 bg-white border-rose-300 mx-auto text-center"
                                           />
                                         </div>
                                       </>
@@ -586,9 +588,12 @@ function RoutesContent() {
 
                                   <div className="md:col-span-3 flex flex-col gap-2">
                                     {isEditingAllowed ? (
-                                      <Button variant="ghost" size="sm" className="text-destructive font-bold self-end" onClick={() => removeItemFromSheet(item.clientId)}>
-                                        <Minus className="h-4 w-4 mr-1" /> QUITAR
-                                      </Button>
+                                      <div className="space-y-2">
+                                        <Input value={item.others} onChange={(e) => updateItemField(item.clientId, 'others', e.target.value)} placeholder="Notas..." className="h-8 text-xs" />
+                                        <Button variant="ghost" size="sm" className="text-destructive font-bold w-full h-7" onClick={() => removeItemFromSheet(item.clientId)}>
+                                          <Minus className="h-3 w-3 mr-1" /> QUITAR
+                                        </Button>
+                                      </div>
                                     ) : null}
                                     
                                     {selectedSheet.status === 'completed' && isAdmin ? (
@@ -608,30 +613,30 @@ function RoutesContent() {
                                       </div>
                                     ) : selectedSheet.status === 'active' ? (
                                       <div className="flex flex-col gap-2">
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-2 items-end">
                                           <div className="flex-1 space-y-1">
-                                            <Label className="text-[10px] font-bold uppercase">Cobrado ($)</Label>
+                                            <Label className="text-[9px] font-bold uppercase">Cobró ($)</Label>
                                             <Input 
                                               type="number" 
                                               disabled={item.processed || (!isAdmin && !isReplenisher)}
-                                              placeholder="Efectivo..." 
+                                              placeholder="0" 
                                               value={item.cashCollected} 
                                               onChange={(e) => updateItemField(item.clientId, 'cashCollected', Number(e.target.value))} 
-                                              className="h-10 bg-white border-emerald-200"
+                                              className="h-9 w-24 bg-white border-emerald-200 text-center font-bold"
                                             />
                                           </div>
                                           {!item.isDelivered && (isAdmin || isReplenisher) && (
-                                            <Button className="h-10 mt-auto bg-emerald-600" onClick={() => loadPlannedToReal(item.clientId)}>
+                                            <Button className="h-9 w-9 bg-emerald-600 shrink-0" onClick={() => loadPlannedToReal(item.clientId)}>
                                               <Check className="h-4 w-4" />
                                             </Button>
                                           )}
                                         </div>
                                         <input 
-                                          placeholder="Comentario entrega..." 
+                                          placeholder="Nota entrega..." 
                                           disabled={item.processed || (!isAdmin && !isReplenisher)}
                                           value={item.notes} 
                                           onChange={(e) => updateItemField(item.clientId, 'notes', e.target.value)} 
-                                          className="h-8 text-[10px] bg-white italic border rounded px-2"
+                                          className="h-7 text-[10px] bg-white italic border rounded px-2"
                                         />
                                       </div>
                                     ) : null}
