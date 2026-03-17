@@ -214,14 +214,50 @@ function TransactionsContent() {
       setMainView("register")
       if (clientIdParam) setSelectedCustomerId(clientIdParam)
       
-      const itemsToLoad = []
+      const itemsToLoad: any[] = []
+      
+      // Helper to match products flexibly (case and accent insensitive)
+      const findProduct = (searchTerm: string) => {
+        const normalizedSearch = searchTerm.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        return catalog.find(p => {
+          const name = p.name || "";
+          const normalizedName = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          return normalizedName.includes(normalizedSearch);
+        });
+      };
+
       if (preCloro && Number(preCloro) > 0) {
-        const cloroProd = catalog.find(p => p.name.toLowerCase().includes("cloro"))
-        if (cloroProd) itemsToLoad.push({ itemId: cloroProd.id, name: cloroProd.name, qty: Number(preCloro), price: cloroProd.priceARS || 0, currency: 'ARS', discount: 0 })
+        // Intenta buscar "cloro" o el nombre técnico "hipoclorito"
+        let cloroProd = findProduct("cloro") || findProduct("hipoclorito");
+        
+        if (cloroProd) {
+          const defaultCurrency = (cloroProd.priceARS || 0) > 0 ? 'ARS' : 'USD';
+          const defaultPrice = (cloroProd.priceARS || 0) > 0 ? cloroProd.priceARS : cloroProd.priceUSD;
+          itemsToLoad.push({ 
+            itemId: cloroProd.id, 
+            name: cloroProd.name, 
+            qty: Number(preCloro), 
+            price: defaultPrice || 0, 
+            currency: defaultCurrency, 
+            discount: 0 
+          });
+        }
       }
+
       if (preAcido && Number(preAcido) > 0) {
-        const acidoProd = catalog.find(p => p.name.toLowerCase().includes("ácido"))
-        if (acidoProd) itemsToLoad.push({ itemId: acidoProd.id, name: acidoProd.name, qty: Number(preAcido), price: acidoProd.priceARS || 0, currency: 'ARS', discount: 0 })
+        const acidoProd = findProduct("acido"); // Normalizado encuentra "ácido"
+        if (acidoProd) {
+          const defaultCurrency = (acidoProd.priceARS || 0) > 0 ? 'ARS' : 'USD';
+          const defaultPrice = (acidoProd.priceARS || 0) > 0 ? acidoProd.priceARS : acidoProd.priceUSD;
+          itemsToLoad.push({ 
+            itemId: acidoProd.id, 
+            name: acidoProd.name, 
+            qty: Number(preAcido), 
+            price: defaultPrice || 0, 
+            currency: defaultCurrency, 
+            discount: 0 
+          });
+        }
       }
       
       if (itemsToLoad.length > 0) {
