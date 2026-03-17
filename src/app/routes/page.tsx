@@ -298,9 +298,9 @@ export default function RoutesPage() {
                     <h2 className="text-2xl font-black text-slate-800">
                       Hoja de Ruta: {new Date(selectedSheet.date + 'T12:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                     </h2>
-                    <p className="text-sm text-muted-foreground flex items-center gap-2">
+                    <div className="text-sm text-muted-foreground flex items-center gap-2">
                       Estado: <Badge variant="secondary" className="font-bold uppercase">{selectedSheet.status}</Badge>
-                    </p>
+                    </div>
                   </div>
                   <div className="flex gap-2 w-full md:w-auto">
                     {selectedSheet.status === 'planned' && (isAdmin || isCommunicator) && (
