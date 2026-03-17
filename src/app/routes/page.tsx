@@ -28,7 +28,8 @@ import {
   ArrowRight,
   Calculator,
   Info,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  MapPinned
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -78,9 +79,11 @@ export default function RoutesPage() {
 
   // Queries
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
+  const zonesQuery = useMemoFirebase(() => collection(db, 'zones'), [db])
   const routesQuery = useMemoFirebase(() => query(collection(db, 'route_sheets'), orderBy('date', 'desc')), [db])
 
   const { data: clients } = useCollection(clientsQuery)
+  const { data: zones } = useCollection(zonesQuery)
   const { data: routeSheets, isLoading: loadingSheets } = useCollection(routesQuery)
 
   const refillClients = useMemo(() => clients?.filter(c => c.esClienteReposicion) || [], [clients])
@@ -108,7 +111,7 @@ export default function RoutesPage() {
 
   const handleDeleteSheet = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (confirm("¿Eliminar esta hoja de ruta?")) {
+    if (confirm("¿Estás seguro de que deseas eliminar esta hoja de ruta? Se perderán todos los datos registrados en ella.")) {
       deleteDocumentNonBlocking(doc(db, 'route_sheets', id))
       if (selectedSheetId === id) setMainView("list")
       toast({ title: "Hoja de ruta eliminada" })
@@ -168,7 +171,6 @@ export default function RoutesPage() {
   }
 
   const handleGenerateTransaction = (item: any) => {
-    // Redirigir a Operaciones con datos pre-cargados en la URL
     const queryParams = new URLSearchParams({
       mode: 'new',
       clientId: item.clientId,
@@ -210,6 +212,11 @@ export default function RoutesPage() {
       return acc
     }, { chlorine: 0, acid: 0 })
   }, [selectedSheet])
+
+  const handleOpenMaps = (address: string, city: string) => {
+    const query = encodeURIComponent(`${address}, ${city}, Argentina`)
+    window.open(`https://google.com/maps/search/?api=1&query=${query}`, '_blank')
+  }
 
   if (isUserLoading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
 
@@ -263,7 +270,7 @@ export default function RoutesPage() {
                         <Badge variant="outline" className={cn("text-[10px] font-black uppercase tracking-wider", statusInfo.color)}>
                           <Icon className="h-3 w-3 mr-1" /> {statusInfo.label}
                         </Badge>
-                        {!isReplenisher && !isCommunicator && sheet.status === 'planned' && (
+                        {(isAdmin || (isCommunicator && sheet.status === 'planned')) && (
                           <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive opacity-0 group-hover:opacity-100" onClick={(e) => handleDeleteSheet(sheet.id, e)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -379,6 +386,7 @@ export default function RoutesPage() {
                       {selectedSheet.items.map((item: any, idx: number) => {
                         const client = clients?.find(c => c.id === item.clientId)
                         if (!client) return null
+                        const zone = zones?.find(z => z.id === client.zonaId);
 
                         return (
                           <Card key={idx} className={cn(
@@ -389,11 +397,22 @@ export default function RoutesPage() {
                             <CardContent className="p-4 md:p-6">
                               <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
                                 <div className="md:col-span-3 space-y-1">
-                                  <h4 className="font-black text-lg leading-tight">{client.apellido}, {client.nombre}</h4>
-                                  <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" /> {client.direccion}</p>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <h4 className="font-black text-lg leading-tight truncate">{client.apellido}, {client.nombre}</h4>
+                                    {zone && <Badge variant="outline" className="text-[8px] h-4 bg-primary/5 text-primary border-primary/20">{zone.name}</Badge>}
+                                  </div>
+                                  <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3 shrink-0" /> {client.direccion}, {client.localidad}</p>
                                   <div className="flex gap-2 mt-2">
                                     <Button variant="outline" size="sm" className="h-7 px-2 text-[10px]" asChild>
                                       <a href={`tel:${client.telefono}`}><Phone className="h-3 w-3 mr-1" /> LLAMAR</a>
+                                    </Button>
+                                    <Button 
+                                      variant="secondary" 
+                                      size="sm" 
+                                      className="h-7 px-2 text-[10px] bg-emerald-50 text-emerald-700 hover:bg-emerald-100" 
+                                      onClick={() => handleOpenMaps(client.direccion, client.localidad)}
+                                    >
+                                      <MapPinned className="h-3 w-3 mr-1" /> MAPA
                                     </Button>
                                     <Button variant="outline" size="sm" className="h-7 px-2 text-[10px] text-emerald-600 border-emerald-200" asChild>
                                       <a href={`https://wa.me/${client.telefono?.replace(/\D/g, '')}`} target="_blank"><Send className="h-3 w-3 mr-1" /> WS</a>
