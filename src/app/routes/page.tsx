@@ -29,7 +29,8 @@ import {
   Calculator,
   Info,
   Calendar as CalendarIcon,
-  MapPinned
+  MapPinned,
+  Share2
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -112,6 +113,17 @@ export default function RoutesPage() {
 
   // New Sheet Form
   const [newSheetDate, setNewSheetDate] = useState(new Date().toISOString().split('T')[0])
+
+  const loadTotals = useMemo(() => {
+    if (!selectedSheet) return { plannedChlorine: 0, plannedAcid: 0, realChlorine: 0, realAcid: 0 }
+    return selectedSheet.items.reduce((acc: any, curr: any) => {
+      acc.plannedChlorine += Number(curr.plannedChlorine || 0)
+      acc.plannedAcid += Number(curr.plannedAcid || 0)
+      acc.realChlorine += Number(curr.realChlorine || 0)
+      acc.realAcid += Number(curr.realAcid || 0)
+      return acc
+    }, { plannedChlorine: 0, plannedAcid: 0, realChlorine: 0, realAcid: 0 })
+  }, [selectedSheet])
 
   // Handlers
   const handleCreateSheet = () => {
@@ -227,20 +239,33 @@ export default function RoutesPage() {
     updateItemField(clientId, 'isDelivered', true)
   }
 
-  const loadTotals = useMemo(() => {
-    if (!selectedSheet) return { plannedChlorine: 0, plannedAcid: 0, realChlorine: 0, realAcid: 0 }
-    return selectedSheet.items.reduce((acc: any, curr: any) => {
-      acc.plannedChlorine += Number(curr.plannedChlorine || 0)
-      acc.plannedAcid += Number(curr.plannedAcid || 0)
-      acc.realChlorine += Number(curr.realChlorine || 0)
-      acc.realAcid += Number(curr.realAcid || 0)
-      return acc
-    }, { plannedChlorine: 0, plannedAcid: 0, realChlorine: 0, realAcid: 0 })
-  }, [selectedSheet])
-
   const handleOpenMaps = (address: string, city: string) => {
     const query = encodeURIComponent(`${address}, ${city}, Argentina`)
     window.open(`https://google.com/maps/search/?api=1&query=${query}`, '_blank')
+  }
+
+  const handleShareRoute = () => {
+    if (!selectedSheet) return
+    const dateStr = new Date(selectedSheet.date + 'T12:00:00').toLocaleDateString('es-AR')
+    let text = `🚚 *HOJA DE RUTA - ${dateStr}*\n\n`
+    text += `📦 *TOTAL CARGA PARA CAMIONETA:*\n`
+    text += `• Cloro: *${loadTotals.plannedChlorine}* bidones\n`
+    text += `• Ácido: *${loadTotals.plannedAcid}* bidones\n`
+    text += `--------------------------\n\n`
+    text += `👥 *DETALLE DE ENTREGAS:*\n\n`
+
+    selectedSheet.items.forEach((item: any, idx: number) => {
+      const client = clients?.find(c => c.id === item.clientId)
+      if (!client) return
+      const zone = zones?.find(z => z.id === client.zonaId)
+      text += `${idx + 1}. *${client.apellido}, ${client.nombre}*\n`
+      text += `📍 ${client.direccion}, ${client.localidad}${zone ? ` (${zone.name})` : ''}\n`
+      text += `💧 Cloro: ${item.plannedChlorine} | 🧪 Ácido: ${item.plannedAcid}\n`
+      if (item.others) text += `📝 Notas: ${item.others}\n`
+      text += `--------------------------\n`
+    })
+
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
   }
 
   if (isUserLoading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
@@ -264,6 +289,9 @@ export default function RoutesPage() {
             )
           ) : (
             <div className="flex gap-2">
+              <Button variant="outline" size="icon" onClick={handleShareRoute} className="text-primary border-primary/20" title="Compartir Ruta">
+                <Share2 className="h-4 w-4" />
+              </Button>
               {isAdmin && (
                 <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={() => setSheetToDelete(selectedSheet)}>
                   <Trash2 className="h-5 w-5" />
