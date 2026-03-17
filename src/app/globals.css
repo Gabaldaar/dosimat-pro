@@ -86,27 +86,22 @@
 }
 
 @media print {
-  /* Hide EVERYTHING by default */
-  body * {
-    visibility: hidden;
+  /* Ocultar todo lo que tenga la clase no-print */
+  .no-print {
+    display: none !important;
   }
   
-  /* Show only the print container and its contents */
-  .print-only, .print-only * {
-    visibility: visible;
-  }
-
+  /* Mostrar solo el contenedor de impresión */
   .print-only {
+    display: block !important;
     position: absolute;
     left: 0;
     top: 0;
     width: 100%;
-    display: block !important;
     background: white !important;
     color: black !important;
   }
 
-  /* Reset layout for print */
   body, html {
     background: white !important;
     padding: 0 !important;
@@ -116,7 +111,7 @@
   }
 
   @page {
-    margin: 1.5cm;
+    margin: 1cm;
     size: A4;
   }
 }
