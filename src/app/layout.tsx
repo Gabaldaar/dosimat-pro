@@ -12,10 +12,10 @@ export const metadata: Metadata = {
   description: 'Sistema inteligente para el mantenimiento de piscinas y control financiero',
   icons: {
     icon: [
-      { url: 'https://picsum.photos/seed/pool-water-drop-v6/192/192', sizes: '192x192', type: 'image/png' },
-      { url: 'https://picsum.photos/seed/pool-water-drop-v6/32/32', sizes: '32x32', type: 'image/png' }
+      { url: 'https://placehold.co/32x32/3b82f6/white?text=D', sizes: '32x32', type: 'image/png' },
+      { url: 'https://placehold.co/192x192/3b82f6/white?text=DP', sizes: '192x192', type: 'image/png' }
     ],
-    apple: 'https://picsum.photos/seed/pool-water-drop-v6/192/192',
+    apple: 'https://placehold.co/180x180/3b82f6/white?text=DP',
   },
 };
 
