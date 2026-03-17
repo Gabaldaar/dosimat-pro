@@ -205,12 +205,14 @@ export default function RoutesPage() {
   }
 
   const loadTotals = useMemo(() => {
-    if (!selectedSheet) return { chlorine: 0, acid: 0 }
+    if (!selectedSheet) return { plannedChlorine: 0, plannedAcid: 0, realChlorine: 0, realAcid: 0 }
     return selectedSheet.items.reduce((acc: any, curr: any) => {
-      acc.chlorine += Number(curr.plannedChlorine || 0)
-      acc.acid += Number(curr.plannedAcid || 0)
+      acc.plannedChlorine += Number(curr.plannedChlorine || 0)
+      acc.plannedAcid += Number(curr.plannedAcid || 0)
+      acc.realChlorine += Number(curr.realChlorine || 0)
+      acc.realAcid += Number(curr.realAcid || 0)
       return acc
-    }, { chlorine: 0, acid: 0 })
+    }, { plannedChlorine: 0, plannedAcid: 0, realChlorine: 0, realAcid: 0 })
   }, [selectedSheet])
 
   const handleOpenMaps = (address: string, city: string) => {
@@ -323,22 +325,46 @@ export default function RoutesPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <Card className="bg-blue-50 border-blue-100 shadow-none">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Card className="bg-blue-50 border-blue-100 shadow-none relative overflow-hidden">
+                    <div className="absolute right-0 top-0 h-full w-1 bg-blue-500 opacity-20" />
                     <CardContent className="p-4 flex items-center gap-4">
                       <div className="p-3 bg-blue-100 rounded-full text-blue-600"><Calculator className="h-6 w-6" /></div>
-                      <div>
-                        <p className="text-[10px] font-black uppercase text-blue-700">Total Cloro</p>
-                        <p className="text-2xl font-black">{loadTotals.chlorine} Bidones</p>
+                      <div className="flex-1">
+                        <p className="text-[10px] font-black uppercase text-blue-700 tracking-widest">Total Cloro</p>
+                        <div className="flex items-baseline gap-2">
+                          <p className="text-2xl font-black">{loadTotals.realChlorine}</p>
+                          <p className="text-xs font-bold text-blue-400">/ {loadTotals.plannedChlorine} planeados</p>
+                        </div>
+                        {selectedSheet.status !== 'planned' && (
+                          <div className="mt-2 h-1.5 w-full bg-blue-200 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-blue-600 transition-all duration-500" 
+                              style={{ width: `${Math.min(100, (loadTotals.realChlorine / (loadTotals.plannedChlorine || 1)) * 100)}%` }} 
+                            />
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
-                  <Card className="bg-rose-50 border-rose-100 shadow-none">
+                  <Card className="bg-rose-50 border-rose-100 shadow-none relative overflow-hidden">
+                    <div className="absolute right-0 top-0 h-full w-1 bg-rose-500 opacity-20" />
                     <CardContent className="p-4 flex items-center gap-4">
                       <div className="p-3 bg-rose-100 rounded-full text-rose-600"><Calculator className="h-6 w-6" /></div>
-                      <div>
-                        <p className="text-[10px] font-black uppercase text-rose-700">Total Ácido</p>
-                        <p className="text-2xl font-black">{loadTotals.acid} Bidones</p>
+                      <div className="flex-1">
+                        <p className="text-[10px] font-black uppercase text-rose-700 tracking-widest">Total Ácido</p>
+                        <div className="flex items-baseline gap-2">
+                          <p className="text-2xl font-black">{loadTotals.realAcid}</p>
+                          <p className="text-xs font-bold text-rose-400">/ {loadTotals.plannedAcid} planeados</p>
+                        </div>
+                        {selectedSheet.status !== 'planned' && (
+                          <div className="mt-2 h-1.5 w-full bg-rose-200 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-rose-600 transition-all duration-500" 
+                              style={{ width: `${Math.min(100, (loadTotals.realAcid / (loadTotals.plannedAcid || 1)) * 100)}%` }} 
+                            />
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -425,11 +451,21 @@ export default function RoutesPage() {
                                     <>
                                       <div className="space-y-1">
                                         <Label className="text-[10px] font-bold uppercase">Cloro (Pedido)</Label>
-                                        <Input type="number" value={item.plannedChlorine} onChange={(e) => updateItemField(item.clientId, 'plannedChlorine', Number(e.target.value))} />
+                                        <input 
+                                          type="number" 
+                                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                          value={item.plannedChlorine} 
+                                          onChange={(e) => updateItemField(item.clientId, 'plannedChlorine', Number(e.target.value))} 
+                                        />
                                       </div>
                                       <div className="space-y-1">
                                         <Label className="text-[10px] font-bold uppercase">Ácido (Pedido)</Label>
-                                        <Input type="number" value={item.plannedAcid} onChange={(e) => updateItemField(item.clientId, 'plannedAcid', Number(e.target.value))} />
+                                        <input 
+                                          type="number" 
+                                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                          value={item.plannedAcid} 
+                                          onChange={(e) => updateItemField(item.clientId, 'plannedAcid', Number(e.target.value))} 
+                                        />
                                       </div>
                                       <div className="space-y-1 col-span-2 md:col-span-1">
                                         <Label className="text-[10px] font-bold uppercase">Otros / Notas</Label>
