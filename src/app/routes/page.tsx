@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect, Suspense } from "react"
+import { useState, useMemo, useEffect, Suspense, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
@@ -284,11 +284,11 @@ function RoutesContent() {
     window.open(`https://wa.me/${num}`, '_blank')
   }
 
-  const handlePrint = () => {
-    setTimeout(() => {
+  const handlePrint = useCallback(() => {
+    if (typeof window !== 'undefined') {
       window.print();
-    }, 100);
-  }
+    }
+  }, []);
 
   const handleShareLink = () => {
     if (!selectedSheetId || !selectedSheet) return
