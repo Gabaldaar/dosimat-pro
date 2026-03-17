@@ -1,8 +1,8 @@
 
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useMemo, useEffect, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -31,7 +31,8 @@ import {
   Calendar as CalendarIcon,
   MapPinned,
   Printer,
-  Package
+  Package,
+  Link as LinkIcon
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -77,10 +78,11 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
-export default function RoutesPage() {
+function RoutesContent() {
   const { toast } = useToast()
   const db = useFirestore()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { userData, isUserLoading, user } = useUser()
   const isAdmin = userData?.role === 'Admin'
   const isCommunicator = userData?.role === 'Communicator'
@@ -98,7 +100,26 @@ export default function RoutesPage() {
 
   const { data: clients } = useCollection(clientsQuery)
   const { data: zones } = useCollection(zonesQuery)
-  const { data: routeSheets, isLoading: loadingSheets } = useCollection(routesQuery)
+  const { data: rawRouteSheets, isLoading: loadingSheets } = useCollection(routesQuery)
+
+  // Manejo de parámetro sheetId en la URL para links compartidos
+  useEffect(() => {
+    const sheetId = searchParams.get('sheetId')
+    if (sheetId) {
+      setSelectedSheetId(sheetId)
+      setMainView("detail")
+    }
+  }, [searchParams])
+
+  // Filtrado de hojas de ruta según rol
+  const routeSheets = useMemo(() => {
+    if (!rawRouteSheets) return []
+    if (isReplenisher) {
+      // El repositor no ve planillas "planned", solo las que están listas para ejecutar o terminadas
+      return rawRouteSheets.filter(s => s.status === 'active' || s.status === 'completed')
+    }
+    return rawRouteSheets
+  }, [rawRouteSheets, isReplenisher])
 
   const refillClients = useMemo(() => {
     if (!clients) return []
@@ -117,7 +138,7 @@ export default function RoutesPage() {
       })
   }, [clients])
 
-  const selectedSheet = useMemo(() => routeSheets?.find(s => s.id === selectedSheetId), [routeSheets, selectedSheetId])
+  const selectedSheet = useMemo(() => rawRouteSheets?.find(s => s.id === selectedSheetId), [rawRouteSheets, selectedSheetId])
 
   const [newSheetDate, setNewSheetDate] = useState(new Date().toISOString().split('T')[0])
 
@@ -201,7 +222,7 @@ export default function RoutesPage() {
   const handleStartRoute = () => {
     if (!selectedSheetId) return
     updateDocumentNonBlocking(doc(db, 'route_sheets', selectedSheetId), { status: "active" })
-    toast({ title: "Ruta iniciada" })
+    toast({ title: "Ruta habilitada para entrega", description: "Ahora es visible para el repositor." })
   }
 
   const handleCompleteRoute = () => {
@@ -251,7 +272,19 @@ export default function RoutesPage() {
   }
 
   const handlePrint = () => {
-    window.print();
+    // Pequeño timeout para asegurar que el DOM esté listo antes de abrir el diálogo de impresión
+    setTimeout(() => {
+      window.print();
+    }, 100);
+  }
+
+  const handleShareLink = () => {
+    if (!selectedSheetId || !selectedSheet) return
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    const url = `${origin}/routes?sheetId=${selectedSheetId}`
+    const dateStr = new Date(selectedSheet.date + 'T12:00:00').toLocaleDateString('es-AR')
+    const text = `*DOSIMAT PRO - HOJA DE RUTA*\nFecha: ${dateStr}\n\nPuedes ver y completar la planilla en este link:\n${url}`
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
   }
 
   if (isUserLoading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
@@ -276,6 +309,9 @@ export default function RoutesPage() {
               )
             ) : (
               <div className="flex gap-2">
+                <Button variant="outline" size="icon" onClick={handleShareLink} className="text-emerald-600 border-emerald-200" title="Compartir Link de acceso">
+                  <LinkIcon className="h-4 w-4" />
+                </Button>
                 <Button variant="outline" size="icon" onClick={handlePrint} className="text-primary border-primary/20" title="Imprimir / Exportar PDF">
                   <Printer className="h-4 w-4" />
                 </Button>
@@ -299,7 +335,8 @@ export default function RoutesPage() {
                 ) : routeSheets?.length === 0 ? (
                   <Card className="col-span-full p-12 text-center border-dashed bg-muted/5">
                     <ClipboardList className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
-                    <h3 className="text-lg font-semibold">No hay hojas de ruta registradas</h3>
+                    <h3 className="text-lg font-semibold">No hay hojas de ruta disponibles</h3>
+                    {isReplenisher && <p className="text-sm text-muted-foreground mt-2">Aún no se han habilitado rutas para entrega hoy.</p>}
                   </Card>
                 ) : routeSheets?.map((sheet: any) => {
                   const statusInfo = {
@@ -353,7 +390,7 @@ export default function RoutesPage() {
                     </div>
                     <div className="flex gap-2 w-full md:w-auto">
                       {selectedSheet.status === 'planned' && (isAdmin || isCommunicator) && (
-                        <Button onClick={handleStartRoute} className="bg-amber-500 hover:bg-amber-600 font-bold w-full md:w-auto">
+                        <Button onClick={handleStartRoute} className="bg-amber-500 hover:bg-amber-600 font-bold w-full md:w-auto shadow-lg shadow-amber-200">
                           <Truck className="mr-2 h-4 w-4" /> INICIAR ENTREGA
                         </Button>
                       )}
@@ -601,7 +638,7 @@ export default function RoutesPage() {
               <AlertDialogHeader>
                 <AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Se perderán todos los datos registrados en ella.
+                  Se perderán todos los datos registrados en ella. Esta acción no se puede deshacer.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -719,5 +756,17 @@ export default function RoutesPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function RoutesPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    }>
+      <RoutesContent />
+    </Suspense>
   )
 }
