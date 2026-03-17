@@ -41,6 +41,16 @@ import {
   DialogFooter, 
   DialogDescription 
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { 
   Select, 
   SelectContent, 
@@ -62,7 +72,7 @@ import { collection, doc, query, orderBy } from "firebase/firestore"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Progress } from "@/components/ui/progress"
 
 export default function RoutesPage() {
   const { toast } = useToast()
@@ -76,6 +86,7 @@ export default function RoutesPage() {
   const [view, setMainView] = useState<"list" | "detail">("list")
   const [selectedSheetId, setSelectedSheetId] = useState<string | null>(null)
   const [isNewSheetOpen, setIsNewSheetOpen] = useState(false)
+  const [sheetToDelete, setSheetToDelete] = useState<any | null>(null)
 
   // Queries
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
@@ -109,13 +120,15 @@ export default function RoutesPage() {
     toast({ title: "Hoja de ruta creada" })
   }
 
-  const handleDeleteSheet = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (confirm("¿Estás seguro de que deseas eliminar esta hoja de ruta? Se perderán todos los datos registrados en ella.")) {
-      deleteDocumentNonBlocking(doc(db, 'route_sheets', id))
-      if (selectedSheetId === id) setMainView("list")
-      toast({ title: "Hoja de ruta eliminada" })
+  const handleConfirmDeleteSheet = () => {
+    if (!sheetToDelete) return
+    deleteDocumentNonBlocking(doc(db, 'route_sheets', sheetToDelete.id))
+    if (selectedSheetId === sheetToDelete.id) {
+      setSelectedSheetId(null)
+      setMainView("list")
     }
+    setSheetToDelete(null)
+    toast({ title: "Hoja de ruta eliminada" })
   }
 
   const updateSheet = (updatedItems: any[]) => {
@@ -240,9 +253,16 @@ export default function RoutesPage() {
               </Button>
             )
           ) : (
-            <Button variant="outline" onClick={() => setMainView("list")} className="font-bold">
-              Volver al listado
-            </Button>
+            <div className="flex gap-2">
+              {isAdmin && (
+                <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={() => setSheetToDelete(selectedSheet)}>
+                  <Trash2 className="h-5 w-5" />
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => setMainView("list")} className="font-bold">
+                Volver al listado
+              </Button>
+            </div>
           )}
         </header>
 
@@ -273,7 +293,7 @@ export default function RoutesPage() {
                           <Icon className="h-3 w-3 mr-1" /> {statusInfo.label}
                         </Badge>
                         {(isAdmin || (isCommunicator && sheet.status === 'planned')) && (
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive opacity-0 group-hover:opacity-100" onClick={(e) => handleDeleteSheet(sheet.id, e)}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); setSheetToDelete(sheet); }}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         )}
@@ -338,10 +358,7 @@ export default function RoutesPage() {
                         </div>
                         {selectedSheet.status !== 'planned' && (
                           <div className="mt-2 h-1.5 w-full bg-blue-200 rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-blue-600 transition-all duration-500" 
-                              style={{ width: `${Math.min(100, (loadTotals.realChlorine / (loadTotals.plannedChlorine || 1)) * 100)}%` }} 
-                            />
+                            <Progress value={Math.min(100, (loadTotals.realChlorine / (loadTotals.plannedChlorine || 1)) * 100)} className="h-full bg-blue-600 transition-all duration-500" />
                           </div>
                         )}
                       </div>
@@ -359,10 +376,7 @@ export default function RoutesPage() {
                         </div>
                         {selectedSheet.status !== 'planned' && (
                           <div className="mt-2 h-1.5 w-full bg-rose-200 rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-rose-600 transition-all duration-500" 
-                              style={{ width: `${Math.min(100, (loadTotals.realAcid / (loadTotals.plannedAcid || 1)) * 100)}%` }} 
-                            />
+                            <Progress value={Math.min(100, (loadTotals.realAcid / (loadTotals.plannedAcid || 1)) * 100)} className="h-full bg-rose-600 transition-all duration-500" />
                           </div>
                         )}
                       </div>
@@ -580,6 +594,21 @@ export default function RoutesPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <AlertDialog open={!!sheetToDelete} onOpenChange={(o) => { if(!o) setSheetToDelete(null); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Confirmar eliminación de hoja de ruta?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Esta acción eliminará permanentemente la planilla de "{sheetToDelete && new Date(sheetToDelete.date + 'T12:00:00').toLocaleDateString('es-AR')}". Se perderán todos los datos registrados en ella.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleConfirmDeleteSheet} className="bg-destructive text-destructive-foreground">Eliminar definitivamente</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
       </SidebarInset>
       <MobileNav />
