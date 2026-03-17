@@ -106,15 +106,16 @@ function TransactionsContent() {
   const { userData, isUserLoading } = useUser()
   const isAdmin = userData?.role === 'Admin'
   const searchParams = useSearchParams()
+  
+  // URL Params for Pre-loading from Route Sheet
   const clientIdParam = searchParams.get('clientId')
   const accountIdParam = searchParams.get('accountId')
   const modeParam = searchParams.get('mode')
-
-  useEffect(() => {
-    if (!isUserLoading && userData?.role === 'Communicator') {
-      router.replace('/customers')
-    }
-  }, [userData, isUserLoading, router])
+  const preCloro = searchParams.get('cloro')
+  const preAcido = searchParams.get('acido')
+  const preCash = searchParams.get('cash')
+  const preNotes = searchParams.get('notes')
+  const preRouteId = searchParams.get('routeId')
 
   const [mainView, setMainView] = useState("history")
   const [activeTab, setActiveTab] = useState("refill")
@@ -207,29 +208,39 @@ function TransactionsContent() {
   const [txDescription, setTxDescription] = useState("")
   const [cobroSource, setCobroSource] = useState("sale")
 
+  // PRE-LOAD LOGIC FROM URL (ROUTE SHEET)
   useEffect(() => {
-    const observer = new MutationObserver(() => {
-      if (document.body.style.pointerEvents === 'none') {
-        if (!isEmailDialogOpen && !txToDelete && !selectedTxDetails && !isWsDialogOpen) {
-          document.body.style.pointerEvents = 'auto';
-        }
+    if (modeParam === 'new' && catalog && catalog.length > 0) {
+      setMainView("register")
+      if (clientIdParam) setSelectedCustomerId(clientIdParam)
+      
+      const itemsToLoad = []
+      if (preCloro && Number(preCloro) > 0) {
+        const cloroProd = catalog.find(p => p.name.toLowerCase().includes("cloro"))
+        if (cloroProd) itemsToLoad.push({ itemId: cloroProd.id, name: cloroProd.name, qty: Number(preCloro), price: cloroProd.priceARS || 0, currency: 'ARS', discount: 0 })
       }
-    });
-    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
-    return () => observer.disconnect();
-  }, [isEmailDialogOpen, txToDelete, selectedTxDetails, isWsDialogOpen]);
+      if (preAcido && Number(preAcido) > 0) {
+        const acidoProd = catalog.find(p => p.name.toLowerCase().includes("ácido"))
+        if (acidoProd) itemsToLoad.push({ itemId: acidoProd.id, name: acidoProd.name, qty: Number(preAcido), price: acidoProd.priceARS || 0, currency: 'ARS', discount: 0 })
+      }
+      
+      if (itemsToLoad.length > 0) {
+        setSelectedItems(itemsToLoad)
+        setActiveTab("refill")
+      }
 
-  useEffect(() => {
-    if (clientIdParam) {
-      setFilterCustomer(clientIdParam)
-      setSelectedCustomerId(clientIdParam)
-      if (modeParam === 'new') setMainView("register")
+      if (preCash && Number(preCash) > 0) {
+        setPaidAmounts(prev => ({ ...prev, ARS: Number(preCash) }))
+      }
+      
+      if (preNotes) setTxDescription(`Ruta Reposición. ${preNotes}`)
     }
+    
     if (accountIdParam) {
       setFilterAccount(accountIdParam)
       setMainView("history")
     }
-  }, [clientIdParam, accountIdParam, modeParam])
+  }, [modeParam, catalog, clientIdParam, preCloro, preAcido, preCash, preNotes, accountIdParam])
 
   const cartTotals = useMemo(() => {
     return selectedItems.reduce((acc, item) => {
@@ -443,7 +454,6 @@ function TransactionsContent() {
   const revertTxBalances = (tx: any) => {
     const balanceField = tx.currency === 'ARS' ? 'saldoActual' : 'saldoUSD'
     
-    // Revert stock if items existed and they track stock
     if (tx.items) {
       tx.items.forEach((item: any) => {
         const catalogItem = catalog?.find(ci => ci.id === item.itemId);
@@ -572,7 +582,6 @@ function TransactionsContent() {
 
           setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
 
-          // Update Stock only for items that track stock
           currentItems.forEach(item => {
             const catalogItem = catalog?.find(ci => ci.id === item.itemId);
             if (catalogItem?.trackStock !== false) {

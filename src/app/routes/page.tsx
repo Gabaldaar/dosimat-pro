@@ -2,6 +2,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,7 +10,6 @@ import { Badge } from "@/components/ui/badge"
 import { 
   Truck, 
   Plus, 
-  Calendar as CalendarIcon, 
   User, 
   Droplet, 
   Minus, 
@@ -20,15 +20,15 @@ import {
   Clock, 
   MapPin, 
   Phone,
-  Search,
   Loader2,
-  Settings2,
   Check,
   ClipboardList,
   AlertTriangle,
-  History,
   Save,
-  ArrowRight
+  ArrowRight,
+  Calculator,
+  Info,
+  Calendar as CalendarIcon
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -55,10 +55,9 @@ import {
   setDocumentNonBlocking, 
   deleteDocumentNonBlocking, 
   updateDocumentNonBlocking, 
-  useUser,
-  addDocumentNonBlocking
+  useUser
 } from "@/firebase"
-import { collection, doc, query, orderBy, increment } from "firebase/firestore"
+import { collection, doc, query, orderBy } from "firebase/firestore"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -67,6 +66,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 export default function RoutesPage() {
   const { toast } = useToast()
   const db = useFirestore()
+  const router = useRouter()
   const { userData, isUserLoading, user } = useUser()
   const isAdmin = userData?.role === 'Admin'
   const isCommunicator = userData?.role === 'Communicator'
@@ -75,18 +75,13 @@ export default function RoutesPage() {
   const [view, setMainView] = useState<"list" | "detail">("list")
   const [selectedSheetId, setSelectedSheetId] = useState<string | null>(null)
   const [isNewSheetOpen, setIsNewSheetOpen] = useState(false)
-  const [searchTerm, setSearchTerm] = useState("")
 
   // Queries
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const routesQuery = useMemoFirebase(() => query(collection(db, 'route_sheets'), orderBy('date', 'desc')), [db])
-  const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
-  const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
 
   const { data: clients } = useCollection(clientsQuery)
   const { data: routeSheets, isLoading: loadingSheets } = useCollection(routesQuery)
-  const { data: accounts } = useCollection(accountsQuery)
-  const { data: catalog } = useCollection(catalogQuery)
 
   const refillClients = useMemo(() => clients?.filter(c => c.esClienteReposicion) || [], [clients])
   const selectedSheet = useMemo(() => routeSheets?.find(s => s.id === selectedSheetId), [routeSheets, selectedSheetId])
@@ -172,71 +167,30 @@ export default function RoutesPage() {
     setMainView("list")
   }
 
-  // Logic for Admin Processing
-  const [isProcessingOpen, setIsProcessingOpen] = useState(false)
-  const [selectedAccountId, setSelectedAccountId] = useState("")
-
-  const handleProcessRoute = () => {
-    if (!selectedSheet || !selectedAccountId) return
+  const handleGenerateTransaction = (item: any) => {
+    // Redirigir a Operaciones con datos pre-cargados en la URL
+    const queryParams = new URLSearchParams({
+      mode: 'new',
+      clientId: item.clientId,
+      type: 'refill',
+      cloro: item.realChlorine.toString(),
+      acido: item.realAcid.toString(),
+      cash: item.cashCollected.toString(),
+      notes: item.notes || '',
+      routeId: selectedSheetId!,
+      fromRoute: 'true'
+    }).toString()
     
-    // In a real scenario, we'd map these to real catalog IDs
-    // For now, we'll create generic refill transactions for each client in the sheet
-    selectedSheet.items.forEach((item: any) => {
-      if (item.processed) return
+    router.push(`/transactions?${queryParams}`)
+  }
 
-      const client = clients?.find(c => c.id === item.clientId)
-      if (!client) return
-
-      // Logic: Calculate total ARS based on Chlorine/Acid entregado
-      // We assume standard prices for simplicity or get them from catalog
-      const chlorinePrice = catalog?.find(p => p.name.toLowerCase().includes("cloro"))?.priceARS || 1000
-      const acidPrice = catalog?.find(p => p.name.toLowerCase().includes("ácido"))?.priceARS || 1200
-      
-      const totalAmount = (item.realChlorine * chlorinePrice) + (item.realAcid * acidPrice)
-      const cash = Number(item.cashCollected || 0)
-      
-      const txId = Math.random().toString(36).substring(2, 11)
-      const finalDate = new Date(selectedSheet.date + 'T12:00:00').toISOString()
-
-      // Create Transaction
-      const txData = {
-        id: txId,
-        date: finalDate,
-        clientId: item.clientId,
-        type: 'refill',
-        amount: totalAmount,
-        paidAmount: cash,
-        currency: 'ARS',
-        description: `Reposición de Ruta (${selectedSheet.date}). ${item.notes || ''}`,
-        financialAccountId: cash > 0 ? selectedAccountId : null,
-        items: [
-          { name: "Cloro (Ruta)", qty: item.realChlorine, price: chlorinePrice, currency: "ARS", discount: 0 },
-          { name: "Ácido (Ruta)", qty: item.realAcid, price: acidPrice, currency: "ARS", discount: 0 }
-        ]
-      }
-
-      setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
-
-      // Update Financial Account if cash collected
-      if (cash > 0) {
-        updateDocumentNonBlocking(doc(db, 'financial_accounts', selectedAccountId), {
-          initialBalance: increment(cash)
-        })
-      }
-
-      // Update Client Balance (Debt = total - cash)
-      const debt = totalAmount - cash
-      if (debt !== 0) {
-        updateDocumentNonBlocking(doc(db, 'clients', item.clientId), {
-          saldoActual: increment(-debt)
-        })
-      }
-    })
-
-    updateDocumentNonBlocking(doc(db, 'route_sheets', selectedSheet.id), { status: "processed" })
-    setIsProcessingOpen(false)
-    toast({ title: "Ruta procesada y facturada" })
-    setMainView("list")
+  const markAsProcessed = (clientId: string) => {
+    if (!selectedSheet) return
+    const newItems = selectedSheet.items.map((i: any) => 
+      i.clientId === clientId ? { ...i, processed: true } : i
+    )
+    updateSheet(newItems)
+    toast({ title: "Cliente marcado como operado" })
   }
 
   const loadPlannedToReal = (clientId: string) => {
@@ -248,7 +202,6 @@ export default function RoutesPage() {
     updateItemField(clientId, 'isDelivered', true)
   }
 
-  // Totals for Load
   const loadTotals = useMemo(() => {
     if (!selectedSheet) return { chlorine: 0, acid: 0 }
     return selectedSheet.items.reduce((acc: any, curr: any) => {
@@ -299,8 +252,7 @@ export default function RoutesPage() {
                 const statusInfo = {
                   planned: { label: "Planificada", color: "bg-blue-100 text-blue-700", icon: Clock },
                   active: { label: "En Camino", color: "bg-amber-100 text-amber-700", icon: Truck },
-                  completed: { label: "Finalizada", color: "bg-emerald-100 text-emerald-700", icon: CheckCircle2 },
-                  processed: { label: "Procesada", color: "bg-slate-100 text-slate-700", icon: Settings2 }
+                  completed: { label: "Finalizada", color: "bg-emerald-100 text-emerald-700", icon: CheckCircle2 }
                 }[sheet.status as keyof typeof statusInfo] || { label: sheet.status, color: "bg-muted", icon: Clock }
                 const Icon = statusInfo.icon
 
@@ -347,7 +299,7 @@ export default function RoutesPage() {
                       Hoja de Ruta: {new Date(selectedSheet.date + 'T12:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                     </h2>
                     <p className="text-sm text-muted-foreground flex items-center gap-2">
-                      Estado actual: <Badge variant="secondary" className="font-bold">{selectedSheet.status.toUpperCase()}</Badge>
+                      Estado: <Badge variant="secondary" className="font-bold uppercase">{selectedSheet.status}</Badge>
                     </p>
                   </div>
                   <div className="flex gap-2 w-full md:w-auto">
@@ -361,18 +313,13 @@ export default function RoutesPage() {
                         <CheckCircle2 className="mr-2 h-4 w-4" /> FINALIZAR JORNADA
                       </Button>
                     )}
-                    {selectedSheet.status === 'completed' && isAdmin && (
-                      <Button onClick={() => setIsProcessingOpen(true)} className="bg-primary font-bold w-full md:w-auto">
-                        <Save className="mr-2 h-4 w-4" /> PROCESAR Y FACTURAR
-                      </Button>
-                    )}
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <Card className="bg-blue-50 border-blue-100 shadow-none">
                     <CardContent className="p-4 flex items-center gap-4">
-                      <div className="p-3 bg-blue-100 rounded-full text-blue-600"><Droplet className="h-6 w-6" /></div>
+                      <div className="p-3 bg-blue-100 rounded-full text-blue-600"><Calculator className="h-6 w-6" /></div>
                       <div>
                         <p className="text-[10px] font-black uppercase text-blue-700">Total Cloro</p>
                         <p className="text-2xl font-black">{loadTotals.chlorine} Bidones</p>
@@ -381,7 +328,7 @@ export default function RoutesPage() {
                   </Card>
                   <Card className="bg-rose-50 border-rose-100 shadow-none">
                     <CardContent className="p-4 flex items-center gap-4">
-                      <div className="p-3 bg-rose-100 rounded-full text-rose-600"><AlertTriangle className="h-6 w-6" /></div>
+                      <div className="p-3 bg-rose-100 rounded-full text-rose-600"><Calculator className="h-6 w-6" /></div>
                       <div>
                         <p className="text-[10px] font-black uppercase text-rose-700">Total Ácido</p>
                         <p className="text-2xl font-black">{loadTotals.acid} Bidones</p>
@@ -404,7 +351,20 @@ export default function RoutesPage() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <p className="text-[10px] text-muted-foreground italic mb-2">Solo aparecen clientes marcados como "Reposición".</p>
+                    </div>
+                  </Card>
+                )}
+
+                {selectedSheet.status === 'completed' && isAdmin && (
+                  <Card className="bg-amber-50 border-amber-200 p-4">
+                    <div className="flex items-start gap-3">
+                      <Info className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-bold text-amber-900">Mesa de Entradas: Ruta Finalizada</h4>
+                        <p className="text-xs text-amber-800">
+                          Revisa los datos del repositor. Toca el botón <b>"Operar"</b> para generar la factura de cada cliente manualmente con los datos pre-cargados.
+                        </p>
+                      </div>
                     </div>
                   </Card>
                 )}
@@ -423,6 +383,7 @@ export default function RoutesPage() {
                         return (
                           <Card key={idx} className={cn(
                             "glass-card border-l-4 transition-all",
+                            item.processed ? "border-l-slate-300 opacity-60" : 
                             item.isDelivered ? "border-l-emerald-500 bg-emerald-50/20" : "border-l-primary"
                           )}>
                             <CardContent className="p-4 md:p-6">
@@ -441,34 +402,32 @@ export default function RoutesPage() {
                                 </div>
 
                                 <div className="md:col-span-6 grid grid-cols-2 md:grid-cols-3 gap-4">
-                                  {/* PLANIFICACION - Editable por Comunicador/Admin si está planificada */}
                                   {selectedSheet.status === 'planned' ? (
                                     <>
                                       <div className="space-y-1">
-                                        <Label className="text-[10px] font-bold uppercase">Cloro (Bidones)</Label>
+                                        <Label className="text-[10px] font-bold uppercase">Cloro (Pedido)</Label>
                                         <Input type="number" value={item.plannedChlorine} onChange={(e) => updateItemField(item.clientId, 'plannedChlorine', Number(e.target.value))} />
                                       </div>
                                       <div className="space-y-1">
-                                        <Label className="text-[10px] font-bold uppercase">Ácido (Bidones)</Label>
+                                        <Label className="text-[10px] font-bold uppercase">Ácido (Pedido)</Label>
                                         <Input type="number" value={item.plannedAcid} onChange={(e) => updateItemField(item.clientId, 'plannedAcid', Number(e.target.value))} />
                                       </div>
                                       <div className="space-y-1 col-span-2 md:col-span-1">
                                         <Label className="text-[10px] font-bold uppercase">Otros / Notas</Label>
-                                        <Input value={item.others} onChange={(e) => updateItemField(item.clientId, 'others', e.target.value)} placeholder="Ej: Revisar boya" />
+                                        <Input value={item.others} onChange={(e) => updateItemField(item.clientId, 'others', e.target.value)} placeholder="..." />
                                       </div>
                                     </>
                                   ) : (
                                     <>
-                                      {/* EJECUCION - Editable por Repositor */}
                                       <div className="bg-muted/30 p-2 rounded-lg border border-dashed text-center">
-                                        <p className="text-[9px] font-black text-muted-foreground uppercase mb-1">Pedido Original</p>
-                                        <p className="text-xs font-bold text-slate-600">{item.plannedChlorine} Cloro / {item.plannedAcid} Ácido</p>
+                                        <p className="text-[9px] font-black text-muted-foreground uppercase mb-1">Pedido Ref.</p>
+                                        <p className="text-xs font-bold text-slate-600">{item.plannedChlorine} Cl / {item.plannedAcid} Ác</p>
                                       </div>
                                       <div className="space-y-1">
                                         <Label className="text-[10px] font-bold text-emerald-700">Entregado Cloro</Label>
                                         <Input 
                                           type="number" 
-                                          disabled={selectedSheet.status === 'processed' || (!isAdmin && !isReplenisher)}
+                                          disabled={item.processed || (!isAdmin && !isReplenisher)}
                                           value={item.realChlorine} 
                                           onChange={(e) => updateItemField(item.clientId, 'realChlorine', Number(e.target.value))} 
                                           className="h-10 font-black text-emerald-700 bg-white"
@@ -478,7 +437,7 @@ export default function RoutesPage() {
                                         <Label className="text-[10px] font-bold text-rose-700">Entregado Ácido</Label>
                                         <Input 
                                           type="number" 
-                                          disabled={selectedSheet.status === 'processed' || (!isAdmin && !isReplenisher)}
+                                          disabled={item.processed || (!isAdmin && !isReplenisher)}
                                           value={item.realAcid} 
                                           onChange={(e) => updateItemField(item.clientId, 'realAcid', Number(e.target.value))} 
                                           className="h-10 font-black text-rose-700 bg-white"
@@ -493,6 +452,21 @@ export default function RoutesPage() {
                                     <Button variant="ghost" size="sm" className="text-destructive font-bold self-end" onClick={() => removeItemFromSheet(item.clientId)}>
                                       <Minus className="h-4 w-4 mr-1" /> QUITAR
                                     </Button>
+                                  ) : selectedSheet.status === 'completed' && isAdmin ? (
+                                    <div className="flex gap-2">
+                                      <Button 
+                                        className="flex-1 bg-primary font-black text-[10px]"
+                                        disabled={item.processed}
+                                        onClick={() => handleGenerateTransaction(item)}
+                                      >
+                                        {item.processed ? 'OPERADO' : 'OPERAR'}
+                                      </Button>
+                                      {!item.processed && (
+                                        <Button variant="outline" size="icon" onClick={() => markAsProcessed(item.clientId)}>
+                                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                                        </Button>
+                                      )}
+                                    </div>
                                   ) : (
                                     <div className="flex flex-col gap-2">
                                       <div className="flex gap-2">
@@ -500,7 +474,7 @@ export default function RoutesPage() {
                                           <Label className="text-[10px] font-bold uppercase">Cobrado ($)</Label>
                                           <Input 
                                             type="number" 
-                                            disabled={selectedSheet.status === 'processed' || (!isAdmin && !isReplenisher)}
+                                            disabled={item.processed || (!isAdmin && !isReplenisher)}
                                             placeholder="Efectivo..." 
                                             value={item.cashCollected} 
                                             onChange={(e) => updateItemField(item.clientId, 'cashCollected', Number(e.target.value))} 
@@ -515,7 +489,7 @@ export default function RoutesPage() {
                                       </div>
                                       <Input 
                                         placeholder="Comentario entrega..." 
-                                        disabled={selectedSheet.status === 'processed' || (!isAdmin && !isReplenisher)}
+                                        disabled={item.processed || (!isAdmin && !isReplenisher)}
                                         value={item.notes} 
                                         onChange={(e) => updateItemField(item.clientId, 'notes', e.target.value)} 
                                         className="h-8 text-[10px] bg-white italic"
@@ -536,7 +510,6 @@ export default function RoutesPage() {
           </div>
         )}
 
-        {/* DIALOGS */}
         <Dialog open={isNewSheetOpen} onOpenChange={setIsNewSheetOpen}>
           <DialogContent>
             <DialogHeader><DialogTitle>Nueva Hoja de Ruta</DialogTitle></DialogHeader>
@@ -545,72 +518,10 @@ export default function RoutesPage() {
                 <Label>Fecha de la Reposición</Label>
                 <Input type="date" value={newSheetDate} onChange={(e) => setNewSheetDate(e.target.value)} />
               </div>
-              <p className="text-xs text-muted-foreground">Luego podrás agregar los clientes y las cantidades planificadas.</p>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsNewSheetOpen(false)}>Cancelar</Button>
               <Button onClick={handleCreateSheet}>Crear y Empezar</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={isProcessingOpen} onOpenChange={setIsProcessingOpen}>
-          <DialogContent className="max-w-3xl">
-            <DialogHeader>
-              <DialogTitle>Mesa de Entradas: Procesar Facturación</DialogTitle>
-              <DialogDescription>Revisa los datos entregados por el repositor antes de generar las operaciones reales.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-6 py-4">
-              <div className="space-y-2">
-                <Label className="text-primary font-bold">Caja para ingresos en efectivo</Label>
-                <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar caja..." /></SelectTrigger>
-                  <SelectContent>
-                    {accounts?.filter(a => a.currency === 'ARS').map(a => (
-                      <SelectItem key={a.id} value={a.id}>{a.name} (Saldo: ${a.initialBalance.toLocaleString('es-AR')})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <ScrollArea className="h-[300px] border rounded-xl p-2 bg-muted/10">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Cliente</TableHead>
-                      <TableHead className="text-center">Cloro</TableHead>
-                      <TableHead className="text-center">Ácido</TableHead>
-                      <TableHead className="text-right">Cobrado</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selectedSheet?.items.map((item: any, i: number) => {
-                      const client = clients?.find(c => c.id === item.clientId)
-                      return (
-                        <TableRow key={i}>
-                          <TableCell className="font-bold text-xs">{client?.apellido}, {client?.nombre}</TableCell>
-                          <TableCell className="text-center font-black text-emerald-600">{item.realChlorine}</TableCell>
-                          <TableCell className="text-center font-black text-rose-600">{item.realAcid}</TableCell>
-                          <TableCell className="text-right font-bold">${item.cashCollected.toLocaleString('es-AR')}</TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
-
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex gap-3 text-amber-800">
-                <Info className="h-5 w-5 shrink-0" />
-                <p className="text-xs leading-relaxed">
-                  Al confirmar, el sistema creará una <b>Operación de Reposición</b> para cada cliente, actualizará sus saldos y registrará los ingresos en la caja seleccionada.
-                </p>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsProcessingOpen(false)}>Cancelar y Seguir Revisando</Button>
-              <Button onClick={handleProcessRoute} disabled={!selectedAccountId} className="font-black px-8">
-                CONFIRMAR Y FACTURAR TODO
-              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

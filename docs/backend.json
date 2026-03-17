@@ -37,7 +37,7 @@
       "properties": {
         "id": { "type": "string" },
         "date": { "type": "string", "format": "date" },
-        "status": { "type": "string", "enum": ["planned", "active", "completed", "processed"] },
+        "status": { "type": "string", "enum": ["planned", "active", "completed"] },
         "createdBy": { "type": "string" },
         "items": {
           "type": "array",
