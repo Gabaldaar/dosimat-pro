@@ -103,9 +103,15 @@ export default function RoutesPage() {
     return [...clients]
       .filter(c => c.esClienteReposicion)
       .sort((a: any, b: any) => {
-        const nameA = `${a.apellido || ""} ${a.nombre || ""}`.toLowerCase();
-        const nameB = `${b.apellido || ""} ${b.nombre || ""}`.toLowerCase();
-        return nameA.localeCompare(nameB);
+        const apellidoA = (a.apellido || "").toLowerCase();
+        const apellidoB = (b.apellido || "").toLowerCase();
+        if (apellidoA < apellidoB) return -1;
+        if (apellidoA > apellidoB) return 1;
+        const nombreA = (a.nombre || "").toLowerCase();
+        const nombreB = (b.nombre || "").toLowerCase();
+        if (nombreA < nombreB) return -1;
+        if (nombreA > nombreB) return 1;
+        return 0;
       })
   }, [clients])
 
