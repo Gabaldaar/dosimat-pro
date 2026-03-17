@@ -285,11 +285,11 @@ function RoutesContent() {
     window.open(`https://wa.me/${num}`, '_blank')
   }
 
-  const handlePrint = () => {
+  const handlePrint = useCallback(() => {
     if (typeof window !== 'undefined') {
       window.print();
     }
-  };
+  }, []);
 
   const handleShareLink = () => {
     if (!selectedSheetId || !selectedSheet) return
@@ -462,11 +462,11 @@ function RoutesContent() {
                   {isEditingAllowed && (
                     <Card className="p-4 glass-card border-dashed">
                       <div className="flex flex-col md:flex-row gap-4 items-end">
-                        <div className="flex-1 space-y-2">
+                        <div className="flex-1 space-y-2 pt-4">
                           <Label className="font-bold flex items-center gap-2"><Plus className="h-4 w-4" /> Agregar Cliente de Reposición</Label>
                           <Select onValueChange={addItemToSheet}>
                             <SelectTrigger className="h-11"><SelectValue placeholder="Seleccionar cliente..." /></SelectTrigger>
-                            <SelectContent>
+                            <SelectContent className="max-h-96">
                               {refillClients.map((c: any) => (
                                 <SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre} ({c.direccion})</SelectItem>
                               ))}
@@ -692,46 +692,42 @@ function RoutesContent() {
 
       {/* VISTA DE IMPRESIÓN / PDF */}
       {selectedSheet && (
-        <div className="print-only w-full p-8 font-sans text-slate-900 bg-white">
-          <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6 mb-8">
+        <div className="print-only w-full p-4 font-sans text-slate-900 bg-white">
+          <div className="flex justify-between items-start border-b border-slate-900 pb-2 mb-4">
             <div>
-              <h1 className="text-3xl font-black uppercase tracking-tight">Hoja de Ruta de Reposición</h1>
-              <p className="text-lg font-bold text-slate-600 mt-1">Fecha: {new Date(selectedSheet.date + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+              <h1 className="text-xl font-black uppercase tracking-tight">Hoja de Ruta de Reposición</h1>
+              <p className="text-sm font-bold text-slate-600">Fecha: {new Date(selectedSheet.date + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
             </div>
             <div className="text-right">
-              <p className="text-sm font-black uppercase text-slate-400">Dosimat Pro System</p>
-              <p className="text-xs italic">Planilla de Logística</p>
+              <p className="text-[10px] font-black uppercase text-slate-400">Dosimat Pro System</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-8 mb-10">
-            <div className="p-6 border-2 border-slate-900 rounded-2xl bg-slate-50">
-              <h2 className="text-sm font-black uppercase mb-4 flex items-center gap-2">
-                <Package className="h-4 w-4" /> Resumen de Carga para Camioneta
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="p-3 border border-slate-900 rounded-xl bg-slate-50">
+              <h2 className="text-[10px] font-black uppercase mb-2 flex items-center gap-2">
+                <Package className="h-3 w-3" /> Resumen de Carga
               </h2>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center text-2xl">
-                  <span className="font-medium">Bidones de Cloro:</span>
-                  <span className="font-black px-4 py-1 bg-white border-2 border-slate-900 rounded-lg">{loadTotals.plannedChlorine}</span>
+              <div className="flex gap-6">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium">Cloro:</span>
+                  <span className="font-black text-lg px-2 border border-slate-900 rounded">{loadTotals.plannedChlorine}</span>
                 </div>
-                <div className="flex justify-between items-center text-2xl">
-                  <span className="font-medium">Bidones de Ácido:</span>
-                  <span className="font-black px-4 py-1 bg-white border-2 border-slate-900 rounded-lg">{loadTotals.plannedAcid}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium">Ácido:</span>
+                  <span className="font-black text-lg px-2 border border-slate-900 rounded">{loadTotals.plannedAcid}</span>
                 </div>
               </div>
             </div>
-            <div className="flex flex-col justify-end text-sm text-slate-500 italic">
-              <p>Nota: Las cantidades indicadas son las solicitadas por los clientes. Por favor, verificar stock antes de salir.</p>
-            </div>
           </div>
 
-          <table className="w-full border-collapse border-2 border-slate-900">
+          <table className="w-full border-collapse border border-slate-900 text-xs">
             <thead>
               <tr className="bg-slate-900 text-white">
-                <th className="border border-slate-900 p-3 text-left text-xs uppercase font-black">Cliente / Dirección</th>
-                <th className="border border-slate-900 p-3 text-center text-xs uppercase font-black w-24">Cloro</th>
-                <th className="border border-slate-900 p-3 text-center text-xs uppercase font-black w-24">Ácido</th>
-                <th className="border border-slate-900 p-3 text-left text-xs uppercase font-black">Cobro / Notas Reales</th>
+                <th className="border border-slate-900 p-1 text-left uppercase font-black">Cliente / Dirección</th>
+                <th className="border border-slate-900 p-1 text-center uppercase font-black w-16">Cloro</th>
+                <th className="border border-slate-900 p-1 text-center uppercase font-black w-16">Ácido</th>
+                <th className="border border-slate-900 p-1 text-left uppercase font-black">Cobro / Notas Reales</th>
               </tr>
             </thead>
             <tbody>
@@ -741,37 +737,31 @@ function RoutesContent() {
                 const zone = zones?.find(z => z.id === client.zonaId);
                 return (
                   <tr key={idx} className="border-b border-slate-300">
-                    <td className="border border-slate-900 p-4">
-                      <p className="font-black text-md">{client.apellido}, {client.nombre}</p>
-                      <p className="text-sm font-bold mt-1">📍 {client.direccion}, {client.localidad}</p>
-                      <p className="text-xs text-slate-500 uppercase font-bold mt-1">Zona: {zone?.name || 'S/D'} • Tel: {client.telefono || '---'}</p>
-                      {item.others && <p className="text-xs bg-slate-100 p-1 mt-2 border border-slate-200">Obs: {item.others}</p>}
+                    <td className="border border-slate-900 p-2">
+                      <p className="font-black">{client.apellido}, {client.nombre}</p>
+                      <p className="text-[10px] mt-0.5">📍 {client.direccion}, {client.localidad}</p>
+                      <p className="text-[9px] text-slate-500 font-bold mt-0.5 uppercase">{zone?.name || 'S/D'} • Tel: {client.telefono || '---'}</p>
+                      {item.others && <p className="text-[8px] italic mt-1 border-t pt-1">Obs: {item.others}</p>}
                     </td>
-                    <td className="border border-slate-900 p-4 text-center">
-                      <p className="text-xs font-black text-slate-400 mb-1">Pedido</p>
-                      <p className="text-2xl font-black">{item.plannedChlorine}</p>
-                      <div className="mt-4 border-t-2 border-slate-200 pt-2">
-                        <span className="text-[8px] font-black uppercase text-slate-400">Entregó:</span>
-                        <div className="h-8 border-2 border-dashed border-slate-300 rounded mt-1"></div>
+                    <td className="border border-slate-900 p-1 text-center">
+                      <p className="text-sm font-black">{item.plannedChlorine}</p>
+                      <div className="mt-1 border-t border-slate-200">
+                        <div className="h-6 border border-dashed border-slate-300 rounded mt-1"></div>
                       </div>
                     </td>
-                    <td className="border border-slate-900 p-4 text-center">
-                      <p className="text-xs font-black text-slate-400 mb-1">Pedido</p>
-                      <p className="text-2xl font-black">{item.plannedAcid}</p>
-                      <div className="mt-4 border-t-2 border-slate-200 pt-2">
-                        <span className="text-[8px] font-black uppercase text-slate-400">Entregó:</span>
-                        <div className="h-8 border-2 border-dashed border-slate-300 rounded mt-1"></div>
+                    <td className="border border-slate-900 p-1 text-center">
+                      <p className="text-sm font-black">{item.plannedAcid}</p>
+                      <div className="mt-1 border-t border-slate-200">
+                        <div className="h-6 border border-dashed border-slate-300 rounded mt-1"></div>
                       </div>
                     </td>
-                    <td className="border border-slate-900 p-4">
-                      <div className="h-full flex flex-col justify-between gap-4">
-                        <div>
-                          <span className="text-[10px] font-black uppercase text-slate-400">¿Cobró efectivo?</span>
-                          <div className="h-10 border-2 border-dashed border-slate-300 rounded mt-1"></div>
+                    <td className="border border-slate-900 p-1">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="h-8 border border-dashed border-slate-300 rounded relative">
+                          <span className="absolute top-0.5 left-1 text-[6px] font-black text-slate-300 uppercase">COBRÓ</span>
                         </div>
-                        <div>
-                          <span className="text-[10px] font-black uppercase text-slate-400">Comentario del repartidor:</span>
-                          <div className="h-12 border-2 border-dashed border-slate-300 rounded mt-1"></div>
+                        <div className="h-8 border border-dashed border-slate-300 rounded relative">
+                          <span className="absolute top-0.5 left-1 text-[6px] font-black text-slate-300 uppercase">NOTAS</span>
                         </div>
                       </div>
                     </td>
@@ -781,14 +771,14 @@ function RoutesContent() {
             </tbody>
           </table>
 
-          <div className="mt-12 pt-8 border-t border-slate-200 grid grid-cols-2 gap-8">
+          <div className="mt-6 pt-4 border-t border-slate-200 grid grid-cols-2 gap-8">
             <div>
-              <p className="text-[10px] font-black uppercase text-slate-400 mb-8">Firma Responsable Salida</p>
-              <div className="w-48 border-b-2 border-slate-900"></div>
+              <p className="text-[8px] font-black uppercase text-slate-400 mb-4">Salida</p>
+              <div className="w-32 border-b border-slate-900"></div>
             </div>
             <div className="text-right">
-              <p className="text-[10px] font-black uppercase text-slate-400 mb-8">Firma Responsable Recepción</p>
-              <div className="w-48 border-b-2 border-slate-900 ml-auto"></div>
+              <p className="text-[8px] font-black uppercase text-slate-400 mb-4">Recepción</p>
+              <div className="w-32 border-b border-slate-900 ml-auto"></div>
             </div>
           </div>
         </div>
