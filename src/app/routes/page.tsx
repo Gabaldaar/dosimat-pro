@@ -272,7 +272,6 @@ function RoutesContent() {
   }
 
   const handlePrint = () => {
-    // Pequeño timeout para asegurar que el DOM esté listo antes de abrir el diálogo de impresión
     setTimeout(() => {
       window.print();
     }, 100);
@@ -288,6 +287,8 @@ function RoutesContent() {
   }
 
   if (isUserLoading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+
+  const isEditingAllowed = selectedSheet && (selectedSheet.status === 'planned' || selectedSheet.status === 'active') && (isAdmin || isCommunicator)
 
   return (
     <div className="flex min-h-screen w-full bg-background">
@@ -439,7 +440,7 @@ function RoutesContent() {
                     </Card>
                   </div>
 
-                  {selectedSheet.status === 'planned' && (isAdmin || isCommunicator) && (
+                  {isEditingAllowed && (
                     <Card className="p-4 glass-card border-dashed">
                       <div className="flex flex-col md:flex-row gap-4 items-end">
                         <div className="flex-1 space-y-2">
@@ -499,7 +500,7 @@ function RoutesContent() {
                                   </div>
 
                                   <div className="md:col-span-6 grid grid-cols-2 md:grid-cols-3 gap-4">
-                                    {selectedSheet.status === 'planned' ? (
+                                    {selectedSheet.status === 'planned' || (selectedSheet.status === 'active' && (isAdmin || isCommunicator)) ? (
                                       <>
                                         <div className="space-y-1">
                                           <Label className="text-[10px] font-bold uppercase">Cloro (Pedido)</Label>
@@ -525,11 +526,14 @@ function RoutesContent() {
                                         </div>
                                       </>
                                     ) : (
+                                      <div className="bg-muted/30 p-2 rounded-lg border border-dashed text-center">
+                                        <p className="text-[9px] font-black text-muted-foreground uppercase mb-1">Pedido Ref.</p>
+                                        <p className="text-xs font-bold text-slate-600">{item.plannedChlorine} Cl / {item.plannedAcid} Ác</p>
+                                      </div>
+                                    )}
+
+                                    {selectedSheet.status === 'active' && (
                                       <>
-                                        <div className="bg-muted/30 p-2 rounded-lg border border-dashed text-center">
-                                          <p className="text-[9px] font-black text-muted-foreground uppercase mb-1">Pedido Ref.</p>
-                                          <p className="text-xs font-bold text-slate-600">{item.plannedChlorine} Cl / {item.plannedAcid} Ác</p>
-                                        </div>
                                         <div className="space-y-1">
                                           <Label className="text-[10px] font-bold text-emerald-700">Entregado Cloro</Label>
                                           <Input 
@@ -555,11 +559,13 @@ function RoutesContent() {
                                   </div>
 
                                   <div className="md:col-span-3 flex flex-col gap-2">
-                                    {selectedSheet.status === 'planned' ? (
+                                    {isEditingAllowed ? (
                                       <Button variant="ghost" size="sm" className="text-destructive font-bold self-end" onClick={() => removeItemFromSheet(item.clientId)}>
                                         <Minus className="h-4 w-4 mr-1" /> QUITAR
                                       </Button>
-                                    ) : selectedSheet.status === 'completed' && isAdmin ? (
+                                    ) : null}
+                                    
+                                    {selectedSheet.status === 'completed' && isAdmin ? (
                                       <div className="flex gap-2">
                                         <Button 
                                           className="flex-1 bg-primary font-black text-[10px]"
@@ -574,7 +580,7 @@ function RoutesContent() {
                                           </Button>
                                         )}
                                       </div>
-                                    ) : (
+                                    ) : selectedSheet.status === 'active' ? (
                                       <div className="flex flex-col gap-2">
                                         <div className="flex gap-2">
                                           <div className="flex-1 space-y-1">
@@ -602,7 +608,7 @@ function RoutesContent() {
                                           className="h-8 text-[10px] bg-white italic border rounded px-2"
                                         />
                                       </div>
-                                    )}
+                                    ) : null}
                                   </div>
                                 </div>
                               </CardContent>
