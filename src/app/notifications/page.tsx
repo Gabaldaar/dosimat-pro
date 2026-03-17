@@ -1,6 +1,7 @@
+
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -22,6 +23,15 @@ export default function NotificationsPage() {
   
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const { data: customers } = useCollection(clientsQuery)
+
+  const sortedCustomers = useMemo(() => {
+    if (!customers) return []
+    return [...customers].sort((a: any, b: any) => {
+      const nameA = `${a.apellido || ""} ${a.nombre || ""}`.toLowerCase();
+      const nameB = `${b.apellido || ""} ${b.nombre || ""}`.toLowerCase();
+      return nameA.localeCompare(nameB);
+    })
+  }, [customers])
 
   const [formData, setFormData] = useState({
     customerId: "",
@@ -121,14 +131,14 @@ export default function NotificationsPage() {
               <div className="space-y-2">
                 <Label htmlFor="customer">Cliente Destinatario</Label>
                 <Select onValueChange={(v) => {
-                  const c = customers?.find(cust => cust.id === v)
+                  const c = sortedCustomers?.find(cust => cust.id === v)
                   setFormData({...formData, customerId: v, customerName: c ? `${c.nombre} ${c.apellido}` : ""})
                 }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Seleccionar cliente..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {customers?.map((c: any) => (
+                    {sortedCustomers.map((c: any) => (
                       <SelectItem key={c.id} value={c.id}>
                         {c.apellido}, {c.nombre}
                       </SelectItem>

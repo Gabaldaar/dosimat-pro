@@ -97,7 +97,17 @@ export default function RoutesPage() {
   const { data: zones } = useCollection(zonesQuery)
   const { data: routeSheets, isLoading: loadingSheets } = useCollection(routesQuery)
 
-  const refillClients = useMemo(() => clients?.filter(c => c.esClienteReposicion) || [], [clients])
+  const refillClients = useMemo(() => {
+    if (!clients) return []
+    return [...clients]
+      .filter(c => c.esClienteReposicion)
+      .sort((a: any, b: any) => {
+        const nameA = `${a.apellido || ""} ${a.nombre || ""}`.toLowerCase();
+        const nameB = `${b.apellido || ""} ${b.nombre || ""}`.toLowerCase();
+        return nameA.localeCompare(nameB);
+      })
+  }, [clients])
+
   const selectedSheet = useMemo(() => routeSheets?.find(s => s.id === selectedSheetId), [routeSheets, selectedSheetId])
 
   // New Sheet Form
@@ -556,12 +566,12 @@ export default function RoutesPage() {
                                           </Button>
                                         )}
                                       </div>
-                                      <Input 
+                                      <input 
                                         placeholder="Comentario entrega..." 
                                         disabled={item.processed || (!isAdmin && !isReplenisher)}
                                         value={item.notes} 
                                         onChange={(e) => updateItemField(item.clientId, 'notes', e.target.value)} 
-                                        className="h-8 text-[10px] bg-white italic"
+                                        className="h-8 text-[10px] bg-white italic border rounded px-2"
                                       />
                                     </div>
                                   )}
