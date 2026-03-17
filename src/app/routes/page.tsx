@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
@@ -32,7 +31,9 @@ import {
   MapPinned,
   Printer,
   Package,
-  Link as LinkIcon
+  Link as LinkIcon,
+  MessageSquare,
+  RefreshCw
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -225,6 +226,12 @@ function RoutesContent() {
     toast({ title: "Ruta habilitada para entrega", description: "Ahora es visible para el repositor." })
   }
 
+  const handleResetToPlanning = () => {
+    if (!selectedSheetId) return
+    updateDocumentNonBlocking(doc(db, 'route_sheets', selectedSheetId), { status: "planned" })
+    toast({ title: "Ruta devuelta a Planificación", description: "El repositor ya no podrá verla hasta que vuelvas a iniciarla." })
+  }
+
   const handleCompleteRoute = () => {
     if (!selectedSheetId) return
     updateDocumentNonBlocking(doc(db, 'route_sheets', selectedSheetId), { status: "completed" })
@@ -271,6 +278,12 @@ function RoutesContent() {
     window.open(`https://google.com/maps/search/?api=1&query=${query}`, '_blank')
   }
 
+  const handleWhatsApp = (phone: string) => {
+    if (!phone) return
+    const num = phone.replace(/\D/g, '')
+    window.open(`https://wa.me/${num}`, '_blank')
+  }
+
   const handlePrint = () => {
     setTimeout(() => {
       window.print();
@@ -288,7 +301,7 @@ function RoutesContent() {
 
   if (isUserLoading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
 
-  const isEditingAllowed = selectedSheet && (selectedSheet.status === 'planned' || selectedSheet.status === 'active') && (isAdmin || isCommunicator)
+  const isEditingAllowed = selectedSheet && selectedSheet.status === 'planned' && (isAdmin || isCommunicator)
 
   return (
     <div className="flex min-h-screen w-full bg-background">
@@ -395,6 +408,11 @@ function RoutesContent() {
                           <Truck className="mr-2 h-4 w-4" /> INICIAR ENTREGA
                         </Button>
                       )}
+                      {selectedSheet.status === 'active' && (isAdmin || isCommunicator) && (
+                        <Button variant="outline" onClick={handleResetToPlanning} className="border-amber-500 text-amber-700 hover:bg-amber-50 font-bold w-full md:w-auto">
+                          <RefreshCw className="mr-2 h-4 w-4" /> VOLVER A PLANIFICAR
+                        </Button>
+                      )}
                       {selectedSheet.status === 'active' && (isAdmin || isReplenisher) && (
                         <Button onClick={handleCompleteRoute} className="bg-emerald-600 hover:bg-emerald-700 font-bold w-full md:w-auto">
                           <CheckCircle2 className="mr-2 h-4 w-4" /> FINALIZAR JORNADA
@@ -484,14 +502,22 @@ function RoutesContent() {
                                       {zone && <Badge variant="outline" className="text-[8px] h-4 bg-primary/5 text-primary border-primary/20">{zone.name}</Badge>}
                                     </div>
                                     <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3 shrink-0" /> {client.direccion}, {client.localidad}</p>
-                                    <div className="flex gap-2 mt-2">
+                                    <div className="flex gap-1.5 mt-2 flex-wrap">
                                       <Button variant="outline" size="sm" className="h-7 px-2 text-[10px]" asChild>
                                         <a href={`tel:${client.telefono}`}><Phone className="h-3 w-3 mr-1" /> LLAMAR</a>
                                       </Button>
                                       <Button 
+                                        variant="outline" 
+                                        size="sm" 
+                                        className="h-7 px-2 text-[10px] text-emerald-700 border-emerald-200 bg-emerald-50 hover:bg-emerald-100" 
+                                        onClick={() => handleWhatsApp(client.telefono)}
+                                      >
+                                        <MessageSquare className="h-3 w-3 mr-1" /> WHATSAPP
+                                      </Button>
+                                      <Button 
                                         variant="secondary" 
                                         size="sm" 
-                                        className="h-7 px-2 text-[10px] bg-emerald-50 text-emerald-700 hover:bg-emerald-100" 
+                                        className="h-7 px-2 text-[10px]" 
                                         onClick={() => handleOpenMaps(client.direccion, client.localidad)}
                                       >
                                         <MapPinned className="h-3 w-3 mr-1" /> MAPA
@@ -500,7 +526,7 @@ function RoutesContent() {
                                   </div>
 
                                   <div className="md:col-span-6 grid grid-cols-2 md:grid-cols-3 gap-4">
-                                    {selectedSheet.status === 'planned' || (selectedSheet.status === 'active' && (isAdmin || isCommunicator)) ? (
+                                    {selectedSheet.status === 'planned' ? (
                                       <>
                                         <div className="space-y-1">
                                           <Label className="text-[10px] font-bold uppercase">Cloro (Pedido)</Label>
