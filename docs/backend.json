@@ -9,7 +9,7 @@
         "id": { "type": "string" },
         "email": { "type": "string", "format": "email" },
         "name": { "type": "string" },
-        "role": { "type": "string" },
+        "role": { "type": "string", "enum": ["Admin", "Employee", "Communicator", "Replenisher", "Pending", "Blocked"] },
         "createdAt": { "type": "string", "format": "date-time" }
       }
     },
@@ -25,7 +25,38 @@
         "telefono": { "type": "string" },
         "direccion": { "type": "string" },
         "saldoActual": { "type": "number" },
-        "saldoUSD": { "type": "number" }
+        "saldoUSD": { "type": "number" },
+        "esClienteReposicion": { "type": "boolean" },
+        "zonaId": { "type": "string" }
+      }
+    },
+    "RouteSheet": {
+      "title": "RouteSheet",
+      "type": "object",
+      "description": "Daily delivery plan for chemical replenishments.",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["planned", "active", "completed", "processed"] },
+        "createdBy": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "clientId": { "type": "string" },
+              "plannedChlorine": { "type": "number" },
+              "realChlorine": { "type": "number" },
+              "plannedAcid": { "type": "number" },
+              "realAcid": { "type": "number" },
+              "others": { "type": "string" },
+              "cashCollected": { "type": "number" },
+              "notes": { "type": "string" },
+              "isDelivered": { "type": "boolean" },
+              "processed": { "type": "boolean" }
+            }
+          }
+        }
       }
     },
     "ProductService": {
@@ -36,59 +67,10 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "categoryId": { "type": "string" },
-        "priceARS": { "type": "number", "description": "Venta ARS" },
-        "priceUSD": { "type": "number", "description": "Venta USD" },
-        "costARS": { "type": "number", "description": "Costo calculado ARS" },
-        "costUSD": { "type": "number", "description": "Costo calculado USD" },
-        "laborCostARS": { "type": "number", "description": "Mano de obra ARS" },
-        "laborCostUSD": { "type": "number", "description": "Mano de obra USD" },
-        "isService": { "type": "boolean" },
-        "isCompuesto": { "type": "boolean" },
-        "trackStock": { "type": "boolean", "description": "Whether this item moves inventory." },
-        "stock": { "type": "number" },
-        "minStock": { "type": "number" },
-        "components": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "productId": { "type": "string" },
-              "quantity": { "type": "number" }
-            }
-          }
-        }
-      }
-    },
-    "ProductCategory": {
-      "title": "ProductCategory",
-      "type": "object",
-      "description": "Categories for catalog items.",
-      "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "isFavorite": { "type": "boolean" }
-      }
-    },
-    "EmailTemplate": {
-      "title": "EmailTemplate",
-      "type": "object",
-      "description": "Templates for email notifications.",
-      "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "subject": { "type": "string" },
-        "body": { "type": "string" },
-        "bcc": { "type": "string", "description": "Blind Carbon Copy emails separated by semicolon." }
-      }
-    },
-    "WhatsAppTemplate": {
-      "title": "WhatsAppTemplate",
-      "type": "object",
-      "description": "Templates for WhatsApp messages.",
-      "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "body": { "type": "string" }
+        "priceARS": { "type": "number" },
+        "priceUSD": { "type": "number" },
+        "trackStock": { "type": "boolean" },
+        "stock": { "type": "number" }
       }
     }
   },
@@ -102,44 +84,16 @@
         "definition": { "entityName": "User", "description": "User profiles." }
       },
       {
-        "path": "/user_roles/{userId}",
-        "definition": { "entityName": "User", "description": "Security roles." }
-      },
-      {
         "path": "/clients/{clientId}",
         "definition": { "entityName": "Client", "description": "Customers." }
       },
       {
-        "path": "/products_services/{productId}",
-        "definition": { "entityName": "ProductService", "description": "Catalog items." }
-      },
-      {
-        "path": "/product_categories/{categoryId}",
-        "definition": { "entityName": "ProductCategory", "description": "Item categories." }
-      },
-      {
-        "path": "/zones/{zoneId}",
-        "definition": { "entityName": "Zone", "description": "Geographic zones." }
-      },
-      {
-        "path": "/financial_accounts/{accountId}",
-        "definition": { "entityName": "FinancialAccount", "description": "Cash boxes." }
+        "path": "/route_sheets/{sheetId}",
+        "definition": { "entityName": "RouteSheet", "description": "Daily replenishment routes." }
       },
       {
         "path": "/transactions/{transactionId}",
         "definition": { "entityName": "Transaction", "description": "Financial records." }
-      },
-      {
-        "path": "/email_templates/{templateId}",
-        "definition": { "entityName": "EmailTemplate", "description": "Message templates." }
-      },
-      {
-        "path": "/whatsapp_templates/{templateId}",
-        "definition": { "entityName": "WhatsAppTemplate", "description": "WhatsApp message templates." }
-      },
-      {
-        "path": "/expense_categories/{categoryId}",
-        "definition": { "entityName": "ProductCategory", "description": "Categories for expenses." }
       }
     ]
   }

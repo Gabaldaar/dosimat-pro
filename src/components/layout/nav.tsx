@@ -14,7 +14,8 @@ import {
   LogOut,
   Shield,
   FileText,
-  BarChart3
+  BarChart3,
+  Truck
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -36,6 +37,7 @@ import {
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/customers", label: "Clientes", icon: Users },
+  { href: "/routes", label: "Rutas", icon: Truck },
   { href: "/transactions", label: "Operaciones", icon: ArrowLeftRight },
   { href: "/analysis", label: "Análisis", icon: BarChart3 },
   { href: "/accounts", label: "Cajas", icon: Wallet },
@@ -51,7 +53,7 @@ export function Sidebar({ className }: { className?: string }) {
   const { state, isMobile, setOpenMobile } = useSidebar()
 
   const userDocRef = useMemoFirebase(() => user ? doc(firestore, 'users', user.uid) : null, [user, firestore])
-  const { data: userData, isLoading: isUserDocLoading } = useDoc(userDocRef)
+  const { data: userData } = useDoc(userDocRef)
   
   const handleLogout = async () => {
     try {
@@ -68,11 +70,13 @@ export function Sidebar({ className }: { className?: string }) {
     }
   }
 
-  // Filtrar items según el rol del usuario
   const filteredNavItems = React.useMemo(() => {
     if (!userData) return [];
     if (userData.role === 'Communicator') {
-      return navItems.filter(item => item.href === '/customers');
+      return navItems.filter(item => ['/customers', '/routes'].includes(item.href));
+    }
+    if (userData.role === 'Replenisher') {
+      return navItems.filter(item => item.href === '/routes');
     }
     return navItems;
   }, [userData]);
@@ -119,25 +123,13 @@ export function Sidebar({ className }: { className?: string }) {
             </Avatar>
             {state === "expanded" && (
               <div className="flex flex-col overflow-hidden">
-                <span className="text-sm font-semibold truncate">
-                  {userData?.name || user.email?.split('@')[0] || 'Usuario'}
-                </span>
-                <span className="text-[10px] text-muted-foreground truncate uppercase font-bold tracking-tighter">
-                  {isUserDocLoading ? 'Cargando...' : (userData?.role || 'Sin Rol')}
-                </span>
+                <span className="text-sm font-semibold truncate">{userData?.name || 'Usuario'}</span>
+                <span className="text-[10px] text-muted-foreground truncate uppercase font-bold">{userData?.role || 'Sin Rol'}</span>
               </div>
             )}
           </div>
         )}
-        <Button 
-          variant="ghost" 
-          className={cn(
-            "w-full text-destructive hover:text-destructive hover:bg-destructive/10",
-            state === "collapsed" ? "justify-center px-0" : "justify-start"
-          )}
-          onClick={handleLogout}
-          title="Cerrar sesión"
-        >
+        <Button variant="ghost" className="w-full text-destructive" onClick={handleLogout}>
           <LogOut className={cn("h-4 w-4", state === "expanded" && "mr-2")} />
           {state === "expanded" && <span>Cerrar sesión</span>}
         </Button>
@@ -150,33 +142,27 @@ export function MobileNav() {
   const pathname = usePathname()
   const { userData } = useUser()
   
-  // Custom list for mobile based on role
   const mobileItems = React.useMemo(() => {
     if (!userData) return [];
-    if (userData.role === 'Communicator') {
-      return [{ href: "/customers", label: "Clientes", icon: Users }];
-    }
+    if (userData.role === 'Replenisher') return [{ href: "/routes", label: "Rutas", icon: Truck }];
+    if (userData.role === 'Communicator') return [
+      { href: "/customers", label: "Clientes", icon: Users },
+      { href: "/routes", label: "Rutas", icon: Truck }
+    ];
     return [
       { href: "/", label: "Dashboard", icon: LayoutDashboard },
       { href: "/customers", label: "Clientes", icon: Users },
+      { href: "/routes", label: "Rutas", icon: Truck },
       { href: "/transactions", label: "Operaciones", icon: ArrowLeftRight },
-      { href: "/analysis", label: "Análisis", icon: BarChart3 },
       { href: "/accounts", label: "Cajas", icon: Wallet },
     ];
   }, [userData]);
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[100] bg-background/60 backdrop-blur-xl border-t border-primary/10 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] flex items-center justify-around px-4 py-3 pb-[calc(1rem+env(safe-area-inset-bottom))] md:hidden">
+    <div className="fixed bottom-0 left-0 right-0 z-[100] bg-background/60 backdrop-blur-xl border-t flex items-center justify-around px-4 py-3 pb-[calc(1rem+env(safe-area-inset-bottom))] md:hidden">
       {mobileItems.map((item) => (
-        <Link
-          key={item.href}
-          href={item.href}
-          className={cn(
-            "flex flex-col items-center gap-1.5 p-1 rounded-md transition-all active:scale-90",
-            pathname === item.href ? "text-primary font-bold" : "text-muted-foreground/80"
-          )}
-        >
-          <item.icon className={cn("h-6 w-6", pathname === item.href && "stroke-[2.5px]")} />
+        <Link key={item.href} href={item.href} className={cn("flex flex-col items-center gap-1.5", pathname === item.href ? "text-primary font-bold" : "text-muted-foreground")}>
+          <item.icon className="h-6 w-6" />
           <span className="text-[9px] uppercase tracking-wider font-bold">{item.label}</span>
         </Link>
       ))}
