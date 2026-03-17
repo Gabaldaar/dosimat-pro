@@ -12,10 +12,9 @@ export const metadata: Metadata = {
   description: 'Sistema inteligente para el mantenimiento de piscinas y control financiero',
   icons: {
     icon: [
-      { url: 'https://placehold.co/32x32/3b82f6/white?text=D', sizes: '32x32', type: 'image/png' },
-      { url: 'https://placehold.co/192x192/3b82f6/white?text=DP', sizes: '192x192', type: 'image/png' }
+      { url: 'https://i.ibb.co/tM1VCHQ5/logo.png', type: 'image/png' },
     ],
-    apple: 'https://placehold.co/180x180/3b82f6/white?text=DP',
+    apple: 'https://i.ibb.co/tM1VCHQ5/logo.png',
   },
 };
 
