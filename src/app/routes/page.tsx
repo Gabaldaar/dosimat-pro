@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect, Suspense, useCallback } from "react"
@@ -284,11 +285,11 @@ function RoutesContent() {
     window.open(`https://wa.me/${num}`, '_blank')
   }
 
-  const handlePrint = useCallback(() => {
+  const handlePrint = () => {
     if (typeof window !== 'undefined') {
       window.print();
     }
-  }, []);
+  };
 
   const handleShareLink = () => {
     if (!selectedSheetId || !selectedSheet) return
@@ -323,10 +324,10 @@ function RoutesContent() {
               )
             ) : (
               <div className="flex gap-2">
-                <Button variant="outline" size="icon" onClick={handleShareLink} className="text-emerald-600 border-emerald-200" title="Compartir Link de acceso">
+                <Button type="button" variant="outline" size="icon" onClick={handleShareLink} className="text-emerald-600 border-emerald-200" title="Compartir Link de acceso">
                   <LinkIcon className="h-4 w-4" />
                 </Button>
-                <Button variant="outline" size="icon" onClick={handlePrint} className="text-primary border-primary/20" title="Imprimir / Exportar PDF">
+                <Button type="button" variant="outline" size="icon" onClick={handlePrint} className="text-primary border-primary/20" title="Imprimir / Exportar PDF">
                   <Printer className="h-4 w-4" />
                 </Button>
                 {isAdmin && (
@@ -622,7 +623,7 @@ function RoutesContent() {
                                               placeholder="0" 
                                               value={item.cashCollected} 
                                               onChange={(e) => updateItemField(item.clientId, 'cashCollected', Number(e.target.value))} 
-                                              className="h-9 w-24 bg-white border-emerald-200 text-center font-bold"
+                                              className="h-9 w-48 bg-white border-emerald-200 text-center font-bold"
                                             />
                                           </div>
                                           {!item.isDelivered && (isAdmin || isReplenisher) && (
