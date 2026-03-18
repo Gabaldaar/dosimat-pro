@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Sparkles, Send, Copy, RefreshCw, MessageSquare, Mail, Phone, Info, Droplets } from "lucide-react"
+import { Sparkles, Send, Copy, RefreshCw, MessageSquare, Mail, Phone, Info, Droplets, AlertTriangle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { generatePersonalizedNotification, type GenerateNotificationOutput } from "@/ai/flows/generate-personalized-notifications"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
@@ -223,6 +223,13 @@ export default function NotificationsPage() {
                       {result.suggestedAction}
                     </div>
                   </div>
+
+                  <Card className="bg-amber-50 border-amber-200 p-3 shadow-none border-dashed">
+                    <div className="flex gap-2 text-amber-800 italic text-[10px]">
+                      <AlertTriangle className="h-3 w-3 shrink-0" />
+                      <p>Nota: Al usar email, verifique que la cuenta remitente sea la correcta en su Outlook/Gmail.</p>
+                    </div>
+                  </Card>
 
                   <div className="grid grid-cols-2 gap-3 pt-2">
                     <Button onClick={sendWhatsApp} className="bg-emerald-600 hover:bg-emerald-700 font-bold h-11 gap-2">

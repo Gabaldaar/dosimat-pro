@@ -216,7 +216,6 @@ function TransactionsContent() {
       
       const itemsToLoad: any[] = []
       
-      // Helper to match products flexibly (case and accent insensitive)
       const findProduct = (searchTerm: string) => {
         const normalizedSearch = searchTerm.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         return catalog.find(p => {
@@ -227,9 +226,7 @@ function TransactionsContent() {
       };
 
       if (preCloro && Number(preCloro) > 0) {
-        // Intenta buscar "cloro" o el nombre técnico "hipoclorito"
         let cloroProd = findProduct("cloro") || findProduct("hipoclorito");
-        
         if (cloroProd) {
           const defaultCurrency = (cloroProd.priceARS || 0) > 0 ? 'ARS' : 'USD';
           const defaultPrice = (cloroProd.priceARS || 0) > 0 ? cloroProd.priceARS : cloroProd.priceUSD;
@@ -245,7 +242,7 @@ function TransactionsContent() {
       }
 
       if (preAcido && Number(preAcido) > 0) {
-        const acidoProd = findProduct("acido"); // Normalizado encuentra "ácido"
+        const acidoProd = findProduct("acido");
         if (acidoProd) {
           const defaultCurrency = (acidoProd.priceARS || 0) > 0 ? 'ARS' : 'USD';
           const defaultPrice = (acidoProd.priceARS || 0) > 0 ? acidoProd.priceARS : acidoProd.priceUSD;
@@ -1497,6 +1494,18 @@ function TransactionsContent() {
                   </div>
                 </Card>
               )}
+
+              <Card className="bg-amber-100 border-amber-400 p-4 border-2">
+                <div className="flex gap-3 text-amber-900">
+                  <AlertTriangle className="h-6 w-6 shrink-0 text-amber-600" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-bold uppercase">Verificar Remitente</p>
+                    <p className="text-xs leading-relaxed">
+                      Al abrir su aplicación de correo, asegúrese de seleccionar la cuenta <b>Remitente (De)</b> correcta antes de enviar este mensaje.
+                    </p>
+                  </div>
+                </div>
+              </Card>
 
               {selectedTemplateId && (
                 <div className="p-4 bg-muted/20 rounded border space-y-2 max-h-[300px] overflow-y-auto shadow-inner">
