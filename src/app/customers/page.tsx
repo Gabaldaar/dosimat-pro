@@ -95,9 +95,11 @@ function CustomersContent() {
   const [isBulkEmailOpen, setIsBulkEmailOpen] = useState(false)
   const [isWsDialogOpen, setIsWsDialogOpen] = useState(false)
   const [isBulkWsOpen, setIsBulkWsOpen] = useState(false)
+  const [isDirectEmailWarningOpen, setIsDirectEmailWarningOpen] = useState(false)
   
   const [selectedTxForWs, setSelectedTxForWs] = useState<any | null>(null)
   const [customerToDelete, setCustomerToDelete] = useState<any | null>(null)
+  const [customerForDirectEmail, setCustomerForDirectEmail] = useState<any | null>(null)
   
   const [selectedTemplateId, setSelectedTemplateId] = useState("")
   const [selectedWsTemplateId, setSelectedWsTemplateId] = useState("")
@@ -120,7 +122,7 @@ function CustomersContent() {
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        const anyOpen = isDialogOpen || isZoneManagerOpen || isBulkEmailOpen || isWsDialogOpen || !!customerToDelete || isBulkWsOpen;
+        const anyOpen = isDialogOpen || isZoneManagerOpen || isBulkEmailOpen || isWsDialogOpen || !!customerToDelete || isBulkWsOpen || isDirectEmailWarningOpen;
         if (!anyOpen) {
           document.body.style.pointerEvents = 'auto';
         }
@@ -128,7 +130,7 @@ function CustomersContent() {
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isDialogOpen, isZoneManagerOpen, isBulkEmailOpen, isWsDialogOpen, customerToDelete, isBulkWsOpen]);
+  }, [isDialogOpen, isZoneManagerOpen, isBulkEmailOpen, isWsDialogOpen, customerToDelete, isBulkWsOpen, isDirectEmailWarningOpen]);
 
   const extractDynamicKeys = (text: string) => {
     const regex = /\{\{\?([^}]+)\}\}/g;
@@ -519,6 +521,23 @@ function CustomersContent() {
     }
   }
 
+  const handleOpenDirectEmailWarning = (customer: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!customer.mail) {
+      toast({ title: "Sin Email", description: "Este cliente no tiene correo registrado.", variant: "destructive" });
+      return;
+    }
+    setCustomerForDirectEmail(customer);
+    setIsDirectEmailWarningOpen(true);
+  }
+
+  const handleConfirmDirectEmail = () => {
+    if (customerForDirectEmail?.mail) {
+      window.location.href = `mailto:${customerForDirectEmail.mail}`;
+    }
+    setIsDirectEmailWarningOpen(false);
+  }
+
   const currentTemplate = emailTemplates?.find(t => t.id === selectedTemplateId);
   const currentWsTemplate = wsTemplates?.find(t => t.id === selectedWsTemplateId);
 
@@ -829,14 +848,7 @@ function CustomersContent() {
                             variant="outline" 
                             size="icon" 
                             className="h-9 w-9"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (customer.mail) {
-                                window.location.href = `mailto:${customer.mail}`;
-                              } else {
-                                toast({ title: "Sin Email", description: "Este cliente no tiene correo registrado.", variant: "destructive" });
-                              }
-                            }}
+                            onClick={(e) => handleOpenDirectEmailWarning(customer, e)}
                             title="Enviar Email"
                           >
                             <Mail className="h-4 w-4" />
@@ -1325,6 +1337,36 @@ function CustomersContent() {
                   <Send className="h-4 w-4" /> Enviar
                 </Button>
               </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isDirectEmailWarningOpen} onOpenChange={setIsDirectEmailWarningOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Mail className="h-5 w-5 text-primary" /> Aviso de Seguridad
+              </DialogTitle>
+              <DialogDescription>
+                Se abrirá tu programa de correo para escribirle a <b>{customerForDirectEmail?.apellido}, {customerForDirectEmail?.nombre}</b>.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <Card className="bg-amber-100 border-amber-400 p-4 border-2">
+                <div className="flex gap-3 text-amber-900">
+                  <AlertTriangle className="h-6 w-6 shrink-0 text-amber-600" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-bold uppercase">Verificar Remitente</p>
+                    <p className="text-xs leading-relaxed">
+                      Al abrir tu aplicación de correo, asegurate de seleccionar la cuenta <b>Remitente (De:)</b> correspondiente a <b>DOSIMAT</b> antes de enviar este mensaje.
+                    </p>
+                  </div>
+                </div>
+              </Card>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsDirectEmailWarningOpen(false)}>Cancelar</Button>
+              <Button onClick={handleConfirmDirectEmail} className="bg-primary font-bold">Continuar al Email</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
