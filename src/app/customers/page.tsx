@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
@@ -1117,9 +1116,9 @@ function CustomersContent() {
                 <div className="flex gap-3 text-amber-900">
                   <AlertTriangle className="h-6 w-6 shrink-0 text-amber-600" />
                   <div className="space-y-1">
-                    <p className="text-sm font-bold uppercase">Aviso de Remitente</p>
+                    <p className="text-sm font-bold uppercase">Verificar Remitente</p>
                     <p className="text-xs leading-relaxed">
-                      Al abrir su programa de correo (Outlook, Gmail, etc.), asegúrese de que la cuenta <b>Remitente (De)</b> sea la correcta antes de enviar.
+                      Al abrir tu aplicación de correo, asegurate de seleccionar la cuenta <b>Remitente (De:)</b> correspondiente a <b>DOSIMAT</b> antes de enviar este mensaje.
                     </p>
                   </div>
                 </div>

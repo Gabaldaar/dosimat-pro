@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
@@ -1513,7 +1512,7 @@ function TransactionsContent() {
                   <div className="space-y-1">
                     <p className="text-sm font-bold uppercase">Verificar Remitente</p>
                     <p className="text-xs leading-relaxed">
-                      Al abrir su aplicación de correo, asegúrese de seleccionar la cuenta <b>Remitente (De)</b> correcta antes de enviar este mensaje.
+                      Al abrir tu aplicación de correo, asegurate de seleccionar la cuenta <b>Remitente (De:)</b> correspondiente a <b>DOSIMAT</b> antes de enviar este mensaje.
                     </p>
                   </div>
                 </div>

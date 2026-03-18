@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo } from "react"
@@ -227,7 +226,7 @@ export default function NotificationsPage() {
                   <Card className="bg-amber-50 border-amber-200 p-3 shadow-none border-dashed">
                     <div className="flex gap-2 text-amber-800 italic text-[10px]">
                       <AlertTriangle className="h-3 w-3 shrink-0" />
-                      <p>Nota: Al usar email, verifique que la cuenta remitente sea la correcta en su Outlook/Gmail.</p>
+                      <p>Al abrir tu aplicación de correo, asegurate de seleccionar la cuenta <b>Remitente (De:)</b> correspondiente a <b>DOSIMAT</b> antes de enviar este mensaje.</p>
                     </div>
                   </Card>
 
