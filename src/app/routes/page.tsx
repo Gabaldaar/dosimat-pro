@@ -95,6 +95,19 @@ function RoutesContent() {
   const [isNewSheetOpen, setIsNewSheetOpen] = useState(false)
   const [sheetToDelete, setSheetToDelete] = useState<any | null>(null)
 
+  // Fix for pointer-events stuck in 'none' after dialog closures
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      if (document.body.style.pointerEvents === 'none') {
+        if (!isNewSheetOpen && !sheetToDelete) {
+          document.body.style.pointerEvents = 'auto';
+        }
+      }
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+    return () => observer.disconnect();
+  }, [isNewSheetOpen, sheetToDelete]);
+
   // Queries
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const zonesQuery = useMemoFirebase(() => collection(db, 'zones'), [db])
@@ -104,7 +117,6 @@ function RoutesContent() {
   const { data: zones } = useCollection(zonesQuery)
   const { data: rawRouteSheets, isLoading: loadingSheets } = useCollection(routesQuery)
 
-  // Manejo de parámetro sheetId en la URL para links compartidos
   useEffect(() => {
     const sheetId = searchParams.get('sheetId')
     if (sheetId) {
@@ -113,11 +125,9 @@ function RoutesContent() {
     }
   }, [searchParams])
 
-  // Filtrado de hojas de ruta según rol
   const routeSheets = useMemo(() => {
     if (!rawRouteSheets) return []
     if (isReplenisher) {
-      // El repositor no ve planillas "planned", solo las que están listas para ejecutar o terminadas
       return rawRouteSheets.filter(s => s.status === 'active' || s.status === 'completed')
     }
     return rawRouteSheets
@@ -450,8 +460,8 @@ function RoutesContent() {
                             <p className="text-xs font-bold text-rose-400">/ {loadTotals.plannedAcid} planeados</p>
                           </div>
                           {selectedSheet.status !== 'planned' && (
-                            <div className="mt-2 h-1.5 w-full bg-rose-200 rounded-full overflow-hidden">
-                              <Progress value={Math.min(100, (loadTotals.realAcid / (loadTotals.plannedAcid || 1)) * 100)} className="h-full bg-rose-600" />
+                            <div className="mt-2 h-1.5 w-full bg-blue-200 rounded-full overflow-hidden">
+                              <Progress value={Math.min(100, (loadTotals.realAcid / (loadTotals.plannedAcid || 1)) * 100)} className="h-full bg-blue-600" />
                             </div>
                           )}
                         </div>

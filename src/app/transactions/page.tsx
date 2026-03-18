@@ -107,7 +107,6 @@ function TransactionsContent() {
   const isAdmin = userData?.role === 'Admin'
   const searchParams = useSearchParams()
   
-  // URL Params for Pre-loading from Route Sheet
   const clientIdParam = searchParams.get('clientId')
   const accountIdParam = searchParams.get('accountId')
   const modeParam = searchParams.get('mode')
@@ -136,6 +135,20 @@ function TransactionsContent() {
 
   const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({})
   const [dynamicKeys, setDynamicKeys] = useState<string[]>([])
+
+  // Fix for pointer-events stuck in 'none' after dialog closures
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      if (document.body.style.pointerEvents === 'none') {
+        const anyOpen = selectedTxDetails || isEmailDialogOpen || isWsDialogOpen || txToDelete;
+        if (!anyOpen) {
+          document.body.style.pointerEvents = 'auto';
+        }
+      }
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+    return () => observer.disconnect();
+  }, [selectedTxDetails, isEmailDialogOpen, isWsDialogOpen, txToDelete]);
 
   const [filterCustomer, setFilterCustomer] = useState("all")
   const [filterAccount, setFilterAccount] = useState("all")
@@ -208,7 +221,6 @@ function TransactionsContent() {
   const [txDescription, setTxDescription] = useState("")
   const [cobroSource, setCobroSource] = useState("sale")
 
-  // PRE-LOAD LOGIC FROM URL (ROUTE SHEET)
   useEffect(() => {
     if (modeParam === 'new' && catalog && catalog.length > 0) {
       setMainView("register")
