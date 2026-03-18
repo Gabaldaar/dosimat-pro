@@ -1,12 +1,11 @@
-
 'use client';
 
-import { useUser } from '@/firebase';
-import { Loader2, Droplets, ShieldAlert, Clock, Ban } from 'lucide-react';
+import { useUser } from '../../firebase';
+import { Loader2, Droplets, Clock, Ban } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { useFirebase } from '@/firebase';
+import { useFirebase } from '../../firebase';
 import { signOut } from 'firebase/auth';
 
 /**
@@ -106,8 +105,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Solo renderizamos la aplicación si el usuario está aprobado (Admin, Employee o Communicator)
-  if (role === 'Admin' || role === 'Employee' || role === 'Communicator') {
+  // Solo renderizamos la aplicación si el usuario está aprobado (Admin, Employee, Communicator o Replenisher)
+  if (role === 'Admin' || role === 'Employee' || role === 'Communicator' || role === 'Replenisher') {
     return <>{children}</>;
   }
 

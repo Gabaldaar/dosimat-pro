@@ -63,7 +63,7 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select"
-import { useToast } from "@/hooks/use-toast"
+import { useToast } from "../../hooks/use-toast"
 import { 
   useFirestore, 
   useCollection, 
@@ -72,7 +72,7 @@ import {
   deleteDocumentNonBlocking, 
   updateDocumentNonBlocking, 
   useUser
-} from "@/firebase"
+} from "../../firebase"
 import { collection, doc, query, orderBy } from "firebase/firestore"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"

@@ -9,10 +9,10 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Sparkles, Send, Copy, RefreshCw, MessageSquare, Mail, Phone, Info, Droplets, AlertTriangle } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+import { useToast } from "../../hooks/use-toast"
 import { generatePersonalizedNotification, type GenerateNotificationOutput } from "@/ai/flows/generate-personalized-notifications"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
-import { useCollection, useMemoFirebase, useFirestore } from "@/firebase"
+import { useCollection, useMemoFirebase, useFirestore } from "../../firebase"
 import { collection } from "firebase/firestore"
 
 export default function NotificationsPage() {

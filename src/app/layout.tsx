@@ -2,7 +2,7 @@
 import type {Metadata, Viewport} from 'next';
 import './globals.css';
 import {Toaster} from '@/components/ui/toaster';
-import { FirebaseClientProvider } from '@/firebase/client-provider';
+import { FirebaseClientProvider } from '../firebase/client-provider';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import Script from 'next/script';

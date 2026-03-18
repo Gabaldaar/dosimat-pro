@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react"
@@ -20,7 +19,7 @@ import {
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { useFirebase, useDoc, useMemoFirebase, useUser } from "@/firebase"
+import { useFirebase, useDoc, useMemoFirebase, useUser } from "../../firebase"
 import { signOut } from "firebase/auth"
 import { doc } from "firebase/firestore"
 import {
