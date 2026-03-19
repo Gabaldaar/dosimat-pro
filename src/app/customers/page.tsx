@@ -1,8 +1,9 @@
+
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -67,10 +68,21 @@ import { Progress } from "@/components/ui/progress"
 function CustomersContent() {
   const { toast } = useToast()
   const db = useFirestore()
-  const { user, userData } = useUser()
+  const router = useRouter()
+  const { user, userData, isUserLoading } = useUser()
   const isAdmin = userData?.role === 'Admin'
   const isCommunicator = userData?.role === 'Communicator'
+  const isReplenisher = userData?.role === 'Replenisher'
   const searchParams = useSearchParams()
+
+  // Redirección por Rol
+  useEffect(() => {
+    if (!isUserLoading && userData) {
+      if (userData.role === 'Replenisher') {
+        router.replace('/routes')
+      }
+    }
+  }, [userData, isUserLoading, router])
   
   const [searchTerm, setSearchTerm] = useState("")
   const [filterBalance, setFilterBalance] = useState("all") 
@@ -257,7 +269,7 @@ function CustomersContent() {
   }
 
   const handleOpenDialog = (customer?: any) => {
-    if (isCommunicator) return;
+    if (isCommunicator || isReplenisher) return;
     if (customer) {
       setEditingCustomer(customer)
       setFormData({
@@ -276,7 +288,7 @@ function CustomersContent() {
   }
 
   const handleSave = () => {
-    if (isCommunicator) return;
+    if (isCommunicator || isReplenisher) return;
     if (!formData.nombre || !formData.apellido) {
       toast({ title: "Error", description: "Nombre y Apellido son obligatorios", variant: "destructive" })
       return
@@ -301,7 +313,7 @@ function CustomersContent() {
   }
 
   const confirmDelete = () => {
-    if (!customerToDelete || isCommunicator) return;
+    if (!customerToDelete || isCommunicator || isReplenisher) return;
     if (!isAdmin) {
       toast({ title: "Acceso denegado", description: "Solo administradores pueden eliminar clientes.", variant: "destructive" })
       return
@@ -367,7 +379,7 @@ function CustomersContent() {
   }
 
   const handleAddZone = () => {
-    if (!isAdmin || isCommunicator) return
+    if (!isAdmin || isCommunicator || isReplenisher) return
     if (!newZoneName.trim()) return
     const id = Math.random().toString(36).substring(2, 11)
     setDocumentNonBlocking(doc(db, 'zones', id), { id, name: newZoneName }, { merge: true })
@@ -376,7 +388,7 @@ function CustomersContent() {
   }
 
   const handleDeleteZone = (id: string) => {
-    if (!isAdmin || isCommunicator) return
+    if (!isAdmin || isCommunicator || isReplenisher) return
     if (confirm("¿Eliminar esta zona?")) {
       deleteDocumentNonBlocking(doc(db, 'zones', id))
       toast({ title: "Zona eliminada" })
@@ -541,6 +553,17 @@ function CustomersContent() {
   const currentTemplate = emailTemplates?.find(t => t.id === selectedTemplateId);
   const currentWsTemplate = wsTemplates?.find(t => t.id === selectedWsTemplateId);
 
+  if (isUserLoading || userData?.role === 'Replenisher') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="mt-4 text-sm text-muted-foreground font-medium">
+          {userData?.role === 'Replenisher' ? 'Redirigiendo a Rutas...' : 'Cargando...'}
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="flex min-h-screen bg-background w-full">
       <Sidebar />
@@ -583,7 +606,7 @@ function CustomersContent() {
                 <MapPinned className="mr-2 h-4 w-4" /> Zonas
               </Button>
             )}
-            {!isCommunicator && (
+            {!isCommunicator && !isReplenisher && (
               <Button onClick={() => handleOpenDialog()} className="shadow-lg shadow-primary/20 font-bold">
                 <Plus className="mr-2 h-5 w-5" /> Nuevo
               </Button>
@@ -707,9 +730,9 @@ function CustomersContent() {
                   key={customer.id} 
                   className={cn(
                     "glass-card hover:shadow-md transition-all group relative overflow-hidden",
-                    !isCommunicator && "cursor-pointer"
+                    (!isCommunicator && !isReplenisher) && "cursor-pointer"
                   )}
-                  onClick={() => !isCommunicator && handleOpenDialog(customer)}
+                  onClick={() => (!isCommunicator && !isReplenisher) && handleOpenDialog(customer)}
                 >
                   <div className={cn(
                     "absolute top-0 left-0 w-1.5 h-full",
@@ -769,7 +792,7 @@ function CustomersContent() {
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0">
-                          {!isCommunicator && (
+                          {!isCommunicator && !isReplenisher && (
                             <>
                               <Button 
                                 variant="default" 
@@ -862,7 +885,7 @@ function CustomersContent() {
                           >
                             <Copy className="h-4 w-4" />
                           </Button>
-                          {isAdmin && !isCommunicator && (
+                          {isAdmin && !isCommunicator && !isReplenisher && (
                             <Button 
                               variant="ghost" 
                               size="icon" 
@@ -884,7 +907,7 @@ function CustomersContent() {
 
         <div className="h-40" />
 
-        {!isCommunicator && (
+        {!isCommunicator && !isReplenisher && (
           <Dialog open={isDialogOpen} onOpenChange={(o) => {
             setIsDialogOpen(o);
             if(!o) setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);

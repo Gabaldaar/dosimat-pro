@@ -72,9 +72,14 @@ export default function TeamPage() {
   const { user: currentUser, userData, isUserLoading } = useUser()
   const isAdmin = userData?.role === 'Admin'
 
+  // Redirecciones por Rol
   useEffect(() => {
-    if (!isUserLoading && userData?.role === 'Communicator') {
-      router.replace('/customers')
+    if (!isUserLoading && userData) {
+      if (userData.role === 'Replenisher') {
+        router.replace('/routes')
+      } else if (userData.role === 'Communicator') {
+        router.replace('/customers')
+      }
     }
   }, [userData, isUserLoading, router])
 
@@ -125,10 +130,15 @@ export default function TeamPage() {
 
   const pendingCount = useMemo(() => team?.filter(m => m.role === 'Pending').length || 0, [team]);
 
-  if (isUserLoading) {
+  if (isUserLoading || userData?.role === 'Replenisher' || userData?.role === 'Communicator') {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="mt-4 text-sm text-muted-foreground">
+          {userData?.role === 'Replenisher' ? 'Redirigiendo a Rutas...' : 
+           userData?.role === 'Communicator' ? 'Redirigiendo a Clientes...' : 
+           'Accediendo...'}
+        </p>
       </div>
     )
   }

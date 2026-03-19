@@ -33,10 +33,14 @@ export default function Dashboard() {
   const router = useRouter()
   const { userData, isUserLoading } = useUser()
 
-  // Redirección para el rol Comunicador: No debe ver el Dashboard
+  // Redirecciones por Rol
   useEffect(() => {
-    if (!isUserLoading && userData?.role === 'Communicator') {
-      router.replace('/customers')
+    if (!isUserLoading && userData) {
+      if (userData.role === 'Replenisher') {
+        router.replace('/routes')
+      } else if (userData.role === 'Communicator') {
+        router.replace('/customers')
+      }
     }
   }, [userData, isUserLoading, router])
 
@@ -103,13 +107,14 @@ export default function Dashboard() {
 
   const isLoading = loadingAccounts || loadingTx || loadingClients || isUserLoading
 
-  // Mientras carga o si es comunicador (esperando redirección), mostramos loader
-  if (isUserLoading || userData?.role === 'Communicator') {
+  if (isUserLoading || userData?.role === 'Communicator' || userData?.role === 'Replenisher') {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <p className="mt-4 text-sm text-muted-foreground font-medium">
-          {userData?.role === 'Communicator' ? 'Accediendo a Clientes...' : 'Cargando aplicación...'}
+          {userData?.role === 'Replenisher' ? 'Accediendo a Rutas...' : 
+           userData?.role === 'Communicator' ? 'Accediendo a Clientes...' : 
+           'Cargando aplicación...'}
         </p>
       </div>
     )

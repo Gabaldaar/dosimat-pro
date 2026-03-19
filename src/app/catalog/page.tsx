@@ -81,9 +81,14 @@ export default function CatalogPage() {
   const { userData, isUserLoading } = useUser()
   const isAdmin = userData?.role === 'Admin'
 
+  // Redirecciones por Rol
   useEffect(() => {
-    if (!isUserLoading && userData?.role === 'Communicator') {
-      router.replace('/customers')
+    if (!isUserLoading && userData) {
+      if (userData.role === 'Replenisher') {
+        router.replace('/routes')
+      } else if (userData.role === 'Communicator') {
+        router.replace('/customers')
+      }
     }
   }, [userData, isUserLoading, router])
 
@@ -447,10 +452,15 @@ export default function CatalogPage() {
     </div>
   )
 
-  if (isUserLoading) {
+  if (isUserLoading || userData?.role === 'Replenisher' || userData?.role === 'Communicator') {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="mt-4 text-sm text-muted-foreground font-medium">
+          {userData?.role === 'Replenisher' ? 'Redirigiendo a Rutas...' : 
+           userData?.role === 'Communicator' ? 'Redirigiendo a Clientes...' : 
+           'Accediendo...'}
+        </p>
       </div>
     )
   }
@@ -835,7 +845,7 @@ export default function CatalogPage() {
       <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-primary font-bold">
+            <DialogTitle className="flex items-gap-2 text-primary font-bold">
               <Tag className="h-5 w-5" /> Categorías de Productos
             </DialogTitle>
             <DialogDescription>Administra los grupos y marca tus favoritos para el filtro inicial.</DialogDescription>

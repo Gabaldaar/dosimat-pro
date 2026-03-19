@@ -62,10 +62,14 @@ export default function TemplatesPage() {
   const { userData, isUserLoading } = useUser()
   const isAdmin = userData?.role === 'Admin'
 
-  // Redirección para el rol Comunicador (No puede ver plantillas)
+  // Redirecciones por Rol
   useEffect(() => {
-    if (!isUserLoading && userData?.role === 'Communicator') {
-      router.replace('/customers')
+    if (!isUserLoading && userData) {
+      if (userData.role === 'Replenisher') {
+        router.replace('/routes')
+      } else if (userData.role === 'Communicator') {
+        router.replace('/customers')
+      }
     }
   }, [userData, isUserLoading, router])
   
@@ -152,11 +156,15 @@ export default function TemplatesPage() {
     toast({ title: "Copiado", description: `${text} listo para pegar.` })
   }
 
-  if (isUserLoading || (userData?.role === 'Communicator')) {
+  if (isUserLoading || userData?.role === 'Replenisher' || userData?.role === 'Communicator') {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="mt-4 text-sm text-muted-foreground">Accediendo...</p>
+        <p className="mt-4 text-sm text-muted-foreground">
+          {userData?.role === 'Replenisher' ? 'Redirigiendo a Rutas...' : 
+           userData?.role === 'Communicator' ? 'Redirigiendo a Clientes...' : 
+           'Accediendo...'}
+        </p>
       </div>
     )
   }

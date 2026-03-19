@@ -59,10 +59,14 @@ export default function AnalysisPage() {
   const router = useRouter()
   const { userData, isUserLoading } = useUser()
 
-  // Redirección para el rol Comunicador: No debe ver análisis
+  // Redirección por Rol
   useEffect(() => {
-    if (!isUserLoading && userData?.role === 'Communicator') {
-      router.replace('/customers')
+    if (!isUserLoading && userData) {
+      if (userData.role === 'Replenisher') {
+        router.replace('/routes')
+      } else if (userData.role === 'Communicator') {
+        router.replace('/customers')
+      }
     }
   }, [userData, isUserLoading, router])
   
@@ -243,12 +247,14 @@ export default function AnalysisPage() {
       .slice(0, 5)
   }, [filteredTxsByCurrency, clients, zones])
 
-  if (isUserLoading || userData?.role === 'Communicator') {
+  if (isUserLoading || userData?.role === 'Communicator' || userData?.role === 'Replenisher') {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <p className="mt-4 text-sm text-muted-foreground font-medium">
-          {userData?.role === 'Communicator' ? 'Redirigiendo a Clientes...' : 'Accediendo...'}
+          {userData?.role === 'Replenisher' ? 'Redirigiendo a Rutas...' : 
+           userData?.role === 'Communicator' ? 'Redirigiendo a Clientes...' : 
+           'Accediendo...'}
         </p>
       </div>
     )
@@ -364,7 +370,7 @@ export default function AnalysisPage() {
               </div>
               <div className="space-y-1">
                 <h3 className={cn("text-2xl font-black", (summary.ARS.income - summary.ARS.expense) >= 0 ? "text-primary" : "text-rose-600")}>
-                  ${(summary.ARS.income - summary.ARS.expense).toLocaleString('es-AR')}
+                  ${{(summary.ARS.income - summary.ARS.expense).toLocaleString('es-AR')}
                 </h3>
                 <p className={cn("text-sm font-bold", (summary.USD.income - summary.USD.expense) >= 0 ? "text-primary" : "text-rose-600")}>
                   u$s {(summary.USD.income - summary.USD.expense).toLocaleString('es-AR')}

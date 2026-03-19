@@ -1,6 +1,8 @@
+
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,14 +13,25 @@ import { Sparkles, Send, Copy, RefreshCw, MessageSquare, Mail, Phone, Info, Drop
 import { useToast } from "../../hooks/use-toast"
 import { generatePersonalizedNotification, type GenerateNotificationOutput } from "@/ai/flows/generate-personalized-notifications"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
-import { useCollection, useMemoFirebase, useFirestore } from "../../firebase"
+import { useCollection, useMemoFirebase, useFirestore, useUser } from "../../firebase"
 import { collection } from "firebase/firestore"
 
 export default function NotificationsPage() {
   const { toast } = useToast()
   const db = useFirestore()
+  const router = useRouter()
+  const { userData, isUserLoading } = useUser()
   const [isLoading, setIsLoading] = useState(false)
   const [result, setResult] = useState<GenerateNotificationOutput | null>(null)
+
+  // Redirecciones por Rol
+  useEffect(() => {
+    if (!isUserLoading && userData) {
+      if (userData.role === 'Replenisher') {
+        router.replace('/routes')
+      }
+    }
+  }, [userData, isUserLoading, router])
   
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const { data: customers } = useCollection(clientsQuery)
@@ -97,6 +110,17 @@ export default function NotificationsPage() {
     const subject = formData.eventType === 'overduePayment' ? 'Recordatorio de Pago - Dosimat Pro' : 'Aviso de Reposición de Cloro - Dosimat Pro'
     const mailtoLink = `mailto:${selectedCustomer.mail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(result.notificationMessage)}`
     window.location.href = mailtoLink
+  }
+
+  if (isUserLoading || userData?.role === 'Replenisher') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="mt-4 text-sm text-muted-foreground font-medium">
+          {userData?.role === 'Replenisher' ? 'Redirigiendo a Rutas...' : 'Cargando...'}
+        </p>
+      </div>
+    )
   }
 
   return (
