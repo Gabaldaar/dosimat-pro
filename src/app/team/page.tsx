@@ -38,6 +38,16 @@ import {
   DialogDescription,
   DialogFooter
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking, useUser } from "../../firebase"
 import { collection, doc } from "firebase/firestore"
 import { useToast } from "../../hooks/use-toast"
@@ -69,6 +79,7 @@ export default function TeamPage() {
   }, [userData, isUserLoading, router])
 
   const [isInviteOpen, setIsInviteOpen] = useState(false)
+  const [memberToDelete, setMemberToDelete] = useState<any | null>(null)
   
   const usersQuery = useMemoFirebase(() => collection(db, 'users'), [db])
   const { data: team, isLoading } = useCollection(usersQuery)
@@ -93,6 +104,18 @@ export default function TeamPage() {
   const handleBlockUser = (userId: string) => {
     if (!isAdmin || userId === currentUser?.uid) return;
     handleUpdateRole(userId, 'Blocked');
+  }
+
+  const confirmDeleteMember = () => {
+    if (!isAdmin || !memberToDelete) return
+    
+    // Eliminar de perfiles de usuario
+    deleteDocumentNonBlocking(doc(db, 'users', memberToDelete.id))
+    // Eliminar de asignación de roles/seguridad
+    deleteDocumentNonBlocking(doc(db, 'user_roles', memberToDelete.id))
+    
+    setMemberToDelete(null)
+    toast({ title: "Miembro eliminado", description: "El acceso y el perfil han sido borrados." })
   }
 
   const sortedTeam = useMemo(() => {
@@ -138,19 +161,19 @@ export default function TeamPage() {
 
           <TabsContent value="active" className="space-y-4">
             {sortedTeam.filter(m => ['Admin', 'Employee', 'Communicator', 'Replenisher'].includes(m.role)).map((member: any) => (
-              <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onBlock={handleBlockUser} />
+              <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onBlock={handleBlockUser} onDelete={setMemberToDelete} />
             ))}
           </TabsContent>
 
           <TabsContent value="pending" className="space-y-4">
             {sortedTeam.filter(m => m.role === 'Pending').map((member: any) => (
-              <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onBlock={handleBlockUser} />
+              <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onBlock={handleBlockUser} onDelete={setMemberToDelete} />
             ))}
           </TabsContent>
 
           <TabsContent value="blocked" className="space-y-4">
             {sortedTeam.filter(m => m.role === 'Blocked').map((member: any) => (
-              <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onBlock={handleBlockUser} />
+              <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onBlock={handleBlockUser} onDelete={setMemberToDelete} />
             ))}
           </TabsContent>
         </Tabs>
@@ -166,13 +189,29 @@ export default function TeamPage() {
             <DialogFooter><Button onClick={() => setIsInviteOpen(false)} className="w-full">Entendido</Button></DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <AlertDialog open={!!memberToDelete} onOpenChange={(o) => !o && setMemberToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Confirmar eliminación de acceso?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Se borrará el perfil de <b>{memberToDelete?.name || memberToDelete?.email}</b> y perderá todo acceso al sistema. Esta acción no se puede deshacer.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeleteMember} className="bg-destructive text-destructive-foreground">Eliminar definitivamente</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
       </SidebarInset>
       <MobileNav />
     </div>
   )
 }
 
-function MemberCard({ member, isAdmin, currentUid, onUpdateRole, onBlock }: any) {
+function MemberCard({ member, isAdmin, currentUid, onUpdateRole, onBlock, onDelete }: any) {
   const roleInfo = roleDisplay[member.role] || { label: member.role, icon: UserCircle, color: 'secondary' };
   const Icon = roleInfo.icon;
   const isMe = member.id === currentUid;
@@ -203,7 +242,8 @@ function MemberCard({ member, isAdmin, currentUid, onUpdateRole, onBlock }: any)
               <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Employee')}><UserCircle className="mr-2 h-4 w-4" /> Hacer Empleado</DropdownMenuItem>
               <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Admin')}><ShieldCheck className="mr-2 h-4 w-4" /> Hacer Admin</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-rose-600" onClick={() => onBlock(member.id)}><Ban className="mr-2 h-4 w-4" /> Bloquear</DropdownMenuItem>
+              <DropdownMenuItem className="text-amber-600" onClick={() => onBlock(member.id)}><Ban className="mr-2 h-4 w-4" /> Bloquear acceso</DropdownMenuItem>
+              <DropdownMenuItem className="text-destructive font-bold" onClick={() => onDelete(member)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar definitivamente</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         )}
