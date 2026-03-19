@@ -370,7 +370,7 @@ export default function AnalysisPage() {
               </div>
               <div className="space-y-1">
                 <h3 className={cn("text-2xl font-black", (summary.ARS.income - summary.ARS.expense) >= 0 ? "text-primary" : "text-rose-600")}>
-                  ${{(summary.ARS.income - summary.ARS.expense).toLocaleString('es-AR')}
+                  ${(summary.ARS.income - summary.ARS.expense).toLocaleString('es-AR')}
                 </h3>
                 <p className={cn("text-sm font-bold", (summary.USD.income - summary.USD.expense) >= 0 ? "text-primary" : "text-rose-600")}>
                   u$s {(summary.USD.income - summary.USD.expense).toLocaleString('es-AR')}
