@@ -34,12 +34,15 @@ export default function LoginPage() {
         toast({ title: "Bienvenido", description: "Iniciando sesión..." })
         router.push("/")
       } else {
-        // Verificar si es el primer usuario del sistema para darle rol Admin
-        const usersSnap = await getDocs(query(collection(firestore, 'users'), limit(1)))
-        const isFirstUser = usersSnap.empty
-        
+        // Primero creamos el usuario en Auth. 
+        // Esto hace que el usuario quede autenticado inmediatamente en el cliente.
         const userCredential = await createUserWithEmailAndPassword(auth, email, password)
         const user = userCredential.user
+        
+        // Ahora que el usuario está autenticado, podemos consultar Firestore 
+        // para ver si es el primer usuario del sistema (requiere auth según reglas).
+        const usersSnap = await getDocs(query(collection(firestore, 'users'), limit(1)))
+        const isFirstUser = usersSnap.empty
         
         // El primer usuario es Admin, los demás entran como 'Pending' para aprobación
         const initialRole = isFirstUser ? 'Admin' : 'Pending'

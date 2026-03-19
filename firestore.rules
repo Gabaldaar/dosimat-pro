@@ -1,8 +1,17 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // REGLAS ABIERTAS PARA DESARROLLO AGIL
-    // La seguridad y permisos se gestionan desde la lógica de la aplicación
+    // Permitir lectura de la colección de usuarios para el registro inicial
+    match /users {
+      allow read: if true;
+    }
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    // El resto de la base requiere estar autenticado
     match /{document=**} {
       allow read, write: if request.auth != null;
     }
