@@ -3,7 +3,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { useFirebase, setDocumentNonBlocking, useFirestore } from "../../firebase"
+import { useFirebase, setDocumentNonBlocking } from "../../firebase"
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth"
 import { doc, getDocs, collection, query, limit } from "firebase/firestore"
 import { Button } from "@/components/ui/button"
@@ -34,20 +34,16 @@ export default function LoginPage() {
         toast({ title: "Bienvenido", description: "Iniciando sesión..." })
         router.push("/")
       } else {
-        // Primero creamos el usuario en Auth. 
-        // Esto hace que el usuario quede autenticado inmediatamente en el cliente.
+        // Primero creamos el usuario en Auth
         const userCredential = await createUserWithEmailAndPassword(auth, email, password)
         const user = userCredential.user
         
-        // Ahora que el usuario está autenticado, podemos consultar Firestore 
-        // para ver si es el primer usuario del sistema (requiere auth según reglas).
-        const usersSnap = await getDocs(query(collection(firestore, 'users'), limit(1)))
+        // El primer usuario es Admin, los demás entran como 'Pending'
+        const usersSnap = await getDocs(query(collection(firestore!, 'users'), limit(1)))
         const isFirstUser = usersSnap.empty
-        
-        // El primer usuario es Admin, los demás entran como 'Pending' para aprobación
         const initialRole = isFirstUser ? 'Admin' : 'Pending'
 
-        setDocumentNonBlocking(doc(firestore, 'users', user.uid), {
+        setDocumentNonBlocking(doc(firestore!, 'users', user.uid), {
           id: user.uid,
           name: name || email.split('@')[0],
           email: email,
@@ -56,20 +52,14 @@ export default function LoginPage() {
           updatedAt: new Date().toISOString()
         }, { merge: true })
 
-        setDocumentNonBlocking(doc(firestore, 'user_roles', user.uid), {
+        setDocumentNonBlocking(doc(firestore!, 'user_roles', user.uid), {
           roleIds: [initialRole.toLowerCase()]
         }, { merge: true })
         
         if (isFirstUser) {
-          toast({ 
-            title: "Administrador creado", 
-            description: "Has sido registrado como el primer administrador del sistema." 
-          })
+          toast({ title: "Administrador creado", description: "Has sido registrado como el primer administrador." })
         } else {
-          toast({ 
-            title: "Cuenta creada", 
-            description: "Tu acceso está pendiente de aprobación por un administrador." 
-          })
+          toast({ title: "Cuenta creada", description: "Tu acceso está pendiente de aprobación." })
         }
         router.push("/")
       }
@@ -77,12 +67,12 @@ export default function LoginPage() {
       console.error("Auth error:", error)
       let message = "Verifica tus datos o regístrate si no tienes cuenta."
       
-      if (error.code === 'auth/invalid-credential') {
+      if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
         message = "Email o contraseña incorrectos."
       } else if (error.code === 'auth/user-not-found') {
         message = "Usuario no encontrado."
       } else if (error.code === 'auth/email-already-in-use') {
-        message = "Este email ya está en uso."
+        message = "Este email ya está registrado. Si ya tienes cuenta, intenta 'Iniciar Sesión'. Si tu perfil fue eliminado por un admin, inicia sesión para solicitar acceso de nuevo."
       }
       
       toast({ 
@@ -114,35 +104,16 @@ export default function LoginPage() {
             {!isLogin && (
               <div className="space-y-2">
                 <Label htmlFor="name">Nombre Completo</Label>
-                <Input 
-                  id="name" 
-                  placeholder="Ej: Juan Pérez" 
-                  value={name} 
-                  onChange={(e) => setName(e.target.value)} 
-                  required 
-                />
+                <Input id="name" placeholder="Ej: Juan Pérez" value={name} onChange={(e) => setName(e.target.value)} required />
               </div>
             )}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input 
-                id="email" 
-                type="email" 
-                placeholder="usuario@dosimat.pro" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)} 
-                required 
-              />
+              <Input id="email" type="email" placeholder="usuario@dosimat.pro" value={email} onChange={(e) => setEmail(e.target.value)} required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Contraseña</Label>
-              <Input 
-                id="password" 
-                type="password" 
-                value={password} 
-                onChange={(e) => setPassword(e.target.value)} 
-                required 
-              />
+              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
@@ -150,12 +121,7 @@ export default function LoginPage() {
               {isLoading ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
               {isLogin ? "Iniciar Sesión" : "Registrarse"}
             </Button>
-            <Button 
-              type="button" 
-              variant="link" 
-              className="text-sm text-primary" 
-              onClick={() => setIsLogin(!isLogin)}
-            >
+            <Button type="button" variant="link" className="text-sm text-primary" onClick={() => setIsLogin(!isLogin)}>
               {isLogin ? "¿No tienes cuenta? Regístrate aquí" : "¿Ya tienes cuenta? Ingresa aquí"}
             </Button>
           </CardFooter>

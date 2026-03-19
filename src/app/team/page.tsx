@@ -21,7 +21,8 @@ import {
   Droplets,
   Loader2,
   MessageSquare,
-  Truck
+  Truck,
+  Info
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -192,25 +193,38 @@ export default function TeamPage() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Agregar colaborador</DialogTitle>
-              <DialogDescription className="pt-4 space-y-4">
-                Pide a tu colaborador que se registre con su email en la pantalla de inicio. Luego aparecerá en la pestaña de <b>"Pendientes"</b>.
+              <DialogDescription className="pt-4 space-y-4 text-sm leading-relaxed">
+                Pide a tu colaborador que se registre con su email en la pantalla de inicio. Luego aparecerá en tu pestaña de <b>"Pendientes"</b> para que le asignes un rol.
               </DialogDescription>
             </DialogHeader>
-            <DialogFooter><Button onClick={() => setIsInviteOpen(false)} className="w-full">Entendido</Button></DialogFooter>
+            <DialogFooter><Button onClick={() => setIsInviteOpen(false)} className="w-full font-bold">Entendido</Button></DialogFooter>
           </DialogContent>
         </Dialog>
 
         <AlertDialog open={!!memberToDelete} onOpenChange={(o) => !o && setMemberToDelete(null)}>
-          <AlertDialogContent>
+          <AlertDialogContent className="max-w-md">
             <AlertDialogHeader>
-              <AlertDialogTitle>¿Confirmar eliminación de acceso?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Se borrará el perfil de <b>{memberToDelete?.name || memberToDelete?.email}</b> y perderá todo acceso al sistema. Esta acción no se puede deshacer.
+              <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
+                <ShieldAlert className="h-5 w-5" /> ¿Confirmar eliminación de acceso?
+              </AlertDialogTitle>
+              <AlertDialogDescription className="space-y-4 text-sm">
+                <p>Se borrará el perfil y los permisos de <b>{memberToDelete?.name || memberToDelete?.email}</b>. Perderá acceso inmediato al sistema.</p>
+                
+                <div className="p-4 bg-amber-50 text-amber-800 rounded-xl border border-amber-200 flex gap-3">
+                  <Info className="h-5 w-5 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-bold">Aviso sobre el email:</p>
+                    <p className="italic text-[11px] leading-relaxed">
+                      El registro de login (email/password) permanecerá en la base de datos de seguridad. Si el usuario intenta entrar de nuevo, el sistema le pedirá solicitar acceso otra vez. <br/><br/>
+                      Si deseas liberar el email por completo o borrar su contraseña permanentemente, deberás hacerlo manualmente desde la <b>Consola de Firebase</b>.
+                    </p>
+                  </div>
+                </div>
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmDeleteMember} className="bg-destructive text-destructive-foreground">Eliminar definitivamente</AlertDialogAction>
+            <AlertDialogFooter className="mt-4">
+              <AlertDialogCancel className="font-bold">Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeleteMember} className="bg-destructive text-destructive-foreground font-bold">Eliminar definitivamente</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -227,33 +241,35 @@ function MemberCard({ member, isAdmin, currentUid, onUpdateRole, onBlock, onDele
   const isMe = member.id === currentUid;
 
   return (
-    <Card className={cn("glass-card border-l-4", isMe ? "border-l-primary" : "border-l-muted")}>
+    <Card className={cn("glass-card border-l-4 transition-all hover:shadow-md", isMe ? "border-l-primary" : "border-l-muted")}>
       <CardContent className="p-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Avatar className="h-10 w-10">
+          <Avatar className="h-10 w-10 border border-muted">
             <AvatarImage src={`https://picsum.photos/seed/${member.id}/100/100`} />
-            <AvatarFallback>{member.name?.[0] || 'U'}</AvatarFallback>
+            <AvatarFallback className="bg-primary/5 text-primary font-bold">{member.name?.[0] || 'U'}</AvatarFallback>
           </Avatar>
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-sm">{member.name || member.email} {isMe && "(Tú)"}</h3>
-              <Badge variant={roleInfo.color as any} className="text-[9px] uppercase"><Icon className="h-2.5 w-2.5 mr-1" />{roleInfo.label}</Badge>
+              <Badge variant={roleInfo.color as any} className="text-[9px] uppercase font-black tracking-widest h-5">
+                <Icon className="h-2.5 w-2.5 mr-1" />{roleInfo.label}
+              </Badge>
             </div>
-            <p className="text-xs text-muted-foreground">{member.email}</p>
+            <p className="text-[11px] text-muted-foreground font-medium">{member.email}</p>
           </div>
         </div>
 
         {isAdmin && !isMe && (
           <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Replenisher')}><Truck className="mr-2 h-4 w-4" /> Hacer Repositor</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Communicator')}><MessageSquare className="mr-2 h-4 w-4" /> Hacer Comunicador</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Employee')}><UserCircle className="mr-2 h-4 w-4" /> Hacer Empleado</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Admin')}><ShieldCheck className="mr-2 h-4 w-4" /> Hacer Admin</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Replenisher')} className="text-xs font-medium"><Truck className="mr-2 h-4 w-4" /> Hacer Repositor</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Communicator')} className="text-xs font-medium"><MessageSquare className="mr-2 h-4 w-4" /> Hacer Comunicador</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Employee')} className="text-xs font-medium"><UserCircle className="mr-2 h-4 w-4" /> Hacer Empleado</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Admin')} className="text-xs font-medium"><ShieldCheck className="mr-2 h-4 w-4" /> Hacer Admin</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-amber-600" onClick={() => onBlock(member.id)}><Ban className="mr-2 h-4 w-4" /> Bloquear acceso</DropdownMenuItem>
-              <DropdownMenuItem className="text-destructive font-bold" onClick={() => onDelete(member)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar definitivamente</DropdownMenuItem>
+              <DropdownMenuItem className="text-amber-600 text-xs font-medium" onClick={() => onBlock(member.id)}><Ban className="mr-2 h-4 w-4" /> Bloquear acceso</DropdownMenuItem>
+              <DropdownMenuItem className="text-destructive font-bold text-xs" onClick={() => onDelete(member)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar definitivamente</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         )}

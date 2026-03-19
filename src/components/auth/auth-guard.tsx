@@ -1,12 +1,14 @@
+
 'use client';
 
-import { useUser } from '../../firebase';
-import { Loader2, Droplets, Clock, Ban } from 'lucide-react';
+import { useUser, useFirestore, setDocumentNonBlocking } from '../../firebase';
+import { Loader2, Droplets, Clock, Ban, User, ShieldAlert } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useFirebase } from '../../firebase';
 import { signOut } from 'firebase/auth';
+import { doc } from 'firebase/firestore';
 
 /**
  * AuthGuard protege las rutas de la aplicación.
@@ -15,9 +17,10 @@ import { signOut } from 'firebase/auth';
  */
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, userData, isUserLoading } = useUser();
-  const { auth } = useFirebase();
+  const { auth, firestore } = useFirebase();
   const pathname = usePathname();
   const router = useRouter();
+  const [isCreatingProfile, setIsCreatingProfile] = useState(false);
 
   // Efecto para redirigir al login si no hay sesión activa
   useEffect(() => {
@@ -25,6 +28,24 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       router.replace('/login');
     }
   }, [user, isUserLoading, pathname, router]);
+
+  // Función para recrear un perfil si el usuario existe en Auth pero fue borrado de Firestore
+  const handleRequestAccess = () => {
+    if (!user || !firestore) return;
+    setIsCreatingProfile(true);
+    const now = new Date().toISOString();
+    
+    setDocumentNonBlocking(doc(firestore, 'users', user.uid), {
+      id: user.uid,
+      name: user.displayName || user.email?.split('@')[0] || 'Usuario',
+      email: user.email,
+      role: 'Pending',
+      createdAt: now,
+      updatedAt: now
+    }, { merge: true });
+    
+    // El listener de FirebaseProvider detectará el nuevo documento automáticamente
+  };
 
   // Si estamos en la página de login, permitimos el renderizado siempre
   if (pathname === '/login') {
@@ -56,6 +77,33 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   // Verificación de ROL (Seguridad de acceso)
   const role = userData?.role;
 
+  // Si el usuario está autenticado pero NO tiene datos en Firestore (posiblemente fue eliminado)
+  if (!isUserLoading && user && !userData) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-background p-6 text-center">
+        <div className="max-w-md w-full p-8 glass-card border-slate-200 rounded-3xl space-y-6">
+          <div className="bg-slate-100 p-4 rounded-full w-20 h-20 flex items-center justify-center mx-auto text-slate-600">
+            <ShieldAlert className="h-10 w-10" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-slate-800">Perfil no encontrado</h2>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              Tu cuenta está registrada, pero no tienes un perfil de acceso activo en Dosimat Pro. Esto sucede si tu usuario fue eliminado recientemente.
+            </p>
+          </div>
+          <div className="pt-4 space-y-3">
+            <Button className="w-full font-bold h-12" onClick={handleRequestAccess} disabled={isCreatingProfile}>
+              {isCreatingProfile ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : "Solicitar acceso de nuevo"}
+            </Button>
+            <Button variant="outline" className="w-full" onClick={() => signOut(auth)}>
+              Cerrar sesión y volver
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (role === 'Pending') {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background p-6 text-center">
@@ -66,7 +114,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
           <div className="space-y-2">
             <h2 className="text-2xl font-bold text-slate-800">Acceso en revisión</h2>
             <p className="text-muted-foreground text-sm leading-relaxed">
-              Hola <b>{userData?.name || user.email}</b>. Tu cuenta ha sido creada con éxito, pero un administrador debe aprobar tu acceso antes de que puedas entrar al sistema.
+              Hola <b>{userData?.name || user.email}</b>. Tu solicitud de acceso ha sido recibida. Un administrador debe aprobarte antes de que puedas entrar al sistema.
             </p>
           </div>
           <div className="pt-4 space-y-3">
@@ -110,7 +158,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  // Caso por defecto: usuario sin datos de perfil cargados aún
+  // Caso por defecto: cargando...
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-background p-4">
       <Loader2 className="h-8 w-8 animate-spin text-primary" />
