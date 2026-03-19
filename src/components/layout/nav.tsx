@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -113,7 +114,7 @@ export function Sidebar({ className }: { className?: string }) {
         </SidebarMenu>
       </SidebarContent>
 
-      <SidebarFooter className="p-4 border-t space-y-4">
+      <SidebarFooter className={cn("p-4 border-t space-y-4", isMobile && "pb-12")}>
         {user && (
           <div className="flex items-center gap-3 py-1">
             <Avatar className="h-8 w-8 border border-primary/20 shrink-0">
@@ -128,7 +129,7 @@ export function Sidebar({ className }: { className?: string }) {
             )}
           </div>
         )}
-        <Button variant="ghost" className="w-full text-destructive" onClick={handleLogout}>
+        <Button variant="ghost" className="w-full text-destructive justify-start px-2" onClick={handleLogout}>
           <LogOut className={cn("h-4 w-4", state === "expanded" && "mr-2")} />
           {state === "expanded" && <span>Cerrar sesión</span>}
         </Button>
@@ -158,7 +159,7 @@ export function MobileNav() {
   }, [userData]);
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[100] bg-background/60 backdrop-blur-xl border-t flex items-center justify-around px-4 py-3 pb-[calc(1rem+env(safe-area-inset-bottom))] md:hidden">
+    <div className="fixed bottom-0 left-0 right-0 z-40 bg-background/60 backdrop-blur-xl border-t flex items-center justify-around px-4 py-3 pb-[calc(1rem+env(safe-area-inset-bottom))] md:hidden">
       {mobileItems.map((item) => (
         <Link key={item.href} href={item.href} className={cn("flex flex-col items-center gap-1.5", pathname === item.href ? "text-primary font-bold" : "text-muted-foreground")}>
           <item.icon className="h-6 w-6" />
