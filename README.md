@@ -4,40 +4,30 @@ Sistema inteligente para el mantenimiento de piscinas y control financiero dise�
 
 ## 🚀 Cómo subir este proyecto a GitHub
 
-El mensaje de error `bash: __vsc_prompt_cmd_original: command not found` que ves en tu terminal suele ser un problema visual del entorno de VS Code, **no significa que el comando falló**. 
+Si al intentar subir el código recibes un error de **"Invalid username or token"**, es porque GitHub ya no acepta tu contraseña de siempre para la terminal. Sigue estos pasos:
 
-Por favor, copia y pega estos comandos **uno por uno** (asegúrate de no incluir el símbolo `$` ni las comillas):
+### 1. Generar tu Token en GitHub
+1. Ve a tu cuenta de GitHub en el navegador.
+2. Entra en **Settings** (Configuración) -> **Developer settings** (al final a la izquierda).
+3. Haz clic en **Personal access tokens** -> **Tokens (classic)**.
+4. Dale a **Generate new token (classic)**.
+5. Ponle un nombre (ej: "Token Dosimat"), elige la expiración que prefieras y **marca la casilla "repo"** (esto es muy importante).
+6. Haz clic en **Generate token** al final.
+7. **Copia el código que te dan** (empieza con `ghp_...`). ¡Guárdalo bien porque no volverá a aparecer!
 
-1. **Inicializar Git**:
-   ```
-   git init
-   ```
+### 2. Actualizar tu proyecto con el Token
+Copia y pega este comando en tu terminal, reemplazando `<TU_TOKEN>` por el código que acabas de copiar:
 
-2. **Agregar los archivos**:
-   ```
-   git add .
-   ```
+```bash
+git remote set-url origin https://<TU_TOKEN>@github.com/Gabaldaar/dosimat-pro.git
+```
 
-3. **Primer Commit**:
-   ```
-   git commit -m "Primer despliegue de Dosimat Pro"
-   ```
+### 3. Subir el código definitivamente
+Ahora ya puedes hacer el push final:
 
-4. **Configurar la rama principal**:
-   ```
-   git branch -M main
-   ```
-
-5. **Vincular con tu repositorio**:
-   *(Copia la URL de tu repo de GitHub y pégala aquí abajo)*
-   ```
-   git remote add origin https://github.com/Gabaldaar/dosimat-pro.git
-   ```
-
-6. **Subir el código**:
-   ```
-   git push -u origin main
-   ```
+```bash
+git push -u origin main
+```
 
 ---
 
