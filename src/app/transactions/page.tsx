@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
@@ -139,8 +140,7 @@ function TransactionsContent() {
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        const anyOpen = selectedTxDetails || isEmailDialogOpen || isWsDialogOpen || txToDelete;
-        if (!anyOpen) {
+        if (!selectedTxDetails && !isEmailDialogOpen && !isWsDialogOpen && !txToDelete) {
           document.body.style.pointerEvents = 'auto';
         }
       }
@@ -221,6 +221,12 @@ function TransactionsContent() {
   const [cobroSource, setCobroSource] = useState("sale")
 
   useEffect(() => {
+    // Si viene con un cliente específico y no es para nueva operación, filtrar el historial
+    if (clientIdParam && modeParam !== 'new') {
+      setFilterCustomer(clientIdParam)
+      setMainView("history")
+    }
+
     if (modeParam === 'new' && catalog && catalog.length > 0) {
       setMainView("register")
       if (clientIdParam) setSelectedCustomerId(clientIdParam)
