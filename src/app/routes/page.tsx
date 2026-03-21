@@ -315,6 +315,8 @@ function RoutesContent() {
 
   const isEditingAllowed = selectedSheet && selectedSheet.status === 'planned' && (isAdmin || isCommunicator)
 
+  const showProgressLayout = selectedSheet && (selectedSheet.status === 'active' || selectedSheet.status === 'completed')
+
   return (
     <div className="flex min-h-screen w-full bg-background">
       <div className="no-print w-full flex">
@@ -435,7 +437,7 @@ function RoutesContent() {
 
                   <div className="space-y-4">
                     <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                      <Package className="h-4 w-4" /> {selectedSheet.status === 'active' ? 'Progreso de Carga en Camioneta' : 'Resumen de Carga para Camioneta'}
+                      <Package className="h-4 w-4" /> {showProgressLayout ? 'Resumen de Entrega (Real vs Planificado)' : 'Resumen de Carga para Camioneta'}
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Card className="bg-blue-600 border-none shadow-xl shadow-blue-200 relative overflow-hidden text-white group">
@@ -444,16 +446,16 @@ function RoutesContent() {
                           <div className="p-4 bg-white/20 rounded-2xl backdrop-blur-md shadow-inner"><Droplet className="h-8 w-8 text-white" /></div>
                           <div className="flex-1">
                             <p className="text-xs font-black uppercase text-blue-100 tracking-widest">
-                              {selectedSheet.status === 'active' ? 'PROGRESO ENTREGA CLORO' : 'TOTAL CLORO A CARGAR'}
+                              {showProgressLayout ? 'PROGRESO ENTREGA CLORO' : 'TOTAL CLORO A CARGAR'}
                             </p>
                             <div className="flex items-baseline gap-3">
                               <h3 className="text-5xl md:text-6xl font-black tabular-nums">
-                                {selectedSheet.status === 'active' ? `${loadTotals.realChlorine}/${loadTotals.plannedChlorine}` : loadTotals.plannedChlorine}
+                                {showProgressLayout ? `${loadTotals.realChlorine}/${loadTotals.plannedChlorine}` : loadTotals.plannedChlorine}
                               </h3>
                               <p className="text-xs font-bold text-blue-200 uppercase">Bidones</p>
                             </div>
                             <p className="text-[9px] font-black text-blue-200/60 mt-1 uppercase tracking-tighter">
-                              {selectedSheet.status === 'active' ? 'Cantidad ya entregada vs. Total cargado' : 'Carga planificada para hoy'}
+                              {showProgressLayout ? 'Cantidad ya entregada vs. Total cargado' : 'Carga planificada para hoy'}
                             </p>
                           </div>
                         </CardContent>
@@ -465,34 +467,21 @@ function RoutesContent() {
                           <div className="p-4 bg-white/20 rounded-2xl backdrop-blur-md shadow-inner"><Beaker className="h-8 w-8 text-white" /></div>
                           <div className="flex-1">
                             <p className="text-xs font-black uppercase text-rose-100 tracking-widest">
-                              {selectedSheet.status === 'active' ? 'PROGRESO ENTREGA ÁCIDO' : 'TOTAL ÁCIDO A CARGAR'}
+                              {showProgressLayout ? 'PROGRESO ENTREGA ÁCIDO' : 'TOTAL ÁCIDO A CARGAR'}
                             </p>
                             <div className="flex items-baseline gap-3">
                               <h3 className="text-5xl md:text-6xl font-black tabular-nums">
-                                {selectedSheet.status === 'active' ? `${loadTotals.realAcid}/${loadTotals.plannedAcid}` : loadTotals.plannedAcid}
+                                {showProgressLayout ? `${loadTotals.realAcid}/${loadTotals.plannedAcid}` : loadTotals.plannedAcid}
                               </h3>
                               <p className="text-xs font-bold text-rose-200 uppercase">Bidones</p>
                             </div>
                             <p className="text-[9px] font-black text-rose-200/60 mt-1 uppercase tracking-tighter">
-                              {selectedSheet.status === 'active' ? 'Cantidad ya entregada vs. Total cargado' : 'Carga planificada para hoy'}
+                              {showProgressLayout ? 'Cantidad ya entregada vs. Total cargado' : 'Carga planificada para hoy'}
                             </p>
                           </div>
                         </CardContent>
                       </Card>
                     </div>
-
-                    {selectedSheet.status === 'completed' && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="p-3 bg-blue-50 rounded-xl border border-blue-100 flex justify-between items-center px-6">
-                          <span className="text-[10px] font-black text-blue-700 uppercase">Entregado Real Cloro:</span>
-                          <span className="font-black text-xl text-blue-800">{loadTotals.realChlorine} / {loadTotals.plannedChlorine}</span>
-                        </div>
-                        <div className="p-3 bg-rose-50 rounded-xl border border-rose-100 flex justify-between items-center px-6">
-                          <span className="text-[10px] font-black text-rose-700 uppercase">Entregado Real Ácido:</span>
-                          <span className="font-black text-xl text-rose-800">{loadTotals.realAcid} / {loadTotals.plannedAcid}</span>
-                        </div>
-                      </div>
-                    )}
                   </div>
 
                   {isEditingAllowed && (
