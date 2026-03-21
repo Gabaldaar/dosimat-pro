@@ -435,7 +435,7 @@ function RoutesContent() {
 
                   <div className="space-y-4">
                     <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                      <Package className="h-4 w-4" /> Resumen de Carga para Camioneta
+                      <Package className="h-4 w-4" /> {selectedSheet.status === 'active' ? 'Progreso de Carga en Camioneta' : 'Resumen de Carga para Camioneta'}
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Card className="bg-blue-600 border-none shadow-xl shadow-blue-200 relative overflow-hidden text-white group">
@@ -443,12 +443,18 @@ function RoutesContent() {
                         <CardContent className="p-6 flex items-center gap-6">
                           <div className="p-4 bg-white/20 rounded-2xl backdrop-blur-md shadow-inner"><Droplet className="h-8 w-8 text-white" /></div>
                           <div className="flex-1">
-                            <p className="text-xs font-black uppercase text-blue-100 tracking-widest">TOTAL CLORO</p>
+                            <p className="text-xs font-black uppercase text-blue-100 tracking-widest">
+                              {selectedSheet.status === 'active' ? 'PROGRESO ENTREGA CLORO' : 'TOTAL CLORO A CARGAR'}
+                            </p>
                             <div className="flex items-baseline gap-3">
-                              <h3 className="text-6xl font-black tabular-nums">{loadTotals.plannedChlorine}</h3>
+                              <h3 className="text-5xl md:text-6xl font-black tabular-nums">
+                                {selectedSheet.status === 'active' ? `${loadTotals.realChlorine}/${loadTotals.plannedChlorine}` : loadTotals.plannedChlorine}
+                              </h3>
                               <p className="text-xs font-bold text-blue-200 uppercase">Bidones</p>
                             </div>
-                            <p className="text-[9px] font-black text-blue-200/60 mt-1 uppercase tracking-tighter">Carga planificada para hoy</p>
+                            <p className="text-[9px] font-black text-blue-200/60 mt-1 uppercase tracking-tighter">
+                              {selectedSheet.status === 'active' ? 'Cantidad ya entregada vs. Total cargado' : 'Carga planificada para hoy'}
+                            </p>
                           </div>
                         </CardContent>
                       </Card>
@@ -458,12 +464,18 @@ function RoutesContent() {
                         <CardContent className="p-6 flex items-center gap-6">
                           <div className="p-4 bg-white/20 rounded-2xl backdrop-blur-md shadow-inner"><Beaker className="h-8 w-8 text-white" /></div>
                           <div className="flex-1">
-                            <p className="text-xs font-black uppercase text-rose-100 tracking-widest">TOTAL ÁCIDO</p>
+                            <p className="text-xs font-black uppercase text-rose-100 tracking-widest">
+                              {selectedSheet.status === 'active' ? 'PROGRESO ENTREGA ÁCIDO' : 'TOTAL ÁCIDO A CARGAR'}
+                            </p>
                             <div className="flex items-baseline gap-3">
-                              <h3 className="text-6xl font-black tabular-nums">{loadTotals.plannedAcid}</h3>
+                              <h3 className="text-5xl md:text-6xl font-black tabular-nums">
+                                {selectedSheet.status === 'active' ? `${loadTotals.realAcid}/${loadTotals.plannedAcid}` : loadTotals.plannedAcid}
+                              </h3>
                               <p className="text-xs font-bold text-rose-200 uppercase">Bidones</p>
                             </div>
-                            <p className="text-[9px] font-black text-rose-200/60 mt-1 uppercase tracking-tighter">Carga planificada para hoy</p>
+                            <p className="text-[9px] font-black text-rose-200/60 mt-1 uppercase tracking-tighter">
+                              {selectedSheet.status === 'active' ? 'Cantidad ya entregada vs. Total cargado' : 'Carga planificada para hoy'}
+                            </p>
                           </div>
                         </CardContent>
                       </Card>
@@ -597,7 +609,7 @@ function RoutesContent() {
                                         <div className="p-2 bg-rose-50 border border-rose-100 rounded-lg text-center">
                                           <p className="text-[8px] font-bold text-rose-600 uppercase">Ácido</p>
                                           <div className="flex justify-center items-baseline gap-1">
-                                            <span className="text-lg font-black text-rose-800">{item.realAcid}</span>
+                                            <span className="text-lg font-black text-lg text-rose-800">{item.realAcid}</span>
                                             <span className="text-[10px] text-rose-400">/ {item.plannedAcid}</span>
                                           </div>
                                         </div>
