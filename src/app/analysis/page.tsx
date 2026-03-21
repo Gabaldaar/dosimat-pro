@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
@@ -37,7 +38,8 @@ import {
   Droplets,
   MapPin,
   Target,
-  Coins
+  Coins,
+  Info
 } from "lucide-react"
 import { useFirestore, useCollection, useMemoFirebase, useUser } from "../../firebase"
 import { collection, query, orderBy } from "firebase/firestore"
@@ -268,6 +270,10 @@ export default function AnalysisPage() {
     )
   }
 
+  const currencySymbol = analysisCurrency === 'ARS' ? '$' : 'u$s';
+  const otherCurrency = analysisCurrency === 'ARS' ? 'USD' : 'ARS';
+  const otherSymbol = otherCurrency === 'ARS' ? '$' : 'u$s';
+
   return (
     <div className="flex min-h-screen bg-background w-full">
       <Sidebar />
@@ -279,16 +285,26 @@ export default function AnalysisPage() {
                <div className="bg-primary p-1.5 rounded-lg shadow-sm shadow-primary/20"><Droplets className="h-4 w-4 text-white" /></div>
                <span className="font-headline font-black text-primary text-sm tracking-tight uppercase">DosimatPro</span>
             </div>
-            <h1 className="text-xl md:text-3xl font-bold text-primary font-headline flex items-center gap-2">
-              <BarChart3 className="h-7 w-7" /> Análisis Financiero
-            </h1>
+            <div className="flex flex-col">
+              <h1 className="text-xl md:text-3xl font-bold text-primary font-headline flex items-center gap-2">
+                <BarChart3 className="h-7 w-7" /> Análisis Financiero
+              </h1>
+              <div className="flex items-center gap-2 mt-1">
+                <Badge variant="outline" className={cn(
+                  "text-[10px] font-black uppercase tracking-widest",
+                  analysisCurrency === 'ARS' ? "border-blue-500 text-blue-700 bg-blue-50" : "border-emerald-500 text-emerald-700 bg-emerald-50"
+                )}>
+                  MODO: {analysisCurrency === 'ARS' ? 'PESOS' : 'DÓLARES'}
+                </Badge>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-2 bg-muted/50 p-1 rounded-lg border">
+          <div className="flex items-center gap-2 bg-muted/50 p-1 rounded-xl border shadow-sm">
             <Coins className="h-4 w-4 text-muted-foreground ml-2" />
             <Tabs value={analysisCurrency} onValueChange={setAnalysisCurrency} className="w-auto">
-              <TabsList className="bg-transparent h-8">
-                <TabsTrigger value="ARS" className="text-[10px] font-bold h-7 px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm">PESOS (ARS)</TabsTrigger>
-                <TabsTrigger value="USD" className="text-[10px] font-bold h-7 px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm">DÓLARES (USD)</TabsTrigger>
+              <TabsList className="bg-transparent h-9">
+                <TabsTrigger value="ARS" className="text-[10px] font-black h-7 px-4 data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm uppercase">Pesos (ARS)</TabsTrigger>
+                <TabsTrigger value="USD" className="text-[10px] font-black h-7 px-4 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm uppercase">Dólares (USD)</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -299,16 +315,16 @@ export default function AnalysisPage() {
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
             <div className="space-y-1">
               <Label className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> Desde</Label>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-9" />
+              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10 bg-white" />
             </div>
             <div className="space-y-1">
               <Label className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> Hasta</Label>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-9" />
+              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-10 bg-white" />
             </div>
             <div className="space-y-1">
               <Label className="text-[10px] font-bold uppercase text-muted-foreground">Rubro Ingresos</Label>
               <Select value={incomeTypeFilter} onValueChange={setIncomeTypeFilter}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-10 bg-white"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="sale">Ventas</SelectItem>
@@ -321,59 +337,69 @@ export default function AnalysisPage() {
             <div className="space-y-1">
               <Label className="text-[10px] font-bold uppercase text-muted-foreground">Rubro Gastos</Label>
               <Select value={expenseCatFilter} onValueChange={setExpenseCatFilter}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-10 bg-white"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
                   {expenseCategories?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <Button variant="outline" className="h-9 font-bold" onClick={resetFilters}>
-              <FilterX className="h-4 w-4 mr-2" /> Limpiar
+            <Button variant="outline" className="h-10 font-bold border-dashed" onClick={resetFilters}>
+              <FilterX className="h-4 w-4 mr-2" /> Limpiar Filtros
             </Button>
           </div>
         </Card>
 
         {/* Totals Section */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="glass-card bg-emerald-50/30 border-l-4 border-l-emerald-500">
+          <Card className="glass-card bg-emerald-50/30 border-l-4 border-l-emerald-500 relative overflow-hidden">
+            <div className="absolute top-2 right-2 opacity-10"><TrendingUp className="h-12 w-12 text-emerald-600" /></div>
             <CardContent className="pt-6">
-              <div className="flex items-center justify-between mb-4">
-                 <p className="text-[10px] font-black uppercase text-emerald-700 tracking-widest">Ingresos Reales (Caja)</p>
-                 <div className="bg-emerald-100 p-2 rounded-full text-emerald-600"><ArrowUpRight className="h-5 w-5" /></div>
-              </div>
+              <p className="text-[10px] font-black uppercase text-emerald-700 tracking-widest mb-4">Ingresos Reales (Caja)</p>
               <div className="space-y-1">
-                <h3 className="text-2xl font-black text-emerald-800">${summary.ARS.income.toLocaleString('es-AR')}</h3>
-                <p className="text-sm font-bold text-emerald-600">u$s {summary.USD.income.toLocaleString('es-AR')}</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="glass-card bg-rose-50/30 border-l-4 border-l-rose-500">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between mb-4">
-                 <p className="text-[10px] font-black uppercase text-rose-700 tracking-widest">Gastos Reales</p>
-                 <div className="bg-rose-100 p-2 rounded-full text-rose-600"><ArrowDownLeft className="h-5 w-5" /></div>
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-2xl font-black text-rose-800">${summary.ARS.expense.toLocaleString('es-AR')}</h3>
-                <p className="text-sm font-bold text-rose-600">u$s {summary.USD.expense.toLocaleString('es-AR')}</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="glass-card bg-primary/5 border-l-4 border-l-primary">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between mb-4">
-                 <p className="text-[10px] font-black uppercase text-primary tracking-widest">Resultado Operativo</p>
-                 <div className="bg-primary/10 p-2 rounded-full text-primary"><Wallet className="h-5 w-5" /></div>
-              </div>
-              <div className="space-y-1">
-                <h3 className={cn("text-2xl font-black", (summary.ARS.income - summary.ARS.expense) >= 0 ? "text-primary" : "text-rose-600")}>
-                  ${(summary.ARS.income - summary.ARS.expense).toLocaleString('es-AR')}
+                <h3 className="text-3xl font-black text-emerald-800">
+                  {currencySymbol} {summary[analysisCurrency as 'ARS' | 'USD'].income.toLocaleString('es-AR')}
                 </h3>
-                <p className={cn("text-sm font-bold", (summary.USD.income - summary.USD.expense) >= 0 ? "text-primary" : "text-rose-600")}>
-                  u$s {(summary.USD.income - summary.USD.expense).toLocaleString('es-AR')}
+                <p className="text-xs font-bold text-emerald-600 opacity-60">
+                  Ref. {otherSymbol} {summary[otherCurrency as 'ARS' | 'USD'].income.toLocaleString('es-AR')}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="glass-card bg-rose-50/30 border-l-4 border-l-rose-500 relative overflow-hidden">
+            <div className="absolute top-2 right-2 opacity-10"><TrendingDown className="h-12 w-12 text-rose-600" /></div>
+            <CardContent className="pt-6">
+              <p className="text-[10px] font-black uppercase text-rose-700 tracking-widest mb-4">Gastos Reales</p>
+              <div className="space-y-1">
+                <h3 className="text-3xl font-black text-rose-800">
+                  {currencySymbol} {summary[analysisCurrency as 'ARS' | 'USD'].expense.toLocaleString('es-AR')}
+                </h3>
+                <p className="text-xs font-bold text-rose-600 opacity-60">
+                  Ref. {otherSymbol} {summary[otherCurrency as 'ARS' | 'USD'].expense.toLocaleString('es-AR')}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className={cn(
+            "glass-card border-l-4 relative overflow-hidden",
+            (summary[analysisCurrency as 'ARS'|'USD'].income - summary[analysisCurrency as 'ARS'|'USD'].expense) >= 0 
+              ? "bg-primary/5 border-l-primary" 
+              : "bg-rose-100/20 border-l-rose-600"
+          )}>
+            <div className="absolute top-2 right-2 opacity-10"><Wallet className="h-12 w-12" /></div>
+            <CardContent className="pt-6">
+              <p className="text-[10px] font-black uppercase text-slate-600 tracking-widest mb-4">Resultado Operativo</p>
+              <div className="space-y-1">
+                <h3 className={cn(
+                  "text-3xl font-black",
+                  (summary[analysisCurrency as 'ARS'|'USD'].income - summary[analysisCurrency as 'ARS'|'USD'].expense) >= 0 ? "text-primary" : "text-rose-600"
+                )}>
+                  {currencySymbol} {(summary[analysisCurrency as 'ARS' | 'USD'].income - summary[analysisCurrency as 'ARS' | 'USD'].expense).toLocaleString('es-AR')}
+                </h3>
+                <p className="text-xs font-bold opacity-60">
+                  Ref. {otherSymbol} {(summary[otherCurrency as 'ARS' | 'USD'].income - summary[otherCurrency as 'ARS' | 'USD'].expense).toLocaleString('es-AR')}
                 </p>
               </div>
             </CardContent>
@@ -383,9 +409,14 @@ export default function AnalysisPage() {
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <Card className="glass-card col-span-1 lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><BarChart3 className="h-5 w-5 text-primary" /> Evolución Anual ({analysisCurrency})</CardTitle>
-              <CardDescription>Comparativa de ingresos vs gastos reales últimos 12 meses en {analysisCurrency === 'ARS' ? 'Pesos' : 'Dólares'}</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div className="space-y-1">
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-primary" /> Evolución Anual ({analysisCurrency})
+                </CardTitle>
+                <CardDescription>Comparativa de flujos reales de dinero en {analysisCurrency === 'ARS' ? 'Pesos' : 'Dólares'}</CardDescription>
+              </div>
+              <Badge variant="outline" className="font-bold border-primary/20">{analysisCurrency}</Badge>
             </CardHeader>
             <CardContent>
               <div className="h-[400px] w-full">
@@ -393,12 +424,12 @@ export default function AnalysisPage() {
                   <BarChart data={annualData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
                     <XAxis dataKey="name" axisLine={false} tickLine={false} fontSize={12} />
-                    <YAxis axisLine={false} tickLine={false} fontSize={10} tickFormatter={(v) => analysisCurrency === 'ARS' ? `$${v/1000}k` : `u$s${v}`} />
+                    <YAxis axisLine={false} tickLine={false} fontSize={10} tickFormatter={(v) => `${currencySymbol}${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} />
                     <RechartsTooltip 
-                      formatter={(v: any) => [analysisCurrency === 'ARS' ? `$${v.toLocaleString('es-AR')}` : `u$s ${v.toLocaleString('es-AR')}`, '']}
+                      formatter={(v: any) => [`${currencySymbol} ${v.toLocaleString('es-AR')}`, '']}
                       contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                     />
-                    <Legend verticalAlign="top" align="right" />
+                    <Legend verticalAlign="top" align="right" iconType="circle" />
                     <Bar dataKey="ingresos" name="Ingresos" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                     <Bar dataKey="gastos" name="Gastos" fill="#f43f5e" radius={[4, 4, 0, 0]} />
                     <Bar dataKey="saldo" name="Saldo" fill="#10b981" radius={[4, 4, 0, 0]} />
@@ -410,8 +441,10 @@ export default function AnalysisPage() {
 
           <Card className="glass-card">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><PieChartIcon className="h-5 w-5 text-emerald-500" /> Ingresos por Rubro ({analysisCurrency})</CardTitle>
-              <CardDescription>Distribución del dinero real cobrado</CardDescription>
+              <CardTitle className="flex items-center gap-2 text-emerald-700">
+                <PieChartIcon className="h-5 w-5" /> Ingresos por Rubro ({analysisCurrency})
+              </CardTitle>
+              <CardDescription>Origen del dinero cobrado en {analysisCurrency}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[300px] w-full">
@@ -431,12 +464,15 @@ export default function AnalysisPage() {
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
-                      <RechartsTooltip formatter={(v: any) => analysisCurrency === 'ARS' ? `$${v.toLocaleString('es-AR')}` : `u$s ${v.toLocaleString('es-AR')}`} />
+                      <RechartsTooltip formatter={(v: any) => `${currencySymbol} ${v.toLocaleString('es-AR')}`} />
                       <Legend />
                     </PieChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-full flex items-center justify-center italic text-muted-foreground">No hay datos en {analysisCurrency} para este periodo.</div>
+                  <div className="h-full flex flex-col items-center justify-center italic text-muted-foreground gap-2">
+                    <Info className="h-8 w-8 opacity-20" />
+                    No hay datos en {analysisCurrency} para este periodo.
+                  </div>
                 )}
               </div>
             </CardContent>
@@ -444,8 +480,10 @@ export default function AnalysisPage() {
 
           <Card className="glass-card">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><PieChartIcon className="h-5 w-5 text-rose-500" /> Gastos por Categoría ({analysisCurrency})</CardTitle>
-              <CardDescription>Distribución basada en rubros de gasto</CardDescription>
+              <CardTitle className="flex items-center gap-2 text-rose-700">
+                <PieChartIcon className="h-5 w-5" /> Gastos por Categoría ({analysisCurrency})
+              </CardTitle>
+              <CardDescription>Distribución de egresos en {analysisCurrency}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[300px] w-full">
@@ -465,12 +503,15 @@ export default function AnalysisPage() {
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
-                      <RechartsTooltip formatter={(v: any) => analysisCurrency === 'ARS' ? `$${v.toLocaleString('es-AR')}` : `u$s ${v.toLocaleString('es-AR')}`} />
+                      <RechartsTooltip formatter={(v: any) => `${currencySymbol} ${v.toLocaleString('es-AR')}`} />
                       <Legend />
                     </PieChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-full flex items-center justify-center italic text-muted-foreground">No hay gastos en {analysisCurrency} para este periodo.</div>
+                  <div className="h-full flex flex-col items-center justify-center italic text-muted-foreground gap-2">
+                    <Info className="h-8 w-8 opacity-20" />
+                    No hay gastos en {analysisCurrency} para este periodo.
+                  </div>
                 )}
               </div>
             </CardContent>
@@ -484,17 +525,17 @@ export default function AnalysisPage() {
                 <CardTitle className="text-lg flex items-center gap-2">
                   <MapPin className="h-5 w-5 text-primary" /> Top 5 Zonas ({analysisCurrency})
                 </CardTitle>
-                <CardDescription>Zonas con mayor recaudación real</CardDescription>
+                <CardDescription>Recaudación real por ubicación geográfica</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {zoneRevenue.length > 0 ? zoneRevenue.map((z, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-muted/20 rounded-lg">
+                    <div key={idx} className="flex items-center justify-between p-3 bg-muted/20 rounded-xl border border-white">
                       <div className="flex items-center gap-3">
                         <span className="font-black text-primary/40">#{idx + 1}</span>
                         <span className="font-bold text-sm">{z.name}</span>
                       </div>
-                      <span className="font-black text-sm">{analysisCurrency === 'ARS' ? '$' : 'u$s'} {z.value.toLocaleString('es-AR')}</span>
+                      <span className="font-black text-sm">{currencySymbol} {z.value.toLocaleString('es-AR')}</span>
                     </div>
                   )) : (
                     <p className="text-center italic text-muted-foreground py-10">Sin datos de zonas en {analysisCurrency}.</p>
@@ -506,20 +547,28 @@ export default function AnalysisPage() {
            <Card className="glass-card bg-primary text-primary-foreground border-none overflow-hidden relative group">
               <Target className="absolute -right-4 -bottom-4 h-32 w-32 opacity-10 group-hover:scale-110 transition-transform" />
               <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2">Métricas de Rendimiento</CardTitle>
+                <CardTitle className="text-white flex items-center gap-2">Interpretación de Datos</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div>
-                   <p className="text-[10px] font-black uppercase opacity-70 tracking-widest">Ticket Promedio ({analysisCurrency})</p>
-                   <h3 className="text-3xl font-black mt-1">
-                     {analysisCurrency === 'ARS' ? '$' : 'u$s'} {filteredTxsByCurrency.length > 0 ? (summary[analysisCurrency as 'ARS'|'USD'].income / (filteredTxsByCurrency.filter(t => t.amount > 0).length || 1)).toLocaleString('es-AR') : '0'}
+                   <p className="text-[10px] font-black uppercase opacity-70 tracking-widest">Ticket Promedio en {analysisCurrency}</p>
+                   <h3 className="text-4xl font-black mt-1">
+                     {currencySymbol} {filteredTxsByCurrency.length > 0 ? (summary[analysisCurrency as 'ARS'|'USD'].income / (filteredTxsByCurrency.filter(t => t.amount > 0).length || 1)).toLocaleString('es-AR') : '0'}
                    </h3>
                 </div>
-                <div className="pt-4 border-t border-white/10">
-                   <p className="text-xs leading-relaxed opacity-90">
-                     Estás viendo el análisis en <b>{analysisCurrency === 'ARS' ? 'Pesos' : 'Dólares'}</b>. <br/>
-                     Este panel utiliza el <b>Criterio de Caja</b>: solo se cuenta el dinero que realmente ingresó o egresó de tus cuentas.
-                   </p>
+                <div className="pt-4 border-t border-white/10 space-y-3">
+                   <div className="flex gap-3">
+                     <div className="bg-white/20 p-2 rounded-lg h-fit"><Info className="h-4 w-4" /></div>
+                     <p className="text-xs leading-relaxed">
+                       Estás visualizando el análisis en <b>{analysisCurrency === 'ARS' ? 'Pesos (ARS)' : 'Dólares (USD)'}</b>. Los gráficos y tablas omiten los movimientos que no correspondan a esta moneda.
+                     </p>
+                   </div>
+                   <div className="flex gap-3">
+                     <div className="bg-white/20 p-2 rounded-lg h-fit"><Wallet className="h-4 w-4" /></div>
+                     <p className="text-xs leading-relaxed">
+                       <b>Criterio de Caja:</b> Este panel solo contabiliza el dinero que realmente ingresó o egresó de tus cajas. Las deudas pendientes no se reflejan en estos totales de ingresos.
+                     </p>
+                   </div>
                 </div>
               </CardContent>
            </Card>
