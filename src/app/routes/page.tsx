@@ -433,41 +433,54 @@ function RoutesContent() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card className="bg-blue-50 border-blue-100 shadow-none relative overflow-hidden">
-                      <CardContent className="p-4 flex items-center gap-4">
-                        <div className="p-3 bg-blue-100 rounded-full text-blue-600"><Calculator className="h-6 w-6" /></div>
-                        <div className="flex-1">
-                          <p className="text-[10px] font-black uppercase text-blue-700 tracking-widest">Total Cloro</p>
-                          <div className="flex items-baseline gap-2">
-                            <p className="text-2xl font-black">{loadTotals.realChlorine}</p>
-                            <p className="text-xs font-bold text-blue-400">/ {loadTotals.plannedChlorine} planeados</p>
-                          </div>
-                          {selectedSheet.status !== 'planned' && (
-                            <div className="mt-2 h-1.5 w-full bg-blue-200 rounded-full overflow-hidden">
-                              <Progress value={Math.min(100, (loadTotals.realChlorine / (loadTotals.plannedChlorine || 1)) * 100)} className="h-full bg-blue-600" />
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                      <Package className="h-4 w-4" /> Resumen de Carga para Camioneta
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Card className="bg-blue-600 border-none shadow-xl shadow-blue-200 relative overflow-hidden text-white group">
+                        <Package className="absolute -right-4 -bottom-4 h-32 w-32 opacity-10 group-hover:scale-110 transition-transform -rotate-12" />
+                        <CardContent className="p-6 flex items-center gap-6">
+                          <div className="p-4 bg-white/20 rounded-2xl backdrop-blur-md shadow-inner"><Droplet className="h-8 w-8 text-white" /></div>
+                          <div className="flex-1">
+                            <p className="text-xs font-black uppercase text-blue-100 tracking-widest">TOTAL CLORO</p>
+                            <div className="flex items-baseline gap-3">
+                              <h3 className="text-6xl font-black tabular-nums">{loadTotals.plannedChlorine}</h3>
+                              <p className="text-xs font-bold text-blue-200 uppercase">Bidones</p>
                             </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                    <Card className="bg-rose-50 border-rose-100 shadow-none relative overflow-hidden">
-                      <CardContent className="p-4 flex items-center gap-4">
-                        <div className="p-3 bg-rose-100 rounded-full text-rose-600"><Calculator className="h-6 w-6" /></div>
-                        <div className="flex-1">
-                          <p className="text-[10px] font-black uppercase text-rose-700 tracking-widest">Total Ácido</p>
-                          <div className="flex items-baseline gap-2">
-                            <p className="text-2xl font-black">{loadTotals.realAcid}</p>
-                            <p className="text-xs font-bold text-rose-400">/ {loadTotals.plannedAcid} planeados</p>
+                            <p className="text-[9px] font-black text-blue-200/60 mt-1 uppercase tracking-tighter">Carga planificada para hoy</p>
                           </div>
-                          {selectedSheet.status !== 'planned' && (
-                            <div className="mt-2 h-1.5 w-full bg-blue-200 rounded-full overflow-hidden">
-                              <Progress value={Math.min(100, (loadTotals.realAcid / (loadTotals.plannedAcid || 1)) * 100)} className="h-full bg-blue-600" />
+                        </CardContent>
+                      </Card>
+                      
+                      <Card className="bg-rose-600 border-none shadow-xl shadow-rose-200 relative overflow-hidden text-white group">
+                        <Package className="absolute -right-4 -bottom-4 h-32 w-32 opacity-10 group-hover:scale-110 transition-transform -rotate-12" />
+                        <CardContent className="p-6 flex items-center gap-6">
+                          <div className="p-4 bg-white/20 rounded-2xl backdrop-blur-md shadow-inner"><Beaker className="h-8 w-8 text-white" /></div>
+                          <div className="flex-1">
+                            <p className="text-xs font-black uppercase text-rose-100 tracking-widest">TOTAL ÁCIDO</p>
+                            <div className="flex items-baseline gap-3">
+                              <h3 className="text-6xl font-black tabular-nums">{loadTotals.plannedAcid}</h3>
+                              <p className="text-xs font-bold text-rose-200 uppercase">Bidones</p>
                             </div>
-                          )}
+                            <p className="text-[9px] font-black text-rose-200/60 mt-1 uppercase tracking-tighter">Carga planificada para hoy</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {selectedSheet.status === 'completed' && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="p-3 bg-blue-50 rounded-xl border border-blue-100 flex justify-between items-center px-6">
+                          <span className="text-[10px] font-black text-blue-700 uppercase">Entregado Real Cloro:</span>
+                          <span className="font-black text-xl text-blue-800">{loadTotals.realChlorine} / {loadTotals.plannedChlorine}</span>
                         </div>
-                      </CardContent>
-                    </Card>
+                        <div className="p-3 bg-rose-50 rounded-xl border border-rose-100 flex justify-between items-center px-6">
+                          <span className="text-[10px] font-black text-rose-700 uppercase">Entregado Real Ácido:</span>
+                          <span className="font-black text-xl text-rose-800">{loadTotals.realAcid} / {loadTotals.plannedAcid}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {isEditingAllowed && (
@@ -737,18 +750,18 @@ function RoutesContent() {
           </div>
 
           <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="p-3 border border-slate-900 rounded-xl bg-slate-50">
+            <div className="p-3 border-2 border-slate-900 rounded-xl bg-slate-50">
               <h2 className="text-[10px] font-black uppercase mb-2 flex items-center gap-2">
-                <Package className="h-3 w-3" /> Resumen de Carga
+                <Package className="h-3 w-3" /> CARGA TOTAL CAMIONETA
               </h2>
-              <div className="flex gap-6">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium">Cloro:</span>
-                  <span className="font-black text-lg px-2 border border-slate-900 rounded">{loadTotals.plannedChlorine}</span>
+              <div className="flex gap-12">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-black">CLORO:</span>
+                  <span className="text-3xl font-black px-4 py-1 border-2 border-slate-900 rounded-lg">{loadTotals.plannedChlorine}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium">Ácido:</span>
-                  <span className="font-black text-lg px-2 border border-slate-900 rounded">{loadTotals.plannedAcid}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-black">ÁCIDO:</span>
+                  <span className="text-3xl font-black px-4 py-1 border-2 border-slate-900 rounded-lg">{loadTotals.plannedAcid}</span>
                 </div>
               </div>
             </div>
@@ -777,23 +790,23 @@ function RoutesContent() {
                       {item.others && <p className="text-[8px] italic mt-1 border-t pt-1">Obs: {item.others}</p>}
                     </td>
                     <td className="border border-slate-900 p-1 text-center">
-                      <p className="text-sm font-black">{item.plannedChlorine}</p>
+                      <p className="text-lg font-black">{item.plannedChlorine}</p>
                       <div className="mt-1 border-t border-slate-200">
                         <div className="h-6 border border-dashed border-slate-300 rounded mt-1"></div>
                       </div>
                     </td>
                     <td className="border border-slate-900 p-1 text-center">
-                      <p className="text-sm font-black">{item.plannedAcid}</p>
+                      <p className="text-lg font-black">{item.plannedAcid}</p>
                       <div className="mt-1 border-t border-slate-200">
                         <div className="h-6 border border-dashed border-slate-300 rounded mt-1"></div>
                       </div>
                     </td>
                     <td className="border border-slate-900 p-1">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="h-8 border border-dashed border-slate-300 rounded relative">
+                      <div className="grid grid-cols-2 gap-2 h-full">
+                        <div className="h-10 border border-dashed border-slate-300 rounded relative">
                           <span className="absolute top-0.5 left-1 text-[6px] font-black text-slate-300 uppercase">COBRÓ</span>
                         </div>
-                        <div className="h-8 border border-dashed border-slate-300 rounded relative">
+                        <div className="h-10 border border-dashed border-slate-300 rounded relative">
                           <span className="absolute top-0.5 left-1 text-[6px] font-black text-slate-300 uppercase">NOTAS</span>
                         </div>
                       </div>
