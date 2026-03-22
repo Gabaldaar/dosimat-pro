@@ -75,7 +75,6 @@ function CustomersContent() {
   const isReplenisher = userData?.role === 'Replenisher'
   const searchParams = useSearchParams()
 
-  // Redirección por Rol
   useEffect(() => {
     if (!isUserLoading && userData) {
       if (userData.role === 'Replenisher') {
@@ -471,9 +470,9 @@ function CustomersContent() {
     }
 
     const uniqueEmails = [...new Set([...customerEmails, ...templateBccs])]
-    const emails = uniqueEmails.join(';')
+    const emailsStr = uniqueEmails.join(';');
 
-    if (!emails) {
+    if (!emailsStr) {
       toast({ title: "Sin emails", description: "Ningún cliente filtrado tiene un email válido.", variant: "destructive" })
       return
     }
@@ -481,8 +480,16 @@ function CustomersContent() {
     const subject = processMarkers(template.subject, {});
     const body = processMarkers(template.body, {});
 
-    const mailtoLink = `mailto:?bcc=${encodeURIComponent(emails)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-    window.location.href = mailtoLink
+    const encodedSubject = encodeURIComponent(subject);
+    const encodedBody = encodeURIComponent(body).replace(/%0A/g, '%0D%0A');
+    const encodedBcc = encodeURIComponent(emailsStr);
+
+    const mailtoLink = `mailto:?bcc=${encodedBcc}&subject=${encodedSubject}&body=${encodedBody}`;
+    
+    const link = document.createElement('a');
+    link.href = mailtoLink;
+    link.click();
+    
     setIsBulkEmailOpen(false)
     toast({ title: "Correo Masivo Preparado", description: `Se han incluido ${uniqueEmails.length} direcciones únicas en CCO.` })
   }
@@ -545,7 +552,9 @@ function CustomersContent() {
 
   const handleConfirmDirectEmail = () => {
     if (customerForDirectEmail?.mail) {
-      window.location.href = `mailto:${customerForDirectEmail.mail}`;
+      const link = document.createElement('a');
+      link.href = `mailto:${customerForDirectEmail.mail}`;
+      link.click();
     }
     setIsDirectEmailWarningOpen(false);
   }

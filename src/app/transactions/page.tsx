@@ -136,7 +136,6 @@ function TransactionsContent() {
   const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({})
   const [dynamicKeys, setDynamicKeys] = useState<string[]>([])
 
-  // Fix for pointer-events stuck in 'none' after dialog closures
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -221,7 +220,6 @@ function TransactionsContent() {
   const [cobroSource, setCobroSource] = useState("sale")
 
   useEffect(() => {
-    // Si viene con un cliente específico y no es para nueva operación, filtrar el historial
     if (clientIdParam && modeParam !== 'new') {
       setFilterCustomer(clientIdParam)
       setMainView("history")
@@ -691,15 +689,26 @@ function TransactionsContent() {
   }
 
   const handleSendEmail = () => {
-    if (!allDynamicFieldsFilled) return;
+    if (!allDynamicFieldsFilled || !selectedTxForEmail) return;
     const client = selectedTxForEmail.clientId ? customers?.find(c => c.id === selectedTxForEmail.clientId) : null;
-    const tpl = emailTemplates?.find(t => t.id === selectedTemplateId)
-    if (!processedEmail.subject || !processedEmail.body || !tpl) return
-    const recipient = client?.mail || ""
-    let mailtoLink = `mailto:${recipient}?subject=${encodeURIComponent(processedEmail.subject)}&body=${encodeURIComponent(processedEmail.body)}`
-    if (tpl.bcc) mailtoLink += `&bcc=${encodeURIComponent(tpl.bcc)}`
-    window.location.href = mailtoLink
-    setIsEmailDialogOpen(false)
+    const tpl = emailTemplates?.find(t => t.id === selectedTemplateId);
+    if (!processedEmail.subject || !processedEmail.body || !tpl) return;
+    
+    const recipient = client?.mail || "";
+    const encodedSubject = encodeURIComponent(processedEmail.subject);
+    const encodedBody = encodeURIComponent(processedEmail.body).replace(/%0A/g, '%0D%0A');
+    
+    let mailtoUrl = `mailto:${recipient}?subject=${encodedSubject}&body=${encodedBody}`;
+    if (tpl.bcc) {
+      mailtoUrl += `&bcc=${encodeURIComponent(tpl.bcc)}`;
+    }
+    
+    // Disparar email
+    const link = document.createElement('a');
+    link.href = mailtoUrl;
+    link.click();
+    
+    setIsEmailDialogOpen(false);
   }
 
   const handleOpenWsDialog = (tx: any) => {
@@ -711,7 +720,7 @@ function TransactionsContent() {
   }
 
   const handleSendWs = () => {
-    if (!allDynamicFieldsFilled) return;
+    if (!allDynamicFieldsFilled || !selectedTxForWs) return;
     const client = selectedTxForWs.clientId ? customers?.find(c => c.id === selectedTxForWs.clientId) : null;
     const phone = client?.telefono?.replace(/\D/g, '')
     if (!phone || !processedWs) return

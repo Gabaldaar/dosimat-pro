@@ -24,7 +24,6 @@ export default function NotificationsPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [result, setResult] = useState<GenerateNotificationOutput | null>(null)
 
-  // Redirecciones por Rol
   useEffect(() => {
     if (!isUserLoading && userData) {
       if (userData.role === 'Replenisher') {
@@ -107,9 +106,15 @@ export default function NotificationsPage() {
       }
       return
     }
-    const subject = formData.eventType === 'overduePayment' ? 'Recordatorio de Pago - Dosimat Pro' : 'Aviso de Reposición de Cloro - Dosimat Pro'
-    const mailtoLink = `mailto:${selectedCustomer.mail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(result.notificationMessage)}`
-    window.location.href = mailtoLink
+    const subject = formData.eventType === 'overduePayment' ? 'Recordatorio de Pago - Dosimat Pro' : 'Aviso de Reposición de Cloro - Dosimat Pro';
+    const encodedSubject = encodeURIComponent(subject);
+    const encodedBody = encodeURIComponent(result.notificationMessage).replace(/%0A/g, '%0D%0A');
+    
+    const mailtoUrl = `mailto:${selectedCustomer.mail}?subject=${encodedSubject}&body=${encodedBody}`;
+    
+    const link = document.createElement('a');
+    link.href = mailtoUrl;
+    link.click();
   }
 
   if (isUserLoading || userData?.role === 'Replenisher') {
