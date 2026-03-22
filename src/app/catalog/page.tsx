@@ -643,7 +643,7 @@ export default function CatalogPage() {
     const sortedItemsToInclude = [...itemsToInclude].sort((a, b) => a.name.localeCompare(b.name));
 
     sortedItemsToInclude.forEach(f => {
-      text += `- *${f.name}*: Comprar ${f.manualQty} unidades.\n`;
+      text += `- *${f.name}*: ${f.manualQty} unidades.\n`;
     });
 
     const ars = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * i.costARS), 0);
@@ -848,7 +848,7 @@ export default function CatalogPage() {
 
             return (
               <div key={sup} className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <div className="bg-slate-900 p-2 rounded-lg text-white">
                       <Truck className="h-4 w-4" />
@@ -858,11 +858,11 @@ export default function CatalogPage() {
                       <p className="text-[10px] text-muted-foreground font-bold">{items.length} ÍTEMS PENDIENTES</p>
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <Button 
                       variant="outline" 
                       size="sm" 
-                      className="h-8 gap-2 font-bold text-xs" 
+                      className="h-8 gap-2 font-bold text-xs flex-1 md:flex-none" 
                       onClick={() => handleCopyShoppingList(sup)}
                     >
                       <Copy className="h-3.5 w-3.5" /> COPIAR
@@ -870,7 +870,7 @@ export default function CatalogPage() {
                     {orderToView?.status !== 'completed' && (
                       <Button 
                         size="sm" 
-                        className="h-8 gap-2 bg-emerald-600 hover:bg-emerald-700 font-bold text-xs" 
+                        className="h-8 gap-2 bg-emerald-600 hover:bg-emerald-700 font-bold text-xs flex-1 md:flex-none" 
                         onClick={() => handleReceiveMaterials(sup)}
                         disabled={items.every(i => i.manualQty <= 0)}
                       >
@@ -880,8 +880,8 @@ export default function CatalogPage() {
                   </div>
                 </div>
 
-                <div className="border-2 rounded-xl bg-white shadow-md overflow-hidden">
-                  <Table>
+                <div className="border-2 rounded-xl bg-white shadow-md overflow-hidden overflow-x-auto">
+                  <Table className="min-w-[600px]">
                     <TableHeader className="bg-slate-50">
                       <TableRow>
                         <TableHead className="text-[9px] font-black uppercase">Material</TableHead>
@@ -1226,8 +1226,8 @@ export default function CatalogPage() {
                   <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
                     <Layers className="h-4 w-4" /> Explosión de Insumos (Multinivel)
                   </h3>
-                  <div className="border rounded-xl bg-white shadow-sm overflow-hidden">
-                    <Table>
+                  <div className="border rounded-xl bg-white shadow-sm overflow-x-auto">
+                    <Table className="min-w-[500px]">
                       <TableHeader className="bg-slate-50">
                         <TableRow>
                           <TableHead className="text-[9px] font-black uppercase">Pieza / Material</TableHead>
@@ -1250,8 +1250,8 @@ export default function CatalogPage() {
                               <TableCell className="text-center font-black text-primary text-xs">{req.required}</TableCell>
                               <TableCell className="text-center text-xs">{req.available}</TableCell>
                               <TableCell className="text-right">
-                                {faltaDirecto ? <Badge className="bg-rose-600 text-[8px] h-4">FALTA STOCK</Badge> : 
-                                 esCritico ? <Badge variant="outline" className="text-amber-600 border-amber-200 text-[8px] h-4">BAJO MÍNIMO</Badge> : 
+                                {faltaDirecto ? <Badge className="bg-rose-600 text-[8px] h-4 leading-none py-0 px-1">FALTA STOCK</Badge> : 
+                                 esCritico ? <Badge variant="outline" className="text-amber-600 border-amber-200 text-[8px] h-4 leading-none py-0 px-1">BAJO MÍNIMO</Badge> : 
                                  <CheckCircle className="h-4 w-4 text-emerald-500 ml-auto" />}
                               </TableCell>
                             </TableRow>
@@ -1668,8 +1668,8 @@ export default function CatalogPage() {
                       {explosionSummary.all.length} COMPONENTES IMPACTADOS
                     </Badge>
                   </div>
-                  <div className="border rounded-xl bg-white shadow-sm overflow-hidden overflow-x-auto">
-                    <Table>
+                  <div className="border rounded-xl bg-white shadow-sm overflow-x-auto">
+                    <Table className="min-w-[500px]">
                       <TableHeader className="bg-slate-50">
                         <TableRow>
                           <TableHead className="font-black text-[10px] uppercase">Componente</TableHead>
@@ -1696,11 +1696,11 @@ export default function CatalogPage() {
                               <TableCell className="text-center font-medium text-slate-500">{req.available}</TableCell>
                               <TableCell className="text-right">
                                 {faltaDirecto ? (
-                                  <Badge className="bg-rose-600 font-bold text-[9px]">FALTA STOCK</Badge>
+                                  <Badge className="bg-rose-600 font-bold text-[9px] leading-none py-0 px-1">FALTA STOCK</Badge>
                                 ) : esCritico ? (
-                                  <Badge variant="outline" className="border-amber-500 text-amber-700 bg-amber-50 font-bold text-[9px]">BAJO MÍNIMO</Badge>
+                                  <Badge variant="outline" className="border-amber-500 text-amber-700 bg-amber-50 font-bold text-[9px] leading-none py-0 px-1">BAJO MÍNIMO</Badge>
                                 ) : (
-                                  <Badge variant="outline" className="text-emerald-600 bg-emerald-50 border-emerald-200 font-bold text-[9px]">OK</Badge>
+                                  <Badge variant="outline" className="text-emerald-600 bg-emerald-50 border-emerald-200 font-bold text-[9px] leading-none py-0 px-1">OK</Badge>
                                 )}
                               </TableCell>
                             </TableRow>
