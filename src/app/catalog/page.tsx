@@ -43,7 +43,8 @@ import {
   Coins,
   ShoppingCart,
   ArrowRight,
-  Copy
+  Copy,
+  RefreshCw
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -1051,7 +1052,7 @@ export default function CatalogPage() {
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <h3 className="text-xs font-black uppercase tracking-widest text-slate-800 flex items-center gap-2 border-b pb-1">
-                        <Layers className="h-3 w-3" /> Estructura de Armado (BOM)
+                        <Layers className="h-4 w-4" /> Estructura de Armado (BOM)
                       </h3>
                       <div className="border rounded-lg bg-white overflow-hidden">
                         <table className="w-full text-[11px]">
