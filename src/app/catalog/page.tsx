@@ -670,72 +670,72 @@ export default function CatalogPage() {
         </SidebarInset>
       </div>
 
-      {/* DIÁLOGO DE VISTA PREVIA DE FICHA */}
+      {/* DIÁLOGO DE VISTA PREVIA DE FICHA - COMPACTO */}
       <Dialog open={!!productToPreview} onOpenChange={(o) => { if(!o) setProductToPreview(null); }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-primary font-black text-xl">
-              <Printer className="h-5 w-5" /> Vista Previa de Ficha
+            <DialogTitle className="flex items-center gap-2 text-primary font-black text-lg">
+              <Printer className="h-4 w-4" /> Vista Previa de Ficha
             </DialogTitle>
-            <DialogDescription>Revisa la información antes de generar el documento PDF.</DialogDescription>
+            <DialogDescription className="text-xs">Revisa la información antes de exportar.</DialogDescription>
           </DialogHeader>
           
           {productToPreview && (
-            <div className="py-4 space-y-8">
-              <div className="border-2 rounded-2xl p-6 bg-slate-50/50 shadow-inner">
-                <div className="flex justify-between items-start border-b pb-4 mb-6">
+            <div className="py-2 space-y-4">
+              <div className="border rounded-xl p-4 bg-slate-50/50 shadow-sm">
+                <div className="flex justify-between items-start border-b pb-3 mb-4">
                   <div>
-                    <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight">{productToPreview.name}</h2>
-                    <Badge variant="secondary" className="font-bold">{categoryMap[productToPreview.categoryId] || "Sin Categoría"}</Badge>
+                    <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">{productToPreview.name}</h2>
+                    <Badge variant="secondary" className="text-[10px] h-5 font-bold">{categoryMap[productToPreview.categoryId] || "Sin Categoría"}</Badge>
                   </div>
                   <div className="text-right">
-                    <p className="text-[10px] font-black text-slate-400">DOSIMAT PRO</p>
-                    <p className="text-xs font-bold text-slate-500">{new Date().toLocaleDateString('es-AR')}</p>
+                    <p className="text-[8px] font-black text-slate-400">DOSIMAT PRO</p>
+                    <p className="text-[10px] font-bold text-slate-500">{new Date().toLocaleDateString('es-AR')}</p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                  <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div className="space-y-3">
                     <div>
-                      <Label className="text-[10px] font-black uppercase text-slate-400">Descripción del ítem</Label>
-                      <p className="text-sm text-slate-600 leading-relaxed italic">{productToPreview.description || "Sin descripción."}</p>
+                      <Label className="text-[9px] font-black uppercase text-slate-400">Descripción</Label>
+                      <p className="text-xs text-slate-600 italic">{productToPreview.description || "Sin descripción."}</p>
                     </div>
                     <div>
-                      <Label className="text-[10px] font-black uppercase text-slate-400">Tipo de Recurso</Label>
-                      <p className="text-sm font-bold">{productToPreview.isService ? 'SERVICIO TÉCNICO' : 'PRODUCTO FÍSICO'}</p>
+                      <Label className="text-[9px] font-black uppercase text-slate-400">Tipo de Recurso</Label>
+                      <p className="text-xs font-bold uppercase">{productToPreview.isService ? 'SERVICIO TÉCNICO' : 'PRODUCTO FÍSICO'}</p>
                     </div>
                   </div>
-                  <div className="bg-white p-4 rounded-xl border-2 space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white p-3 rounded-lg border space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <span className="text-[9px] font-black text-primary uppercase block">Venta ARS</span>
-                        <span className="text-xl font-black">${Number(productToPreview.priceARS || 0).toLocaleString('es-AR')}</span>
+                        <span className="text-[8px] font-black text-primary uppercase block">Venta ARS</span>
+                        <span className="text-lg font-black">${Number(productToPreview.priceARS || 0).toLocaleString('es-AR')}</span>
                       </div>
                       <div>
-                        <span className="text-[9px] font-black text-emerald-700 uppercase block">Venta USD</span>
-                        <span className="text-xl font-black">u$s {Number(productToPreview.priceUSD || 0).toLocaleString('es-AR')}</span>
+                        <span className="text-[8px] font-black text-emerald-700 uppercase block">Venta USD</span>
+                        <span className="text-lg font-black">u$s {Number(productToPreview.priceUSD || 0).toLocaleString('es-AR')}</span>
                       </div>
                     </div>
                     {productToPreview.trackStock !== false && (
                       <div className="pt-2 border-t flex justify-between items-center">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase">Stock actual</span>
-                        <span className="font-black">{productToPreview.stock || 0} Unidades</span>
+                        <span className="text-[9px] font-bold text-slate-500 uppercase">Stock actual</span>
+                        <span className="text-xs font-black">{productToPreview.stock || 0} Unidades</span>
                       </div>
                     )}
                   </div>
                 </div>
 
                 {productToPreview.isCompuesto && productToPreview.components?.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="text-md font-black uppercase tracking-widest text-slate-800 flex items-center gap-2 border-b pb-2">
-                      <Layers className="h-4 w-4" /> Estructura de Armado (BOM)
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-800 flex items-center gap-2 border-b pb-1">
+                      <Layers className="h-3 w-3" /> Estructura de Armado
                     </h3>
-                    <div className="border rounded-xl bg-white overflow-hidden">
-                      <table className="w-full text-sm">
+                    <div className="border rounded-lg bg-white overflow-hidden">
+                      <table className="w-full text-[11px]">
                         <thead className="bg-slate-100 border-b">
                           <tr>
-                            <th className="p-2 text-left font-black text-[10px] uppercase">Parte / Componente</th>
-                            <th className="p-2 text-center font-black text-[10px] uppercase w-20">Cant.</th>
+                            <th className="p-1.5 text-left font-black uppercase text-[9px]">Componente</th>
+                            <th className="p-1.5 text-center font-black uppercase text-[9px] w-16">Cant.</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y">
@@ -743,8 +743,8 @@ export default function CatalogPage() {
                             const child = items?.find(i => i.id === comp.productId);
                             return (
                               <tr key={idx}>
-                                <td className="p-2 font-bold">{child?.name || 'Cargando...'}</td>
-                                <td className="p-2 text-center font-black text-primary">{comp.quantity}</td>
+                                <td className="p-1.5 font-medium">{child?.name || 'Cargando...'}</td>
+                                <td className="p-1.5 text-center font-black text-primary">{comp.quantity}</td>
                               </tr>
                             );
                           })}
@@ -757,94 +757,94 @@ export default function CatalogPage() {
             </div>
           )}
 
-          <DialogFooter className="border-t pt-4">
-            <Button variant="ghost" onClick={() => setProductToPreview(null)} className="font-bold">Cancelar</Button>
-            <Button onClick={handlePrint} className="bg-primary font-black px-8 shadow-lg shadow-primary/20 gap-2">
-              <Download className="h-4 w-4" /> IMPRIMIR / GUARDAR PDF
+          <DialogFooter className="border-t pt-3">
+            <Button variant="ghost" size="sm" onClick={() => setProductToPreview(null)} className="font-bold text-xs h-9">Cancelar</Button>
+            <Button size="sm" onClick={handlePrint} className="bg-primary font-black px-6 shadow-md shadow-primary/20 gap-2 h-9 text-xs">
+              <Download className="h-3.5 w-3.5" /> IMPRIMIR / PDF
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* CONTENEDOR OCULTO PARA IMPRESIÓN REAL */}
+      {/* CONTENEDOR OCULTO PARA IMPRESIÓN REAL - MUCHO MÁS COMPACTO */}
       {productToPreview && (
-        <div className="print-only w-full p-8 font-sans text-slate-900 bg-white">
-          <div className="flex justify-between items-start border-b-4 border-slate-900 pb-4 mb-8">
+        <div className="print-only w-full p-4 font-sans text-slate-900 bg-white">
+          <div className="flex justify-between items-end border-b-2 border-slate-900 pb-2 mb-4">
             <div>
-              <h1 className="text-4xl font-black uppercase tracking-tight text-primary">Ficha Técnica</h1>
-              <p className="text-md font-bold text-slate-500">Dosimat Pro • Sistema de Gestión</p>
+              <h1 className="text-xl font-black uppercase tracking-tight text-primary">Ficha Técnica</h1>
+              <p className="text-[10px] font-bold text-slate-500">Dosimat Pro • Sistema de Gestión</p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] font-black uppercase text-slate-400">Generado: {new Date().toLocaleDateString('es-AR')}</p>
+              <p className="text-[8px] font-black uppercase text-slate-400">Fecha: {new Date().toLocaleDateString('es-AR')}</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-12">
-            <div className="space-y-6">
+          <div className="grid grid-cols-12 gap-6 mb-6">
+            <div className="col-span-7 space-y-3">
               <div>
-                <Label className="text-[10px] font-black uppercase text-slate-400">Nombre del Ítem</Label>
-                <h2 className="text-3xl font-black text-slate-800">{productToPreview.name}</h2>
+                <Label className="text-[8px] font-black uppercase text-slate-400">Nombre del Ítem</Label>
+                <h2 className="text-lg font-black text-slate-800 leading-tight">{productToPreview.name}</h2>
               </div>
-              <div className="flex gap-8">
+              <div className="flex gap-6">
                 <div>
-                  <Label className="text-[10px] font-black uppercase text-slate-400">Categoría</Label>
-                  <p className="text-lg font-bold">{categoryMap[productToPreview.categoryId] || "Sin Categoría"}</p>
+                  <Label className="text-[8px] font-black uppercase text-slate-400">Categoría</Label>
+                  <p className="text-xs font-bold">{categoryMap[productToPreview.categoryId] || "Sin Categoría"}</p>
                 </div>
                 <div>
-                  <Label className="text-[10px] font-black uppercase text-slate-400">Tipo</Label>
-                  <p className="text-lg font-bold">{productToPreview.isService ? 'SERVICIO TÉCNICO' : 'PRODUCTO FÍSICO'}</p>
+                  <Label className="text-[8px] font-black uppercase text-slate-400">Tipo</Label>
+                  <p className="text-xs font-bold uppercase">{productToPreview.isService ? 'SERVICIO' : 'PRODUCTO'}</p>
                 </div>
               </div>
               <div>
-                <Label className="text-[10px] font-black uppercase text-slate-400">Descripción Detallada</Label>
-                <p className="text-sm leading-relaxed text-slate-600 italic">
+                <Label className="text-[8px] font-black uppercase text-slate-400">Descripción</Label>
+                <p className="text-[11px] leading-snug text-slate-600 italic">
                   {productToPreview.description || "Sin descripción registrada."}
                 </p>
               </div>
             </div>
 
-            <div className="bg-slate-50 p-8 rounded-3xl border-4 border-slate-100 space-y-8">
-              <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 pb-2">Precios de Venta Vigentes</h3>
-              <div className="grid grid-cols-2 gap-6">
-                <div className="p-6 bg-white rounded-2xl border-2 border-slate-200 shadow-sm">
-                  <span className="text-[10px] font-black text-primary uppercase block mb-2">Precio ARS</span>
-                  <span className="text-3xl font-black">${Number(productToPreview.priceARS || 0).toLocaleString('es-AR')}</span>
+            <div className="col-span-5 bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+              <h3 className="text-[8px] font-black uppercase tracking-widest text-slate-400 border-b pb-1">Precios Vigentes</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-2 bg-white rounded-lg border border-slate-200 shadow-sm text-center">
+                  <span className="text-[7px] font-black text-primary uppercase block mb-1">Precio ARS</span>
+                  <span className="text-lg font-black">${Number(productToPreview.priceARS || 0).toLocaleString('es-AR')}</span>
                 </div>
-                <div className="p-6 bg-white rounded-2xl border-2 border-slate-200 shadow-sm">
-                  <span className="text-[10px] font-black text-emerald-700 uppercase block mb-2">Precio USD</span>
-                  <span className="text-3xl font-black">u$s {Number(productToPreview.priceUSD || 0).toLocaleString('es-AR')}</span>
+                <div className="p-2 bg-white rounded-lg border border-slate-200 shadow-sm text-center">
+                  <span className="text-[7px] font-black text-emerald-700 uppercase block mb-1">Precio USD</span>
+                  <span className="text-lg font-black">u$s {Number(productToPreview.priceUSD || 0).toLocaleString('es-AR')}</span>
                 </div>
               </div>
               {productToPreview.trackStock !== false && !productToPreview.isService && (
-                <div className="p-6 bg-white rounded-2xl border-2 border-slate-200 flex justify-between items-center shadow-sm">
-                  <span className="text-[10px] font-black text-slate-500 uppercase">Stock Actual Disponible</span>
-                  <span className="text-2xl font-black">{productToPreview.stock || 0} Unidades</span>
+                <div className="p-2 bg-white rounded-lg border border-slate-200 flex justify-between items-center shadow-sm px-3">
+                  <span className="text-[8px] font-black text-slate-500 uppercase">Stock</span>
+                  <span className="text-sm font-black">{productToPreview.stock || 0} Unidades</span>
                 </div>
               )}
             </div>
           </div>
 
           {productToPreview.isCompuesto && productToPreview.components?.length > 0 && (
-            <div className="space-y-6">
-              <h3 className="text-xl font-black uppercase tracking-tight flex items-center gap-3 border-b-4 border-slate-900 pb-3">
-                <Layers className="h-6 w-6" /> Estructura de Armado (BOM)
+            <div className="space-y-3">
+              <h3 className="text-sm font-black uppercase tracking-tight flex items-center gap-2 border-b border-slate-900 pb-1">
+                <Layers className="h-4 w-4" /> Estructura de Armado (BOM)
               </h3>
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-slate-900 text-white">
-                    <th className="p-3 text-left uppercase text-[12px] font-black">Componente / Pieza</th>
-                    <th className="p-3 text-center uppercase text-[12px] font-black w-40">Cantidad Requerida</th>
-                    <th className="p-3 text-left uppercase text-[12px] font-black">Observaciones</th>
+                    <th className="p-1.5 text-left uppercase text-[9px] font-black">Componente / Pieza</th>
+                    <th className="p-1.5 text-center uppercase text-[9px] font-black w-24">Cantidad</th>
+                    <th className="p-1.5 text-left uppercase text-[9px] font-black">Estado / Obs.</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y-2 divide-slate-200 border-b-2 border-slate-200">
+                <tbody className="divide-y divide-slate-200 border-b border-slate-200">
                   {productToPreview.components.map((comp: any, idx: number) => {
                     const child = items?.find(i => i.id === comp.productId);
                     return (
                       <tr key={idx}>
-                        <td className="p-4 text-md font-bold">{child?.name || '---'}</td>
-                        <td className="p-4 text-center text-lg font-black text-primary">{comp.quantity}</td>
-                        <td className="p-4 text-xs text-slate-300 italic">____________________________</td>
+                        <td className="p-1.5 text-[11px] font-bold">{child?.name || '---'}</td>
+                        <td className="p-1.5 text-center text-xs font-black text-primary">{comp.quantity}</td>
+                        <td className="p-1.5 text-[9px] text-slate-300 italic">__________________</td>
                       </tr>
                     );
                   })}
@@ -853,12 +853,12 @@ export default function CatalogPage() {
             </div>
           )}
 
-          <div className="mt-20 pt-12 border-t-2 border-slate-100 flex justify-between items-end">
-            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-              Dosimat Pro v2.5 • Ficha Técnica Oficial
+          <div className="mt-12 pt-4 border-t border-slate-100 flex justify-between items-end">
+            <div className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">
+              Dosimat Pro v2.5 • Documento Técnico Compacto
             </div>
-            <div className="w-64 border-t-4 border-slate-900 pt-3 text-center text-[12px] font-black uppercase">
-              Firma y Sello Responsable
+            <div className="w-48 border-t-2 border-slate-900 pt-1 text-center text-[9px] font-black uppercase">
+              Firma Responsable
             </div>
           </div>
         </div>
