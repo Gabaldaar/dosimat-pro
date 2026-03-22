@@ -264,9 +264,12 @@ export default function CatalogPage() {
 
   const handlePrintProduct = (item: any) => {
     setProductToPrint(item);
+    // Usamos un pequeño delay para asegurar que el DOM se actualice con la ficha a imprimir
     setTimeout(() => {
-      window.print();
-    }, 100);
+      if (typeof window !== 'undefined') {
+        window.print();
+      }
+    }, 250);
   };
 
   const handleSave = () => {
@@ -496,11 +499,15 @@ export default function CatalogPage() {
                     <Filter className="h-4 w-4" />
                   </Button>
                 </SheetTrigger>
-                <SheetContent side="left" className="w-[280px]">
-                  <SheetHeader className="mb-6">
-                    <SheetTitle className="flex items-center gap-2"><Tag className="h-5 w-5" /> Filtrar Catálogo</SheetTitle>
-                  </SheetHeader>
-                  <FilterPanel />
+                <SheetContent side="left" className="w-[280px] flex flex-col p-0">
+                  <div className="p-6 pb-2">
+                    <SheetHeader className="mb-2">
+                      <SheetTitle className="flex items-center gap-2"><Tag className="h-5 w-5" /> Filtrar Catálogo</SheetTitle>
+                    </SheetHeader>
+                  </div>
+                  <ScrollArea className="flex-1 p-6 pt-0">
+                    <FilterPanel />
+                  </ScrollArea>
                 </SheetContent>
               </Sheet>
               {isAdmin && (
@@ -566,25 +573,30 @@ export default function CatalogPage() {
                               {!tracksStock && <Badge variant="outline" className="text-[9px] font-black uppercase text-blue-600 border-blue-200 bg-blue-50">ENTREGA DIRECTA</Badge>}
                               <Badge variant="outline" className="text-[9px] font-bold bg-white text-muted-foreground border-muted-foreground/20">{catName}</Badge>
                             </div>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onSelect={() => handlePrintProduct(item)}><Printer className="mr-2 h-4 w-4" /> Exportar Ficha (PDF)</DropdownMenuItem>
-                                {isAdmin && (
-                                  <>
-                                    <DropdownMenuItem onSelect={() => handleOpenDialog(item)}><Edit className="mr-2 h-4 w-4" /> Editar parámetros</DropdownMenuItem>
-                                    {item.isCompuesto && (
-                                      <DropdownMenuItem className="text-amber-600 font-bold" onSelect={() => { setSelectedForAssembly(item); setAssemblyQty(1); setIsAssemblyOpen(true); }}>
-                                        <Hammer className="mr-2 h-4 w-4" /> Orden de Armado
-                                      </DropdownMenuItem>
-                                    )}
-                                    <DropdownMenuItem className="text-destructive" onSelect={() => setItemToDelete(item)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem>
-                                  </>
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            <div className="flex items-center gap-1">
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-primary opacity-40 group-hover:opacity-100 transition-opacity" onClick={() => handlePrintProduct(item)} title="Imprimir Ficha">
+                                <Printer className="h-4 w-4" />
+                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onSelect={() => handlePrintProduct(item)}><Printer className="mr-2 h-4 w-4" /> Exportar Ficha (PDF)</DropdownMenuItem>
+                                  {isAdmin && (
+                                    <>
+                                      <DropdownMenuItem onSelect={() => handleOpenDialog(item)}><Edit className="mr-2 h-4 w-4" /> Editar parámetros</DropdownMenuItem>
+                                      {item.isCompuesto && (
+                                        <DropdownMenuItem className="text-amber-600 font-bold" onSelect={() => { setSelectedForAssembly(item); setAssemblyQty(1); setIsAssemblyOpen(true); }}>
+                                          <Hammer className="mr-2 h-4 w-4" /> Orden de Armado
+                                        </DropdownMenuItem>
+                                      )}
+                                      <DropdownMenuItem className="text-destructive" onSelect={() => setItemToDelete(item)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem>
+                                    </>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
                           </div>
                           <CardTitle className="text-lg mt-2 truncate font-bold">{item.name}</CardTitle>
                         </CardHeader>
