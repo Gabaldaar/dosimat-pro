@@ -178,7 +178,7 @@ export default function CatalogPage() {
   const [formData, setFormData] = useState({
     name: "",
     categoryId: "",
-    supplier: "",
+    supplier: "none",
     priceARS: 0,
     priceUSD: 0,
     costARS: 0,
@@ -369,7 +369,7 @@ export default function CatalogPage() {
         ...formData,
         name: item.name || "",
         categoryId: item.categoryId || "",
-        supplier: item.supplier || "",
+        supplier: item.supplier || "none",
         priceARS: item.priceARS || 0,
         priceUSD: item.priceUSD || 0,
         costARS: item.costARS || 0,
@@ -387,7 +387,7 @@ export default function CatalogPage() {
     } else {
       setEditingItemId(null)
       setFormData({ 
-        name: "", categoryId: "", supplier: "", priceARS: 0, priceUSD: 0, costARS: 0, costUSD: 0, 
+        name: "", categoryId: "", supplier: "none", priceARS: 0, priceUSD: 0, costARS: 0, costUSD: 0, 
         laborCostARS: 0, laborCostUSD: 0, isService: false, 
         isCompuesto: false, trackStock: true, description: "", stock: 0, minStock: 0, components: [] 
       })
@@ -426,7 +426,13 @@ export default function CatalogPage() {
       }
     }
 
-    setDocumentNonBlocking(doc(db, 'products_services', id), { ...formData, id }, { merge: true })
+    const savePayload = {
+      ...formData,
+      id,
+      supplier: formData.supplier === 'none' ? "" : formData.supplier
+    }
+
+    setDocumentNonBlocking(doc(db, 'products_services', id), savePayload, { merge: true })
     setIsDialogOpen(false)
     toast({ title: editingItemId ? "Item actualizado" : "Item creado" })
   }
@@ -1056,7 +1062,7 @@ export default function CatalogPage() {
                     {orderToView.status !== 'completed' && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs"><Copy className="h-3 w-3" /> COPIAR LISTA</Button>
+                          <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs"><Copy className="h-3.5 w-3.5" /> COPIAR LISTA</Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => handleCopyShoppingList()}>Lista Completa</DropdownMenuItem>
@@ -1200,7 +1206,7 @@ export default function CatalogPage() {
                   <Select value={formData.supplier} onValueChange={(v) => setFormData({...formData, supplier: v})}>
                     <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">SIN PROVEEDOR</SelectItem>
+                      <SelectItem value="none">SIN PROVEEDOR</SelectItem>
                       {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
