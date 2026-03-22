@@ -52,7 +52,8 @@ import {
   Truck,
   Briefcase,
   Phone,
-  MapPin
+  MapPin,
+  Save
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -308,36 +309,35 @@ export default function CatalogPage() {
 
     return {
       all: flatList,
-      toBuySuggested: flatList.filter(f => f.suggestedToBuy > 0)
+      toBuySuggested: flatList.filter(f => f.suggestedToBuy > 0 || (orderToView?.purchaseQtys?.[f.id] > 0))
     };
   }, [selectedForAssembly, assemblyQty, items, orderToView]);
 
-  // Inicializar el carrito de compras manual cada vez que la explosión cambie
+  // Inicializar el carrito de compras manual cada vez que la explosión cambie o se cargue una orden
   useEffect(() => {
-    if (explosionSummary?.toBuySuggested) {
+    if (orderToView && explosionSummary) {
       const newManualQtys: Record<string, number> = {};
       const newManualSups: Record<string, string> = {};
       
       explosionSummary.toBuySuggested.forEach(item => {
-        // Solo inicializar si no existen ya (para no pisar cambios mientras el modal está abierto)
-        // Pero si estamos viendo una orden guardada, cargamos sus valores
-        if (orderToView?.purchaseQtys?.[item.id] !== undefined) {
-          newManualQtys[item.id] = orderToView.purchaseQtys[item.id];
-        } else {
-          newManualQtys[item.id] = item.suggestedToBuy;
-        }
-
-        if (orderToView?.purchaseSuppliers?.[item.id] !== undefined) {
-          newManualSups[item.id] = orderToView.purchaseSuppliers[item.id];
-        } else {
-          newManualSups[item.id] = item.supplier;
-        }
+        newManualQtys[item.id] = orderToView.purchaseQtys?.[item.id] ?? item.suggestedToBuy;
+        newManualSups[item.id] = orderToView.purchaseSuppliers?.[item.id] ?? item.supplier;
       });
       
       setManualPurchaseQtys(newManualQtys);
       setManualSuppliers(newManualSups);
+    } else if (isAssemblyOpen && !orderToView && explosionSummary) {
+      // Caso de creación de nueva orden
+      const newManualQtys: Record<string, number> = {};
+      const newManualSups: Record<string, string> = {};
+      explosionSummary.toBuySuggested.forEach(item => {
+        newManualQtys[item.id] = item.suggestedToBuy;
+        newManualSups[item.id] = item.supplier;
+      });
+      setManualPurchaseQtys(newManualQtys);
+      setManualSuppliers(newManualSups);
     }
-  }, [explosionSummary, orderToView]);
+  }, [isAssemblyOpen, orderToView, explosionSummary]);
 
   const purchaseCalculations = useMemo(() => {
     if (!explosionSummary || !items) return null;
@@ -421,16 +421,6 @@ export default function CatalogPage() {
     setIsDialogOpen(true)
   }
 
-  const handlePrint = () => {
-    if (typeof window !== 'undefined' && productToPreview) {
-      const originalTitle = document.title;
-      const cleanName = productToPreview.name.replace(/[/\\?%*:|"<>]/g, '-');
-      document.title = `BOM_${cleanName}`;
-      window.print();
-      document.title = originalTitle;
-    }
-  };
-
   const handleSave = () => {
     if (!formData.name || !formData.categoryId) {
       toast({ title: "Error", description: "Nombre y Categoría son obligatorios", variant: "destructive" })
@@ -486,23 +476,41 @@ export default function CatalogPage() {
     toast({ title: "Orden de producción creada", description: `Estado: ${status === 'ready' ? 'Lista para armar' : 'Pendiente de compra'}` });
   }
 
+  const handleUpdateOrderPlan = () => {
+    if (!orderToView) return;
+    
+    updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
+      purchaseQtys: manualPurchaseQtys,
+      purchaseSuppliers: manualSuppliers
+    });
+
+    toast({ title: "Planificación actualizada", description: "Se han guardado las cantidades y proveedores en la orden." });
+  }
+
   const handleReceiveMaterials = () => {
     if (!orderToView || !purchaseCalculations) return;
 
+    const newPurchaseQtys = { ...orderToView.purchaseQtys };
+
     purchaseCalculations.items.forEach(item => {
       if (item.manualQty > 0) {
+        // Sumar al stock real
         updateDocumentNonBlocking(doc(db, 'products_services', item.id), {
           stock: increment(item.manualQty)
         });
+        // Limpiar la cantidad pendiente de compra en la orden
+        newPurchaseQtys[item.id] = 0;
       }
     });
 
+    // Actualizar la orden con los ítems ya "comprados"
     updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
-      status: 'ready'
+      purchaseQtys: newPurchaseQtys,
+      purchaseSuppliers: manualSuppliers
     });
 
-    toast({ title: "Materiales ingresados", description: "El stock ha sido actualizado y la orden está lista para armar." });
-    setOrderToView(null);
+    toast({ title: "Materiales ingresados", description: "Se actualizó el stock y se descontaron de la lista de pendientes." });
+    // No cerramos el modal para que el usuario vea el recálculo
   }
 
   const handleAssembleFinal = () => {
@@ -1103,20 +1111,27 @@ export default function CatalogPage() {
                     <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
                       <ShoppingCart className="h-4 w-4" /> Compras / Insumos
                     </h3>
-                    {orderToView.status !== 'completed' && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs"><Copy className="h-3.5 w-3.5" /> COPIAR LISTA</Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleCopyShoppingList()}>Lista Completa</DropdownMenuItem>
-                          <div className="h-px bg-muted my-1" />
-                          {Array.from(new Set(purchaseCalculations?.items.map(i => i.supplier))).map(sup => (
-                            <DropdownMenuItem key={sup} onClick={() => handleCopyShoppingList(sup)}>{sup}</DropdownMenuItem>
-                          ))}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
+                    <div className="flex gap-2">
+                      {orderToView.status !== 'completed' && (
+                        <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs" onClick={handleUpdateOrderPlan}>
+                          <Save className="h-3.5 w-3.5" /> GUARDAR PLAN
+                        </Button>
+                      )}
+                      {orderToView.status !== 'completed' && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs"><Copy className="h-3.5 w-3.5" /> COPIAR LISTA</Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleCopyShoppingList()}>Lista Completa</DropdownMenuItem>
+                            <div className="h-px bg-muted my-1" />
+                            {Array.from(new Set(purchaseCalculations?.items.map(i => i.supplier))).map(sup => (
+                              <DropdownMenuItem key={sup} onClick={() => handleCopyShoppingList(sup)}>{sup}</DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
                   </div>
 
                   <Card className="border-2 shadow-lg relative overflow-hidden bg-white">
@@ -1198,8 +1213,12 @@ export default function CatalogPage() {
                       )}
                     </CardContent>
                   </Card>
-                  {orderToView.status === 'pending_purchase' && (
-                    <Button className="w-full bg-emerald-600 hover:bg-emerald-700 font-black h-12 shadow-lg" onClick={handleReceiveMaterials}>
+                  {orderToView.status !== 'completed' && (
+                    <Button 
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 font-black h-12 shadow-lg" 
+                      onClick={handleReceiveMaterials}
+                      disabled={!purchaseCalculations || purchaseCalculations.items.every(i => i.manualQty <= 0)}
+                    >
                       <Truck className="mr-2 h-5 w-5" /> INGRESAR MATERIALES COMPRADOS
                     </Button>
                   )}
