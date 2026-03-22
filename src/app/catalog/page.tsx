@@ -671,7 +671,7 @@ export default function CatalogPage() {
         </SidebarInset>
       </div>
 
-      {/* DIÁLOGO DE VISTA PREVIA DE FICHA - COMPACTO */}
+      {/* DIÁLOGO DE VISTA PREVIA DE FICHA */}
       <Dialog open={!!productToPreview} onOpenChange={(o) => { if(!o) setProductToPreview(null); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -727,31 +727,74 @@ export default function CatalogPage() {
                 </div>
 
                 {productToPreview.isCompuesto && productToPreview.components?.length > 0 && (
-                  <div className="space-y-2">
-                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-800 flex items-center gap-2 border-b pb-1">
-                      <Layers className="h-3 w-3" /> Estructura de Armado
-                    </h3>
-                    <div className="border rounded-lg bg-white overflow-hidden">
-                      <table className="w-full text-[11px]">
-                        <thead className="bg-slate-100 border-b">
-                          <tr>
-                            <th className="p-1.5 text-left font-black uppercase text-[9px]">Componente</th>
-                            <th className="p-1.5 text-center font-black uppercase text-[9px] w-16">Cant.</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {productToPreview.components.map((comp: any, idx: number) => {
-                            const child = items?.find(i => i.id === comp.productId);
-                            return (
-                              <tr key={idx}>
-                                <td className="p-1.5 font-medium">{child?.name || 'Cargando...'}</td>
-                                <td className="p-1.5 text-center font-black text-primary">{comp.quantity}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <h3 className="text-xs font-black uppercase tracking-widest text-slate-800 flex items-center gap-2 border-b pb-1">
+                        <Layers className="h-3 w-3" /> Estructura de Armado
+                      </h3>
+                      <div className="border rounded-lg bg-white overflow-hidden">
+                        <table className="w-full text-[11px]">
+                          <thead className="bg-slate-100 border-b">
+                            <tr>
+                              <th className="p-1.5 text-left font-black uppercase text-[9px]">Componente</th>
+                              <th className="p-1.5 text-center font-black uppercase text-[9px] w-16">Cant.</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {productToPreview.components.map((comp: any, idx: number) => {
+                              const child = items?.find(i => i.id === comp.productId);
+                              return (
+                                <tr key={idx}>
+                                  <td className="p-1.5 font-medium">{child?.name || 'Cargando...'}</td>
+                                  <td className="p-1.5 text-center font-black text-primary">{comp.quantity}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
+
+                    {/* Desglose de sub-estructuras compuestas */}
+                    {productToPreview.components
+                      .map((c: any) => items?.find(i => i.id === c.productId))
+                      .filter((i: any) => i?.isCompuesto && i?.components?.length > 0)
+                      .length > 0 && (
+                      <div className="space-y-3 pt-2">
+                        <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                          <Package className="h-3.5 w-3.5" /> Desglose de Partes Compuestas
+                        </h3>
+                        <div className="grid grid-cols-1 gap-3">
+                          {productToPreview.components
+                            .map((c: any) => items?.find(i => i.id === c.productId))
+                            .filter((i: any) => i?.isCompuesto && i?.components?.length > 0)
+                            .map((subItem: any) => (
+                              <div key={subItem.id} className="space-y-1.5 ml-4">
+                                <div className="flex items-center gap-2 text-[10px] font-bold text-slate-700">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                  {subItem.name}
+                                </div>
+                                <div className="border-l-2 border-slate-200 ml-0.5 pl-3">
+                                  <table className="w-full text-[10px] text-slate-600">
+                                    <tbody>
+                                      {subItem.components.map((sc: any, sidx: number) => {
+                                        const child = items?.find(i => i.id === sc.productId);
+                                        return (
+                                          <tr key={sidx} className="h-5">
+                                            <td className="pr-4">{child?.name || '---'}</td>
+                                            <td className="text-right font-bold w-12">x{sc.quantity}</td>
+                                          </tr>
+                                        )
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            ))
+                          }
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -767,7 +810,7 @@ export default function CatalogPage() {
         </DialogContent>
       </Dialog>
 
-      {/* CONTENEDOR OCULTO PARA IMPRESIÓN REAL - MUCHO MÁS COMPACTO */}
+      {/* CONTENEDOR OCULTO PARA IMPRESIÓN REAL */}
       {productToPreview && (
         <div className="print-only w-full p-4 font-sans text-slate-900 bg-white">
           <div className="flex justify-between items-end border-b-2 border-slate-900 pb-2 mb-4">
@@ -826,31 +869,73 @@ export default function CatalogPage() {
           </div>
 
           {productToPreview.isCompuesto && productToPreview.components?.length > 0 && (
-            <div className="space-y-3">
-              <h3 className="text-sm font-black uppercase tracking-tight flex items-center gap-2 border-b border-slate-900 pb-1">
-                <Layers className="h-4 w-4" /> Estructura de Armado (BOM)
-              </h3>
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="bg-slate-900 text-white">
-                    <th className="p-1.5 text-left uppercase text-[9px] font-black">Componente / Pieza</th>
-                    <th className="p-1.5 text-center uppercase text-[9px] font-black w-24">Cantidad</th>
-                    <th className="p-1.5 text-left uppercase text-[9px] font-black">Estado / Obs.</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 border-b border-slate-200">
-                  {productToPreview.components.map((comp: any, idx: number) => {
-                    const child = items?.find(i => i.id === comp.productId);
-                    return (
-                      <tr key={idx}>
-                        <td className="p-1.5 text-[11px] font-bold">{child?.name || '---'}</td>
-                        <td className="p-1.5 text-center text-xs font-black text-primary">{comp.quantity}</td>
-                        <td className="p-1.5 text-[9px] text-slate-300 italic">__________________</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <h3 className="text-sm font-black uppercase tracking-tight flex items-center gap-2 border-b border-slate-900 pb-1">
+                  <Layers className="h-4 w-4" /> Estructura de Armado (BOM)
+                </h3>
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-slate-900 text-white">
+                      <th className="p-1.5 text-left uppercase text-[9px] font-black">Componente / Pieza</th>
+                      <th className="p-1.5 text-center uppercase text-[9px] font-black w-24">Cantidad</th>
+                      <th className="p-1.5 text-left uppercase text-[9px] font-black">Estado / Obs.</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 border-b border-slate-200">
+                    {productToPreview.components.map((comp: any, idx: number) => {
+                      const child = items?.find(i => i.id === comp.productId);
+                      return (
+                        <tr key={idx}>
+                          <td className="p-1.5 text-[11px] font-bold">{child?.name || '---'}</td>
+                          <td className="p-1.5 text-center text-xs font-black text-primary">{comp.quantity}</td>
+                          <td className="p-1.5 text-[9px] text-slate-300 italic">__________________</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Sub-estructuras en impresión */}
+              {productToPreview.components
+                .map((c: any) => items?.find(i => i.id === c.productId))
+                .filter((i: any) => i?.isCompuesto && i?.components?.length > 0)
+                .length > 0 && (
+                <div className="space-y-4 pt-2">
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2 border-b pb-1">
+                    <Package className="h-3.5 w-3.5" /> Desglose detallado de sub-partes
+                  </h3>
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                    {productToPreview.components
+                      .map((c: any) => items?.find(i => i.id === c.productId))
+                      .filter((i: any) => i?.isCompuesto && i?.components?.length > 0)
+                      .map((subItem: any) => (
+                        <div key={subItem.id} className="space-y-1.5">
+                          <div className="text-[10px] font-black text-slate-800 uppercase bg-slate-100 p-1 px-2 rounded">
+                            {subItem.name}
+                          </div>
+                          <div className="pl-2">
+                            <table className="w-full text-[9px] text-slate-700">
+                              <tbody className="divide-y divide-slate-100">
+                                {subItem.components.map((sc: any, sidx: number) => {
+                                  const child = items?.find(i => i.id === sc.productId);
+                                  return (
+                                    <tr key={sidx} className="h-4">
+                                      <td className="py-0.5">{child?.name || '---'}</td>
+                                      <td className="text-right font-bold w-10">x{sc.quantity}</td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ))
+                    }
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
