@@ -20,7 +20,7 @@ import {
   Layers, 
   Wrench, 
   Minus, 
-  CheckCircle2,
+  CheckCircle2, 
   Hammer,
   ListFilter,
   Tag,
@@ -160,6 +160,20 @@ export default function CatalogPage() {
     components: [] as { productId: string, quantity: number }[]
   })
 
+  // Efecto para disparar la impresión de forma robusta
+  useEffect(() => {
+    if (productToPrint) {
+      const timer = setTimeout(() => {
+        if (typeof window !== 'undefined') {
+          window.print();
+          // Limpiamos el estado después de imprimir
+          setProductToPrint(null);
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [productToPrint]);
+
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -264,12 +278,6 @@ export default function CatalogPage() {
 
   const handlePrintProduct = (item: any) => {
     setProductToPrint(item);
-    // Usamos un pequeño delay para asegurar que el DOM se actualice con la ficha a imprimir
-    setTimeout(() => {
-      if (typeof window !== 'undefined') {
-        window.print();
-      }
-    }, 250);
   };
 
   const handleSave = () => {
@@ -506,7 +514,9 @@ export default function CatalogPage() {
                     </SheetHeader>
                   </div>
                   <ScrollArea className="flex-1 p-6 pt-0">
-                    <FilterPanel />
+                    <div className="p-1">
+                      <FilterPanel />
+                    </div>
                   </ScrollArea>
                 </SheetContent>
               </Sheet>
@@ -574,7 +584,14 @@ export default function CatalogPage() {
                               <Badge variant="outline" className="text-[9px] font-bold bg-white text-muted-foreground border-muted-foreground/20">{catName}</Badge>
                             </div>
                             <div className="flex items-center gap-1">
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-primary opacity-40 group-hover:opacity-100 transition-opacity" onClick={() => handlePrintProduct(item)} title="Imprimir Ficha">
+                              <Button 
+                                type="button" 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-primary opacity-40 group-hover:opacity-100 transition-opacity" 
+                                onClick={() => handlePrintProduct(item)} 
+                                title="Imprimir Ficha"
+                              >
                                 <Printer className="h-4 w-4" />
                               </Button>
                               <DropdownMenu>
@@ -582,16 +599,16 @@ export default function CatalogPage() {
                                   <Button variant="ghost" size="icon" className="h-8 w-8 opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onSelect={() => handlePrintProduct(item)}><Printer className="mr-2 h-4 w-4" /> Exportar Ficha (PDF)</DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handlePrintProduct(item)}><Printer className="mr-2 h-4 w-4" /> Exportar Ficha (PDF)</DropdownMenuItem>
                                   {isAdmin && (
                                     <>
-                                      <DropdownMenuItem onSelect={() => handleOpenDialog(item)}><Edit className="mr-2 h-4 w-4" /> Editar parámetros</DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => handleOpenDialog(item)}><Edit className="mr-2 h-4 w-4" /> Editar parámetros</DropdownMenuItem>
                                       {item.isCompuesto && (
-                                        <DropdownMenuItem className="text-amber-600 font-bold" onSelect={() => { setSelectedForAssembly(item); setAssemblyQty(1); setIsAssemblyOpen(true); }}>
+                                        <DropdownMenuItem className="text-amber-600 font-bold" onClick={() => { setSelectedForAssembly(item); setAssemblyQty(1); setIsAssemblyOpen(true); }}>
                                           <Hammer className="mr-2 h-4 w-4" /> Orden de Armado
                                         </DropdownMenuItem>
                                       )}
-                                      <DropdownMenuItem className="text-destructive" onSelect={() => setItemToDelete(item)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem>
+                                      <DropdownMenuItem className="text-destructive" onClick={() => setItemToDelete(item)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem>
                                     </>
                                   )}
                                 </DropdownMenuContent>
