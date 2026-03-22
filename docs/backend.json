@@ -96,7 +96,9 @@
       "description": "Entity providing materials or services.",
       "properties": {
         "id": { "type": "string" },
-        "name": { "type": "string" }
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" }
       }
     }
   },

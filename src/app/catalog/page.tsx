@@ -50,7 +50,9 @@ import {
   Clock,
   CheckCircle,
   Truck,
-  Briefcase
+  Briefcase,
+  Phone,
+  MapPin
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -164,7 +166,12 @@ export default function CatalogPage() {
   const [selectedForAssembly, setSelectedForAssembly] = useState<any | null>(null)
   const [assemblyQty, setAssemblyQty] = useState(1)
   const [newCategoryName, setNewCategoryName] = useState("")
+  
+  // Supplier Form State
   const [newSupplierName, setNewSupplierName] = useState("")
+  const [newSupplierPhone, setNewSupplierPhone] = useState("")
+  const [newSupplierAddress, setNewSupplierAddress] = useState("")
+  
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
   const [productToPreview, setProductToPreview] = useState<any | null>(null)
   const [orderToView, setOrderToView] = useState<any | null>(null)
@@ -529,9 +536,16 @@ export default function CatalogPage() {
   const handleSaveSupplier = () => {
     if (!newSupplierName.trim()) return
     const id = Math.random().toString(36).substr(2, 9)
-    setDocumentNonBlocking(doc(db, 'suppliers', id), { id, name: newSupplierName }, { merge: true })
+    setDocumentNonBlocking(doc(db, 'suppliers', id), { 
+      id, 
+      name: newSupplierName,
+      phone: newSupplierPhone,
+      address: newSupplierAddress
+    }, { merge: true })
     setNewSupplierName("")
-    toast({ title: "Proveedor agregado" })
+    setNewSupplierPhone("")
+    setNewSupplierAddress("")
+    toast({ title: "Proveedor guardado" })
   }
 
   const handleDeleteSupplier = (id: string) => {
@@ -579,7 +593,16 @@ export default function CatalogPage() {
     
     let text = `*LISTA DE COMPRAS - DOSIMAT PRO*\n`;
     text += `Para: ${targetOrder.quantity} x ${targetOrder.productName}\n`;
-    if (supplierFilter) text += `PROVEEDOR: ${supplierFilter.toUpperCase()}\n`;
+    
+    if (supplierFilter) {
+      text += `PROVEEDOR: ${supplierFilter.toUpperCase()}\n`;
+      const supObj = suppliers?.find(s => s.name === supplierFilter);
+      if (supObj) {
+        if (supObj.phone) text += `Tel: ${supObj.phone}\n`;
+        if (supObj.address) text += `Dir: ${supObj.address}\n`;
+      }
+    }
+    
     text += `Fecha: ${dateStr}\n\n`;
     
     let itemsToInclude = purchaseCalculations.items;
@@ -1423,22 +1446,67 @@ export default function CatalogPage() {
       </Dialog>
 
       <Dialog open={isSupplierManagerOpen} onOpenChange={setIsSupplierManagerOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>Gestionar Proveedores</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="flex gap-2">
-              <Input placeholder="Nombre del proveedor..." value={newSupplierName} onChange={(e) => setNewSupplierName(e.target.value)} />
-              <Button onClick={handleSaveSupplier}><Plus className="h-4 w-4 mr-1" /> Agregar</Button>
+          <div className="space-y-6 py-4">
+            <div className="p-4 bg-muted/20 rounded-xl border border-dashed space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase">Nombre del Proveedor</Label>
+                  <Input placeholder="Ferretería Central..." value={newSupplierName} onChange={(e) => setNewSupplierName(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase">Teléfono / WhatsApp</Label>
+                  <Input placeholder="+54 9 11..." value={newSupplierPhone} onChange={(e) => setNewSupplierPhone(e.target.value)} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-black uppercase">Dirección</Label>
+                <Input placeholder="Av. Principal 123, Pilar..." value={newSupplierAddress} onChange={(e) => setNewSupplierAddress(e.target.value)} />
+              </div>
+              <Button onClick={handleSaveSupplier} className="w-full font-bold"><Plus className="h-4 w-4 mr-2" /> Guardar Proveedor</Button>
             </div>
-            <ScrollArea className="h-[300px] border rounded-md p-2">
+
+            <ScrollArea className="h-[300px] border rounded-xl p-2 bg-white">
               {sortedSuppliers.length === 0 ? (
                 <p className="text-center py-10 text-xs text-muted-foreground italic">No hay proveedores registrados.</p>
-              ) : sortedSuppliers.map((sup: any) => (
-                <div key={sup.id} className="flex justify-between items-center p-2 border-b last:border-0 hover:bg-muted/50 transition-colors">
-                  <span className="text-sm font-medium">{sup.name}</span>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeleteSupplier(sup.id)}><Trash2 className="h-4 w-4" /></Button>
+              ) : (
+                <div className="space-y-2">
+                  {sortedSuppliers.map((sup: any) => (
+                    <div key={sup.id} className="flex flex-col md:flex-row md:items-center justify-between p-3 border rounded-lg hover:bg-muted/20 transition-colors group">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-black text-slate-800">{sup.name}</span>
+                          {sup.phone && <Badge variant="outline" className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border-emerald-100">{sup.phone}</Badge>}
+                        </div>
+                        {sup.address && (
+                          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                            <MapPin className="h-3 w-3" /> {sup.address}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-1 mt-2 md:mt-0 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8" 
+                          onClick={() => {
+                            setNewSupplierName(sup.name || "");
+                            setNewSupplierPhone(sup.phone || "");
+                            setNewSupplierAddress(sup.address || "");
+                            deleteDocumentNonBlocking(doc(db, 'suppliers', sup.id));
+                          }}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeleteSupplier(sup.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </ScrollArea>
           </div>
         </DialogContent>
@@ -1661,6 +1729,203 @@ export default function CatalogPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* FICHA TÉCNICA (INVISIBLE EN PANTALLA, SOLO PARA IMPRESIÓN) */}
+      {productToPreview && (
+        <div className="print-only w-full p-8 font-sans text-slate-900 bg-white">
+          <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6 mb-8">
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <div className="bg-slate-900 p-2 rounded">
+                  <Droplets className="h-6 w-6 text-white" />
+                </div>
+                <h1 className="text-3xl font-black uppercase tracking-tighter">Ficha Técnica de Producto</h1>
+              </div>
+              <p className="text-slate-500 font-bold text-sm tracking-widest uppercase">Dosimat Pro System • Control de Ingeniería</p>
+            </div>
+            <div className="text-right space-y-1">
+              <Badge className="bg-slate-900 text-white font-black px-4 py-1 rounded-none uppercase tracking-widest text-xs">Documento Oficial</Badge>
+              <p className="text-[10px] font-black text-slate-400">REF ID: {productToPreview.id.toUpperCase()}</p>
+            </div>
+          </div>
+
+          <section className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-10">
+            <div className="space-y-6">
+              <div>
+                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1 block">Nombre del Ítem</Label>
+                <h2 className="text-4xl font-black text-slate-900 leading-tight">{productToPreview.name}</h2>
+              </div>
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1 block">Categoría</Label>
+                  <p className="font-bold text-lg">{categoryMap[productToPreview.categoryId] || "General"}</p>
+                </div>
+                <div>
+                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1 block">Tipo</Label>
+                  <p className="font-bold text-lg">{productToPreview.isService ? 'Servicio Técnico' : 'Producto Físico'}</p>
+                </div>
+              </div>
+              {productToPreview.description && (
+                <div>
+                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1 block">Especificaciones Generales</Label>
+                  <p className="text-sm text-slate-700 leading-relaxed border-l-4 border-slate-200 pl-4 py-1 italic">{productToPreview.description}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-slate-50 p-6 border-2 border-slate-900 rounded-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-5"><Coins className="h-24 w-24" /></div>
+                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] mb-4 block">Lista de Precios Vigente</Label>
+                <div className="space-y-4 relative z-10">
+                  <div className="flex justify-between items-baseline border-b border-slate-200 pb-2">
+                    <span className="text-xs font-black uppercase">P. Venta ARS:</span>
+                    <span className="text-3xl font-black">${(productToPreview.priceARS || 0).toLocaleString('es-AR')}</span>
+                  </div>
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-xs font-black uppercase">P. Venta USD:</span>
+                    <span className="text-3xl font-black text-emerald-700">u$s {(productToPreview.priceUSD || 0).toLocaleString('es-AR')}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-100/50 p-4 border border-slate-200 rounded-xl">
+                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] mb-3 block">Costo Total Estimado</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase">Costo ARS</span>
+                    <span className="font-black text-slate-700">${(productToPreview.calculatedCostARS || 0).toLocaleString('es-AR')}</span>
+                  </div>
+                  <div className="flex flex-col border-l pl-4 border-slate-200">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase">Costo USD</span>
+                    <span className="font-black text-emerald-700">u$s {(productToPreview.calculatedCostUSD || 0).toLocaleString('es-AR')}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {productToPreview.isCompuesto && (
+            <div className="space-y-10 animate-in fade-in duration-700">
+              <section className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <Layers className="h-5 w-5 text-slate-900" />
+                  <h3 className="text-lg font-black uppercase tracking-widest text-slate-900">Estructura de Armado (BOM)</h3>
+                </div>
+                <div className="border-2 border-slate-900 rounded-xl overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-slate-900">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="text-white font-black uppercase text-[10px]">Componente / Referencia</TableHead>
+                        <TableHead className="text-white font-black uppercase text-[10px] text-center w-24">Cantidad</TableHead>
+                        <TableHead className="text-white font-black uppercase text-[10px] text-right">Costo Unit.</TableHead>
+                        <TableHead className="text-white font-black uppercase text-[10px] text-right">Subtotal Costo</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {productToPreview.components?.map((comp: any, idx: number) => {
+                        const child = items?.find(i => i.id === comp.productId);
+                        const cost = child ? calculateCost(child, items || []) : { ars: 0, usd: 0 };
+                        const currencySymbol = child?.costARS > 0 ? '$' : 'u$s';
+                        const unitCostValue = child?.costARS > 0 ? cost.ars : cost.usd;
+                        const subtotalCostValue = unitCostValue * comp.quantity;
+
+                        return (
+                          <TableRow key={idx} className="border-b border-slate-200">
+                            <TableCell>
+                              <p className="font-black text-sm">{child?.name || 'Cargando...'}</p>
+                              <p className="text-[9px] text-slate-400 font-bold uppercase">{child?.supplier || 'Sin Proveedor Especificado'}</p>
+                            </TableCell>
+                            <TableCell className="text-center font-black text-lg">{comp.quantity}</TableCell>
+                            <TableCell className="text-right font-bold text-xs">
+                              {currencySymbol} {unitCostValue.toLocaleString('es-AR')}
+                            </TableCell>
+                            <TableCell className="text-right font-black text-sm">
+                              {currencySymbol} {subtotalCostValue.toLocaleString('es-AR')}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      {productToPreview.laborCostARS > 0 || productToPreview.laborCostUSD > 0 ? (
+                        <TableRow className="bg-slate-50">
+                          <TableCell className="font-black text-xs uppercase italic">Gastos de Ensamblado / Mano de Obra</TableCell>
+                          <TableCell className="text-center">---</TableCell>
+                          <TableCell className="text-right font-bold text-xs">---</TableCell>
+                          <TableCell className="text-right font-black text-sm">
+                            {productToPreview.laborCostARS > 0 
+                              ? `$ ${Number(productToPreview.laborCostARS).toLocaleString('es-AR')}`
+                              : `u$s ${Number(productToPreview.laborCostUSD).toLocaleString('es-AR')}`}
+                          </TableCell>
+                        </TableRow>
+                      ) : null}
+                    </TableBody>
+                  </Table>
+                </div>
+              </section>
+
+              {productToPreview.components?.some((c: any) => items?.find(i => i.id === c.productId)?.isCompuesto) && (
+                <section className="space-y-6 pt-6 border-t-2 border-dashed border-slate-200">
+                  <div className="flex items-center gap-3">
+                    <Factory className="h-5 w-5 text-slate-900" />
+                    <h3 className="text-lg font-black uppercase tracking-widest text-slate-900">Desglose de Partes Compuestas</h3>
+                  </div>
+                  <div className="grid grid-cols-1 gap-8">
+                    {productToPreview.components.filter((c: any) => items?.find(i => i.id === c.productId)?.isCompuesto).map((comp: any, idx: number) => {
+                      const child = items?.find(i => i.id === comp.productId);
+                      return (
+                        <div key={idx} className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
+                          <h4 className="font-black text-slate-800 mb-4 border-b pb-2 flex justify-between">
+                            <span>{child.name.toUpperCase()} (Estructura Interna)</span>
+                            <Badge variant="outline" className="border-slate-900 font-black">X {comp.quantity} UNIDADES</Badge>
+                          </h4>
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="border-b-2 border-slate-300">
+                                <TableHead className="font-black text-slate-900 text-[9px] uppercase">Pieza Interna</TableHead>
+                                <TableHead className="font-black text-slate-900 text-[9px] uppercase text-center">Cant. x Unidad</TableHead>
+                                <TableHead className="font-black text-slate-900 text-[9px] uppercase text-right">Costo Unit. Ref.</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {child.components?.map((subComp: any, sidx: number) => {
+                                const subChild = items?.find(i => i.id === subComp.productId);
+                                const subCost = subChild ? calculateCost(subChild, items || []) : { ars: 0, usd: 0 };
+                                const subCurrency = subChild?.costARS > 0 ? '$' : 'u$s';
+                                const subUnitCost = subChild?.costARS > 0 ? subCost.ars : subCost.usd;
+
+                                return (
+                                  <TableRow key={sidx} className="border-b border-slate-200/50">
+                                    <TableCell className="py-2">
+                                      <p className="font-bold text-xs text-slate-700">{subChild?.name || '---'}</p>
+                                    </TableCell>
+                                    <TableCell className="text-center font-bold text-slate-900">{subComp.quantity}</TableCell>
+                                    <TableCell className="text-right text-xs text-slate-500 italic">
+                                      {subCurrency} {subUnitCost.toLocaleString('es-AR')}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </section>
+              )}
+            </div>
+          )}
+
+          <div className="mt-20 pt-12 border-t border-slate-200">
+            <div className="flex justify-between items-end">
+              <div className="space-y-1">
+                <p className="text-[10px] font-black uppercase text-slate-400">Generado el: {new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                <p className="text-[10px] font-black uppercase text-slate-400">Dosimat Pro v2.5 • Ingeniería de Procesos</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <MobileNav />
     </div>
