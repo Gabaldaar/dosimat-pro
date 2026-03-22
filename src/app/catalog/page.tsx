@@ -267,8 +267,16 @@ export default function CatalogPage() {
   }
 
   const handlePrint = () => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && productToPreview) {
+      const originalTitle = document.title;
+      // Limpiamos el nombre para que sea un nombre de archivo válido
+      const cleanName = productToPreview.name.replace(/[/\\?%*:|"<>]/g, '-');
+      document.title = `BOM_${cleanName}`;
+      
       window.print();
+      
+      // Restauramos el título original inmediatamente después
+      document.title = originalTitle;
     }
   };
 
@@ -672,7 +680,7 @@ export default function CatalogPage() {
         </SidebarInset>
       </div>
 
-      {/* CONTENEDOR OCULTO PARA IMPRESIÓN REAL - Renderizado fuera del flujo principal de UI */}
+      {/* CONTENEDOR OCULTO PARA IMPRESIÓN REAL */}
       {productToPreview && (
         <div className="print-only w-full p-4 font-sans text-slate-900 bg-white">
           <div className="flex justify-between items-end border-b-2 border-slate-900 pb-2 mb-4">
