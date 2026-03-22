@@ -89,6 +89,15 @@
         "createdAt": { "type": "string", "format": "date-time" },
         "purchaseQtys": { "type": "object", "description": "Manual purchase quantities defined for this order." }
       }
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "type": "object",
+      "description": "Entity providing materials or services.",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      }
     }
   },
   "auth": {
@@ -115,6 +124,10 @@
       {
         "path": "/production_orders/{orderId}",
         "definition": { "entityName": "ProductionOrder", "description": "Production tracking." }
+      },
+      {
+        "path": "/suppliers/{supplierId}",
+        "definition": { "entityName": "Supplier", "description": "Managed list of providers." }
       }
     ]
   }

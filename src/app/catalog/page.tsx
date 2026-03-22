@@ -49,7 +49,8 @@ import {
   Factory,
   Clock,
   CheckCircle,
-  Truck
+  Truck,
+  Briefcase
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -116,10 +117,12 @@ export default function CatalogPage() {
   
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   const categoriesQuery = useMemoFirebase(() => collection(db, 'product_categories'), [db])
+  const suppliersQuery = useMemoFirebase(() => collection(db, 'suppliers'), [db])
   const ordersQuery = useMemoFirebase(() => query(collection(db, 'production_orders'), orderBy('createdAt', 'desc')), [db])
   
   const { data: items, isLoading } = useCollection(catalogQuery)
   const { data: rawCategories, isLoading: loadingCats } = useCollection(categoriesQuery)
+  const { data: suppliers } = useCollection(suppliersQuery)
   const { data: orders, isLoading: loadingOrders } = useCollection(ordersQuery)
   
   const categories = useMemo(() => {
@@ -130,6 +133,11 @@ export default function CatalogPage() {
       return (a.name || "").localeCompare(b.name || "")
     })
   }, [rawCategories])
+
+  const sortedSuppliers = useMemo(() => {
+    if (!suppliers) return []
+    return [...suppliers].sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""))
+  }, [suppliers])
 
   useEffect(() => {
     if (!loadingCats && categories.length > 0 && !hasInitializedFavorites) {
@@ -150,11 +158,13 @@ export default function CatalogPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isAssemblyOpen, setIsAssemblyOpen] = useState(false)
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false)
+  const [isSupplierManagerOpen, setIsSupplierManagerOpen] = useState(false)
   const [itemToDelete, setItemToDelete] = useState<any | null>(null)
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [selectedForAssembly, setSelectedForAssembly] = useState<any | null>(null)
   const [assemblyQty, setAssemblyQty] = useState(1)
   const [newCategoryName, setNewCategoryName] = useState("")
+  const [newSupplierName, setNewSupplierName] = useState("")
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
   const [productToPreview, setProductToPreview] = useState<any | null>(null)
   const [orderToView, setOrderToView] = useState<any | null>(null)
@@ -187,7 +197,7 @@ export default function CatalogPage() {
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        const anyOpen = isDialogOpen || !!itemToDelete || isAssemblyOpen || isCategoryManagerOpen || !!productToPreview || !!orderToView || !!orderToDelete;
+        const anyOpen = isDialogOpen || !!itemToDelete || isAssemblyOpen || isCategoryManagerOpen || isSupplierManagerOpen || !!productToPreview || !!orderToView || !!orderToDelete;
         if (!anyOpen) {
           document.body.style.pointerEvents = 'auto';
         }
@@ -195,7 +205,7 @@ export default function CatalogPage() {
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isDialogOpen, itemToDelete, isAssemblyOpen, isCategoryManagerOpen, productToPreview, orderToView, orderToDelete]);
+  }, [isDialogOpen, itemToDelete, isAssemblyOpen, isCategoryManagerOpen, isSupplierManagerOpen, productToPreview, orderToView, orderToDelete]);
 
   const calculateCost = useCallback((itemData: any, allItems: any[]): { ars: number, usd: number } => {
     if (!itemData.isCompuesto) {
@@ -510,34 +520,18 @@ export default function CatalogPage() {
     toast({ title: editingCategoryId ? "Categoría actualizada" : "Categoría creada" })
   }
 
-  const handleEditCategory = (cat: any) => {
-    setEditingCategoryId(cat.id)
-    setNewCategoryName(cat.name)
+  const handleSaveSupplier = () => {
+    if (!newSupplierName.trim()) return
+    const id = Math.random().toString(36).substr(2, 9)
+    setDocumentNonBlocking(doc(db, 'suppliers', id), { id, name: newSupplierName }, { merge: true })
+    setNewSupplierName("")
+    toast({ title: "Proveedor agregado" })
   }
 
-  const cancelEditCategory = () => {
-    setEditingCategoryId(null)
-    setNewCategoryName("")
-  }
-
-  const toggleFavoriteCategory = (cat: any) => {
-    updateDocumentNonBlocking(doc(db, 'product_categories', cat.id), {
-      isFavorite: !cat.isFavorite
-    });
-  }
-
-  const confirmDelete = () => {
-    if (!itemToDelete) return
-    deleteDocumentNonBlocking(doc(db, 'products_services', itemToDelete.id))
-    setItemToDelete(null)
-    toast({ title: "Item eliminado" })
-  }
-
-  const confirmDeleteOrder = () => {
-    if (!orderToDelete) return
-    deleteDocumentNonBlocking(doc(db, 'production_orders', orderToDelete.id))
-    setOrderToDelete(null)
-    toast({ title: "Orden eliminada" })
+  const handleDeleteSupplier = (id: string) => {
+    if (!isAdmin) return
+    deleteDocumentNonBlocking(doc(db, 'suppliers', id))
+    toast({ title: "Proveedor eliminado" })
   }
 
   const toggleCategory = (cid: string) => {
@@ -663,13 +657,22 @@ export default function CatalogPage() {
       </div>
 
       {isAdmin && (
-        <Button 
-          variant="outline" 
-          className="w-full h-10 border-dashed gap-2 font-bold text-xs" 
-          onClick={() => setIsCategoryManagerOpen(true)}
-        >
-          <Settings className="h-3 w-3" /> GESTIONAR CATEGORÍAS
-        </Button>
+        <div className="space-y-2 pt-4 border-t">
+          <Button 
+            variant="outline" 
+            className="w-full h-10 border-dashed gap-2 font-bold text-xs" 
+            onClick={() => setIsCategoryManagerOpen(true)}
+          >
+            <Settings className="h-3 w-3" /> GESTIONAR CATEGORÍAS
+          </Button>
+          <Button 
+            variant="outline" 
+            className="w-full h-10 border-dashed gap-2 font-bold text-xs" 
+            onClick={() => setIsSupplierManagerOpen(true)}
+          >
+            <Briefcase className="h-3 w-3" /> GESTIONAR PROVEEDORES
+          </Button>
+        </div>
       )}
     </div>
   )
@@ -1152,262 +1155,6 @@ export default function CatalogPage() {
         </DialogContent>
       </Dialog>
 
-      {/* VISTA DE IMPRESIÓN / PDF */}
-      {productToPreview && (
-        <div className="print-only w-full p-4 font-sans text-slate-900 bg-white">
-          <div className="flex justify-between items-end border-b-2 border-slate-900 pb-2 mb-4">
-            <div>
-              <h1 className="text-xl font-black uppercase tracking-tight text-primary">Ficha Técnica</h1>
-              <p className="text-[10px] font-bold text-slate-600">Dosimat Pro • Sistema de Gestión</p>
-            </div>
-            <div className="text-right">
-              <p className="text-[8px] font-black uppercase text-slate-400">Fecha: {new Date().toLocaleDateString('es-AR')}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-12 gap-6 mb-6">
-            <div className="col-span-7 space-y-3">
-              <div>
-                <Label className="text-[8px] font-black uppercase text-slate-400">Nombre del Ítem</Label>
-                <h2 className="text-lg font-black text-slate-800 leading-tight">{productToPreview.name}</h2>
-              </div>
-              <div className="flex gap-6">
-                <div>
-                  <Label className="text-[8px] font-black uppercase text-slate-400">Categoría</Label>
-                  <p className="text-xs font-bold">{categoryMap[productToPreview.categoryId] || "Sin Categoría"}</p>
-                </div>
-                <div>
-                  <Label className="text-[8px] font-black uppercase text-slate-400">Proveedor</Label>
-                  <p className="text-xs font-bold">{productToPreview.supplier || "---"}</p>
-                </div>
-              </div>
-              <div>
-                <Label className="text-[8px] font-black uppercase text-slate-400">Descripción</Label>
-                <p className="text-[11px] leading-snug text-slate-600 italic">
-                  {productToPreview.description || "Sin descripción registrada."}
-                </p>
-              </div>
-            </div>
-
-            <div className="col-span-5 bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
-              <div className="space-y-3">
-                <h3 className="text-[8px] font-black uppercase tracking-widest text-slate-400 border-b pb-1">Precios de Venta</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-2 bg-white rounded-lg border border-slate-200 shadow-sm text-center">
-                    <span className="text-[7px] font-black text-primary uppercase block mb-1">P. Venta ARS</span>
-                    <span className="text-md font-black">${Number(productToPreview.priceARS || 0).toLocaleString('es-AR')}</span>
-                  </div>
-                  <div className="p-2 bg-white rounded-lg border border-slate-200 shadow-sm text-center">
-                    <span className="text-[7px] font-black text-emerald-700 uppercase block mb-1">P. Venta USD</span>
-                    <span className="text-md font-black">u$s {Number(productToPreview.priceUSD || 0).toLocaleString('es-AR')}</span>
-                  </div>
-                </div>
-              </div>
-
-              {isAdmin && (
-                <div className="space-y-3">
-                  <h3 className="text-[8px] font-black uppercase tracking-widest text-slate-400 border-b pb-1">Costos de Referencia</h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-2 bg-slate-100 rounded-lg border border-slate-200 text-center">
-                      <span className="text-[7px] font-black text-slate-500 uppercase block mb-1">Costo ARS</span>
-                      <span className="text-sm font-bold text-slate-700">${Number(productToPreview.calculatedCostARS || 0).toLocaleString('es-AR')}</span>
-                    </div>
-                    <div className="p-2 bg-slate-100 rounded-lg border border-slate-200 text-center">
-                      <span className="text-[7px] font-black text-slate-500 uppercase block mb-1">Costo USD</span>
-                      <span className="text-sm font-bold text-slate-700">u$s {Number(productToPreview.calculatedCostUSD || 0).toLocaleString('es-AR')}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {productToPreview.trackStock !== false && !productToPreview.isService && (
-                <div className="p-2 bg-white rounded-lg border border-slate-200 flex justify-between items-center shadow-sm px-3">
-                  <span className="text-[8px] font-black text-slate-500 uppercase">Stock</span>
-                  <span className="text-sm font-black">{productToPreview.stock || 0} Unidades</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {productToPreview.isCompuesto && productToPreview.components?.length > 0 && (
-            <div className="space-y-6">
-              <div className="space-y-3">
-                <h3 className="text-sm font-black uppercase tracking-tight flex items-center gap-2 border-b border-slate-900 pb-1">
-                  <Layers className="h-4 w-4" /> Estructura de Armado (BOM)
-                </h3>
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="bg-slate-900 text-white">
-                      <th className="p-1.5 text-left uppercase text-[9px] font-black">Componente / Pieza</th>
-                      <th className="p-1.5 text-center uppercase text-[9px] font-black w-16">Cantidad</th>
-                      {isAdmin && <th className="p-1.5 text-right uppercase text-[9px] font-black w-24">Costo Unit.</th>}
-                      {isAdmin && <th className="p-1.5 text-right uppercase text-[9px] font-black w-24">Subtotal Costo</th>}
-                      <th className="p-1.5 text-left uppercase text-[9px] font-black">Proveedor</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 border-b border-slate-200">
-                    {productToPreview.components.map((comp: any, idx: number) => {
-                      const child = items?.find(i => i.id === comp.productId);
-                      const childCosts = child ? calculateCost(child, items || []) : { ars: 0, usd: 0 };
-                      const currency = (child?.costARS > 0 || child?.laborCostARS > 0) ? 'ARS' : 'USD';
-                      const unitCost = currency === 'ARS' ? childCosts.ars : childCosts.usd;
-                      const subtotal = unitCost * (comp.quantity || 0);
-
-                      return (
-                        <tr key={idx}>
-                          <td className="p-1.5 text-[11px] font-bold">{child?.name || '---'}</td>
-                          <td className="p-1.5 text-center text-xs font-black text-primary">{comp.quantity}</td>
-                          {isAdmin && (
-                            <td className="p-1.5 text-right text-[10px] text-slate-600">
-                              {currency === 'ARS' ? '$' : 'u$s'} {unitCost.toLocaleString('es-AR')}
-                            </td>
-                          )}
-                          {isAdmin && (
-                            <td className="p-1.5 text-right text-[10px] font-black">
-                              {currency === 'ARS' ? '$' : 'u$s'} {subtotal.toLocaleString('es-AR')}
-                            </td>
-                          )}
-                          <td className="p-1.5 text-[9px] text-slate-500 uppercase">{child?.supplier || "---"}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* DIÁLOGO DE VISTA PREVIA DE FICHA */}
-      <Dialog open={!!productToPreview} onOpenChange={(o) => { if(!o) setProductToPreview(null); }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-primary font-black text-lg">
-              <Printer className="h-4 w-4" /> Vista Previa de Ficha
-            </DialogTitle>
-            <DialogDescription className="text-xs">Revisa la información antes de exportar.</DialogDescription>
-          </DialogHeader>
-          
-          {productToPreview && (
-            <div className="py-2 space-y-4">
-              <div className="border rounded-xl p-4 bg-slate-50/50 shadow-sm">
-                <div className="flex justify-between items-start border-b pb-3 mb-4">
-                  <div>
-                    <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">{productToPreview.name}</h2>
-                    <Badge variant="secondary" className="text-[10px] h-5 font-bold">{categoryMap[productToPreview.categoryId] || "Sin Categoría"}</Badge>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[8px] font-black text-slate-400">DOSIMAT PRO</p>
-                    <p className="text-[10px] font-bold text-slate-500">{new Date().toLocaleDateString('es-AR')}</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <div className="space-y-3">
-                    <div>
-                      <Label className="text-[9px] font-black uppercase text-slate-400">Descripción</Label>
-                      <p className="text-xs text-slate-600 italic">{productToPreview.description || "Sin descripción."}</p>
-                    </div>
-                    <div className="flex gap-4">
-                      <div>
-                        <Label className="text-[9px] font-black uppercase text-slate-400">Tipo de Recurso</Label>
-                        <p className="text-xs font-bold uppercase">{productToPreview.isService ? 'SERVICIO TÉCNICO' : 'PRODUCTO FÍSICO'}</p>
-                      </div>
-                      <div>
-                        <Label className="text-[9px] font-black uppercase text-slate-400">Proveedor</Label>
-                        <p className="text-xs font-bold uppercase">{productToPreview.supplier || "---"}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-white p-3 rounded-lg border space-y-3">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <span className="text-[8px] font-black text-primary uppercase block">Venta ARS</span>
-                        <span className="text-lg font-black">${Number(productToPreview.priceARS || 0).toLocaleString('es-AR')}</span>
-                      </div>
-                      <div>
-                        <span className="text-[8px] font-black text-emerald-700 uppercase block">Venta USD</span>
-                        <span className="text-lg font-black">u$s {Number(productToPreview.priceUSD || 0).toLocaleString('es-AR')}</span>
-                      </div>
-                    </div>
-                    {isAdmin && (
-                      <div className="pt-2 border-t grid grid-cols-2 gap-2 opacity-70">
-                        <div>
-                          <span className="text-[7px] font-black text-slate-500 uppercase block">Costo ARS</span>
-                          <span className="text-xs font-bold">${Number(productToPreview.calculatedCostARS || 0).toLocaleString('es-AR')}</span>
-                        </div>
-                        <div>
-                          <span className="text-[7px] font-black text-slate-500 uppercase block">Costo USD</span>
-                          <span className="text-xs font-bold">u$s {Number(productToPreview.calculatedCostUSD || 0).toLocaleString('es-AR')}</span>
-                        </div>
-                      </div>
-                    )}
-                    {productToPreview.trackStock !== false && (
-                      <div className="pt-2 border-t flex justify-between items-center">
-                        <span className="text-[9px] font-bold text-slate-500 uppercase">Stock actual</span>
-                        <span className="text-xs font-black">{productToPreview.stock || 0} Unidades</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {productToPreview.isCompuesto && productToPreview.components?.length > 0 && (
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <h3 className="text-xs font-black uppercase tracking-widest text-slate-800 flex items-center gap-2 border-b pb-1">
-                        <Layers className="h-4 w-4" /> Estructura de Armado (BOM)
-                      </h3>
-                      <div className="border rounded-lg bg-white overflow-hidden">
-                        <table className="w-full text-[11px]">
-                          <thead className="bg-slate-100 border-b">
-                            <tr>
-                              <th className="p-1.5 text-left font-black uppercase text-[9px]">Componente</th>
-                              <th className="p-1.5 text-center font-black uppercase text-[9px] w-12">Cant.</th>
-                              {isAdmin && <th className="p-1.5 text-right font-black uppercase text-[9px] w-20">Subtotal</th>}
-                              <th className="p-1.5 text-right font-black uppercase text-[9px]">Prov.</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y">
-                            {productToPreview.components.map((comp: any, idx: number) => {
-                              const child = items?.find(i => i.id === comp.productId);
-                              const childCosts = child ? calculateCost(child, items || []) : { ars: 0, usd: 0 };
-                              const currency = (child?.costARS > 0 || child?.laborCostARS > 0) ? 'ARS' : 'USD';
-                              const unitCost = currency === 'ARS' ? childCosts.ars : childCosts.usd;
-                              const subtotal = unitCost * (comp.quantity || 0);
-                              
-                              return (
-                                <tr key={idx}>
-                                  <td className="p-1.5 font-medium">{child?.name || 'Cargando...'}</td>
-                                  <td className="p-1.5 text-center font-black text-primary">{comp.quantity}</td>
-                                  {isAdmin && (
-                                    <td className="p-1.5 text-right font-bold text-slate-700">
-                                      {currency === 'ARS' ? '$' : 'u$s'} {subtotal.toLocaleString('es-AR')}
-                                    </td>
-                                  )}
-                                  <td className="p-1.5 text-right text-[8px] font-black uppercase text-slate-400">{child?.supplier || "---"}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          <DialogFooter className="border-t pt-3">
-            <Button variant="ghost" size="sm" onClick={() => setProductToPreview(null)} className="font-bold text-xs h-9">Cancelar</Button>
-            <Button size="sm" onClick={handlePrint} className="bg-primary font-black px-6 shadow-md shadow-primary/20 gap-2 h-9 text-xs">
-              <Download className="h-3.5 w-3.5" /> IMPRIMIR / PDF
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -1450,7 +1197,13 @@ export default function CatalogPage() {
                 </div>
                 <div className="space-y-2">
                   <Label className="font-bold">Proveedor</Label>
-                  <Input value={formData.supplier} onChange={(e) => setFormData({...formData, supplier: e.target.value})} placeholder="Ej: Ferretería Central" />
+                  <Select value={formData.supplier} onValueChange={(v) => setFormData({...formData, supplier: v})}>
+                    <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">SIN PROVEEDOR</SelectItem>
+                      {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               
@@ -1631,6 +1384,57 @@ export default function CatalogPage() {
               <CheckCircle2 className="mr-2 h-4 w-4" /> GUARDAR ÍTEM
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Categorías de Productos</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex gap-2">
+              <Input placeholder="Nueva categoría..." value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} />
+              <Button onClick={handleSaveCategory}>{editingCategoryId ? "Actualizar" : "Agregar"}</Button>
+              {editingCategoryId && <Button variant="ghost" onClick={cancelEditCategory}>Cancelar</Button>}
+            </div>
+            <ScrollArea className="h-[300px] border rounded-md p-2">
+              {categories.map((cat: any) => (
+                <div key={cat.id} className="flex justify-between items-center p-2 border-b last:border-0 hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => toggleFavoriteCategory(cat)}>
+                      <Star className={cn("h-4 w-4", cat.isFavorite ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30")} />
+                    </Button>
+                    <span className="text-sm font-medium">{cat.name}</span>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEditCategory(cat)}><Edit className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteDocumentNonBlocking(doc(db, 'product_categories', cat.id))}><Trash2 className="h-4 w-4" /></Button>
+                  </div>
+                </div>
+              ))}
+            </ScrollArea>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isSupplierManagerOpen} onOpenChange={setIsSupplierManagerOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Gestionar Proveedores</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex gap-2">
+              <Input placeholder="Nombre del proveedor..." value={newSupplierName} onChange={(e) => setNewSupplierName(e.target.value)} />
+              <Button onClick={handleSaveSupplier}><Plus className="h-4 w-4 mr-1" /> Agregar</Button>
+            </div>
+            <ScrollArea className="h-[300px] border rounded-md p-2">
+              {sortedSuppliers.length === 0 ? (
+                <p className="text-center py-10 text-xs text-muted-foreground italic">No hay proveedores registrados.</p>
+              ) : sortedSuppliers.map((sup: any) => (
+                <div key={sup.id} className="flex justify-between items-center p-2 border-b last:border-0 hover:bg-muted/50 transition-colors">
+                  <span className="text-sm font-medium">{sup.name}</span>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeleteSupplier(sup.id)}><Trash2 className="h-4 w-4" /></Button>
+                </div>
+              ))}
+            </ScrollArea>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -1875,6 +1679,36 @@ export default function CatalogPage() {
     const newComps = [...formData.components];
     newComps[idx].quantity = qty;
     setFormData(prev => ({ ...prev, components: newComps }));
+  }
+
+  function toggleFavoriteCategory(cat: any) {
+    updateDocumentNonBlocking(doc(db, 'product_categories', cat.id), {
+      isFavorite: !cat.isFavorite
+    });
+  }
+
+  function handleEditCategory(cat: any) {
+    setEditingCategoryId(cat.id)
+    setNewCategoryName(cat.name)
+  }
+
+  function cancelEditCategory() {
+    setEditingCategoryId(null)
+    setNewCategoryName("")
+  }
+
+  function confirmDeleteOrder() {
+    if (!orderToDelete) return
+    deleteDocumentNonBlocking(doc(db, 'production_orders', orderToDelete.id))
+    setOrderToDelete(null)
+    toast({ title: "Orden eliminada" })
+  }
+
+  function confirmDelete() {
+    if (!itemToDelete) return
+    deleteDocumentNonBlocking(doc(db, 'products_services', itemToDelete.id))
+    setItemToDelete(null)
+    toast({ title: "Item eliminado" })
   }
 }
 
