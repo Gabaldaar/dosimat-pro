@@ -181,6 +181,7 @@ export default function CatalogPage() {
 
   // Carrito de compras manual para armado
   const [manualPurchaseQtys, setManualPurchaseQtys] = useState<Record<string, number>>({})
+  const [manualSuppliers, setManualSuppliers] = useState<Record<string, string>>({})
 
   const [formData, setFormData] = useState({
     name: "",
@@ -315,12 +316,28 @@ export default function CatalogPage() {
   useEffect(() => {
     if (explosionSummary?.toBuySuggested) {
       const newManualQtys: Record<string, number> = {};
+      const newManualSups: Record<string, string> = {};
+      
       explosionSummary.toBuySuggested.forEach(item => {
-        newManualQtys[item.id] = item.suggestedToBuy;
+        // Solo inicializar si no existen ya (para no pisar cambios mientras el modal está abierto)
+        // Pero si estamos viendo una orden guardada, cargamos sus valores
+        if (orderToView?.purchaseQtys?.[item.id] !== undefined) {
+          newManualQtys[item.id] = orderToView.purchaseQtys[item.id];
+        } else {
+          newManualQtys[item.id] = item.suggestedToBuy;
+        }
+
+        if (orderToView?.purchaseSuppliers?.[item.id] !== undefined) {
+          newManualSups[item.id] = orderToView.purchaseSuppliers[item.id];
+        } else {
+          newManualSups[item.id] = item.supplier;
+        }
       });
+      
       setManualPurchaseQtys(newManualQtys);
+      setManualSuppliers(newManualSups);
     }
-  }, [explosionSummary]);
+  }, [explosionSummary, orderToView]);
 
   const purchaseCalculations = useMemo(() => {
     if (!explosionSummary || !items) return null;
@@ -330,13 +347,15 @@ export default function CatalogPage() {
       const futureStock = item.available + manualQty - item.required;
       const isCritical = futureStock < item.minStock;
       const isInsufficient = futureStock < 0;
+      const currentSupplier = manualSuppliers[item.id] || item.supplier;
 
       return {
         ...item,
         manualQty,
         futureStock,
         isCritical,
-        isInsufficient
+        isInsufficient,
+        supplier: currentSupplier
       };
     });
 
@@ -345,7 +364,7 @@ export default function CatalogPage() {
       totalARS: itemsToBuy.reduce((sum, item) => sum + (item.manualQty * item.costARS), 0),
       totalUSD: itemsToBuy.reduce((sum, item) => sum + (item.manualQty * item.costUSD), 0)
     };
-  }, [explosionSummary, manualPurchaseQtys, items]);
+  }, [explosionSummary, manualPurchaseQtys, manualSuppliers, items]);
 
   const sortedAddedComponents = useMemo(() => {
     if (!items || !formData.components) return []
@@ -456,11 +475,13 @@ export default function CatalogPage() {
       quantity: assemblyQty,
       status,
       createdAt: new Date().toISOString(),
-      purchaseQtys: manualPurchaseQtys
+      purchaseQtys: manualPurchaseQtys,
+      purchaseSuppliers: manualSuppliers
     };
 
     setDocumentNonBlocking(doc(db, 'production_orders', id), newOrder, { merge: true });
     setIsAssemblyOpen(false);
+    setManualSuppliers({});
     setActiveTab("orders");
     toast({ title: "Orden de producción creada", description: `Estado: ${status === 'ready' ? 'Lista para armar' : 'Pendiente de compra'}` });
   }
@@ -922,7 +943,7 @@ export default function CatalogPage() {
                                         <>
                                           <DropdownMenuItem onClick={() => handleOpenDialog(item)}><Edit className="mr-2 h-4 w-4" /> Editar parámetros</DropdownMenuItem>
                                           {item.isCompuesto && (
-                                            <DropdownMenuItem className="text-amber-600 font-bold" onClick={() => { setSelectedForAssembly(item); setAssemblyQty(1); setIsAssemblyOpen(true); }}>
+                                            <DropdownMenuItem className="text-amber-600 font-bold" onClick={() => { setSelectedForAssembly(item); setAssemblyQty(1); setManualSuppliers({}); setIsAssemblyOpen(true); }}>
                                               <Hammer className="mr-2 h-4 w-4" /> Orden de Armado
                                             </DropdownMenuItem>
                                           )}
@@ -1060,7 +1081,7 @@ export default function CatalogPage() {
                             <TableRow key={req.id}>
                               <TableCell className="py-2">
                                 <p className="font-bold text-xs">{req.name}</p>
-                                <p className="text-[8px] text-muted-foreground uppercase">{req.supplier}</p>
+                                <p className="text-[8px] text-muted-foreground uppercase">{manualSuppliers[req.id] || req.supplier}</p>
                               </TableCell>
                               <TableCell className="text-center font-black text-primary text-xs">{req.required}</TableCell>
                               <TableCell className="text-center text-xs">{req.available}</TableCell>
@@ -1089,7 +1110,7 @@ export default function CatalogPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => handleCopyShoppingList()}>Lista Completa</DropdownMenuItem>
-                          <DropdownMenuSeparator />
+                          <div className="h-px bg-muted my-1" />
                           {Array.from(new Set(purchaseCalculations?.items.map(i => i.supplier))).map(sup => (
                             <DropdownMenuItem key={sup} onClick={() => handleCopyShoppingList(sup)}>{sup}</DropdownMenuItem>
                           ))}
@@ -1112,8 +1133,8 @@ export default function CatalogPage() {
                           <Table>
                             <TableHeader className="bg-slate-900 text-white">
                               <TableRow>
-                                <TableHead className="text-white text-[9px] font-black uppercase">Material</TableHead>
-                                <TableHead className="text-white text-[9px] font-black uppercase text-center w-24">Compra</TableHead>
+                                <TableHead className="text-white text-[9px] font-black uppercase">Material / Proveedor</TableHead>
+                                <TableHead className="text-white text-[9px] font-black uppercase text-center w-20">Compra</TableHead>
                                 <TableHead className="text-white text-[9px] font-black uppercase text-center">Post</TableHead>
                                 <TableHead className="text-white text-[9px] font-black uppercase text-right">Subtotal</TableHead>
                               </TableRow>
@@ -1123,7 +1144,21 @@ export default function CatalogPage() {
                                 <TableRow key={f.id} className="hover:bg-muted/5">
                                   <TableCell className="py-2">
                                     <p className="font-bold text-xs">{f.name}</p>
-                                    <p className="text-[8px] text-muted-foreground uppercase">{f.supplier}</p>
+                                    <div className="mt-1">
+                                      <Select 
+                                        disabled={orderToView.status === 'completed'}
+                                        value={manualSuppliers[f.id] || f.supplier} 
+                                        onValueChange={(v) => setManualSuppliers(prev => ({ ...prev, [f.id]: v }))}
+                                      >
+                                        <SelectTrigger className="h-7 text-[9px] py-0 px-2 bg-muted/30 border-none">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="none">Sin Proveedor</SelectItem>
+                                          {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
                                   </TableCell>
                                   <TableCell>
                                     <input 
@@ -1575,7 +1610,7 @@ export default function CatalogPage() {
                               <TableCell>
                                 <div className="flex flex-col">
                                   <span className="font-bold text-sm">{req.name}</span>
-                                  <span className="text-[8px] text-muted-foreground uppercase">{req.supplier}</span>
+                                  <span className="text-[8px] text-muted-foreground uppercase">{manualSuppliers[req.id] || req.supplier}</span>
                                 </div>
                               </TableCell>
                               <TableCell className="text-center font-black text-primary">{req.required}</TableCell>
@@ -1603,7 +1638,7 @@ export default function CatalogPage() {
                       <ShoppingCart className="h-4 w-4" /> Carrito de Compras Sugerido
                     </h3>
                     <div className="flex gap-2">
-                      <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs" onClick={() => setManualPurchaseQtys({})}>
+                      <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs" onClick={() => { setManualPurchaseQtys({}); setManualSuppliers({}); }}>
                         <RefreshCw className="h-3.5 w-3.5" /> REINICIAR
                       </Button>
                       <DropdownMenu>
@@ -1612,7 +1647,7 @@ export default function CatalogPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => handleCopyShoppingList()}>Lista Completa</DropdownMenuItem>
-                          <DropdownMenuSeparator />
+                          <div className="h-px bg-muted my-1" />
                           {Array.from(new Set(purchaseCalculations?.items.map(i => i.supplier))).map(sup => (
                             <DropdownMenuItem key={sup} onClick={() => handleCopyShoppingList(sup)}>{sup}</DropdownMenuItem>
                           ))}
@@ -1635,8 +1670,8 @@ export default function CatalogPage() {
                           <Table>
                             <TableHeader className="bg-slate-900 text-white">
                               <TableRow>
-                                <TableHead className="text-white text-[9px] font-black uppercase">Material</TableHead>
-                                <TableHead className="text-white text-[9px] font-black uppercase text-center w-24">A Comprar</TableHead>
+                                <TableHead className="text-white text-[9px] font-black uppercase">Material / Proveedor</TableHead>
+                                <TableHead className="text-white text-[9px] font-black uppercase text-center w-20">A Comprar</TableHead>
                                 <TableHead className="text-white text-[9px] font-black uppercase text-center">Post-Armado</TableHead>
                                 <TableHead className="text-white text-[9px] font-black uppercase text-right">Subtotal</TableHead>
                               </TableRow>
@@ -1646,7 +1681,20 @@ export default function CatalogPage() {
                                 <TableRow key={f.id} className="hover:bg-muted/5">
                                   <TableCell className="py-2">
                                     <p className="font-bold text-xs">{f.name}</p>
-                                    <p className="text-[8px] text-muted-foreground uppercase">{f.supplier}</p>
+                                    <div className="mt-1">
+                                      <Select 
+                                        value={manualSuppliers[f.id] || f.supplier} 
+                                        onValueChange={(v) => setManualSuppliers(prev => ({ ...prev, [f.id]: v }))}
+                                      >
+                                        <SelectTrigger className="h-7 text-[9px] py-0 px-2 bg-muted/30 border-none">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="none">Sin Proveedor</SelectItem>
+                                          {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
                                   </TableCell>
                                   <TableCell>
                                     <input 
@@ -1981,8 +2029,4 @@ export default function CatalogPage() {
     setItemToDelete(null)
     toast({ title: "Item eliminado" })
   }
-}
-
-function DropdownMenuSeparator() {
-  return <div className="h-px bg-muted my-1" />
 }
