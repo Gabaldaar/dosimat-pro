@@ -1417,7 +1417,7 @@ export default function CatalogPage() {
       </Dialog>
 
       <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Categorías de Productos</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="flex gap-2">
@@ -1446,7 +1446,7 @@ export default function CatalogPage() {
       </Dialog>
 
       <Dialog open={isSupplierManagerOpen} onOpenChange={setIsSupplierManagerOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Gestionar Proveedores</DialogTitle></DialogHeader>
           <div className="space-y-6 py-4">
             <div className="p-4 bg-muted/20 rounded-xl border border-dashed space-y-4">
