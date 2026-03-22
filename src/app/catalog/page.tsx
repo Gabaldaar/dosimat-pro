@@ -42,7 +42,8 @@ import {
   MessageSquare,
   Coins,
   ShoppingCart,
-  ArrowRight
+  ArrowRight,
+  Copy
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -485,7 +486,7 @@ export default function CatalogPage() {
 
     text += `\n*INVERSIÓN TOTAL ESTIMADA:*\n`;
     text += `ARS: $${explosionSummary.totalBuyARS.toLocaleString('es-AR')}\n`;
-    text += `USD: u$s ${explosionSummary.totalBuyUSD.toLocaleString('es-AR')}`;
+    text += `USD: u$s {explosionSummary.totalBuyUSD.toLocaleString('es-AR')}`;
 
     navigator.clipboard.writeText(text);
     toast({ title: "Lista de compras copiada", description: "Lista preparada para enviar por WhatsApp." });
