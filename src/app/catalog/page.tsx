@@ -34,7 +34,9 @@ import {
   Star,
   StarOff,
   History,
-  Box
+  Box,
+  FileText,
+  Printer
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -136,6 +138,7 @@ export default function CatalogPage() {
   const [assemblyQty, setAssemblyQty] = useState(1)
   const [newCategoryName, setNewCategoryName] = useState("")
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
+  const [productToPrint, setProductToPrint] = useState<any | null>(null)
   
   const [bomFilterCategory, setBomFilterCategory] = useState("all")
 
@@ -258,6 +261,13 @@ export default function CatalogPage() {
     }
     setIsDialogOpen(true)
   }
+
+  const handlePrintProduct = (item: any) => {
+    setProductToPrint(item);
+    setTimeout(() => {
+      window.print();
+    }, 100);
+  };
 
   const handleSave = () => {
     if (!formData.name || !formData.categoryId) {
@@ -467,174 +477,281 @@ export default function CatalogPage() {
 
   return (
     <div className="flex min-h-screen w-full bg-background">
-      <Sidebar />
-      <SidebarInset className="flex-1 w-full p-4 md:p-8 space-y-6 pb-32 md:pb-8 overflow-x-hidden">
-        <header className="flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <SidebarTrigger className="flex" />
-            <div className="flex items-center gap-2 md:hidden pr-2 border-r">
-               <div className="bg-primary p-1.5 rounded-lg shadow-sm shadow-primary/20"><Droplets className="h-4 w-4 text-white" /></div>
-               <span className="font-headline font-black text-primary text-sm tracking-tight uppercase">DosimatPro</span>
+      <div className="no-print w-full flex">
+        <Sidebar />
+        <SidebarInset className="flex-1 w-full p-4 md:p-8 space-y-6 pb-32 md:pb-8 overflow-x-hidden">
+          <header className="flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <SidebarTrigger className="flex" />
+              <div className="flex items-center gap-2 md:hidden pr-2 border-r">
+                 <div className="bg-primary p-1.5 rounded-lg shadow-sm shadow-primary/20"><Droplets className="h-4 w-4 text-white" /></div>
+                 <span className="font-headline font-black text-primary text-sm tracking-tight uppercase">DosimatPro</span>
+              </div>
+              <h1 className="text-xl md:text-3xl font-bold text-primary font-headline">Catálogo e Inventario</h1>
             </div>
-            <h1 className="text-xl md:text-3xl font-bold text-primary font-headline">Catálogo e Inventario</h1>
-          </div>
-          <div className="flex gap-2">
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="outline" size="icon" className="md:hidden">
-                  <Filter className="h-4 w-4" />
+            <div className="flex gap-2">
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="outline" size="icon" className="md:hidden">
+                    <Filter className="h-4 w-4" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-[280px]">
+                  <SheetHeader className="mb-6">
+                    <SheetTitle className="flex items-center gap-2"><Tag className="h-5 w-5" /> Filtrar Catálogo</SheetTitle>
+                  </SheetHeader>
+                  <FilterPanel />
+                </SheetContent>
+              </Sheet>
+              {isAdmin && (
+                <Button onClick={() => handleOpenDialog()} className="shadow-lg font-bold">
+                  <Plus className="mr-2 h-4 w-4" /> Nuevo Ítem
                 </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="w-[280px]">
-                <SheetHeader className="mb-6">
-                  <SheetTitle className="flex items-center gap-2"><Tag className="h-5 w-5" /> Filtrar Catálogo</SheetTitle>
-                </SheetHeader>
-                <FilterPanel />
-              </SheetContent>
-            </Sheet>
-            {isAdmin && (
-              <Button onClick={() => handleOpenDialog()} className="shadow-lg font-bold">
-                <Plus className="mr-2 h-4 w-4" /> Nuevo Ítem
-              </Button>
-            )}
-          </div>
-        </header>
-
-        <div className="flex flex-col md:flex-row gap-8 items-start">
-          <Card className="hidden md:block w-64 glass-card p-4 shrink-0 sticky top-8">
-            <FilterPanel />
-          </Card>
-
-          <div className="flex-1 space-y-6 w-full">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input 
-                placeholder="Buscar por nombre..." 
-                className="pl-10 h-11 bg-white/50" 
-                value={searchTerm} 
-                onChange={(e) => setSearchTerm(e.target.value)} 
-              />
+              )}
             </div>
+          </header>
 
-            {isLoading ? (
-              <div className="flex flex-col items-center justify-center h-48 gap-3">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground italic">Sincronizando inventario...</p>
-              </div>
-            ) : filteredItems.length === 0 ? (
-              <div className="text-center py-20 border-2 border-dashed rounded-2xl bg-muted/5">
-                 <Package className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
-                 <p className="text-muted-foreground font-medium">No se encontraron productos o servicios.</p>
-                 {selectedCategories.length > 0 && (
-                   <Button variant="link" onClick={clearFilters} className="text-primary font-bold mt-2">
-                     Limpiar filtros para ver todo
-                   </Button>
-                 )}
-              </div>
-            ) : (
-              <section className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6">
-                {filteredItems.map((item: any) => {
-                  const tracksStock = item.trackStock !== false;
-                  const isLowStock = tracksStock && !item.isService && (item.stock || 0) <= (item.minStock || 0);
-                  const catName = categoryMap[item.categoryId] || "Sin Categoría";
-                  const marginARS = getMarginInfo(item.priceARS, item.calculatedCostARS);
-                  const marginUSD = getMarginInfo(item.priceUSD, item.calculatedCostUSD);
+          <div className="flex flex-col md:flex-row gap-8 items-start">
+            <Card className="hidden md:block w-64 glass-card p-4 shrink-0 sticky top-8">
+              <FilterPanel />
+            </Card>
 
-                  return (
-                    <Card key={item.id} className={cn(
-                      "glass-card hover:shadow-md transition-all group border-l-4",
-                      isLowStock ? "border-l-rose-500 bg-rose-50/30" : "border-l-primary"
-                    )}>
-                      <CardHeader className="pb-2">
-                        <div className="flex justify-between items-start">
-                          <div className="flex flex-wrap gap-1">
-                            <Badge variant={item.isService ? "secondary" : "default"} className="text-[9px] font-black uppercase">
-                              {item.isService ? 'SERVICIO' : 'PRODUCTO'}
-                            </Badge>
-                            {item.isCompuesto && <Badge className="text-[9px] font-black uppercase bg-amber-500 hover:bg-amber-600"><Layers className="h-2 w-2 mr-1" /> COMPUESTO</Badge>}
-                            {!tracksStock && <Badge variant="outline" className="text-[9px] font-black uppercase text-blue-600 border-blue-200 bg-blue-50">ENTREGA DIRECTA</Badge>}
-                            <Badge variant="outline" className="text-[9px] font-bold bg-white text-muted-foreground border-muted-foreground/20">{catName}</Badge>
-                          </div>
-                          {isAdmin && (
+            <div className="flex-1 space-y-6 w-full">
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  placeholder="Buscar por nombre..." 
+                  className="pl-10 h-11 bg-white/50" 
+                  value={searchTerm} 
+                  onChange={(e) => setSearchTerm(e.target.value)} 
+                />
+              </div>
+
+              {isLoading ? (
+                <div className="flex flex-col items-center justify-center h-48 gap-3">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p className="text-sm text-muted-foreground italic">Sincronizando inventario...</p>
+                </div>
+              ) : filteredItems.length === 0 ? (
+                <div className="text-center py-20 border-2 border-dashed rounded-2xl bg-muted/5">
+                   <Package className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
+                   <p className="text-muted-foreground font-medium">No se encontraron productos o servicios.</p>
+                   {selectedCategories.length > 0 && (
+                     <Button variant="link" onClick={clearFilters} className="text-primary font-bold mt-2">
+                       Limpiar filtros para ver todo
+                     </Button>
+                   )}
+                </div>
+              ) : (
+                <section className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6">
+                  {filteredItems.map((item: any) => {
+                    const tracksStock = item.trackStock !== false;
+                    const isLowStock = tracksStock && !item.isService && (item.stock || 0) <= (item.minStock || 0);
+                    const catName = categoryMap[item.categoryId] || "Sin Categoría";
+                    const marginARS = getMarginInfo(item.priceARS, item.calculatedCostARS);
+                    const marginUSD = getMarginInfo(item.priceUSD, item.calculatedCostUSD);
+
+                    return (
+                      <Card key={item.id} className={cn(
+                        "glass-card hover:shadow-md transition-all group border-l-4",
+                        isLowStock ? "border-l-rose-500 bg-rose-50/30" : "border-l-primary"
+                      )}>
+                        <CardHeader className="pb-2">
+                          <div className="flex justify-between items-start">
+                            <div className="flex flex-wrap gap-1">
+                              <Badge variant={item.isService ? "secondary" : "default"} className="text-[9px] font-black uppercase">
+                                {item.isService ? 'SERVICIO' : 'PRODUCTO'}
+                              </Badge>
+                              {item.isCompuesto && <Badge className="text-[9px] font-black uppercase bg-amber-500 hover:bg-amber-600"><Layers className="h-2 w-2 mr-1" /> COMPUESTO</Badge>}
+                              {!tracksStock && <Badge variant="outline" className="text-[9px] font-black uppercase text-blue-600 border-blue-200 bg-blue-50">ENTREGA DIRECTA</Badge>}
+                              <Badge variant="outline" className="text-[9px] font-bold bg-white text-muted-foreground border-muted-foreground/20">{catName}</Badge>
+                            </div>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem onSelect={() => handleOpenDialog(item)}><Edit className="mr-2 h-4 w-4" /> Editar parámetros</DropdownMenuItem>
-                                {item.isCompuesto && (
-                                  <DropdownMenuItem className="text-amber-600 font-bold" onSelect={() => { setSelectedForAssembly(item); setAssemblyQty(1); setIsAssemblyOpen(true); }}>
-                                    <Hammer className="mr-2 h-4 w-4" /> Orden de Armado
-                                  </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => handlePrintProduct(item)}><Printer className="mr-2 h-4 w-4" /> Exportar Ficha (PDF)</DropdownMenuItem>
+                                {isAdmin && (
+                                  <>
+                                    <DropdownMenuItem onSelect={() => handleOpenDialog(item)}><Edit className="mr-2 h-4 w-4" /> Editar parámetros</DropdownMenuItem>
+                                    {item.isCompuesto && (
+                                      <DropdownMenuItem className="text-amber-600 font-bold" onSelect={() => { setSelectedForAssembly(item); setAssemblyQty(1); setIsAssemblyOpen(true); }}>
+                                        <Hammer className="mr-2 h-4 w-4" /> Orden de Armado
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuItem className="text-destructive" onSelect={() => setItemToDelete(item)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem>
+                                  </>
                                 )}
-                                <DropdownMenuItem className="text-destructive" onSelect={() => setItemToDelete(item)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
-                          )}
-                        </div>
-                        <CardTitle className="text-lg mt-2 truncate font-bold">{item.name}</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        {tracksStock && !item.isService && (
-                          <div className="flex items-center justify-between p-2 bg-white rounded-lg border shadow-sm">
-                            <div className="flex flex-col">
-                              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-wider">Stock Actual</span>
-                              <span className={cn("text-xl font-black", isLowStock ? "text-rose-600" : "text-emerald-600")}>
-                                {item.stock || 0}
-                              </span>
-                            </div>
-                            {isLowStock && <AlertTriangle className="h-5 w-5 text-rose-500 animate-pulse" />}
                           </div>
-                        )}
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="p-2 bg-primary/5 rounded-lg border border-primary/10 relative overflow-hidden">
-                            <span className="text-[9px] font-black text-primary uppercase block">Venta ARS</span>
-                            <span className="text-md font-black">${(item.priceARS || 0).toLocaleString('es-AR')}</span>
-                            {isAdmin && marginARS && (
-                              <div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginARS.color)}>
-                                {marginARS.icon} {marginARS.value}%
-                              </div>
-                            )}
-                          </div>
-                          <div className="p-2 bg-emerald-50 rounded-lg border border-emerald-100 relative overflow-hidden">
-                            <span className="text-[9px] font-black text-emerald-700 uppercase block">Venta USD</span>
-                            <span className="text-md font-black">u$s {(item.priceUSD || 0).toLocaleString('es-AR')}</span>
-                            {isAdmin && marginUSD && (
-                              <div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginUSD.color)}>
-                                {marginUSD.icon} {marginUSD.value}%
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {isAdmin && (
-                          <div className="pt-2 border-t border-dashed">
-                            <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground mb-1.5">
-                              <span className="uppercase tracking-widest">Costo Estimado</span>
-                              <Badge variant="outline" className="h-4 text-[8px] font-black bg-white uppercase">Costo real</Badge>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3 text-xs font-bold italic opacity-80">
+                          <CardTitle className="text-lg mt-2 truncate font-bold">{item.name}</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          {tracksStock && !item.isService && (
+                            <div className="flex items-center justify-between p-2 bg-white rounded-lg border shadow-sm">
                               <div className="flex flex-col">
-                                <span className="text-[9px] not-italic text-muted-foreground uppercase">Costo ARS</span>
-                                <span>${(item.calculatedCostARS || 0).toLocaleString('es-AR')}</span>
+                                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-wider">Stock Actual</span>
+                                <span className={cn("text-xl font-black", isLowStock ? "text-rose-600" : "text-emerald-600")}>
+                                  {item.stock || 0}
+                                </span>
                               </div>
-                              <div className="flex flex-col text-right">
-                                <span className="text-[9px] not-italic text-muted-foreground uppercase">Costo USD</span>
-                                <span>u$s {(item.calculatedCostUSD || 0).toLocaleString('es-AR')}</span>
-                              </div>
+                              {isLowStock && <AlertTriangle className="h-5 w-5 text-rose-500 animate-pulse" />}
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="p-2 bg-primary/5 rounded-lg border border-primary/10 relative overflow-hidden">
+                              <span className="text-[9px] font-black text-primary uppercase block">Venta ARS</span>
+                              <span className="text-md font-black">${(item.priceARS || 0).toLocaleString('es-AR')}</span>
+                              {isAdmin && marginARS && (
+                                <div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginARS.color)}>
+                                  {marginARS.icon} {marginARS.value}%
+                                </div>
+                              )}
+                            </div>
+                            <div className="p-2 bg-emerald-50 rounded-lg border border-emerald-100 relative overflow-hidden">
+                              <span className="text-[9px] font-black text-emerald-700 uppercase block">Venta USD</span>
+                              <span className="text-md font-black">u$s {(item.priceUSD || 0).toLocaleString('es-AR')}</span>
+                              {isAdmin && marginUSD && (
+                                <div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginUSD.color)}>
+                                  {marginUSD.icon} {marginUSD.value}%
+                                </div>
+                              )}
                             </div>
                           </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  )
-                })}
-              </section>
-            )}
+
+                          {isAdmin && (
+                            <div className="pt-2 border-t border-dashed">
+                              <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground mb-1.5">
+                                <span className="uppercase tracking-widest">Costo Estimado</span>
+                                <Badge variant="outline" className="h-4 text-[8px] font-black bg-white uppercase">Costo real</Badge>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3 text-xs font-bold italic opacity-80">
+                                <div className="flex flex-col">
+                                  <span className="text-[9px] not-italic text-muted-foreground uppercase">Costo ARS</span>
+                                  <span>${(item.calculatedCostARS || 0).toLocaleString('es-AR')}</span>
+                                </div>
+                                <div className="flex flex-col text-right">
+                                  <span className="text-[9px] not-italic text-muted-foreground uppercase">Costo USD</span>
+                                  <span>u$s {(item.calculatedCostUSD || 0).toLocaleString('es-AR')}</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </section>
+              )}
+            </div>
+          </div>
+        </SidebarInset>
+      </div>
+
+      {/* VISTA DE IMPRESIÓN FICHA TÉCNICA */}
+      {productToPrint && (
+        <div className="print-only w-full p-8 font-sans text-slate-900 bg-white">
+          <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
+            <div>
+              <h1 className="text-3xl font-black uppercase tracking-tight text-primary">Ficha Técnica de Producto</h1>
+              <p className="text-sm font-bold text-slate-500">Dosimat Pro • Sistema de Gestión de Inventario</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] font-black uppercase text-slate-400">Generado: {new Date().toLocaleDateString('es-AR')}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <div className="space-y-4">
+              <div>
+                <Label className="text-[10px] font-black uppercase text-slate-400">Nombre del Ítem</Label>
+                <h2 className="text-2xl font-black text-slate-800">{productToPrint.name}</h2>
+              </div>
+              <div className="flex gap-4">
+                <div>
+                  <Label className="text-[10px] font-black uppercase text-slate-400">Categoría</Label>
+                  <p className="font-bold">{categoryMap[productToPrint.categoryId] || "Sin Categoría"}</p>
+                </div>
+                <div>
+                  <Label className="text-[10px] font-black uppercase text-slate-400">Tipo</Label>
+                  <p className="font-bold">{productToPrint.isService ? 'SERVICIO TÉCNICO' : 'PRODUCTO FÍSICO'}</p>
+                </div>
+              </div>
+              <div>
+                <Label className="text-[10px] font-black uppercase text-slate-400">Descripción</Label>
+                <p className="text-sm leading-relaxed text-slate-600 italic">
+                  {productToPrint.description || "Sin descripción adicional registrada."}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-6 rounded-2xl border-2 border-slate-100 space-y-6">
+              <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 border-b pb-2">Precios de Venta Vigentes</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-white rounded-xl border border-slate-200">
+                  <span className="text-[10px] font-black text-primary uppercase block mb-1">Precio ARS</span>
+                  <span className="text-2xl font-black">${Number(productToPrint.priceARS || 0).toLocaleString('es-AR')}</span>
+                </div>
+                <div className="p-4 bg-white rounded-xl border border-slate-200">
+                  <span className="text-[10px] font-black text-emerald-700 uppercase block mb-1">Precio USD</span>
+                  <span className="text-2xl font-black">u$s {Number(productToPrint.priceUSD || 0).toLocaleString('es-AR')}</span>
+                </div>
+              </div>
+              {!productToPrint.isService && productToPrint.trackStock !== false && (
+                <div className="p-4 bg-white rounded-xl border border-slate-200 flex justify-between items-center">
+                  <span className="text-[10px] font-black text-slate-500 uppercase">Stock Disponible</span>
+                  <span className="text-xl font-black">{productToPrint.stock || 0} Unidades</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {productToPrint.isCompuesto && productToPrint.components?.length > 0 && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-black uppercase tracking-tight flex items-center gap-2 border-b-2 border-slate-900 pb-2">
+                <Layers className="h-5 w-5" /> Estructura de Armado (Partes y Componentes)
+              </h3>
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-slate-900 text-white">
+                    <th className="p-2 text-left uppercase text-[10px] font-black">Componente / Pieza</th>
+                    <th className="p-2 text-center uppercase text-[10px] font-black w-32">Cantidad</th>
+                    <th className="p-2 text-left uppercase text-[10px] font-black">Observaciones de Ensamblado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 border-b border-slate-200">
+                  {productToPrint.components.map((comp: any, idx: number) => {
+                    const child = items?.find(i => i.id === comp.productId);
+                    return (
+                      <tr key={idx}>
+                        <td className="p-3 text-sm font-bold">{child?.name || 'Cargando parte...'}</td>
+                        <td className="p-3 text-center text-sm font-black">{comp.quantity}</td>
+                        <td className="p-3 text-xs text-slate-400 italic">__________________________________________</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <div className="mt-4 p-4 bg-amber-50 rounded-xl border-2 border-dashed border-amber-200">
+                <p className="text-[10px] font-bold text-amber-800 uppercase mb-1">Notas de Control de Calidad</p>
+                <div className="h-20"></div>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-12 pt-8 border-t border-slate-100 flex justify-between items-end">
+            <div className="text-[10px] text-slate-400 font-bold uppercase">
+              Dosimat Pro v2.5 • Ficha Técnica Autorizada
+            </div>
+            <div className="w-48 border-t border-slate-900 pt-2 text-center text-[10px] font-black uppercase">
+              Firma Responsable
+            </div>
           </div>
         </div>
-      </SidebarInset>
+      )}
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -942,7 +1059,7 @@ export default function CatalogPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAssemblyOpen(false)}>Cancelar</Button>
-            <Button onClick={handleAssemble} className="bg-amber-500 hover:bg-amber-600 font-black px-8">
+            <Button onClick={handleAssemble} className="bg-amber-500 hover:bg-emerald-600 font-black px-8">
               PROCESAR ARMADO
             </Button>
           </DialogFooter>
