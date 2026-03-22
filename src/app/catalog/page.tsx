@@ -4,7 +4,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { 
@@ -150,6 +150,9 @@ export default function CatalogPage() {
   
   const [bomFilterCategory, setBomFilterCategory] = useState("all")
 
+  // Carrito de compras manual para armado
+  const [manualPurchaseQtys, setManualPurchaseQtys] = useState<Record<string, number>>({})
+
   const [formData, setFormData] = useState({
     name: "",
     categoryId: "",
@@ -229,7 +232,6 @@ export default function CatalogPage() {
 
       const currentStock = item.stock || 0;
       
-      // Si ya tenemos este ítem en la lista, acumulamos el requerimiento
       if (!requirements[productId]) {
         requirements[productId] = {
           id: item.id,
@@ -246,7 +248,6 @@ export default function CatalogPage() {
       
       requirements[productId].required += qtyNeeded;
 
-      // Si es compuesto y no tenemos suficiente stock YA ARMADO de esta parte, explotamos sus componentes
       if (item.isCompuesto) {
         const neededToProduce = Math.max(0, qtyNeeded - currentStock);
         if (neededToProduce > 0) {
@@ -257,29 +258,63 @@ export default function CatalogPage() {
       }
     };
 
-    // Iniciamos la explosión desde el producto principal
     explode(selectedForAssembly.id, assemblyQty);
 
-    // Calculamos faltantes y lista de compras
     const flatList = Object.values(requirements).map(req => {
       const missingForOrder = Math.max(0, req.required - req.available);
       const stockAfterOrder = req.available - req.required;
-      const missingForMinStock = (stockAfterOrder < req.minStock) ? (req.minStock - stockAfterOrder) : 0;
+      
+      // Sugerencia base: Cubrir orden + Reponer hasta el Mínimo
+      const totalSuggestedToBuy = Math.max(missingForOrder, (req.available < req.required + req.minStock) ? (req.required + req.minStock - req.available) : 0);
       
       return {
         ...req,
         missing: missingForOrder,
-        toBuy: Math.max(missingForOrder, (req.available < req.required + req.minStock) ? (req.required + req.minStock - req.available) : 0)
+        suggestedToBuy: totalSuggestedToBuy
       };
     });
 
     return {
       all: flatList,
-      toBuy: flatList.filter(f => f.toBuy > 0),
-      totalBuyARS: flatList.reduce((sum, f) => sum + (f.toBuy * f.costARS), 0),
-      totalBuyUSD: flatList.reduce((sum, f) => sum + (f.toBuy * f.costUSD), 0)
+      toBuySuggested: flatList.filter(f => f.suggestedToBuy > 0)
     };
   }, [selectedForAssembly, assemblyQty, items]);
+
+  // Inicializar el carrito de compras manual cada vez que la explosión cambie
+  useEffect(() => {
+    if (explosionSummary?.toBuySuggested) {
+      const newManualQtys: Record<string, number> = {};
+      explosionSummary.toBuySuggested.forEach(item => {
+        newManualQtys[item.id] = item.suggestedToBuy;
+      });
+      setManualPurchaseQtys(newManualQtys);
+    }
+  }, [explosionSummary]);
+
+  const purchaseCalculations = useMemo(() => {
+    if (!explosionSummary || !items) return null;
+
+    const itemsToBuy = explosionSummary.toBuySuggested.map(item => {
+      const manualQty = manualPurchaseQtys[item.id] ?? item.suggestedToBuy;
+      const futureStock = item.available + manualQty - item.required;
+      const isCritical = futureStock < item.minStock;
+      const isInsufficient = futureStock < 0;
+
+      return {
+        ...item,
+        manualQty,
+        futureStock,
+        isCritical,
+        isInsufficient
+      };
+    });
+
+    return {
+      items: itemsToBuy,
+      totalARS: itemsToBuy.reduce((sum, item) => sum + (item.manualQty * item.costARS), 0),
+      totalUSD: itemsToBuy.reduce((sum, item) => sum + (item.manualQty * item.costUSD), 0)
+    };
+  }, [explosionSummary, manualPurchaseQtys, items]);
 
   const sortedAddedComponents = useMemo(() => {
     if (!items || !formData.components) return []
@@ -472,24 +507,24 @@ export default function CatalogPage() {
   }
 
   const handleCopyShoppingList = () => {
-    if (!explosionSummary) return;
+    if (!purchaseCalculations) return;
     const dateStr = new Date().toLocaleDateString('es-AR');
     let text = `*LISTA DE COMPRAS - DOSIMAT PRO*\n`;
     text += `Para armar: ${assemblyQty} x ${selectedForAssembly?.name}\n`;
     text += `Fecha: ${dateStr}\n\n`;
     
-    explosionSummary.toBuy.forEach(f => {
-      text += `- *${f.name}*: Necesitas comprar ${f.toBuy} unidades.\n`;
-      if (f.costARS > 0) text += `  Estimado: $${(f.toBuy * f.costARS).toLocaleString('es-AR')}\n`;
-      else if (f.costUSD > 0) text += `  Estimado: u$s ${(f.toBuy * f.costUSD).toLocaleString('es-AR')}\n`;
+    purchaseCalculations.items.forEach(f => {
+      text += `- *${f.name}*: Comprar ${f.manualQty} unidades.\n`;
+      if (f.costARS > 0) text += `  Subtotal: $${(f.manualQty * f.costARS).toLocaleString('es-AR')}\n`;
+      else if (f.costUSD > 0) text += `  Subtotal: u$s ${(f.manualQty * f.costUSD).toLocaleString('es-AR')}\n`;
     });
 
-    text += `\n*INVERSIÓN TOTAL ESTIMADA:*\n`;
-    text += `ARS: $${explosionSummary.totalBuyARS.toLocaleString('es-AR')}\n`;
-    text += `USD: u$s {explosionSummary.totalBuyUSD.toLocaleString('es-AR')}`;
+    text += `\n*INVERSIÓN TOTAL DEFINIDA:*\n`;
+    text += `ARS: $${purchaseCalculations.totalARS.toLocaleString('es-AR')}\n`;
+    text += `USD: u$s ${purchaseCalculations.totalUSD.toLocaleString('es-AR')}`;
 
     navigator.clipboard.writeText(text);
-    toast({ title: "Lista de compras copiada", description: "Lista preparada para enviar por WhatsApp." });
+    toast({ title: "Lista de compras copiada", description: "Lista preparada con tus cantidades manuales." });
   }
 
   const FilterPanel = () => (
@@ -1401,7 +1436,7 @@ export default function CatalogPage() {
       </Dialog>
 
       <Dialog open={isAssemblyOpen} onOpenChange={setIsAssemblyOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-amber-600 font-black text-2xl">
               <Hammer className="h-6 w-6" /> Orden de Fabricación y MRP
@@ -1436,7 +1471,7 @@ export default function CatalogPage() {
                 <section className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
-                      <Layers className="h-4 w-4" /> Explosión de Insumos (Multinivel)
+                      <Layers className="h-4 w-4" /> Explosión de Insumos (Consumo)
                     </h3>
                     <Badge variant="outline" className="font-bold border-amber-200 text-amber-700 bg-amber-50">
                       {explosionSummary.all.length} ÍTEMS IMPACTADOS
@@ -1479,7 +1514,7 @@ export default function CatalogPage() {
                               </TableCell>
                               <TableCell className="text-right">
                                 {faltaDirecto ? (
-                                  <Badge className="bg-rose-600 font-bold text-[9px]">COMPRA URGENTE</Badge>
+                                  <Badge className="bg-rose-600 font-bold text-[9px]">FALTA STOCK</Badge>
                                 ) : esCritico ? (
                                   <Badge variant="outline" className="border-amber-500 text-amber-700 bg-amber-50 font-bold text-[9px]">BAJO MÍNIMO</Badge>
                                 ) : (
@@ -1497,48 +1532,86 @@ export default function CatalogPage() {
                 <section className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
-                      <ShoppingCart className="h-4 w-4" /> Recomendación de Compra
+                      <ShoppingCart className="h-4 w-4" /> Carrito de Compras (Planificación)
                     </h3>
-                    <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs" onClick={handleCopyShoppingList}>
-                      <Copy className="h-3.5 w-3.5" /> COPIAR LISTA
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs" onClick={() => setManualPurchaseQtys({})}>
+                        <RefreshCw className="h-3.5 w-3.5" /> REINICIAR
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs" onClick={handleCopyShoppingList}>
+                        <Copy className="h-3.5 w-3.5" /> COPIAR LISTA
+                      </Button>
+                    </div>
                   </div>
+                  
                   <Card className="border-2 border-slate-900/10 shadow-lg relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-4 opacity-5"><ShoppingCart className="h-32 w-32" /></div>
                     <CardContent className="p-0">
-                      {explosionSummary.toBuy.length === 0 ? (
+                      {purchaseCalculations?.items.length === 0 ? (
                         <div className="p-12 text-center text-emerald-600 space-y-2">
                           <CheckCircle2 className="h-12 w-12 mx-auto" />
-                          <p className="font-black">STOCK COMPLETO</p>
-                          <p className="text-xs text-muted-foreground italic">Tienes todos los materiales necesarios para cumplir con esta orden.</p>
+                          <p className="font-black">ESTADO ÓPTIMO</p>
+                          <p className="text-xs text-muted-foreground italic">No se requieren compras adicionales para esta orden y tus mínimos.</p>
                         </div>
                       ) : (
-                        <div>
-                          <div className="divide-y">
-                            {explosionSummary.toBuy.map(f => (
-                              <div key={f.id} className="p-4 flex items-center justify-between hover:bg-muted/5">
-                                <div className="flex items-center gap-4">
-                                  <div className="bg-rose-100 p-2 rounded-lg text-rose-600"><AlertTriangle className="h-4 w-4" /></div>
-                                  <div>
-                                    <p className="font-black text-sm">{f.name}</p>
-                                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Comprar {f.toBuy} unidades</p>
-                                  </div>
-                                </div>
-                                <div className="text-right">
-                                  {f.costARS > 0 && <p className="text-sm font-black text-slate-800">${(f.toBuy * f.costARS).toLocaleString('es-AR')}</p>}
-                                  {f.costUSD > 0 && <p className="text-xs font-bold text-emerald-700">u$s {(f.toBuy * f.costUSD).toLocaleString('es-AR')}</p>}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="bg-slate-900 text-white p-6 grid grid-cols-2 gap-8">
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader className="bg-slate-900 text-white">
+                              <TableRow>
+                                <TableHead className="text-white text-[10px] font-black uppercase">Material</TableHead>
+                                <TableHead className="text-white text-[10px] font-black uppercase text-center w-32">Cant. a Comprar</TableHead>
+                                <TableHead className="text-white text-[10px] font-black uppercase text-center">Stock Futuro</TableHead>
+                                <TableHead className="text-white text-[10px] font-black uppercase text-right">Subtotal</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {purchaseCalculations?.items.map(f => (
+                                <TableRow key={f.id} className="hover:bg-muted/5">
+                                  <TableCell>
+                                    <div>
+                                      <p className="font-black text-sm">{f.name}</p>
+                                      <p className="text-[9px] text-muted-foreground uppercase">Disp: {f.available} | Req: {f.required} | Mín: {f.minStock}</p>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex items-center gap-2 bg-white border rounded p-1 shadow-inner">
+                                      <input 
+                                        type="number" 
+                                        value={f.manualQty} 
+                                        onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [f.id]: Number(e.target.value) }))}
+                                        className="w-full text-center font-black text-sm focus:outline-none"
+                                      />
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <div className="flex flex-col items-center">
+                                      <span className={cn(
+                                        "font-black text-xs px-2 py-0.5 rounded",
+                                        f.isInsufficient ? "bg-rose-600 text-white" : f.isCritical ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
+                                      )}>
+                                        {f.futureStock}
+                                      </span>
+                                      {f.isInsufficient && <p className="text-[8px] font-bold text-rose-600 mt-1 uppercase">Faltan insumos</p>}
+                                      {f.isCritical && !f.isInsufficient && <p className="text-[8px] font-bold text-amber-600 mt-1 uppercase">Bajo mínimo</p>}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    {f.costARS > 0 && <p className="text-xs font-black text-slate-800">${(f.manualQty * f.costARS).toLocaleString('es-AR')}</p>}
+                                    {f.costUSD > 0 && <p className="text-xs font-bold text-emerald-700">u$s {(f.manualQty * f.costUSD).toLocaleString('es-AR')}</p>}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                          
+                          <div className="bg-slate-900 text-white p-6 grid grid-cols-2 gap-8 border-t border-slate-800">
                             <div>
-                              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Inversión Estimada ARS</p>
-                              <h4 className="text-3xl font-black">${explosionSummary.totalBuyARS.toLocaleString('es-AR')}</h4>
+                              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Inversión Definida ARS</p>
+                              <h4 className="text-3xl font-black">${purchaseCalculations?.totalARS.toLocaleString('es-AR')}</h4>
                             </div>
                             <div className="text-right">
-                              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Inversión Estimada USD</p>
-                              <h4 className="text-3xl font-black text-emerald-400">u$s {explosionSummary.totalBuyUSD.toLocaleString('es-AR')}</h4>
+                              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Inversión Definida USD</p>
+                              <h4 className="text-3xl font-black text-emerald-400">u$s {purchaseCalculations?.totalUSD.toLocaleString('es-AR')}</h4>
                             </div>
                           </div>
                         </div>
@@ -1554,14 +1627,14 @@ export default function CatalogPage() {
             <Button variant="ghost" onClick={() => setIsAssemblyOpen(false)} className="font-bold">Cerrar</Button>
             <Button 
               onClick={handleAssemble} 
-              disabled={explosionSummary?.toBuy.some(f => f.missing > 0)}
+              disabled={explosionSummary?.all.some(f => (f.available - f.required) < 0)}
               className={cn(
                 "px-10 font-black shadow-xl h-12",
-                explosionSummary?.toBuy.some(f => f.missing > 0) ? "bg-slate-200" : "bg-emerald-600 hover:bg-emerald-700"
+                explosionSummary?.all.some(f => (f.available - f.required) < 0) ? "bg-slate-200" : "bg-emerald-600 hover:bg-emerald-700"
               )}
             >
-              {explosionSummary?.toBuy.some(f => f.missing > 0) ? (
-                <>FALTAN MATERIALES CRÍTICOS</>
+              {explosionSummary?.all.some(f => (f.available - f.required) < 0) ? (
+                <>DEBE COMPRAR INSUMOS PRIMERO</>
               ) : (
                 <><Hammer className="mr-2 h-5 w-5" /> PROCESAR ARMADO FINAL</>
               )}
