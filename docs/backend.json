@@ -69,8 +69,25 @@
         "categoryId": { "type": "string" },
         "priceARS": { "type": "number" },
         "priceUSD": { "type": "number" },
+        "costARS": { "type": "number" },
+        "costUSD": { "type": "number" },
         "trackStock": { "type": "boolean" },
-        "stock": { "type": "number" }
+        "stock": { "type": "number" },
+        "supplier": { "type": "string", "description": "Name of the default supplier for this item." }
+      }
+    },
+    "ProductionOrder": {
+      "title": "ProductionOrder",
+      "type": "object",
+      "description": "A manufacturing order for a composite product.",
+      "properties": {
+        "id": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "quantity": { "type": "number" },
+        "status": { "type": "string", "enum": ["draft", "pending_purchase", "ready", "completed"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "purchaseQtys": { "type": "object", "description": "Manual purchase quantities defined for this order." }
       }
     }
   },
@@ -92,8 +109,12 @@
         "definition": { "entityName": "RouteSheet", "description": "Daily replenishment routes." }
       },
       {
-        "path": "/transactions/{transactionId}",
-        "definition": { "entityName": "Transaction", "description": "Financial records." }
+        "path": "/products_services/{productId}",
+        "definition": { "entityName": "ProductService", "description": "Inventory items." }
+      },
+      {
+        "path": "/production_orders/{orderId}",
+        "definition": { "entityName": "ProductionOrder", "description": "Production tracking." }
       }
     ]
   }

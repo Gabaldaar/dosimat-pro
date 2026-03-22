@@ -44,7 +44,12 @@ import {
   ShoppingCart,
   ArrowRight,
   Copy,
-  RefreshCw
+  RefreshCw,
+  ClipboardList,
+  Factory,
+  Clock,
+  CheckCircle,
+  Truck
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -78,12 +83,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { useToast } from "../../hooks/use-toast"
-import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking, useUser } from "../../firebase"
-import { collection, doc, increment } from "firebase/firestore"
+import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking, useUser, addDocumentNonBlocking } from "../../firebase"
+import { collection, doc, increment, query, orderBy } from "firebase/firestore"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function CatalogPage() {
   const { toast } = useToast()
@@ -106,12 +112,15 @@ export default function CatalogPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [hasInitializedFavorites, setHasInitializedFavorites] = useState(false)
+  const [activeView, setActiveTab] = useState("inventory")
   
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   const categoriesQuery = useMemoFirebase(() => collection(db, 'product_categories'), [db])
+  const ordersQuery = useMemoFirebase(() => query(collection(db, 'production_orders'), orderBy('createdAt', 'desc')), [db])
   
   const { data: items, isLoading } = useCollection(catalogQuery)
   const { data: rawCategories, isLoading: loadingCats } = useCollection(categoriesQuery)
+  const { data: orders, isLoading: loadingOrders } = useCollection(ordersQuery)
   
   const categories = useMemo(() => {
     if (!rawCategories) return []
@@ -148,6 +157,8 @@ export default function CatalogPage() {
   const [newCategoryName, setNewCategoryName] = useState("")
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
   const [productToPreview, setProductToPreview] = useState<any | null>(null)
+  const [orderToView, setOrderToView] = useState<any | null>(null)
+  const [orderToDelete, setOrderToDelete] = useState<any | null>(null)
   
   const [bomFilterCategory, setBomFilterCategory] = useState("all")
 
@@ -157,6 +168,7 @@ export default function CatalogPage() {
   const [formData, setFormData] = useState({
     name: "",
     categoryId: "",
+    supplier: "",
     priceARS: 0,
     priceUSD: 0,
     costARS: 0,
@@ -175,7 +187,7 @@ export default function CatalogPage() {
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        const anyOpen = isDialogOpen || !!itemToDelete || isAssemblyOpen || isCategoryManagerOpen || !!productToPreview;
+        const anyOpen = isDialogOpen || !!itemToDelete || isAssemblyOpen || isCategoryManagerOpen || !!productToPreview || !!orderToView || !!orderToDelete;
         if (!anyOpen) {
           document.body.style.pointerEvents = 'auto';
         }
@@ -183,7 +195,7 @@ export default function CatalogPage() {
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isDialogOpen, itemToDelete, isAssemblyOpen, isCategoryManagerOpen, productToPreview]);
+  }, [isDialogOpen, itemToDelete, isAssemblyOpen, isCategoryManagerOpen, productToPreview, orderToView, orderToDelete]);
 
   const calculateCost = useCallback((itemData: any, allItems: any[]): { ars: number, usd: number } => {
     if (!itemData.isCompuesto) {
@@ -223,9 +235,12 @@ export default function CatalogPage() {
 
   // LÓGICA DE EXPLOSIÓN DE MATERIALES (MRP)
   const explosionSummary = useMemo(() => {
-    if (!selectedForAssembly || !items) return null;
+    const target = orderToView ? items?.find(i => i.id === orderToView.productId) : selectedForAssembly;
+    const qty = orderToView ? orderToView.quantity : assemblyQty;
+    
+    if (!target || !items) return null;
 
-    const requirements: Record<string, { id: string, name: string, required: number, available: number, missing: number, minStock: number, costARS: number, costUSD: number, isCompuesto: boolean }> = {};
+    const requirements: Record<string, { id: string, name: string, required: number, available: number, missing: number, minStock: number, costARS: number, costUSD: number, isCompuesto: boolean, supplier: string }> = {};
 
     const explode = (productId: string, qtyNeeded: number) => {
       const item = items.find(i => i.id === productId);
@@ -243,7 +258,8 @@ export default function CatalogPage() {
           minStock: item.minStock || 0,
           costARS: item.costARS || 0,
           costUSD: item.costUSD || 0,
-          isCompuesto: item.isCompuesto || false
+          isCompuesto: item.isCompuesto || false,
+          supplier: item.supplier || "Sin Proveedor"
         };
       }
       
@@ -259,13 +275,10 @@ export default function CatalogPage() {
       }
     };
 
-    explode(selectedForAssembly.id, assemblyQty);
+    explode(target.id, qty);
 
     const flatList = Object.values(requirements).map(req => {
       const missingForOrder = Math.max(0, req.required - req.available);
-      const stockAfterOrder = req.available - req.required;
-      
-      // Sugerencia base: Cubrir orden + Reponer hasta el Mínimo
       const totalSuggestedToBuy = Math.max(missingForOrder, (req.available < req.required + req.minStock) ? (req.required + req.minStock - req.available) : 0);
       
       return {
@@ -279,7 +292,7 @@ export default function CatalogPage() {
       all: flatList,
       toBuySuggested: flatList.filter(f => f.suggestedToBuy > 0)
     };
-  }, [selectedForAssembly, assemblyQty, items]);
+  }, [selectedForAssembly, assemblyQty, items, orderToView]);
 
   // Inicializar el carrito de compras manual cada vez que la explosión cambie
   useEffect(() => {
@@ -346,6 +359,7 @@ export default function CatalogPage() {
         ...formData,
         name: item.name || "",
         categoryId: item.categoryId || "",
+        supplier: item.supplier || "",
         priceARS: item.priceARS || 0,
         priceUSD: item.priceUSD || 0,
         costARS: item.costARS || 0,
@@ -363,7 +377,7 @@ export default function CatalogPage() {
     } else {
       setEditingItemId(null)
       setFormData({ 
-        name: "", categoryId: "", priceARS: 0, priceUSD: 0, costARS: 0, costUSD: 0, 
+        name: "", categoryId: "", supplier: "", priceARS: 0, priceUSD: 0, costARS: 0, costUSD: 0, 
         laborCostARS: 0, laborCostUSD: 0, isService: false, 
         isCompuesto: false, trackStock: true, description: "", stock: 0, minStock: 0, components: [] 
       })
@@ -407,40 +421,84 @@ export default function CatalogPage() {
     toast({ title: editingItemId ? "Item actualizado" : "Item creado" })
   }
 
-  const handleAssemble = () => {
-    if (!selectedForAssembly || assemblyQty <= 0) return;
+  const handleCreateOrder = () => {
+    if (!selectedForAssembly) return;
+    const id = Math.random().toString(36).substring(2, 11);
+    const status = explosionSummary?.all.some(f => (f.available - f.required) < 0) ? 'pending_purchase' : 'ready';
+    
+    const newOrder = {
+      id,
+      productId: selectedForAssembly.id,
+      productName: selectedForAssembly.name,
+      quantity: assemblyQty,
+      status,
+      createdAt: new Date().toISOString(),
+      purchaseQtys: manualPurchaseQtys
+    };
 
-    const shortages: string[] = [];
-    selectedForAssembly.components.forEach((comp: any) => {
-      const child = items?.find(i => i.id === comp.productId);
-      const needed = comp.quantity * assemblyQty;
-      if (!child || (child.trackStock !== false && (child.stock || 0) < needed)) {
-        if (child?.trackStock !== false) shortages.push(child?.name || "Parte desconocida");
-      }
-    });
+    setDocumentNonBlocking(doc(db, 'production_orders', id), newOrder, { merge: true });
+    setIsAssemblyOpen(false);
+    setActiveTab("orders");
+    toast({ title: "Orden de producción creada", description: `Estado: ${status === 'ready' ? 'Lista para armar' : 'Pendiente de compra'}` });
+  }
 
-    if (shortages.length > 0) {
-      toast({ title: "Falta Stock", description: `Falta stock de: ${shortages.join(", ")}`, variant: "destructive" });
-      return;
-    }
+  const handleReceiveMaterials = () => {
+    if (!orderToView || !purchaseCalculations) return;
 
-    selectedForAssembly.components.forEach((comp: any) => {
-      const child = items?.find(i => i.id === comp.productId);
-      if (child?.trackStock !== false) {
-        updateDocumentNonBlocking(doc(db, 'products_services', comp.productId), {
-          stock: increment(-(comp.quantity * assemblyQty))
+    purchaseCalculations.items.forEach(item => {
+      if (item.manualQty > 0) {
+        updateDocumentNonBlocking(doc(db, 'products_services', item.id), {
+          stock: increment(item.manualQty)
         });
       }
     });
 
-    if (selectedForAssembly.trackStock !== false) {
-      updateDocumentNonBlocking(doc(db, 'products_services', selectedForAssembly.id), {
-        stock: increment(assemblyQty)
+    updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
+      status: 'ready'
+    });
+
+    toast({ title: "Materiales ingresados", description: "El stock ha sido actualizado y la orden está lista para armar." });
+    setOrderToView(null);
+  }
+
+  const handleAssembleFinal = () => {
+    const order = orderToView;
+    if (!order || !items) return;
+
+    const product = items.find(i => i.id === order.productId);
+    if (!product) return;
+
+    // Recalcular explosión para asegurar stock actual
+    const explosion = explosionSummary;
+    if (explosion?.all.some(f => (f.available - f.required) < 0)) {
+      toast({ title: "Error de stock", description: "No hay materiales suficientes para finalizar el armado.", variant: "destructive" });
+      return;
+    }
+
+    // Descontar componentes (solo los de nivel 1 directo del producto final)
+    product.components.forEach((comp: any) => {
+      const child = items.find(i => i.id === comp.productId);
+      if (child?.trackStock !== false) {
+        updateDocumentNonBlocking(doc(db, 'products_services', comp.productId), {
+          stock: increment(-(comp.quantity * order.quantity))
+        });
+      }
+    });
+
+    // Sumar producto final
+    if (product.trackStock !== false) {
+      updateDocumentNonBlocking(doc(db, 'products_services', product.id), {
+        stock: increment(order.quantity)
       });
     }
 
-    setIsAssemblyOpen(false);
-    toast({ title: "Ensamblado completado", description: `Se fabricaron ${assemblyQty} unidades.` });
+    // Actualizar orden
+    updateDocumentNonBlocking(doc(db, 'production_orders', order.id), {
+      status: 'completed'
+    });
+
+    setOrderToView(null);
+    toast({ title: "Armado completado", description: `Se han fabricado ${order.quantity} unidades de ${order.productName}.` });
   }
 
   const handleSaveCategory = () => {
@@ -475,6 +533,13 @@ export default function CatalogPage() {
     toast({ title: "Item eliminado" })
   }
 
+  const confirmDeleteOrder = () => {
+    if (!orderToDelete) return
+    deleteDocumentNonBlocking(doc(db, 'production_orders', orderToDelete.id))
+    setOrderToDelete(null)
+    toast({ title: "Orden eliminada" })
+  }
+
   const toggleCategory = (cid: string) => {
     setSelectedCategories(prev => 
       prev.includes(cid) ? prev.filter(i => i !== cid) : [...prev, cid]
@@ -507,25 +572,39 @@ export default function CatalogPage() {
     };
   }
 
-  const handleCopyShoppingList = () => {
+  const handleCopyShoppingList = (supplierFilter?: string) => {
     if (!purchaseCalculations) return;
     const dateStr = new Date().toLocaleDateString('es-AR');
+    const targetOrder = orderToView || { productName: selectedForAssembly?.name, quantity: assemblyQty };
+    
     let text = `*LISTA DE COMPRAS - DOSIMAT PRO*\n`;
-    text += `Para armar: ${assemblyQty} x ${selectedForAssembly?.name}\n`;
+    text += `Para: ${targetOrder.quantity} x ${targetOrder.productName}\n`;
+    if (supplierFilter) text += `PROVEEDOR: ${supplierFilter.toUpperCase()}\n`;
     text += `Fecha: ${dateStr}\n\n`;
     
-    purchaseCalculations.items.forEach(f => {
+    let itemsToInclude = purchaseCalculations.items;
+    if (supplierFilter) {
+      itemsToInclude = itemsToInclude.filter(i => i.supplier === supplierFilter);
+    }
+
+    if (itemsToInclude.length === 0) {
+      toast({ title: "Sin ítems", description: "No hay faltantes para este proveedor." });
+      return;
+    }
+
+    itemsToInclude.forEach(f => {
       text += `- *${f.name}*: Comprar ${f.manualQty} unidades.\n`;
-      if (f.costARS > 0) text += `  Subtotal: $${(f.manualQty * f.costARS).toLocaleString('es-AR')}\n`;
-      else if (f.costUSD > 0) text += `  Subtotal: u$s ${(f.manualQty * f.costUSD).toLocaleString('es-AR')}\n`;
     });
 
-    text += `\n*INVERSIÓN TOTAL DEFINIDA:*\n`;
-    text += `ARS: $${purchaseCalculations.totalARS.toLocaleString('es-AR')}\n`;
-    text += `USD: u$s ${purchaseCalculations.totalUSD.toLocaleString('es-AR')}`;
+    const ars = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * i.costARS), 0);
+    const usd = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * i.costUSD), 0);
+
+    text += `\n*INVERSIÓN ESTIMADA:*\n`;
+    if (ars > 0) text += `ARS: $${ars.toLocaleString('es-AR')}\n`;
+    if (usd > 0) text += `USD: u$s ${usd.toLocaleString('es-AR')}`;
 
     navigator.clipboard.writeText(text);
-    toast({ title: "Lista de compras copiada", description: "Lista preparada con tus cantidades manuales." });
+    toast({ title: "Lista de compras copiada", description: supplierFilter ? `Lista filtrada para ${supplierFilter}.` : "Lista completa copiada." });
   }
 
   const FilterPanel = () => (
@@ -595,6 +674,79 @@ export default function CatalogPage() {
     </div>
   )
 
+  const OrdersList = () => (
+    <div className="space-y-4">
+      {loadingOrders ? (
+        <div className="py-20 flex flex-col items-center justify-center gap-3">
+          <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground italic">Cargando órdenes de producción...</p>
+        </div>
+      ) : !orders || orders.length === 0 ? (
+        <Card className="p-20 text-center border-dashed border-2 bg-muted/5">
+          <Factory className="h-16 w-16 mx-auto text-muted-foreground opacity-20 mb-4" />
+          <h3 className="text-xl font-bold text-slate-800">No hay órdenes de producción</h3>
+          <p className="text-muted-foreground max-w-md mx-auto mt-2">Crea una orden desde el catálogo para planificar la fabricación de productos compuestos.</p>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          {orders.map((order: any) => {
+            const statusInfo = {
+              draft: { label: "Borrador", icon: ClipboardList, color: "text-slate-600 bg-slate-100 border-slate-200" },
+              pending_purchase: { label: "Faltan Materiales", icon: ShoppingCart, color: "text-amber-700 bg-amber-50 border-amber-200" },
+              ready: { label: "Listo para Armar", icon: Hammer, color: "text-blue-700 bg-blue-50 border-blue-200" },
+              completed: { label: "Completado", icon: CheckCircle, color: "text-emerald-700 bg-emerald-50 border-emerald-200" }
+            }[order.status as keyof typeof statusInfo] || { label: order.status, icon: Factory, color: "bg-muted" };
+            
+            const StatusIcon = statusInfo.icon;
+
+            return (
+              <Card 
+                key={order.id} 
+                className={cn(
+                  "glass-card hover:shadow-lg transition-all cursor-pointer border-l-4 group",
+                  order.status === 'completed' ? 'border-l-emerald-500 opacity-70' : 'border-l-primary'
+                )}
+                onClick={() => setOrderToView(order)}
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex justify-between items-start">
+                    <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5", statusInfo.color)}>
+                      <StatusIcon className="h-2.5 w-2.5 mr-1" /> {statusInfo.label}
+                    </Badge>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-7 w-7 text-destructive" 
+                        onClick={(e) => { e.stopPropagation(); setOrderToDelete(order); }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <CardTitle className="text-lg mt-2 font-bold leading-tight">{order.productName}</CardTitle>
+                  <CardDescription className="text-[10px] font-bold uppercase tracking-tighter">
+                    Creada el {new Date(order.createdAt).toLocaleDateString('es-AR')}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="bg-white/50 border rounded-lg p-3 flex items-center justify-between shadow-inner">
+                    <span className="text-[10px] font-black text-muted-foreground uppercase">Unidades a Fabricar</span>
+                    <span className="text-2xl font-black text-primary">{order.quantity}</span>
+                  </div>
+                </CardContent>
+                <CardFooter className="pt-0 border-t bg-muted/5 flex justify-between py-3">
+                  <Button variant="ghost" size="sm" className="h-8 text-[10px] font-bold uppercase p-0 px-2">VER DETALLE <ChevronRight className="h-3 w-3 ml-1" /></Button>
+                  {order.status === 'ready' && <Badge className="bg-blue-600 animate-pulse text-[8px] font-black">PRODUCCIÓN HABILITADA</Badge>}
+                </CardFooter>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  )
+
   if (isUserLoading || userData?.role === 'Replenisher' || userData?.role === 'Communicator') {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background">
@@ -613,7 +765,7 @@ export default function CatalogPage() {
       <div className="no-print w-full flex">
         <Sidebar />
         <SidebarInset className="flex-1 w-full p-4 md:p-8 space-y-6 pb-32 md:pb-8 overflow-x-hidden">
-          <header className="flex justify-between items-center">
+          <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <SidebarTrigger className="flex" />
               <div className="flex items-center gap-2 md:hidden pr-2 border-r">
@@ -622,187 +774,385 @@ export default function CatalogPage() {
               </div>
               <h1 className="text-xl md:text-3xl font-bold text-primary font-headline">Catálogo e Inventario</h1>
             </div>
-            <div className="flex gap-2">
-              <Sheet>
-                <SheetTrigger asChild>
-                  <Button variant="outline" size="icon" className="md:hidden">
-                    <Filter className="h-4 w-4" />
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="left" className="w-[280px] flex flex-col p-0">
-                  <div className="p-6 pb-2">
-                    <SheetHeader className="mb-2">
-                      <SheetTitle className="flex items-center gap-2"><Tag className="h-5 w-5" /> Filtrar Catálogo</SheetTitle>
-                    </SheetHeader>
-                  </div>
-                  <ScrollArea className="flex-1">
-                    <div className="p-6 pt-0">
-                      <FilterPanel />
+            
+            <div className="flex items-center gap-2">
+              <Tabs value={activeView} onValueChange={setActiveTab} className="bg-muted/50 p-1 rounded-xl border">
+                <TabsList className="bg-transparent h-9">
+                  <TabsTrigger value="inventory" className="text-[10px] font-black h-7 px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm uppercase">Stock</TabsTrigger>
+                  <TabsTrigger value="orders" className="text-[10px] font-black h-7 px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm uppercase">Producción</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <div className="w-px h-6 bg-border mx-2 hidden md:block" />
+              <div className="flex gap-2">
+                <Sheet>
+                  <SheetTrigger asChild>
+                    <Button variant="outline" size="icon" className="md:hidden">
+                      <Filter className="h-4 w-4" />
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="left" className="w-[280px] flex flex-col p-0">
+                    <div className="p-6 pb-2">
+                      <SheetHeader className="mb-2">
+                        <SheetTitle className="flex items-center gap-2"><Tag className="h-5 w-5" /> Filtrar Catálogo</SheetTitle>
+                      </SheetHeader>
                     </div>
-                  </ScrollArea>
-                </SheetContent>
-              </Sheet>
-              {isAdmin && (
-                <Button onClick={() => handleOpenDialog()} className="shadow-lg font-bold">
-                  <Plus className="mr-2 h-4 w-4" /> Nuevo Ítem
-                </Button>
-              )}
+                    <ScrollArea className="flex-1">
+                      <div className="p-6 pt-0">
+                        <FilterPanel />
+                      </div>
+                    </ScrollArea>
+                  </SheetContent>
+                </Sheet>
+                {isAdmin && activeView === 'inventory' && (
+                  <Button onClick={() => handleOpenDialog()} className="shadow-lg font-bold">
+                    <Plus className="mr-2 h-4 w-4" /> Nuevo Ítem
+                  </Button>
+                )}
+              </div>
             </div>
           </header>
 
-          <div className="flex flex-col md:flex-row gap-8 items-start">
-            <Card className="hidden md:block w-64 glass-card p-4 shrink-0 sticky top-8 max-h-[calc(100vh-100px)] overflow-y-auto">
-              <FilterPanel />
-            </Card>
+          <Tabs value={activeView} className="w-full">
+            <TabsContent value="inventory" className="m-0 space-y-6">
+              <div className="flex flex-col md:flex-row gap-8 items-start">
+                <Card className="hidden md:block w-64 glass-card p-4 shrink-0 sticky top-8 max-h-[calc(100vh-100px)] overflow-y-auto">
+                  <FilterPanel />
+                </Card>
 
-            <div className="flex-1 space-y-6 w-full">
-              <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <input 
-                  placeholder="Buscar por nombre..." 
-                  className="w-full pl-10 h-11 bg-white/50 backdrop-blur-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20" 
-                  value={searchTerm} 
-                  onChange={(e) => setSearchTerm(e.target.value)} 
-                />
-              </div>
+                <div className="flex-1 space-y-6 w-full">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <input 
+                      placeholder="Buscar por nombre..." 
+                      className="w-full pl-10 h-11 bg-white/50 backdrop-blur-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20" 
+                      value={searchTerm} 
+                      onChange={(e) => setSearchTerm(e.target.value)} 
+                    />
+                  </div>
 
-              {isLoading ? (
-                <div className="flex flex-col items-center justify-center h-48 gap-3">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  <p className="text-sm text-muted-foreground italic">Sincronizando inventario...</p>
-                </div>
-              ) : filteredItems.length === 0 ? (
-                <div className="text-center py-20 border-2 border-dashed rounded-2xl bg-muted/5">
-                   <Package className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
-                   <p className="text-muted-foreground font-medium">No se encontraron productos o servicios.</p>
-                   {selectedCategories.length > 0 && (
-                     <Button variant="link" onClick={clearFilters} className="text-primary font-bold mt-2">
-                       Limpiar filtros para ver todo
-                     </Button>
-                   )}
-                </div>
-              ) : (
-                <section className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6">
-                  {filteredItems.map((item: any) => {
-                    const tracksStock = item.trackStock !== false;
-                    const isLowStock = tracksStock && !item.isService && (item.stock || 0) <= (item.minStock || 0);
-                    const catName = categoryMap[item.categoryId] || "Sin Categoría";
-                    const marginARS = getMarginInfo(item.priceARS, item.calculatedCostARS);
-                    const marginUSD = getMarginInfo(item.priceUSD, item.calculatedCostUSD);
+                  {isLoading ? (
+                    <div className="flex flex-col items-center justify-center h-48 gap-3">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                      <p className="text-sm text-muted-foreground italic">Sincronizando inventario...</p>
+                    </div>
+                  ) : filteredItems.length === 0 ? (
+                    <div className="text-center py-20 border-2 border-dashed rounded-2xl bg-muted/5">
+                       <Package className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
+                       <p className="text-muted-foreground font-medium">No se encontraron productos o servicios.</p>
+                       {selectedCategories.length > 0 && (
+                         <Button variant="link" onClick={clearFilters} className="text-primary font-bold mt-2">
+                           Limpiar filtros para ver todo
+                         </Button>
+                       )}
+                    </div>
+                  ) : (
+                    <section className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6">
+                      {filteredItems.map((item: any) => {
+                        const tracksStock = item.trackStock !== false;
+                        const isLowStock = tracksStock && !item.isService && (item.stock || 0) <= (item.minStock || 0);
+                        const catName = categoryMap[item.categoryId] || "Sin Categoría";
+                        const marginARS = getMarginInfo(item.priceARS, item.calculatedCostARS);
+                        const marginUSD = getMarginInfo(item.priceUSD, item.calculatedCostUSD);
 
-                    return (
-                      <Card key={item.id} className={cn(
-                        "glass-card hover:shadow-md transition-all group border-l-4",
-                        isLowStock ? "border-l-rose-500 bg-rose-50/30" : "border-l-primary"
-                      )}>
-                        <CardHeader className="pb-2">
-                          <div className="flex justify-between items-start">
-                            <div className="flex flex-wrap gap-1">
-                              <Badge variant={item.isService ? "secondary" : "default"} className="text-[9px] font-black uppercase">
-                                {item.isService ? 'SERVICIO' : 'PRODUCTO'}
-                              </Badge>
-                              {item.isCompuesto && <Badge className="text-[9px] font-black uppercase bg-amber-500 hover:bg-amber-600"><Layers className="h-2 w-2 mr-1" /> COMPUESTO</Badge>}
-                              {!tracksStock && <Badge variant="outline" className="text-[9px] font-black uppercase text-blue-600 border-blue-200 bg-blue-50">ENTREGA DIRECTA</Badge>}
-                              <Badge variant="outline" className="text-[9px] font-bold bg-white text-muted-foreground border-muted-foreground/20">{catName}</Badge>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Button 
-                                type="button" 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8 text-primary opacity-40 group-hover:opacity-100 transition-opacity" 
-                                onClick={(e) => { e.stopPropagation(); setProductToPreview(item); }} 
-                                title="Ver Ficha / Exportar"
-                              >
-                                <Printer className="h-4 w-4" />
-                              </Button>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => setProductToPreview(item)}><Printer className="mr-2 h-4 w-4" /> Exportar Ficha (PDF)</DropdownMenuItem>
-                                  {isAdmin && (
-                                    <>
-                                      <DropdownMenuItem onClick={() => handleOpenDialog(item)}><Edit className="mr-2 h-4 w-4" /> Editar parámetros</DropdownMenuItem>
-                                      {item.isCompuesto && (
-                                        <DropdownMenuItem className="text-amber-600 font-bold" onClick={() => { setSelectedForAssembly(item); setAssemblyQty(1); setIsAssemblyOpen(true); }}>
-                                          <Hammer className="mr-2 h-4 w-4" /> Orden de Armado
-                                        </DropdownMenuItem>
+                        return (
+                          <Card key={item.id} className={cn(
+                            "glass-card hover:shadow-md transition-all group border-l-4",
+                            isLowStock ? "border-l-rose-500 bg-rose-50/30" : "border-l-primary"
+                          )}>
+                            <CardHeader className="pb-2">
+                              <div className="flex justify-between items-start">
+                                <div className="flex flex-wrap gap-1">
+                                  <Badge variant={item.isService ? "secondary" : "default"} className="text-[9px] font-black uppercase">
+                                    {item.isService ? 'SERVICIO' : 'PRODUCTO'}
+                                  </Badge>
+                                  {item.isCompuesto && <Badge className="text-[9px] font-black uppercase bg-amber-500 hover:bg-amber-600"><Layers className="h-2 w-2 mr-1" /> COMPUESTO</Badge>}
+                                  {!tracksStock && <Badge variant="outline" className="text-[9px] font-black uppercase text-blue-600 border-blue-200 bg-blue-50">ENTREGA DIRECTA</Badge>}
+                                  <Badge variant="outline" className="text-[9px] font-bold bg-white text-muted-foreground border-muted-foreground/20">{catName}</Badge>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Button 
+                                    type="button" 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="h-8 w-8 text-primary opacity-40 group-hover:opacity-100 transition-opacity" 
+                                    onClick={(e) => { e.stopPropagation(); setProductToPreview(item); }} 
+                                    title="Ver Ficha / Exportar"
+                                  >
+                                    <Printer className="h-4 w-4" />
+                                  </Button>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem onClick={() => setProductToPreview(item)}><Printer className="mr-2 h-4 w-4" /> Exportar Ficha (PDF)</DropdownMenuItem>
+                                      {isAdmin && (
+                                        <>
+                                          <DropdownMenuItem onClick={() => handleOpenDialog(item)}><Edit className="mr-2 h-4 w-4" /> Editar parámetros</DropdownMenuItem>
+                                          {item.isCompuesto && (
+                                            <DropdownMenuItem className="text-amber-600 font-bold" onClick={() => { setSelectedForAssembly(item); setAssemblyQty(1); setIsAssemblyOpen(true); }}>
+                                              <Hammer className="mr-2 h-4 w-4" /> Orden de Armado
+                                            </DropdownMenuItem>
+                                          )}
+                                          <DropdownMenuItem className="text-destructive" onClick={() => setItemToDelete(item)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem>
+                                        </>
                                       )}
-                                      <DropdownMenuItem className="text-destructive" onClick={() => setItemToDelete(item)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem>
-                                    </>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </div>
+                              </div>
+                              <CardTitle className="text-lg mt-2 truncate font-bold">{item.name}</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                              {tracksStock && !item.isService && (
+                                <div className="flex items-center justify-between p-2 bg-white rounded-lg border shadow-sm">
+                                  <div className="flex flex-col">
+                                    <span className="text-[9px] font-black text-muted-foreground uppercase tracking-wider">Stock Actual</span>
+                                    <span className={cn("text-xl font-black", isLowStock ? "text-rose-600" : "text-emerald-600")}>
+                                      {item.stock || 0}
+                                    </span>
+                                  </div>
+                                  {isLowStock && <AlertTriangle className="h-5 w-5 text-rose-500 animate-pulse" />}
+                                </div>
+                              )}
+
+                              <div className="grid grid-cols-2 gap-2">
+                                <div className="p-2 bg-primary/5 rounded-lg border border-primary/10 relative overflow-hidden">
+                                  <span className="text-[9px] font-black text-primary uppercase block">Venta ARS</span>
+                                  <span className="text-md font-black">${(item.priceARS || 0).toLocaleString('es-AR')}</span>
+                                  {isAdmin && marginARS && (
+                                    <div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginARS.color)}>
+                                      {marginARS.icon} {marginARS.value}%
+                                    </div>
                                   )}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </div>
-                          <CardTitle className="text-lg mt-2 truncate font-bold">{item.name}</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          {tracksStock && !item.isService && (
-                            <div className="flex items-center justify-between p-2 bg-white rounded-lg border shadow-sm">
-                              <div className="flex flex-col">
-                                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-wider">Stock Actual</span>
-                                <span className={cn("text-xl font-black", isLowStock ? "text-rose-600" : "text-emerald-600")}>
-                                  {item.stock || 0}
-                                </span>
+                                </div>
+                                <div className="p-2 bg-emerald-50 rounded-lg border border-emerald-100 relative overflow-hidden">
+                                  <span className="text-[9px] font-black text-emerald-700 uppercase block">Venta USD</span>
+                                  <span className="text-md font-black">u$s {(item.priceUSD || 0).toLocaleString('es-AR')}</span>
+                                  {isAdmin && marginUSD && (
+                                    <div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginUSD.color)}>
+                                      {marginUSD.icon} {marginUSD.value}%
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                              {isLowStock && <AlertTriangle className="h-5 w-5 text-rose-500 animate-pulse" />}
-                            </div>
-                          )}
 
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="p-2 bg-primary/5 rounded-lg border border-primary/10 relative overflow-hidden">
-                              <span className="text-[9px] font-black text-primary uppercase block">Venta ARS</span>
-                              <span className="text-md font-black">${(item.priceARS || 0).toLocaleString('es-AR')}</span>
-                              {isAdmin && marginARS && (
-                                <div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginARS.color)}>
-                                  {marginARS.icon} {marginARS.value}%
+                              {isAdmin && (
+                                <div className="pt-2 border-t border-dashed">
+                                  <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground mb-1.5">
+                                    <span className="uppercase tracking-widest">Costo Estimado</span>
+                                    <Badge variant="outline" className="h-4 text-[8px] font-black bg-white uppercase">Costo real</Badge>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-3 text-xs font-bold italic opacity-80">
+                                    <div className="flex flex-col">
+                                      <span className="text-[9px] not-italic text-muted-foreground uppercase">Costo ARS</span>
+                                      <span>${(item.calculatedCostARS || 0).toLocaleString('es-AR')}</span>
+                                    </div>
+                                    <div className="flex flex-col text-right">
+                                      <span className="text-[9px] not-italic text-muted-foreground uppercase">Costo USD</span>
+                                      <span>u$s {(item.calculatedCostUSD || 0).toLocaleString('es-AR')}</span>
+                                    </div>
+                                  </div>
                                 </div>
                               )}
-                            </div>
-                            <div className="p-2 bg-emerald-50 rounded-lg border border-emerald-100 relative overflow-hidden">
-                              <span className="text-[9px] font-black text-emerald-700 uppercase block">Venta USD</span>
-                              <span className="text-md font-black">u$s {(item.priceUSD || 0).toLocaleString('es-AR')}</span>
-                              {isAdmin && marginUSD && (
-                                <div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginUSD.color)}>
-                                  {marginUSD.icon} {marginUSD.value}%
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          {isAdmin && (
-                            <div className="pt-2 border-t border-dashed">
-                              <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground mb-1.5">
-                                <span className="uppercase tracking-widest">Costo Estimado</span>
-                                <Badge variant="outline" className="h-4 text-[8px] font-black bg-white uppercase">Costo real</Badge>
-                              </div>
-                              <div className="grid grid-cols-2 gap-3 text-xs font-bold italic opacity-80">
-                                <div className="flex flex-col">
-                                  <span className="text-[9px] not-italic text-muted-foreground uppercase">Costo ARS</span>
-                                  <span>${(item.calculatedCostARS || 0).toLocaleString('es-AR')}</span>
-                                </div>
-                                <div className="flex flex-col text-right">
-                                  <span className="text-[9px] not-italic text-muted-foreground uppercase">Costo USD</span>
-                                  <span>u$s {(item.calculatedCostUSD || 0).toLocaleString('es-AR')}</span>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    )
-                  })}
-                </section>
-              )}
-            </div>
-          </div>
+                            </CardContent>
+                          </Card>
+                        )
+                      })}
+                    </section>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+            <TabsContent value="orders" className="m-0">
+              <OrdersList />
+            </TabsContent>
+          </Tabs>
         </SidebarInset>
       </div>
 
-      {/* CONTENEDOR OCULTO PARA IMPRESIÓN REAL */}
+      {/* MODAL DE DETALLE DE ORDEN DE PRODUCCIÓN */}
+      <Dialog open={!!orderToView} onOpenChange={(o) => { if(!o) setOrderToView(null); }}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex justify-between items-start pr-8">
+              <div>
+                <DialogTitle className="flex items-center gap-2 text-primary font-black text-2xl">
+                  <Factory className="h-6 w-6" /> Orden #{orderToView?.id.toUpperCase()}
+                </DialogTitle>
+                <DialogDescription>Gestión de fabricación para <b>{orderToView?.quantity} x {orderToView?.productName}</b></DialogDescription>
+              </div>
+              {orderToView && (
+                <Badge className={cn(
+                  "font-black uppercase tracking-widest",
+                  {
+                    draft: "bg-slate-100 text-slate-600",
+                    pending_purchase: "bg-amber-100 text-amber-700",
+                    ready: "bg-blue-100 text-blue-700",
+                    completed: "bg-emerald-100 text-emerald-700"
+                  }[orderToView.status as string]
+                )}>
+                  {orderToView.status === 'pending_purchase' ? 'FALTAN MATERIALES' : 
+                   orderToView.status === 'ready' ? 'LISTO PARA ARMAR' : 
+                   orderToView.status === 'completed' ? 'COMPLETADO' : orderToView.status}
+                </Badge>
+              )}
+            </div>
+          </DialogHeader>
+
+          {orderToView && (
+            <div className="py-4 space-y-8">
+              <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
+                      <Layers className="h-4 w-4" /> Explosión de Insumos
+                    </h3>
+                  </div>
+                  <div className="border rounded-xl bg-white shadow-sm overflow-hidden">
+                    <Table>
+                      <TableHeader className="bg-slate-50">
+                        <TableRow>
+                          <TableHead className="text-[9px] font-black uppercase">Pieza</TableHead>
+                          <TableHead className="text-center text-[9px] font-black uppercase">Req.</TableHead>
+                          <TableHead className="text-center text-[9px] font-black uppercase">Stock</TableHead>
+                          <TableHead className="text-right text-[9px] font-black uppercase">Estado</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {explosionSummary?.all.map(req => {
+                          const stockRestante = req.available - req.required;
+                          const esCritico = stockRestante < req.minStock;
+                          const faltaDirecto = stockRestante < 0;
+                          return (
+                            <TableRow key={req.id}>
+                              <TableCell className="py-2">
+                                <p className="font-bold text-xs">{req.name}</p>
+                                <p className="text-[8px] text-muted-foreground uppercase">{req.supplier}</p>
+                              </TableCell>
+                              <TableCell className="text-center font-black text-primary text-xs">{req.required}</TableCell>
+                              <TableCell className="text-center text-xs">{req.available}</TableCell>
+                              <TableCell className="text-right">
+                                {faltaDirecto ? <Badge className="bg-rose-600 text-[8px] h-4">FALTA</Badge> : 
+                                 esCritico ? <Badge variant="outline" className="text-amber-600 border-amber-200 text-[8px] h-4">BAJO</Badge> : 
+                                 <CheckCircle className="h-4 w-4 text-emerald-500 ml-auto" />}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
+                      <ShoppingCart className="h-4 w-4" /> Compras / Insumos
+                    </h3>
+                    {orderToView.status !== 'completed' && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs"><Copy className="h-3 w-3" /> COPIAR LISTA</Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleCopyShoppingList()}>Lista Completa</DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          {Array.from(new Set(purchaseCalculations?.items.map(i => i.supplier))).map(sup => (
+                            <DropdownMenuItem key={sup} onClick={() => handleCopyShoppingList(sup)}>{sup}</DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </div>
+
+                  <Card className="border-2 shadow-lg relative overflow-hidden bg-white">
+                    <div className="absolute top-0 right-0 p-4 opacity-5"><ShoppingCart className="h-32 w-32" /></div>
+                    <CardContent className="p-0">
+                      {purchaseCalculations?.items.length === 0 ? (
+                        <div className="p-12 text-center text-emerald-600 space-y-2">
+                          <CheckCircle2 className="h-12 w-12 mx-auto" />
+                          <p className="font-black">MATERIALES LISTOS</p>
+                          <p className="text-xs text-muted-foreground italic">Tienes todo lo necesario para empezar el armado.</p>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader className="bg-slate-900 text-white">
+                              <TableRow>
+                                <TableHead className="text-white text-[9px] font-black uppercase">Material</TableHead>
+                                <TableHead className="text-white text-[9px] font-black uppercase text-center w-24">Compra</TableHead>
+                                <TableHead className="text-white text-[9px] font-black uppercase text-center">Post</TableHead>
+                                <TableHead className="text-white text-[9px] font-black uppercase text-right">Subtotal</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {purchaseCalculations?.items.map(f => (
+                                <TableRow key={f.id} className="hover:bg-muted/5">
+                                  <TableCell className="py-2">
+                                    <p className="font-bold text-xs">{f.name}</p>
+                                    <p className="text-[8px] text-muted-foreground uppercase">{f.supplier}</p>
+                                  </TableCell>
+                                  <TableCell>
+                                    <input 
+                                      type="number" 
+                                      disabled={orderToView.status === 'completed'}
+                                      value={f.manualQty} 
+                                      onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [f.id]: Number(e.target.value) }))}
+                                      className="w-full text-center font-black text-sm bg-muted/20 border rounded focus:outline-none"
+                                    />
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <span className={cn(
+                                      "font-black text-[10px] px-1.5 py-0.5 rounded",
+                                      f.isInsufficient ? "bg-rose-600 text-white" : f.isCritical ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
+                                    )}>
+                                      {f.futureStock}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <p className="text-[10px] font-bold">{f.costARS > 0 ? `$${(f.manualQty * f.costARS).toLocaleString('es-AR')}` : `u$s ${(f.manualQty * f.costUSD).toLocaleString('es-AR')}`}</p>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                          <div className="bg-slate-900 text-white p-4 grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-[8px] font-black uppercase text-slate-400">Total ARS</p>
+                              <h4 className="text-xl font-black">${purchaseCalculations?.totalARS.toLocaleString('es-AR')}</h4>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[8px] font-black uppercase text-slate-400">Total USD</p>
+                              <h4 className="text-xl font-black text-emerald-400">u$s {purchaseCalculations?.totalUSD.toLocaleString('es-AR')}</h4>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                  {orderToView.status === 'pending_purchase' && (
+                    <Button className="w-full bg-emerald-600 hover:bg-emerald-700 font-black h-12 shadow-lg" onClick={handleReceiveMaterials}>
+                      <Truck className="mr-2 h-5 w-5" /> INGRESAR MATERIALES COMPRADOS
+                    </Button>
+                  )}
+                </div>
+              </section>
+            </div>
+          )}
+
+          <DialogFooter className="mt-6 border-t pt-6">
+            <Button variant="ghost" onClick={() => setOrderToView(null)} className="font-bold">Cerrar</Button>
+            {orderToView?.status === 'ready' && (
+              <Button onClick={handleAssembleFinal} className="bg-blue-600 hover:bg-blue-700 px-10 font-black shadow-xl h-12">
+                <Hammer className="mr-2 h-5 w-5" /> FINALIZAR ARMADO Y SUMAR STOCK
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* VISTA DE IMPRESIÓN / PDF */}
       {productToPreview && (
         <div className="print-only w-full p-4 font-sans text-slate-900 bg-white">
           <div className="flex justify-between items-end border-b-2 border-slate-900 pb-2 mb-4">
@@ -827,8 +1177,8 @@ export default function CatalogPage() {
                   <p className="text-xs font-bold">{categoryMap[productToPreview.categoryId] || "Sin Categoría"}</p>
                 </div>
                 <div>
-                  <Label className="text-[8px] font-black uppercase text-slate-400">Tipo</Label>
-                  <p className="text-xs font-bold uppercase">{productToPreview.isService ? 'SERVICIO' : 'PRODUCTO'}</p>
+                  <Label className="text-[8px] font-black uppercase text-slate-400">Proveedor</Label>
+                  <p className="text-xs font-bold">{productToPreview.supplier || "---"}</p>
                 </div>
               </div>
               <div>
@@ -892,7 +1242,7 @@ export default function CatalogPage() {
                       <th className="p-1.5 text-center uppercase text-[9px] font-black w-16">Cantidad</th>
                       {isAdmin && <th className="p-1.5 text-right uppercase text-[9px] font-black w-24">Costo Unit.</th>}
                       {isAdmin && <th className="p-1.5 text-right uppercase text-[9px] font-black w-24">Subtotal Costo</th>}
-                      <th className="p-1.5 text-left uppercase text-[9px] font-black">Observaciones</th>
+                      <th className="p-1.5 text-left uppercase text-[9px] font-black">Proveedor</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 border-b border-slate-200">
@@ -917,67 +1267,15 @@ export default function CatalogPage() {
                               {currency === 'ARS' ? '$' : 'u$s'} {subtotal.toLocaleString('es-AR')}
                             </td>
                           )}
-                          <td className="p-1.5 text-[9px] text-slate-300 italic">__________________</td>
+                          <td className="p-1.5 text-[9px] text-slate-500 uppercase">{child?.supplier || "---"}</td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
-
-              {/* Sub-estructuras en impresión */}
-              {productToPreview.components
-                .map((c: any) => items?.find(i => i.id === c.productId))
-                .filter((i: any) => i?.isCompuesto && i?.components?.length > 0)
-                .length > 0 && (
-                <div className="space-y-4 pt-2">
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2 border-b pb-1">
-                    <Package className="h-3.5 w-3.5" /> Desglose detallado de sub-partes
-                  </h3>
-                  <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-                    {productToPreview.components
-                      .map((c: any) => items?.find(i => i.id === c.productId))
-                      .filter((i: any) => i?.isCompuesto && i?.components?.length > 0)
-                      .map((subItem: any) => (
-                        <div key={subItem.id} className="space-y-1.5">
-                          <div className="text-[10px] font-black text-slate-800 uppercase bg-slate-100 p-1 px-2 rounded">
-                            {subItem.name}
-                          </div>
-                          <div className="pl-2">
-                            <table className="w-full text-[9px] text-slate-700">
-                              <tbody className="divide-y divide-slate-100">
-                                {subItem.components.map((sc: any, sidx: number) => {
-                                  const child = items?.find(i => i.id === sc.productId);
-                                  const childCosts = child ? calculateCost(child, items || []) : { ars: 0, usd: 0 };
-                                  const currency = (child?.costARS > 0 || child?.laborCostARS > 0) ? 'ARS' : 'USD';
-                                  const unitCost = currency === 'ARS' ? childCosts.ars : childCosts.usd;
-                                  return (
-                                    <tr key={sidx} className="h-4">
-                                      <td className="py-0.5">{child?.name || '---'}</td>
-                                      <td className="text-right w-24">
-                                        {isAdmin && <span className="text-[8px] text-slate-400">{currency === 'ARS' ? '$' : 'u$s'} {unitCost.toLocaleString('es-AR')} </span>}
-                                        <span className="font-bold">x{sc.quantity}</span>
-                                      </td>
-                                    </tr>
-                                  )
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      ))
-                    }
-                  </div>
-                </div>
-              )}
             </div>
           )}
-
-          <div className="mt-12 pt-4 border-t border-slate-100 flex justify-between items-end">
-            <div className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">
-              Dosimat Pro System • Documento Técnico Generado el {new Date().toLocaleDateString('es-AR')}
-            </div>
-          </div>
         </div>
       )}
 
@@ -1011,9 +1309,15 @@ export default function CatalogPage() {
                       <Label className="text-[9px] font-black uppercase text-slate-400">Descripción</Label>
                       <p className="text-xs text-slate-600 italic">{productToPreview.description || "Sin descripción."}</p>
                     </div>
-                    <div>
-                      <Label className="text-[9px] font-black uppercase text-slate-400">Tipo de Recurso</Label>
-                      <p className="text-xs font-bold uppercase">{productToPreview.isService ? 'SERVICIO TÉCNICO' : 'PRODUCTO FÍSICO'}</p>
+                    <div className="flex gap-4">
+                      <div>
+                        <Label className="text-[9px] font-black uppercase text-slate-400">Tipo de Recurso</Label>
+                        <p className="text-xs font-bold uppercase">{productToPreview.isService ? 'SERVICIO TÉCNICO' : 'PRODUCTO FÍSICO'}</p>
+                      </div>
+                      <div>
+                        <Label className="text-[9px] font-black uppercase text-slate-400">Proveedor</Label>
+                        <p className="text-xs font-bold uppercase">{productToPreview.supplier || "---"}</p>
+                      </div>
                     </div>
                   </div>
                   <div className="bg-white p-3 rounded-lg border space-y-3">
@@ -1060,8 +1364,8 @@ export default function CatalogPage() {
                             <tr>
                               <th className="p-1.5 text-left font-black uppercase text-[9px]">Componente</th>
                               <th className="p-1.5 text-center font-black uppercase text-[9px] w-12">Cant.</th>
-                              {isAdmin && <th className="p-1.5 text-right font-black uppercase text-[9px] w-20">Costo U.</th>}
                               {isAdmin && <th className="p-1.5 text-right font-black uppercase text-[9px] w-20">Subtotal</th>}
+                              <th className="p-1.5 text-right font-black uppercase text-[9px]">Prov.</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y">
@@ -1077,15 +1381,11 @@ export default function CatalogPage() {
                                   <td className="p-1.5 font-medium">{child?.name || 'Cargando...'}</td>
                                   <td className="p-1.5 text-center font-black text-primary">{comp.quantity}</td>
                                   {isAdmin && (
-                                    <td className="p-1.5 text-right text-slate-500">
-                                      {currency === 'ARS' ? '$' : 'u$s'} {unitCost.toLocaleString('es-AR')}
-                                    </td>
-                                  )}
-                                  {isAdmin && (
                                     <td className="p-1.5 text-right font-bold text-slate-700">
                                       {currency === 'ARS' ? '$' : 'u$s'} {subtotal.toLocaleString('es-AR')}
                                     </td>
                                   )}
+                                  <td className="p-1.5 text-right text-[8px] font-black uppercase text-slate-400">{child?.supplier || "---"}</td>
                                 </tr>
                               );
                             })}
@@ -1093,53 +1393,6 @@ export default function CatalogPage() {
                         </table>
                       </div>
                     </div>
-
-                    {/* Desglose de sub-estructuras compuestas */}
-                    {productToPreview.components
-                      .map((c: any) => items?.find(i => i.id === c.productId))
-                      .filter((i: any) => i?.isCompuesto && i?.components?.length > 0)
-                      .length > 0 && (
-                      <div className="space-y-3 pt-2">
-                        <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
-                          <Package className="h-3.5 w-3.5" /> Desglose de Partes Compuestas
-                        </h3>
-                        <div className="grid grid-cols-1 gap-3">
-                          {productToPreview.components
-                            .map((c: any) => items?.find(i => i.id === c.productId))
-                            .filter((i: any) => i?.isCompuesto && i?.components?.length > 0)
-                            .map((subItem: any) => (
-                              <div key={subItem.id} className="space-y-1.5 ml-4">
-                                <div className="flex items-center gap-2 text-[10px] font-bold text-slate-700">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                                  {subItem.name}
-                                </div>
-                                <div className="border-l-2 border-slate-200 ml-0.5 pl-3">
-                                  <table className="w-full text-[10px] text-slate-600">
-                                    <tbody>
-                                      {subItem.components.map((sc: any, sidx: number) => {
-                                        const child = items?.find(i => i.id === sc.productId);
-                                        const childCosts = child ? calculateCost(child, items || []) : { ars: 0, usd: 0 };
-                                        const currency = (child?.costARS > 0 || child?.laborCostARS > 0) ? 'ARS' : 'USD';
-                                        const unitCost = currency === 'ARS' ? childCosts.ars : childCosts.usd;
-                                        return (
-                                          <tr key={sidx} className="h-5">
-                                            <td className="pr-4">{child?.name || '---'}</td>
-                                            <td className="text-right font-medium w-24">
-                                              {isAdmin && `${currency === 'ARS' ? '$' : 'u$s'} ${unitCost.toLocaleString('es-AR')} `}
-                                              <span className="font-bold">x{sc.quantity}</span>
-                                            </td>
-                                          </tr>
-                                        )
-                                      })}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            ))
-                          }
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -1185,14 +1438,20 @@ export default function CatalogPage() {
                 <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Dosificador G4" />
               </div>
 
-              <div className="space-y-2">
-                <Label className="font-bold">Categoría</Label>
-                <Select value={formData.categoryId} onValueChange={(v) => setFormData({...formData, categoryId: v})}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar grupo..." /></SelectTrigger>
-                  <SelectContent>
-                    {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="font-bold">Categoría</Label>
+                  <Select value={formData.categoryId} onValueChange={(v) => setFormData({...formData, categoryId: v})}>
+                    <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                    <SelectContent>
+                      {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-bold">Proveedor</Label>
+                  <Input value={formData.supplier} onChange={(e) => setFormData({...formData, supplier: e.target.value})} placeholder="Ej: Ferretería Central" />
+                </div>
               </div>
               
               <div className="grid grid-cols-2 gap-4">
@@ -1335,7 +1594,7 @@ export default function CatalogPage() {
                               <div className="flex flex-col min-w-0">
                                 <span className="text-xs font-bold truncate">{product?.name || 'Cargando...'}</span>
                                 {product?.trackStock !== false && (
-                                  <span className="text-[9px] text-muted-foreground">Stock actual: {product?.stock || 0}</span>
+                                  <span className="text-[9px] text-muted-foreground">Stock: {product?.stock || 0} | {product?.supplier || "---"}</span>
                                 )}
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
@@ -1375,81 +1634,20 @@ export default function CatalogPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-gap-2 text-primary font-bold">
-              <Tag className="h-5 w-5" /> Categorías de Productos
-            </DialogTitle>
-            <DialogDescription>Administra los grupos y marca tus favoritos para el filtro inicial.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="flex gap-2">
-              <Input 
-                placeholder={editingCategoryId ? "Editar nombre..." : "Nueva categoría..."} 
-                value={newCategoryName} 
-                onChange={(e) => setNewCategoryName(e.target.value)} 
-              />
-              {editingCategoryId ? (
-                <div className="flex gap-1">
-                  <Button onClick={handleSaveCategory} className="bg-emerald-600 hover:bg-emerald-700">
-                    <Check className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" onClick={cancelEditCategory}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ) : (
-                <Button onClick={handleSaveCategory}><Plus className="h-4 w-4" /></Button>
-              )}
-            </div>
-            <ScrollArea className="h-[250px] border rounded-md p-2">
-              {categories.map((cat: any) => (
-                <div key={cat.id} className="flex justify-between items-center p-2 border-b last:border-0 hover:bg-muted/20 group">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className={cn("h-7 w-7", cat.isFavorite ? "text-amber-500" : "text-muted-foreground opacity-40 hover:opacity-100")}
-                      onClick={() => toggleFavoriteCategory(cat)}
-                    >
-                      <Star className={cn("h-4 w-4", cat.isFavorite && "fill-amber-500")} />
-                    </Button>
-                    <span className="text-sm font-medium truncate">{cat.name}</span>
-                  </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-primary" onClick={() => handleEditCategory(cat)}>
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteDocumentNonBlocking(doc(db, 'product_categories', cat.id))}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              {categories.length === 0 && <p className="text-center py-10 text-xs text-muted-foreground italic">Sin categorías creadas.</p>}
-            </ScrollArea>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setIsCategoryManagerOpen(false)} className="w-full">Cerrar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={isAssemblyOpen} onOpenChange={setIsAssemblyOpen}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-amber-600 font-black text-2xl">
-              <Hammer className="h-6 w-6" /> Orden de Fabricación y MRP
+              <Hammer className="h-6 w-6" /> Nueva Orden de Armado
             </DialogTitle>
-            <DialogDescription>Planificación de armado para <b>{selectedForAssembly?.name}</b></DialogDescription>
+            <DialogDescription>Planificación de fabricación para <b>{selectedForAssembly?.name}</b></DialogDescription>
           </DialogHeader>
           
           <div className="py-4 space-y-8">
             <section className="bg-amber-50 border border-amber-100 p-6 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
               <div className="space-y-1">
                 <Label className="font-black text-amber-800 uppercase tracking-widest text-xs">Cantidad a Fabricar</Label>
-                <p className="text-xs text-amber-600">Afecta el cálculo de insumos en todos los niveles.</p>
+                <p className="text-xs text-amber-600">El sistema analizará el stock de todos los componentes recursivamente.</p>
               </div>
               <div className="flex items-center gap-4 bg-white p-2 rounded-xl border shadow-inner">
                 <Button variant="ghost" size="icon" onClick={() => setAssemblyQty(Math.max(1, assemblyQty - 1))} className="h-10 w-10 text-amber-600 hover:bg-amber-50">
@@ -1472,10 +1670,10 @@ export default function CatalogPage() {
                 <section className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
-                      <Layers className="h-4 w-4" /> Explosión de Insumos (Consumo)
+                      <Layers className="h-4 w-4" /> Simulación de Insumos
                     </h3>
                     <Badge variant="outline" className="font-bold border-amber-200 text-amber-700 bg-amber-50">
-                      {explosionSummary.all.length} ÍTEMS IMPACTADOS
+                      {explosionSummary.all.length} COMPONENTES IMPACTADOS
                     </Badge>
                   </div>
                   <div className="border rounded-xl bg-white shadow-sm overflow-hidden overflow-x-auto">
@@ -1485,7 +1683,6 @@ export default function CatalogPage() {
                           <TableHead className="font-black text-[10px] uppercase">Componente</TableHead>
                           <TableHead className="text-center font-black text-[10px] uppercase">Requerido</TableHead>
                           <TableHead className="text-center font-black text-[10px] uppercase">Stock Disp.</TableHead>
-                          <TableHead className="text-center font-black text-[10px] uppercase">Diferencia</TableHead>
                           <TableHead className="text-right font-black text-[10px] uppercase">Estado Post-Armado</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1500,19 +1697,11 @@ export default function CatalogPage() {
                               <TableCell>
                                 <div className="flex flex-col">
                                   <span className="font-bold text-sm">{req.name}</span>
-                                  {req.isCompuesto && <Badge className="w-fit text-[8px] h-4 bg-amber-500 hover:bg-amber-500">PRODUCCIÓN INTERNA</Badge>}
+                                  <span className="text-[8px] text-muted-foreground uppercase">{req.supplier}</span>
                                 </div>
                               </TableCell>
                               <TableCell className="text-center font-black text-primary">{req.required}</TableCell>
                               <TableCell className="text-center font-medium text-slate-500">{req.available}</TableCell>
-                              <TableCell className="text-center">
-                                <span className={cn(
-                                  "font-black px-2 py-0.5 rounded text-xs",
-                                  faltaDirecto ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"
-                                )}>
-                                  {stockRestante >= 0 ? `+${stockRestante}` : stockRestante}
-                                </span>
-                              </TableCell>
                               <TableCell className="text-right">
                                 {faltaDirecto ? (
                                   <Badge className="bg-rose-600 font-bold text-[9px]">FALTA STOCK</Badge>
@@ -1533,15 +1722,24 @@ export default function CatalogPage() {
                 <section className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
-                      <ShoppingCart className="h-4 w-4" /> Carrito de Compras (Planificación)
+                      <ShoppingCart className="h-4 w-4" /> Carrito de Compras Sugerido
                     </h3>
                     <div className="flex gap-2">
                       <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs" onClick={() => setManualPurchaseQtys({})}>
                         <RefreshCw className="h-3.5 w-3.5" /> REINICIAR
                       </Button>
-                      <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs" onClick={handleCopyShoppingList}>
-                        <Copy className="h-3.5 w-3.5" /> COPIAR LISTA
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs"><Copy className="h-3.5 w-3.5" /> COPIAR LISTA</Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleCopyShoppingList()}>Lista Completa</DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          {Array.from(new Set(purchaseCalculations?.items.map(i => i.supplier))).map(sup => (
+                            <DropdownMenuItem key={sup} onClick={() => handleCopyShoppingList(sup)}>{sup}</DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                   
@@ -1551,50 +1749,42 @@ export default function CatalogPage() {
                       {purchaseCalculations?.items.length === 0 ? (
                         <div className="p-12 text-center text-emerald-600 space-y-2">
                           <CheckCircle2 className="h-12 w-12 mx-auto" />
-                          <p className="font-black">ESTADO ÓPTIMO</p>
-                          <p className="text-xs text-muted-foreground italic">No se requieren compras adicionales para esta orden y tus mínimos.</p>
+                          <p className="font-black">MATERIALES SUFICIENTES</p>
+                          <p className="text-xs text-muted-foreground italic">No se requieren compras para esta orden.</p>
                         </div>
                       ) : (
                         <div className="overflow-x-auto">
                           <Table>
                             <TableHeader className="bg-slate-900 text-white">
                               <TableRow>
-                                <TableHead className="text-white text-[10px] font-black uppercase">Material</TableHead>
-                                <TableHead className="text-white text-[10px] font-black uppercase text-center w-32">Cant. a Comprar</TableHead>
-                                <TableHead className="text-white text-[10px] font-black uppercase text-center">Stock Futuro</TableHead>
-                                <TableHead className="text-white text-[10px] font-black uppercase text-right">Subtotal</TableHead>
+                                <TableHead className="text-white text-[9px] font-black uppercase">Material</TableHead>
+                                <TableHead className="text-white text-[9px] font-black uppercase text-center w-24">A Comprar</TableHead>
+                                <TableHead className="text-white text-[9px] font-black uppercase text-center">Post-Armado</TableHead>
+                                <TableHead className="text-white text-[9px] font-black uppercase text-right">Subtotal</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
                               {purchaseCalculations?.items.map(f => (
                                 <TableRow key={f.id} className="hover:bg-muted/5">
-                                  <TableCell>
-                                    <div>
-                                      <p className="font-black text-sm">{f.name}</p>
-                                      <p className="text-[9px] text-muted-foreground uppercase">Disp: {f.available} | Req: {f.required} | Mín: {f.minStock}</p>
-                                    </div>
+                                  <TableCell className="py-2">
+                                    <p className="font-bold text-xs">{f.name}</p>
+                                    <p className="text-[8px] text-muted-foreground uppercase">{f.supplier}</p>
                                   </TableCell>
                                   <TableCell>
-                                    <div className="flex items-center gap-2 bg-white border rounded p-1 shadow-inner">
-                                      <input 
-                                        type="number" 
-                                        value={f.manualQty} 
-                                        onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [f.id]: Number(e.target.value) }))}
-                                        className="w-full text-center font-black text-sm focus:outline-none"
-                                      />
-                                    </div>
+                                    <input 
+                                      type="number" 
+                                      value={f.manualQty} 
+                                      onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [f.id]: Number(e.target.value) }))}
+                                      className="w-full text-center font-black text-sm bg-muted/20 border rounded focus:outline-none"
+                                    />
                                   </TableCell>
                                   <TableCell className="text-center">
-                                    <div className="flex flex-col items-center">
-                                      <span className={cn(
-                                        "font-black text-xs px-2 py-0.5 rounded",
-                                        f.isInsufficient ? "bg-rose-600 text-white" : f.isCritical ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
-                                      )}>
-                                        {f.futureStock}
-                                      </span>
-                                      {f.isInsufficient && <p className="text-[8px] font-bold text-rose-600 mt-1 uppercase">Faltan insumos</p>}
-                                      {f.isCritical && !f.isInsufficient && <p className="text-[8px] font-bold text-amber-600 mt-1 uppercase">Bajo mínimo</p>}
-                                    </div>
+                                    <span className={cn(
+                                      "font-black text-[10px] px-1.5 py-0.5 rounded",
+                                      f.isInsufficient ? "bg-rose-600 text-white" : f.isCritical ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
+                                    )}>
+                                      {f.futureStock}
+                                    </span>
                                   </TableCell>
                                   <TableCell className="text-right">
                                     {f.costARS > 0 && <p className="text-xs font-black text-slate-800">${(f.manualQty * f.costARS).toLocaleString('es-AR')}</p>}
@@ -1625,20 +1815,12 @@ export default function CatalogPage() {
           </div>
 
           <DialogFooter className="mt-6 border-t pt-6">
-            <Button variant="ghost" onClick={() => setIsAssemblyOpen(false)} className="font-bold">Cerrar</Button>
+            <Button variant="ghost" onClick={() => setIsAssemblyOpen(false)} className="font-bold">Cancelar</Button>
             <Button 
-              onClick={handleAssemble} 
-              disabled={explosionSummary?.all.some(f => (f.available - f.required) < 0)}
-              className={cn(
-                "px-10 font-black shadow-xl h-12",
-                explosionSummary?.all.some(f => (f.available - f.required) < 0) ? "bg-slate-200" : "bg-emerald-600 hover:bg-emerald-700"
-              )}
+              onClick={handleCreateOrder} 
+              className="px-10 font-black shadow-xl h-12 bg-primary text-white"
             >
-              {explosionSummary?.all.some(f => (f.available - f.required) < 0) ? (
-                <>DEBE COMPRAR INSUMOS PRIMERO</>
-              ) : (
-                <><Hammer className="mr-2 h-5 w-5" /> PROCESAR ARMADO FINAL</>
-              )}
+              <ClipboardList className="mr-2 h-5 w-5" /> GUARDAR COMO ORDEN DE PRODUCCIÓN
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1653,6 +1835,19 @@ export default function CatalogPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground">Eliminar definitivamente</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!orderToDelete} onOpenChange={(o) => { if(!o) setOrderToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar orden de producción?</AlertDialogTitle>
+            <AlertDialogDescription>Esta acción borrará la planificación de esta orden. No afectará el stock actual.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteOrder} className="bg-destructive">Eliminar Orden</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1681,4 +1876,8 @@ export default function CatalogPage() {
     newComps[idx].quantity = qty;
     setFormData(prev => ({ ...prev, components: newComps }));
   }
+}
+
+function DropdownMenuSeparator() {
+  return <div className="h-px bg-muted my-1" />
 }
