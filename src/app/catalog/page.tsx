@@ -400,7 +400,7 @@ export default function CatalogPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="font-black text-xs uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-          <ListFilter className="h-4 w-4" /> Filtros
+          <MessageSquare className="h-4 w-4" /> Filtros
         </h3>
         {selectedCategories.length > 0 && (
           <Button variant="ghost" size="sm" onClick={clearFilters} className="h-7 text-[10px] font-bold text-primary">
@@ -772,7 +772,7 @@ export default function CatalogPage() {
           <div className="flex justify-between items-end border-b-2 border-slate-900 pb-2 mb-4">
             <div>
               <h1 className="text-xl font-black uppercase tracking-tight text-primary">Ficha Técnica</h1>
-              <p className="text-[10px] font-bold text-slate-500">Dosimat Pro • Sistema de Gestión</p>
+              <p className="text-[10px] font-bold text-slate-600">Dosimat Pro • Sistema de Gestión</p>
             </div>
             <div className="text-right">
               <p className="text-[8px] font-black uppercase text-slate-400">Fecha: {new Date().toLocaleDateString('es-AR')}</p>
@@ -855,10 +855,7 @@ export default function CatalogPage() {
 
           <div className="mt-12 pt-4 border-t border-slate-100 flex justify-between items-end">
             <div className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">
-              Dosimat Pro v2.5 • Documento Técnico Compacto
-            </div>
-            <div className="w-48 border-t-2 border-slate-900 pt-1 text-center text-[9px] font-black uppercase">
-              Firma Responsable
+              Dosimat Pro System • Documento Técnico Generado el {new Date().toLocaleDateString('es-AR')}
             </div>
           </div>
         </div>
