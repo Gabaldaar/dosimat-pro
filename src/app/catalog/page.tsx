@@ -40,7 +40,9 @@ import {
   Eye,
   Download,
   MessageSquare,
-  Coins
+  Coins,
+  ShoppingCart,
+  ArrowRight
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -79,6 +81,7 @@ import { collection, doc, increment } from "firebase/firestore"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 export default function CatalogPage() {
   const { toast } = useToast()
@@ -213,6 +216,70 @@ export default function CatalogPage() {
       .sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""))
   }, [items, searchTerm, selectedCategories, calculateCost])
 
+  // LÓGICA DE EXPLOSIÓN DE MATERIALES (MRP)
+  const explosionSummary = useMemo(() => {
+    if (!selectedForAssembly || !items) return null;
+
+    const requirements: Record<string, { id: string, name: string, required: number, available: number, missing: number, minStock: number, costARS: number, costUSD: number, isCompuesto: boolean }> = {};
+
+    const explode = (productId: string, qtyNeeded: number) => {
+      const item = items.find(i => i.id === productId);
+      if (!item) return;
+
+      const currentStock = item.stock || 0;
+      
+      // Si ya tenemos este ítem en la lista, acumulamos el requerimiento
+      if (!requirements[productId]) {
+        requirements[productId] = {
+          id: item.id,
+          name: item.name,
+          required: 0,
+          available: currentStock,
+          missing: 0,
+          minStock: item.minStock || 0,
+          costARS: item.costARS || 0,
+          costUSD: item.costUSD || 0,
+          isCompuesto: item.isCompuesto || false
+        };
+      }
+      
+      requirements[productId].required += qtyNeeded;
+
+      // Si es compuesto y no tenemos suficiente stock YA ARMADO de esta parte, explotamos sus componentes
+      if (item.isCompuesto) {
+        const neededToProduce = Math.max(0, qtyNeeded - currentStock);
+        if (neededToProduce > 0) {
+          item.components?.forEach((comp: any) => {
+            explode(comp.productId, comp.quantity * neededToProduce);
+          });
+        }
+      }
+    };
+
+    // Iniciamos la explosión desde el producto principal
+    explode(selectedForAssembly.id, assemblyQty);
+
+    // Calculamos faltantes y lista de compras
+    const flatList = Object.values(requirements).map(req => {
+      const missingForOrder = Math.max(0, req.required - req.available);
+      const stockAfterOrder = req.available - req.required;
+      const missingForMinStock = (stockAfterOrder < req.minStock) ? (req.minStock - stockAfterOrder) : 0;
+      
+      return {
+        ...req,
+        missing: missingForOrder,
+        toBuy: Math.max(missingForOrder, (req.available < req.required + req.minStock) ? (req.required + req.minStock - req.available) : 0)
+      };
+    });
+
+    return {
+      all: flatList,
+      toBuy: flatList.filter(f => f.toBuy > 0),
+      totalBuyARS: flatList.reduce((sum, f) => sum + (f.toBuy * f.costARS), 0),
+      totalBuyUSD: flatList.reduce((sum, f) => sum + (f.toBuy * f.costUSD), 0)
+    };
+  }, [selectedForAssembly, assemblyQty, items]);
+
   const sortedAddedComponents = useMemo(() => {
     if (!items || !formData.components) return []
     return [...formData.components].sort((a, b) => {
@@ -239,6 +306,7 @@ export default function CatalogPage() {
     if (item) {
       setEditingItemId(item.id)
       setFormData({
+        ...formData,
         name: item.name || "",
         categoryId: item.categoryId || "",
         priceARS: item.priceARS || 0,
@@ -269,13 +337,9 @@ export default function CatalogPage() {
   const handlePrint = () => {
     if (typeof window !== 'undefined' && productToPreview) {
       const originalTitle = document.title;
-      // Limpiamos el nombre para que sea un nombre de archivo válido
       const cleanName = productToPreview.name.replace(/[/\\?%*:|"<>]/g, '-');
       document.title = `BOM_${cleanName}`;
-      
       window.print();
-      
-      // Restauramos el título original inmediatamente después
       document.title = originalTitle;
     }
   };
@@ -404,6 +468,27 @@ export default function CatalogPage() {
       color,
       icon
     };
+  }
+
+  const handleCopyShoppingList = () => {
+    if (!explosionSummary) return;
+    const dateStr = new Date().toLocaleDateString('es-AR');
+    let text = `*LISTA DE COMPRAS - DOSIMAT PRO*\n`;
+    text += `Para armar: ${assemblyQty} x ${selectedForAssembly?.name}\n`;
+    text += `Fecha: ${dateStr}\n\n`;
+    
+    explosionSummary.toBuy.forEach(f => {
+      text += `- *${f.name}*: Necesitas comprar ${f.toBuy} unidades.\n`;
+      if (f.costARS > 0) text += `  Estimado: $${(f.toBuy * f.costARS).toLocaleString('es-AR')}\n`;
+      else if (f.costUSD > 0) text += `  Estimado: u$s ${(f.toBuy * f.costUSD).toLocaleString('es-AR')}\n`;
+    });
+
+    text += `\n*INVERSIÓN TOTAL ESTIMADA:*\n`;
+    text += `ARS: $${explosionSummary.totalBuyARS.toLocaleString('es-AR')}\n`;
+    text += `USD: u$s ${explosionSummary.totalBuyUSD.toLocaleString('es-AR')}`;
+
+    navigator.clipboard.writeText(text);
+    toast({ title: "Lista de compras copiada", description: "Lista preparada para enviar por WhatsApp." });
   }
 
   const FilterPanel = () => (
@@ -1315,46 +1400,170 @@ export default function CatalogPage() {
       </Dialog>
 
       <Dialog open={isAssemblyOpen} onOpenChange={setIsAssemblyOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-amber-600 font-black">
-              <Hammer className="h-5 w-5" /> Orden de Fabricación
+            <DialogTitle className="flex items-center gap-2 text-amber-600 font-black text-2xl">
+              <Hammer className="h-6 w-6" /> Orden de Fabricación y MRP
             </DialogTitle>
-            <DialogDescription>Ensamblar nuevas unidades de <b>{selectedForAssembly?.name}</b></DialogDescription>
+            <DialogDescription>Planificación de armado para <b>{selectedForAssembly?.name}</b></DialogDescription>
           </DialogHeader>
-          <div className="py-6 space-y-6">
-            <div className="space-y-2">
-              <Label className="font-bold text-lg">¿Cuántas unidades vas a fabricar?</Label>
-              <Input type="number" value={assemblyQty} onChange={(e) => setAssemblyQty(Number(e.target.value))} className="h-14 text-2xl font-black text-center" />
-            </div>
-            
-            <div className="p-4 bg-muted/20 rounded-xl border border-dashed space-y-3">
-              <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest border-b pb-2">Materiales a utilizar</p>
-              {selectedForAssembly?.components?.map((comp: any, idx: number) => {
-                const child = items?.find(i => i.id === comp.productId);
-                const totalNeeded = comp.quantity * assemblyQty;
-                const tracksStock = child?.trackStock !== false;
-                const hasStock = !tracksStock || (child?.stock || 0) >= totalNeeded;
-                return (
-                  <div key={idx} className="flex justify-between items-center text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold">{child?.name}</span>
-                      {!tracksStock && <Badge variant="outline" className="text-[8px] h-4 bg-blue-50 text-blue-600 border-blue-100">Directo</Badge>}
-                    </div>
-                    <div className="flex gap-2 items-center">
-                      <span className={cn("font-black", hasStock ? "text-emerald-600" : "text-rose-600")}>
-                        {totalNeeded} {hasStock ? '✓' : '(Falta stock)'}
-                      </span>
-                    </div>
+          
+          <div className="py-4 space-y-8">
+            <section className="bg-amber-50 border border-amber-100 p-6 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
+              <div className="space-y-1">
+                <Label className="font-black text-amber-800 uppercase tracking-widest text-xs">Cantidad a Fabricar</Label>
+                <p className="text-xs text-amber-600">Afecta el cálculo de insumos en todos los niveles.</p>
+              </div>
+              <div className="flex items-center gap-4 bg-white p-2 rounded-xl border shadow-inner">
+                <Button variant="ghost" size="icon" onClick={() => setAssemblyQty(Math.max(1, assemblyQty - 1))} className="h-10 w-10 text-amber-600 hover:bg-amber-50">
+                  <Minus className="h-5 w-5" />
+                </Button>
+                <input 
+                  type="number" 
+                  value={assemblyQty} 
+                  onChange={(e) => setAssemblyQty(Number(e.target.value))} 
+                  className="w-20 text-3xl font-black text-center text-amber-900 focus:outline-none"
+                />
+                <Button variant="ghost" size="icon" onClick={() => setAssemblyQty(assemblyQty + 1)} className="h-10 w-10 text-amber-600 hover:bg-amber-50">
+                  <Plus className="h-5 w-5" />
+                </Button>
+              </div>
+            </section>
+
+            {explosionSummary && (
+              <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                <section className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
+                      <Layers className="h-4 w-4" /> Explosión de Insumos (Multinivel)
+                    </h3>
+                    <Badge variant="outline" className="font-bold border-amber-200 text-amber-700 bg-amber-50">
+                      {explosionSummary.all.length} ÍTEMS IMPACTADOS
+                    </Badge>
                   </div>
-                );
-              })}
-            </div>
+                  <div className="border rounded-xl bg-white shadow-sm overflow-hidden overflow-x-auto">
+                    <Table>
+                      <TableHeader className="bg-slate-50">
+                        <TableRow>
+                          <TableHead className="font-black text-[10px] uppercase">Componente</TableHead>
+                          <TableHead className="text-center font-black text-[10px] uppercase">Requerido</TableHead>
+                          <TableHead className="text-center font-black text-[10px] uppercase">Stock Disp.</TableHead>
+                          <TableHead className="text-center font-black text-[10px] uppercase">Diferencia</TableHead>
+                          <TableHead className="text-right font-black text-[10px] uppercase">Estado Post-Armado</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {explosionSummary.all.map((req) => {
+                          const stockRestante = req.available - req.required;
+                          const esCritico = stockRestante < req.minStock;
+                          const faltaDirecto = stockRestante < 0;
+
+                          return (
+                            <TableRow key={req.id}>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="font-bold text-sm">{req.name}</span>
+                                  {req.isCompuesto && <Badge className="w-fit text-[8px] h-4 bg-amber-500 hover:bg-amber-500">PRODUCCIÓN INTERNA</Badge>}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center font-black text-primary">{req.required}</TableCell>
+                              <TableCell className="text-center font-medium text-slate-500">{req.available}</TableCell>
+                              <TableCell className="text-center">
+                                <span className={cn(
+                                  "font-black px-2 py-0.5 rounded text-xs",
+                                  faltaDirecto ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"
+                                )}>
+                                  {stockRestante >= 0 ? `+${stockRestante}` : stockRestante}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {faltaDirecto ? (
+                                  <Badge className="bg-rose-600 font-bold text-[9px]">COMPRA URGENTE</Badge>
+                                ) : esCritico ? (
+                                  <Badge variant="outline" className="border-amber-500 text-amber-700 bg-amber-50 font-bold text-[9px]">BAJO MÍNIMO</Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-emerald-600 bg-emerald-50 border-emerald-200 font-bold text-[9px]">OK</Badge>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </section>
+
+                <section className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
+                      <ShoppingCart className="h-4 w-4" /> Recomendación de Compra
+                    </h3>
+                    <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs" onClick={handleCopyShoppingList}>
+                      <Copy className="h-3.5 w-3.5" /> COPIAR LISTA
+                    </Button>
+                  </div>
+                  <Card className="border-2 border-slate-900/10 shadow-lg relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-5"><ShoppingCart className="h-32 w-32" /></div>
+                    <CardContent className="p-0">
+                      {explosionSummary.toBuy.length === 0 ? (
+                        <div className="p-12 text-center text-emerald-600 space-y-2">
+                          <CheckCircle2 className="h-12 w-12 mx-auto" />
+                          <p className="font-black">STOCK COMPLETO</p>
+                          <p className="text-xs text-muted-foreground italic">Tienes todos los materiales necesarios para cumplir con esta orden.</p>
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="divide-y">
+                            {explosionSummary.toBuy.map(f => (
+                              <div key={f.id} className="p-4 flex items-center justify-between hover:bg-muted/5">
+                                <div className="flex items-center gap-4">
+                                  <div className="bg-rose-100 p-2 rounded-lg text-rose-600"><AlertTriangle className="h-4 w-4" /></div>
+                                  <div>
+                                    <p className="font-black text-sm">{f.name}</p>
+                                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Comprar {f.toBuy} unidades</p>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  {f.costARS > 0 && <p className="text-sm font-black text-slate-800">${(f.toBuy * f.costARS).toLocaleString('es-AR')}</p>}
+                                  {f.costUSD > 0 && <p className="text-xs font-bold text-emerald-700">u$s {(f.toBuy * f.costUSD).toLocaleString('es-AR')}</p>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="bg-slate-900 text-white p-6 grid grid-cols-2 gap-8">
+                            <div>
+                              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Inversión Estimada ARS</p>
+                              <h4 className="text-3xl font-black">${explosionSummary.totalBuyARS.toLocaleString('es-AR')}</h4>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Inversión Estimada USD</p>
+                              <h4 className="text-3xl font-black text-emerald-400">u$s {explosionSummary.totalBuyUSD.toLocaleString('es-AR')}</h4>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </section>
+              </div>
+            )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAssemblyOpen(false)}>Cancelar</Button>
-            <Button onClick={handleAssemble} className="bg-amber-500 hover:bg-emerald-600 font-black px-8">
-              PROCESAR ARMADO
+
+          <DialogFooter className="mt-6 border-t pt-6">
+            <Button variant="ghost" onClick={() => setIsAssemblyOpen(false)} className="font-bold">Cerrar</Button>
+            <Button 
+              onClick={handleAssemble} 
+              disabled={explosionSummary?.toBuy.some(f => f.missing > 0)}
+              className={cn(
+                "px-10 font-black shadow-xl h-12",
+                explosionSummary?.toBuy.some(f => f.missing > 0) ? "bg-slate-200" : "bg-emerald-600 hover:bg-emerald-700"
+              )}
+            >
+              {explosionSummary?.toBuy.some(f => f.missing > 0) ? (
+                <>FALTAN MATERIALES CRÍTICOS</>
+              ) : (
+                <><Hammer className="mr-2 h-5 w-5" /> PROCESAR ARMADO FINAL</>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
