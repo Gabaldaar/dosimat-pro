@@ -36,7 +36,9 @@ import {
   History,
   Box,
   FileText,
-  Printer
+  Printer,
+  Eye,
+  Download
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -138,7 +140,7 @@ export default function CatalogPage() {
   const [assemblyQty, setAssemblyQty] = useState(1)
   const [newCategoryName, setNewCategoryName] = useState("")
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
-  const [productToPrint, setProductToPrint] = useState<any | null>(null)
+  const [productToPreview, setProductToPreview] = useState<any | null>(null)
   
   const [bomFilterCategory, setBomFilterCategory] = useState("all")
 
@@ -160,24 +162,10 @@ export default function CatalogPage() {
     components: [] as { productId: string, quantity: number }[]
   })
 
-  // Efecto para disparar la impresión de forma robusta
-  useEffect(() => {
-    if (productToPrint) {
-      const timer = setTimeout(() => {
-        if (typeof window !== 'undefined') {
-          window.print();
-          // Limpiamos el estado después de imprimir
-          setProductToPrint(null);
-        }
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [productToPrint]);
-
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        const anyOpen = isDialogOpen || !!itemToDelete || isAssemblyOpen || isCategoryManagerOpen;
+        const anyOpen = isDialogOpen || !!itemToDelete || isAssemblyOpen || isCategoryManagerOpen || !!productToPreview;
         if (!anyOpen) {
           document.body.style.pointerEvents = 'auto';
         }
@@ -185,7 +173,7 @@ export default function CatalogPage() {
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isDialogOpen, itemToDelete, isAssemblyOpen, isCategoryManagerOpen]);
+  }, [isDialogOpen, itemToDelete, isAssemblyOpen, isCategoryManagerOpen, productToPreview]);
 
   const calculateCost = useCallback((itemData: any, allItems: any[]): { ars: number, usd: number } => {
     if (!itemData.isCompuesto) {
@@ -276,8 +264,10 @@ export default function CatalogPage() {
     setIsDialogOpen(true)
   }
 
-  const handlePrintProduct = (item: any) => {
-    setProductToPrint(item);
+  const handlePrint = () => {
+    if (typeof window !== 'undefined') {
+      window.print();
+    }
   };
 
   const handleSave = () => {
@@ -513,8 +503,8 @@ export default function CatalogPage() {
                       <SheetTitle className="flex items-center gap-2"><Tag className="h-5 w-5" /> Filtrar Catálogo</SheetTitle>
                     </SheetHeader>
                   </div>
-                  <ScrollArea className="flex-1 p-6 pt-0">
-                    <div className="p-1">
+                  <ScrollArea className="flex-1">
+                    <div className="p-6 pt-0">
                       <FilterPanel />
                     </div>
                   </ScrollArea>
@@ -529,16 +519,16 @@ export default function CatalogPage() {
           </header>
 
           <div className="flex flex-col md:flex-row gap-8 items-start">
-            <Card className="hidden md:block w-64 glass-card p-4 shrink-0 sticky top-8">
+            <Card className="hidden md:block w-64 glass-card p-4 shrink-0 sticky top-8 max-h-[calc(100vh-100px)] overflow-y-auto">
               <FilterPanel />
             </Card>
 
             <div className="flex-1 space-y-6 w-full">
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input 
+                <input 
                   placeholder="Buscar por nombre..." 
-                  className="pl-10 h-11 bg-white/50" 
+                  className="w-full pl-10 h-11 bg-white/50 backdrop-blur-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20" 
                   value={searchTerm} 
                   onChange={(e) => setSearchTerm(e.target.value)} 
                 />
@@ -589,8 +579,8 @@ export default function CatalogPage() {
                                 variant="ghost" 
                                 size="icon" 
                                 className="h-8 w-8 text-primary opacity-40 group-hover:opacity-100 transition-opacity" 
-                                onClick={() => handlePrintProduct(item)} 
-                                title="Imprimir Ficha"
+                                onClick={(e) => { e.stopPropagation(); setProductToPreview(item); }} 
+                                title="Ver Ficha / Exportar"
                               >
                                 <Printer className="h-4 w-4" />
                               </Button>
@@ -599,7 +589,7 @@ export default function CatalogPage() {
                                   <Button variant="ghost" size="icon" className="h-8 w-8 opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => handlePrintProduct(item)}><Printer className="mr-2 h-4 w-4" /> Exportar Ficha (PDF)</DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => setProductToPreview(item)}><Printer className="mr-2 h-4 w-4" /> Exportar Ficha (PDF)</DropdownMenuItem>
                                   {isAdmin && (
                                     <>
                                       <DropdownMenuItem onClick={() => handleOpenDialog(item)}><Edit className="mr-2 h-4 w-4" /> Editar parámetros</DropdownMenuItem>
@@ -680,103 +670,195 @@ export default function CatalogPage() {
         </SidebarInset>
       </div>
 
-      {/* VISTA DE IMPRESIÓN FICHA TÉCNICA */}
-      {productToPrint && (
+      {/* DIÁLOGO DE VISTA PREVIA DE FICHA */}
+      <Dialog open={!!productToPreview} onOpenChange={(o) => { if(!o) setProductToPreview(null); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-primary font-black text-xl">
+              <Printer className="h-5 w-5" /> Vista Previa de Ficha
+            </DialogTitle>
+            <DialogDescription>Revisa la información antes de generar el documento PDF.</DialogDescription>
+          </DialogHeader>
+          
+          {productToPreview && (
+            <div className="py-4 space-y-8">
+              <div className="border-2 rounded-2xl p-6 bg-slate-50/50 shadow-inner">
+                <div className="flex justify-between items-start border-b pb-4 mb-6">
+                  <div>
+                    <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight">{productToPreview.name}</h2>
+                    <Badge variant="secondary" className="font-bold">{categoryMap[productToPreview.categoryId] || "Sin Categoría"}</Badge>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-black text-slate-400">DOSIMAT PRO</p>
+                    <p className="text-xs font-bold text-slate-500">{new Date().toLocaleDateString('es-AR')}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                  <div className="space-y-4">
+                    <div>
+                      <Label className="text-[10px] font-black uppercase text-slate-400">Descripción del ítem</Label>
+                      <p className="text-sm text-slate-600 leading-relaxed italic">{productToPreview.description || "Sin descripción."}</p>
+                    </div>
+                    <div>
+                      <Label className="text-[10px] font-black uppercase text-slate-400">Tipo de Recurso</Label>
+                      <p className="text-sm font-bold">{productToPreview.isService ? 'SERVICIO TÉCNICO' : 'PRODUCTO FÍSICO'}</p>
+                    </div>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl border-2 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <span className="text-[9px] font-black text-primary uppercase block">Venta ARS</span>
+                        <span className="text-xl font-black">${Number(productToPreview.priceARS || 0).toLocaleString('es-AR')}</span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-black text-emerald-700 uppercase block">Venta USD</span>
+                        <span className="text-xl font-black">u$s {Number(productToPreview.priceUSD || 0).toLocaleString('es-AR')}</span>
+                      </div>
+                    </div>
+                    {productToPreview.trackStock !== false && (
+                      <div className="pt-2 border-t flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">Stock actual</span>
+                        <span className="font-black">{productToPreview.stock || 0} Unidades</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {productToPreview.isCompuesto && productToPreview.components?.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-md font-black uppercase tracking-widest text-slate-800 flex items-center gap-2 border-b pb-2">
+                      <Layers className="h-4 w-4" /> Estructura de Armado (BOM)
+                    </h3>
+                    <div className="border rounded-xl bg-white overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-100 border-b">
+                          <tr>
+                            <th className="p-2 text-left font-black text-[10px] uppercase">Parte / Componente</th>
+                            <th className="p-2 text-center font-black text-[10px] uppercase w-20">Cant.</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {productToPreview.components.map((comp: any, idx: number) => {
+                            const child = items?.find(i => i.id === comp.productId);
+                            return (
+                              <tr key={idx}>
+                                <td className="p-2 font-bold">{child?.name || 'Cargando...'}</td>
+                                <td className="p-2 text-center font-black text-primary">{comp.quantity}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="border-t pt-4">
+            <Button variant="ghost" onClick={() => setProductToPreview(null)} className="font-bold">Cancelar</Button>
+            <Button onClick={handlePrint} className="bg-primary font-black px-8 shadow-lg shadow-primary/20 gap-2">
+              <Download className="h-4 w-4" /> IMPRIMIR / GUARDAR PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* CONTENEDOR OCULTO PARA IMPRESIÓN REAL */}
+      {productToPreview && (
         <div className="print-only w-full p-8 font-sans text-slate-900 bg-white">
-          <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
+          <div className="flex justify-between items-start border-b-4 border-slate-900 pb-4 mb-8">
             <div>
-              <h1 className="text-3xl font-black uppercase tracking-tight text-primary">Ficha Técnica de Producto</h1>
-              <p className="text-sm font-bold text-slate-500">Dosimat Pro • Sistema de Gestión de Inventario</p>
+              <h1 className="text-4xl font-black uppercase tracking-tight text-primary">Ficha Técnica</h1>
+              <p className="text-md font-bold text-slate-500">Dosimat Pro • Sistema de Gestión</p>
             </div>
             <div className="text-right">
               <p className="text-[10px] font-black uppercase text-slate-400">Generado: {new Date().toLocaleDateString('es-AR')}</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-            <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-12">
+            <div className="space-y-6">
               <div>
                 <Label className="text-[10px] font-black uppercase text-slate-400">Nombre del Ítem</Label>
-                <h2 className="text-2xl font-black text-slate-800">{productToPrint.name}</h2>
+                <h2 className="text-3xl font-black text-slate-800">{productToPreview.name}</h2>
               </div>
-              <div className="flex gap-4">
+              <div className="flex gap-8">
                 <div>
                   <Label className="text-[10px] font-black uppercase text-slate-400">Categoría</Label>
-                  <p className="font-bold">{categoryMap[productToPrint.categoryId] || "Sin Categoría"}</p>
+                  <p className="text-lg font-bold">{categoryMap[productToPreview.categoryId] || "Sin Categoría"}</p>
                 </div>
                 <div>
                   <Label className="text-[10px] font-black uppercase text-slate-400">Tipo</Label>
-                  <p className="font-bold">{productToPrint.isService ? 'SERVICIO TÉCNICO' : 'PRODUCTO FÍSICO'}</p>
+                  <p className="text-lg font-bold">{productToPreview.isService ? 'SERVICIO TÉCNICO' : 'PRODUCTO FÍSICO'}</p>
                 </div>
               </div>
               <div>
-                <Label className="text-[10px] font-black uppercase text-slate-400">Descripción</Label>
+                <Label className="text-[10px] font-black uppercase text-slate-400">Descripción Detallada</Label>
                 <p className="text-sm leading-relaxed text-slate-600 italic">
-                  {productToPrint.description || "Sin descripción adicional registrada."}
+                  {productToPreview.description || "Sin descripción registrada."}
                 </p>
               </div>
             </div>
 
-            <div className="bg-slate-50 p-6 rounded-2xl border-2 border-slate-100 space-y-6">
-              <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 border-b pb-2">Precios de Venta Vigentes</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-white rounded-xl border border-slate-200">
-                  <span className="text-[10px] font-black text-primary uppercase block mb-1">Precio ARS</span>
-                  <span className="text-2xl font-black">${Number(productToPrint.priceARS || 0).toLocaleString('es-AR')}</span>
+            <div className="bg-slate-50 p-8 rounded-3xl border-4 border-slate-100 space-y-8">
+              <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 pb-2">Precios de Venta Vigentes</h3>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="p-6 bg-white rounded-2xl border-2 border-slate-200 shadow-sm">
+                  <span className="text-[10px] font-black text-primary uppercase block mb-2">Precio ARS</span>
+                  <span className="text-3xl font-black">${Number(productToPreview.priceARS || 0).toLocaleString('es-AR')}</span>
                 </div>
-                <div className="p-4 bg-white rounded-xl border border-slate-200">
-                  <span className="text-[10px] font-black text-emerald-700 uppercase block mb-1">Precio USD</span>
-                  <span className="text-2xl font-black">u$s {Number(productToPrint.priceUSD || 0).toLocaleString('es-AR')}</span>
+                <div className="p-6 bg-white rounded-2xl border-2 border-slate-200 shadow-sm">
+                  <span className="text-[10px] font-black text-emerald-700 uppercase block mb-2">Precio USD</span>
+                  <span className="text-3xl font-black">u$s {Number(productToPreview.priceUSD || 0).toLocaleString('es-AR')}</span>
                 </div>
               </div>
-              {!productToPrint.isService && productToPrint.trackStock !== false && (
-                <div className="p-4 bg-white rounded-xl border border-slate-200 flex justify-between items-center">
-                  <span className="text-[10px] font-black text-slate-500 uppercase">Stock Disponible</span>
-                  <span className="text-xl font-black">{productToPrint.stock || 0} Unidades</span>
+              {productToPreview.trackStock !== false && !productToPreview.isService && (
+                <div className="p-6 bg-white rounded-2xl border-2 border-slate-200 flex justify-between items-center shadow-sm">
+                  <span className="text-[10px] font-black text-slate-500 uppercase">Stock Actual Disponible</span>
+                  <span className="text-2xl font-black">{productToPreview.stock || 0} Unidades</span>
                 </div>
               )}
             </div>
           </div>
 
-          {productToPrint.isCompuesto && productToPrint.components?.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-black uppercase tracking-tight flex items-center gap-2 border-b-2 border-slate-900 pb-2">
-                <Layers className="h-5 w-5" /> Estructura de Armado (Partes y Componentes)
+          {productToPreview.isCompuesto && productToPreview.components?.length > 0 && (
+            <div className="space-y-6">
+              <h3 className="text-xl font-black uppercase tracking-tight flex items-center gap-3 border-b-4 border-slate-900 pb-3">
+                <Layers className="h-6 w-6" /> Estructura de Armado (BOM)
               </h3>
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-slate-900 text-white">
-                    <th className="p-2 text-left uppercase text-[10px] font-black">Componente / Pieza</th>
-                    <th className="p-2 text-center uppercase text-[10px] font-black w-32">Cantidad</th>
-                    <th className="p-2 text-left uppercase text-[10px] font-black">Observaciones de Ensamblado</th>
+                    <th className="p-3 text-left uppercase text-[12px] font-black">Componente / Pieza</th>
+                    <th className="p-3 text-center uppercase text-[12px] font-black w-40">Cantidad Requerida</th>
+                    <th className="p-3 text-left uppercase text-[12px] font-black">Observaciones</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 border-b border-slate-200">
-                  {productToPrint.components.map((comp: any, idx: number) => {
+                <tbody className="divide-y-2 divide-slate-200 border-b-2 border-slate-200">
+                  {productToPreview.components.map((comp: any, idx: number) => {
                     const child = items?.find(i => i.id === comp.productId);
                     return (
                       <tr key={idx}>
-                        <td className="p-3 text-sm font-bold">{child?.name || 'Cargando parte...'}</td>
-                        <td className="p-3 text-center text-sm font-black">{comp.quantity}</td>
-                        <td className="p-3 text-xs text-slate-400 italic">__________________________________________</td>
+                        <td className="p-4 text-md font-bold">{child?.name || '---'}</td>
+                        <td className="p-4 text-center text-lg font-black text-primary">{comp.quantity}</td>
+                        <td className="p-4 text-xs text-slate-300 italic">____________________________</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-              <div className="mt-4 p-4 bg-amber-50 rounded-xl border-2 border-dashed border-amber-200">
-                <p className="text-[10px] font-bold text-amber-800 uppercase mb-1">Notas de Control de Calidad</p>
-                <div className="h-20"></div>
-              </div>
             </div>
           )}
 
-          <div className="mt-12 pt-8 border-t border-slate-100 flex justify-between items-end">
-            <div className="text-[10px] text-slate-400 font-bold uppercase">
-              Dosimat Pro v2.5 • Ficha Técnica Autorizada
+          <div className="mt-20 pt-12 border-t-2 border-slate-100 flex justify-between items-end">
+            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+              Dosimat Pro v2.5 • Ficha Técnica Oficial
             </div>
-            <div className="w-48 border-t border-slate-900 pt-2 text-center text-[10px] font-black uppercase">
-              Firma Responsable
+            <div className="w-64 border-t-4 border-slate-900 pt-3 text-center text-[12px] font-black uppercase">
+              Firma y Sello Responsable
             </div>
           </div>
         </div>
@@ -785,10 +867,24 @@ export default function CatalogPage() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-black font-headline text-primary">
-              {editingItemId ? 'Configurar Ítem' : 'Nuevo Ítem'}
-            </DialogTitle>
-            <DialogDescription>Gestión de precios, categoría y estructura de armado.</DialogDescription>
+            <div className="flex justify-between items-start pr-8">
+              <div>
+                <DialogTitle className="text-2xl font-black font-headline text-primary">
+                  {editingItemId ? 'Configurar Ítem' : 'Nuevo Ítem'}
+                </DialogTitle>
+                <DialogDescription>Gestión de precios, categoría y estructura de armado.</DialogDescription>
+              </div>
+              {editingItemId && (
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  onClick={() => setProductToPreview(editingItemId ? items?.find(i => i.id === editingItemId) : null)}
+                  className="text-primary border-primary/20"
+                >
+                  <Printer className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </DialogHeader>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
