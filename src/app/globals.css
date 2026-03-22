@@ -87,37 +87,43 @@
 }
 
 @media print {
-  /* Hide all visible elements on screen by default */
-  body > * {
-    display: none !important;
-  }
-
-  /* Make sure the print container is displayed */
-  .print-only {
-    display: block !important;
-    visibility: visible !important;
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-    height: auto !important;
-    background: white !important;
-    color: black !important;
-    z-index: 99999 !important;
-  }
-
-  /* Ensure children of print-only are also visible */
-  .print-only * {
-    visibility: visible !important;
-  }
-
-  /* Reset layout for print */
+  /* Reset general para impresión */
   html, body {
     height: auto !important;
     overflow: visible !important;
     background: white !important;
-    padding: 0 !important;
+    color: black !important;
     margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Ocultar elementos de UI quirúrgicamente */
+  .no-print,
+  header,
+  nav,
+  aside,
+  [role="dialog"],
+  [data-radix-portal],
+  .sidebar-provider,
+  .sidebar,
+  button {
+    display: none !important;
+  }
+
+  /* Hacer visible el contenedor de impresión */
+  .print-only {
+    display: block !important;
+    visibility: visible !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    z-index: 999999 !important;
+    background: white !important;
+  }
+
+  .print-only * {
+    visibility: visible !important;
   }
 
   @page {
@@ -126,7 +132,7 @@
   }
 }
 
-/* Base state for print-only should be hidden in browser */
+/* Estado base fuera de impresión */
 .print-only {
   display: none;
 }
