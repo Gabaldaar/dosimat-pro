@@ -71,6 +71,7 @@
         "priceUSD": { "type": "number" },
         "costARS": { "type": "number" },
         "costUSD": { "type": "number" },
+        "costCurrency": { "type": "string", "enum": ["ARS", "USD"] },
         "trackStock": { "type": "boolean" },
         "stock": { "type": "number" },
         "supplier": { "type": "string", "description": "Name of the default supplier for this item." }

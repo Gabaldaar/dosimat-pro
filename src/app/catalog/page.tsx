@@ -58,7 +58,8 @@ import {
   Calculator,
   Beaker,
   Lock,
-  Unlock
+  Unlock,
+  ArrowRightLeft
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -123,6 +124,31 @@ export default function CatalogPage() {
   const [hasInitializedFavorites, setHasInitializedFavorites] = useState(false)
   const [activeView, setActiveTab] = useState("inventory")
   
+  // Exchange Rates Logic
+  const [exchangeRates, setExchangeRates] = useState({ official: 1, blue: 1 })
+  const [rateType, setRateType] = useState<'official' | 'blue'>('official')
+
+  useEffect(() => {
+    const fetchRates = async () => {
+      try {
+        const [offRes, blueRes] = await Promise.all([
+          fetch('https://dolarapi.com/v1/dolares/oficial'),
+          fetch('https://dolarapi.com/v1/dolares/blue')
+        ]);
+        const off = await offRes.json();
+        const blue = await blueRes.json();
+        if (off?.venta && blue?.venta) {
+          setExchangeRates({ official: off.venta, blue: blue.venta });
+        }
+      } catch (e) {
+        console.error("Error fetching rates:", e);
+      }
+    }
+    fetchRates();
+  }, []);
+
+  const currentRate = rateType === 'blue' ? exchangeRates.blue : exchangeRates.official;
+
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   const categoriesQuery = useMemoFirebase(() => collection(db, 'product_categories'), [db])
   const suppliersQuery = useMemoFirebase(() => collection(db, 'suppliers'), [db])
@@ -201,8 +227,8 @@ export default function CatalogPage() {
     supplier: "none",
     priceARS: 0,
     priceUSD: 0,
-    costARS: 0,
-    costUSD: 0,
+    costAmount: 0,
+    costCurrency: "ARS",
     laborCostARS: 0,
     laborCostUSD: 0,
     isService: false,
@@ -228,9 +254,16 @@ export default function CatalogPage() {
     return () => observer.disconnect();
   }, [isDialogOpen, itemToDelete, isAssemblyOpen, isCategoryManagerOpen, isSupplierManagerOpen, orderToView, orderToDelete, isAuditOpen, isExitAlertOpen]);
 
-  const calculateCost = useCallback((itemData: any, allItems: any[]): { ars: number, usd: number } => {
+  const calculateCost = useCallback((itemData: any, allItems: any[], currentExchangeRate: number): { ars: number, usd: number } => {
     if (!itemData.isCompuesto) {
-      return { ars: Number(itemData.costARS) || 0, usd: Number(itemData.costUSD) || 0 };
+      const isARS = itemData.costCurrency === 'ARS' || (!itemData.costCurrency && (itemData.costARS > 0 || !itemData.costUSD));
+      const amount = isARS ? (Number(itemData.costARS) || 0) : (Number(itemData.costUSD) || 0);
+      
+      if (isARS) {
+        return { ars: amount, usd: amount / currentExchangeRate };
+      } else {
+        return { ars: amount * currentExchangeRate, usd: amount };
+      }
     }
     
     let totalARS = Number(itemData.laborCostARS) || 0;
@@ -239,7 +272,7 @@ export default function CatalogPage() {
     itemData.components?.forEach((comp: any) => {
       const child = allItems.find(i => i.id === comp.productId);
       if (child) {
-        const childCosts = calculateCost(child, allItems);
+        const childCosts = calculateCost(child, allItems, currentExchangeRate);
         totalARS += childCosts.ars * (Number(comp.quantity) || 0);
         totalUSD += childCosts.usd * (Number(comp.quantity) || 0);
       }
@@ -258,11 +291,11 @@ export default function CatalogPage() {
         return matchSearch && matchCategory;
       })
       .map(item => {
-        const { ars, usd } = calculateCost(item, items);
+        const { ars, usd } = calculateCost(item, items, currentRate);
         return { ...item, calculatedCostARS: ars, calculatedCostUSD: usd };
       })
       .sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""))
-  }, [items, searchTerm, selectedCategories, calculateCost])
+  }, [items, searchTerm, selectedCategories, calculateCost, currentRate])
 
   const explosionSummary = useMemo(() => {
     const target = orderToView ? items?.find(i => i.id === orderToView.productId) : selectedForAssembly;
@@ -270,7 +303,7 @@ export default function CatalogPage() {
     
     if (!target || !items) return null;
 
-    const requirements: Record<string, { id: string, name: string, required: number, available: number, missing: number, minStock: number, costARS: number, costUSD: number, isCompuesto: boolean, supplier: string }> = {};
+    const requirements: Record<string, { id: string, name: string, required: number, available: number, missing: number, minStock: number, costARS: number, costUSD: number, costCurrency: string, isCompuesto: boolean, supplier: string }> = {};
 
     const explode = (productId: string, qtyNeeded: number) => {
       const item = items.find(i => i.id === productId);
@@ -288,6 +321,7 @@ export default function CatalogPage() {
           minStock: item.minStock || 0,
           costARS: item.costARS || 0,
           costUSD: item.costUSD || 0,
+          costCurrency: item.costCurrency || (item.costUSD > 0 && !item.costARS ? 'USD' : 'ARS'),
           isCompuesto: item.isCompuesto || false,
           supplier: item.supplier || "Sin Proveedor"
         };
@@ -338,7 +372,8 @@ export default function CatalogPage() {
       
       explosionSummary.toBuySuggested.forEach(item => {
         newManualQtys[item.id] = orderToView.purchaseQtys?.[item.id] ?? item.suggestedToBuy;
-        newManualPrices[item.id] = orderToView.purchasePrices?.[item.id] ?? (item.costARS > 0 ? item.costARS : item.costUSD);
+        const baseCost = item.costCurrency === 'USD' ? item.costUSD : item.costARS;
+        newManualPrices[item.id] = orderToView.purchasePrices?.[item.id] ?? baseCost;
         newManualSups[item.id] = orderToView.purchaseSuppliers?.[item.id] ?? (item.supplier || "Sin Proveedor");
       });
       
@@ -359,7 +394,8 @@ export default function CatalogPage() {
       const newManualSups: Record<string, string> = {};
       explosionSummary.toBuySuggested.forEach(item => {
         newManualQtys[item.id] = item.suggestedToBuy;
-        newManualPrices[item.id] = item.costARS > 0 ? item.costARS : item.costUSD;
+        const baseCost = item.costCurrency === 'USD' ? item.costUSD : item.costARS;
+        newManualPrices[item.id] = baseCost;
         newManualSups[item.id] = item.supplier || "Sin Proveedor";
       });
       setManualPurchaseQtys(newManualQtys);
@@ -391,7 +427,8 @@ export default function CatalogPage() {
 
     const itemsToBuy = explosionSummary.toBuySuggested.map(item => {
       const manualQty = manualPurchaseQtys[item.id] ?? item.suggestedToBuy;
-      const manualPrice = manualPurchasePrices[item.id] ?? (item.costARS > 0 ? item.costARS : item.costUSD);
+      const baseCost = item.costCurrency === 'USD' ? item.costUSD : item.costARS;
+      const manualPrice = manualPurchasePrices[item.id] ?? baseCost;
       const futureStock = item.available + manualQty - item.required;
       const isCritical = futureStock < item.minStock;
       const isInsufficient = futureStock < 0;
@@ -410,8 +447,8 @@ export default function CatalogPage() {
 
     return {
       items: itemsToBuy,
-      totalARS: itemsToBuy.reduce((sum, item) => sum + (item.manualQty * (item.costARS > 0 ? item.manualPrice : 0)), 0),
-      totalUSD: itemsToBuy.reduce((sum, item) => sum + (item.manualQty * (item.costARS === 0 ? item.manualPrice : 0)), 0)
+      totalARS: itemsToBuy.reduce((sum, item) => sum + (item.manualQty * (item.costCurrency === 'ARS' ? item.manualPrice : 0)), 0),
+      totalUSD: itemsToBuy.reduce((sum, item) => sum + (item.manualQty * (item.costCurrency === 'USD' ? item.manualPrice : 0)), 0)
     };
   }, [explosionSummary, manualPurchaseQtys, manualPurchasePrices, manualSuppliers, items]);
 
@@ -452,6 +489,9 @@ export default function CatalogPage() {
         }
       });
 
+      const costCurrency = item.costCurrency || (item.costUSD > 0 && !item.costARS ? 'USD' : 'ARS');
+      const costAmount = costCurrency === 'USD' ? (item.costUSD || 0) : (item.costARS || 0);
+
       setFormData({
         ...formData,
         name: item.name || "",
@@ -459,8 +499,8 @@ export default function CatalogPage() {
         supplier: item.supplier || "none",
         priceARS: item.priceARS || 0,
         priceUSD: item.priceUSD || 0,
-        costARS: item.costARS || 0,
-        costUSD: item.costUSD || 0,
+        costAmount: costAmount,
+        costCurrency: costCurrency,
         laborCostARS: item.laborCostARS || 0,
         laborCostUSD: item.laborCostUSD || 0,
         isService: item.isService || false,
@@ -474,7 +514,7 @@ export default function CatalogPage() {
     } else {
       setEditingItemId(null)
       setFormData({ 
-        name: "", categoryId: "", supplier: "none", priceARS: 0, priceUSD: 0, costARS: 0, costUSD: 0, 
+        name: "", categoryId: "", supplier: "none", priceARS: 0, priceUSD: 0, costAmount: 0, costCurrency: "ARS", 
         laborCostARS: 0, laborCostUSD: 0, isService: false, 
         isCompuesto: false, trackStock: true, description: "", stock: 0, minStock: 0, components: [] 
       })
@@ -506,7 +546,9 @@ export default function CatalogPage() {
     const savePayload = {
       ...formData,
       id,
-      supplier: formData.supplier === 'none' ? "" : formData.supplier
+      supplier: formData.supplier === 'none' ? "" : formData.supplier,
+      costARS: formData.costCurrency === 'ARS' ? formData.costAmount : 0,
+      costUSD: formData.costCurrency === 'USD' ? formData.costAmount : 0
     }
 
     setDocumentNonBlocking(doc(db, 'products_services', id), savePayload, { merge: true })
@@ -541,7 +583,11 @@ export default function CatalogPage() {
 
   const handleUpdateOrderPlan = () => {
     if (!orderToView) return;
-    const status = explosionSummary?.all.some(f => (f.available - f.required) < 0) ? 'pending_purchase' : 'ready';
+    const status = explosionSummary?.all.some(f => {
+      const stockAfterEntry = f.id in manualPurchaseQtys ? (f.available + (manualPurchaseQtys[f.id] || 0)) : f.available;
+      return (stockAfterEntry - f.required) < 0;
+    }) ? 'pending_purchase' : 'ready';
+    
     updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
       quantity: orderToView.quantity,
       purchaseQtys: manualPurchaseQtys,
@@ -572,11 +618,14 @@ export default function CatalogPage() {
           stock: increment(item.manualQty)
         });
         
-        // Actualizar Costo Real en el catálogo
+        // Actualizar Costo Real en el catálogo y Moneda
         if (item.manualPrice > 0) {
-          const costField = item.costARS > 0 ? 'costARS' : 'costUSD';
+          const costField = item.costCurrency === 'USD' ? 'costUSD' : 'costARS';
+          const otherCostField = item.costCurrency === 'USD' ? 'costARS' : 'costUSD';
           updateDocumentNonBlocking(doc(db, 'products_services', item.id), {
-            [costField]: item.manualPrice
+            [costField]: item.manualPrice,
+            [otherCostField]: 0,
+            costCurrency: item.costCurrency
           });
         }
         
@@ -586,7 +635,7 @@ export default function CatalogPage() {
 
     setManualPurchaseQtys(newPurchaseQtys);
     const status = explosionSummary?.all.some(f => {
-      const stockAfterEntry = f.id in newPurchaseQtys ? (f.available + (manualPurchaseQtys[f.id] || 0)) : f.available;
+      const stockAfterEntry = f.id in newPurchaseQtys ? (f.available + (newPurchaseQtys[f.id] || 0)) : f.available;
       return (stockAfterEntry - f.required) < 0;
     }) ? 'pending_purchase' : 'ready';
     
@@ -763,10 +812,10 @@ export default function CatalogPage() {
     }
     const sortedItemsToInclude = [...itemsToInclude].sort((a, b) => a.name.localeCompare(b.name));
     sortedItemsToInclude.forEach(f => {
-      text += `- *${f.name}*: ${f.manualQty} unidades. (Precio Ref: ${f.costARS > 0 ? '$' : 'u$s'}${f.manualPrice.toLocaleString('es-AR')})\n`;
+      text += `- *${f.name}*: ${f.manualQty} unidades. (Precio Ref: ${f.costCurrency === 'USD' ? 'u$s' : '$'}${f.manualPrice.toLocaleString('es-AR')})\n`;
     });
-    const ars = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * (i.costARS > 0 ? i.manualPrice : 0)), 0);
-    const usd = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * (i.costARS === 0 ? i.manualPrice : 0)), 0);
+    const ars = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * (i.costCurrency === 'ARS' ? i.manualPrice : 0)), 0);
+    const usd = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * (i.costCurrency === 'USD' ? i.manualPrice : 0)), 0);
     text += `\n*INVERSIÓN ESTIMADA:*\n`;
     if (ars > 0) text += `ARS: $${ars.toLocaleString('es-AR')}\n`;
     if (usd > 0) text += `USD: u$s ${usd.toLocaleString('es-AR')}`;
@@ -899,8 +948,8 @@ export default function CatalogPage() {
           supplierNames.map(sup => {
             const items = itemsBySupplier[sup];
             const isOrdered = supplierStatuses[sup] === 'ordered';
-            const groupARS = items.reduce((sum, i) => sum + (i.manualQty * (i.costARS > 0 ? i.manualPrice : 0)), 0);
-            const groupUSD = items.reduce((sum, i) => sum + (i.manualQty * (i.costARS === 0 ? i.manualPrice : 0)), 0);
+            const groupARS = items.reduce((sum, i) => sum + (i.manualQty * (i.costCurrency === 'ARS' ? i.manualPrice : 0)), 0);
+            const groupUSD = items.reduce((sum, i) => sum + (i.manualQty * (i.costCurrency === 'USD' ? i.manualPrice : 0)), 0);
             
             return (
               <div key={sup} className={cn("space-y-4 p-4 rounded-2xl border transition-all", isOrdered ? "bg-slate-50 border-slate-200" : "bg-white border-primary/10 shadow-sm")}>
@@ -962,7 +1011,7 @@ export default function CatalogPage() {
                     <TableBody>
                       {items.map(f => {
                         const isZero = f.manualPrice <= 0;
-                        const originalCost = f.costARS > 0 ? f.costARS : f.costUSD;
+                        const originalCost = f.costCurrency === 'USD' ? f.costUSD : f.costARS;
                         return (
                           <TableRow key={f.id} className="hover:bg-muted/5 h-10">
                             <TableCell className="py-1">
@@ -979,7 +1028,7 @@ export default function CatalogPage() {
                               />
                             </TableCell>
                             <TableCell className="text-center py-1">
-                              <span className="text-[9px] font-bold text-slate-400">{f.costARS > 0 ? '$' : 'u$s'} {originalCost.toLocaleString('es-AR')}</span>
+                              <span className="text-[9px] font-bold text-slate-400">{f.costCurrency === 'USD' ? 'u$s' : '$'} {originalCost.toLocaleString('es-AR')}</span>
                             </TableCell>
                             <TableCell className="py-1">
                               <div className="relative group">
@@ -1000,7 +1049,7 @@ export default function CatalogPage() {
                               <span className={cn("font-black text-[9px] px-1.5 py-0.5 rounded", f.isInsufficient ? "bg-rose-600 text-white" : f.isCritical ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700")}>{f.futureStock}</span>
                             </TableCell>
                             <TableCell className="text-right py-1">
-                              <p className="text-[10px] font-bold">{f.costARS > 0 ? '$' : 'u$s'} {(f.manualQty * (manualPurchasePrices[f.id] ?? originalCost)).toLocaleString('es-AR')}</p>
+                              <p className="text-[10px] font-bold">{f.costCurrency === 'USD' ? 'u$s' : '$'} {(f.manualQty * (manualPurchasePrices[f.id] ?? originalCost)).toLocaleString('es-AR')}</p>
                             </TableCell>
                           </TableRow>
                         );
@@ -1016,7 +1065,7 @@ export default function CatalogPage() {
                 <div className="md:hidden space-y-2">
                   {items.map(f => {
                     const isZero = f.manualPrice <= 0;
-                    const originalCost = f.costARS > 0 ? f.costARS : f.costUSD;
+                    const originalCost = f.costCurrency === 'USD' ? f.costUSD : f.costARS;
                     return (
                       <Card key={f.id} className="p-2.5 bg-white border shadow-sm space-y-2.5">
                         <div className="flex justify-between items-start">
@@ -1035,7 +1084,7 @@ export default function CatalogPage() {
                             />
                           </div>
                           <div className="space-y-1">
-                            <Label className="text-[8px] font-black uppercase text-emerald-700">Precio Compra ({f.costARS > 0 ? '$' : 'u$s'})</Label>
+                            <Label className="text-[8px] font-black uppercase text-emerald-700">Precio Compra ({f.costCurrency === 'USD' ? 'u$s' : '$'})</Label>
                             <input 
                               type="number" 
                               disabled={orderToView?.status === 'completed' || isOrdered} 
@@ -1049,8 +1098,8 @@ export default function CatalogPage() {
                           </div>
                         </div>
                         <div className="flex justify-between items-center text-[8px] italic text-slate-400 px-1">
-                          <span>Precio Ref: {f.costARS > 0 ? '$' : 'u$s'} {originalCost.toLocaleString('es-AR')}</span>
-                          <span className="not-italic font-black text-slate-600">Sub: {f.costARS > 0 ? '$' : 'u$s'} {(f.manualQty * (manualPurchasePrices[f.id] ?? originalCost)).toLocaleString('es-AR')}</span>
+                          <span>Precio Ref: {f.costCurrency === 'USD' ? 'u$s' : '$'} {originalCost.toLocaleString('es-AR')}</span>
+                          <span className="not-italic font-black text-slate-600">Sub: {f.costCurrency === 'USD' ? 'u$s' : '$'} {(f.manualQty * (manualPurchasePrices[f.id] ?? originalCost)).toLocaleString('es-AR')}</span>
                         </div>
                       </Card>
                     );
@@ -1087,20 +1136,31 @@ export default function CatalogPage() {
               <div className="flex items-center gap-2 md:hidden pr-2 border-r"><div className="bg-primary p-1.5 rounded-lg shadow-sm shadow-primary/20"><Droplets className="h-4 w-4 text-white" /></div><span className="font-headline font-black text-primary text-sm tracking-tight uppercase">DosimatPro</span></div>
               <h1 className="text-xl md:text-3xl font-bold text-primary font-headline">Catálogo e Inventario</h1>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Tabs value={activeView} onValueChange={setActiveTab} className="bg-muted/50 p-1 rounded-xl border">
+            
+            <div className="flex flex-wrap items-center gap-3 bg-muted/50 p-1.5 rounded-2xl border shadow-inner">
+              <div className="flex items-center gap-2 px-2 border-r pr-4">
+                <ArrowRightLeft className="h-4 w-4 text-primary" />
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-black uppercase text-muted-foreground leading-none">Dólar de Referencia</span>
+                  <Tabs value={rateType} onValueChange={(v: any) => setRateType(v)} className="h-7 mt-0.5">
+                    <TabsList className="bg-transparent h-7 p-0 gap-1">
+                      <TabsTrigger value="official" className="h-6 text-[9px] font-bold px-2 data-[state=active]:bg-primary data-[state=active]:text-white">OFICIAL (${exchangeRates.official})</TabsTrigger>
+                      <TabsTrigger value="blue" className="h-6 text-[9px] font-bold px-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">BLUE (${exchangeRates.blue})</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
+              </div>
+              <Tabs value={activeView} onValueChange={setActiveTab} className="bg-transparent">
                 <TabsList className="bg-transparent h-9"><TabsTrigger value="inventory" className="text-[10px] font-black h-7 px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm uppercase">Stock</TabsTrigger><TabsTrigger value="orders" className="text-[10px] font-black h-7 px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm uppercase">Producción</TabsTrigger></TabsList>
               </Tabs>
-              <div className="w-px h-6 bg-border mx-2 hidden md:block" />
               <div className="flex gap-2">
-                <Button variant="outline" className="font-bold gap-2" onClick={() => setIsAuditOpen(true)}><Calculator className="h-4 w-4" /> <span className="hidden sm:inline">AUDITORÍA / BALANCES</span></Button>
-                <Sheet><SheetTrigger asChild><Button variant="outline" size="icon" className="md:hidden"><Filter className="h-4 w-4" /></Button></SheetTrigger><SheetContent side="left" className="w-[280px] flex flex-col p-0"><div className="p-6 pb-2"><SheetHeader className="mb-2"><SheetTitle className="flex items-center gap-2"><Tag className="h-5 w-5" /> Filtrar Catálogo</SheetTitle></SheetHeader></div><ScrollArea className="flex-1"><div className="p-6 pt-0"><FilterPanel /></div></ScrollArea></SheetContent></Sheet>
-                {isAdmin && activeView === 'inventory' && (<Button onClick={() => handleOpenDialog()} className="shadow-lg font-bold"><Plus className="mr-2 h-4 w-4" /> <span className="hidden sm:inline">Nuevo Ítem</span><span className="sm:hidden">Nuevo</span></Button>)}
+                <Button variant="outline" className="h-9 font-bold gap-2 text-xs" onClick={() => setIsAuditOpen(true)}><Calculator className="h-4 w-4" /> <span className="hidden sm:inline">AUDITORÍA</span></Button>
+                {isAdmin && activeView === 'inventory' && (<Button onClick={() => handleOpenDialog()} className="h-9 shadow-lg font-bold text-xs"><Plus className="mr-2 h-4 w-4" /> Nuevo</Button>)}
               </div>
             </div>
           </header>
           <Tabs value={activeView} className="w-full">
-            <TabsContent value="inventory" className="m-0 space-y-6"><div className="flex flex-col md:flex-row gap-8 items-start"><Card className="hidden md:block w-64 glass-card p-4 shrink-0 sticky top-8 max-h-[calc(100vh-100px)] overflow-y-auto"><FilterPanel /></Card><div className="flex-1 space-y-6 w-full"><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><input placeholder="Buscar por nombre..." className="w-full pl-10 h-11 bg-white/50 backdrop-blur-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>{isLoading ? (<div className="flex flex-col items-center justify-center h-48 gap-3"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="text-sm text-muted-foreground italic">Sincronizando inventario...</p></div>) : filteredItems.length === 0 ? (<div className="text-center py-20 border-2 border-dashed rounded-2xl bg-muted/5"><Package className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" /><p className="text-muted-foreground font-medium">No se encontraron productos o servicios.</p>{selectedCategories.length > 0 && (<Button variant="link" onClick={clearFilters} className="text-primary font-bold mt-2">Limpiar filtros para ver todo</Button>)}</div>) : (<section className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6">{filteredItems.map((item: any) => { const tracksStock = item.trackStock !== false; const isLowStock = tracksStock && !item.isService && (item.stock || 0) <= (item.minStock || 0); const catName = categoryMap[item.categoryId] || "Sin Categoría"; const marginARS = getMarginInfo(item.priceARS, item.calculatedCostARS); const marginUSD = getMarginInfo(item.priceUSD, item.calculatedCostUSD); return (<Card key={item.id} className={cn("glass-card hover:shadow-md transition-all group border-l-4", isLowStock ? "border-l-rose-500 bg-rose-50/30" : "border-l-primary")}><CardHeader className="pb-2"><div className="flex justify-between items-start"><div className="flex flex-wrap gap-1"><Badge variant={item.isService ? "secondary" : "default"} className="text-[9px] font-black uppercase">{item.isService ? 'SERVICIO' : 'PRODUCTO'}</Badge>{item.isCompuesto && <Badge className="text-[9px] font-black uppercase bg-amber-500 hover:bg-amber-600"><Layers className="h-2 w-2 mr-1" /> COMPUESTO</Badge>}{!tracksStock && <Badge variant="outline" className="text-[9px] font-black uppercase text-blue-600 border-blue-200 bg-blue-50">ENTREGA DIRECTA</Badge>}<Badge variant="outline" className="text-[9px] font-bold bg-white text-muted-foreground border-muted-foreground/20">{catName}</Badge></div><div className="flex items-center gap-1"><Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-primary opacity-40 group-hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); handleExportBOM(item); }} title="Ver Ficha / Exportar"><Printer className="h-4 w-4" /></Button><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onClick={() => handleExportBOM(item)}><Printer className="mr-2 h-4 w-4" /> Exportar Ficha (PDF)</DropdownMenuItem>{isAdmin && (<><DropdownMenuItem onClick={() => handleOpenDialog(item)}><Edit className="mr-2 h-4 w-4" /> Editar parámetros</DropdownMenuItem>{item.isCompuesto && (<DropdownMenuItem className="text-amber-600 font-bold" onClick={() => { setSelectedForAssembly(item); setAssemblyQty(1); setManualSuppliers({}); setIsAssemblyOpen(true); }}><Hammer className="mr-2 h-4 w-4" /> Orden de Armado</DropdownMenuItem>)}<DropdownMenuItem className="text-destructive" onClick={() => setItemToDelete(item)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem></>)}</DropdownMenuContent></DropdownMenu></div></div><CardTitle className="text-lg mt-2 truncate font-bold">{item.name}</CardTitle></CardHeader><CardContent className="space-y-4">{tracksStock && !item.isService && (<div className="flex items-center justify-between p-2 bg-white rounded-lg border shadow-sm"><div className="flex flex-col"><span className="text-[9px] font-black text-muted-foreground uppercase tracking-wider">Stock Actual</span><span className={cn("text-xl font-black", isLowStock ? "text-rose-600" : "text-emerald-600")}>{item.stock || 0}</span></div>{isLowStock && <AlertTriangle className="h-5 w-5 text-rose-500 animate-pulse" />}</div>)}<div className="grid grid-cols-2 gap-2"><div className="p-2 bg-primary/5 rounded-lg border border-primary/10 relative overflow-hidden"><span className="text-[9px] font-black text-primary uppercase block">Venta ARS</span><span className="text-md font-black">${(item.priceARS || 0).toLocaleString('es-AR')}</span>{isAdmin && marginARS && (<div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginARS.color)}>{marginARS.icon} {marginARS.value}%</div>)}</div><div className="p-2 bg-emerald-50 rounded-lg border border-emerald-100 relative overflow-hidden"><span className="text-[9px] font-black text-emerald-700 uppercase block">Venta USD</span><span className="text-md font-black">u$s {(item.priceUSD || 0).toLocaleString('es-AR')}</span>{isAdmin && marginUSD && (<div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginUSD.color)}>{marginUSD.icon} {marginUSD.value}%</div>)}</div></div>{isAdmin && (<div className="pt-2 border-t border-dashed"><div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground mb-1.5"><span className="uppercase tracking-widest">Costo Estimado</span><Badge variant="outline" className="h-4 text-[8px] font-black bg-white uppercase">Costo real</Badge></div><div className="grid grid-cols-2 gap-3 text-xs font-bold italic opacity-80"><div className="flex flex-col"><span className="text-[9px] not-italic text-muted-foreground uppercase">Costo ARS</span><span>${(item.calculatedCostARS || 0).toLocaleString('es-AR')}</span></div><div className="flex flex-col text-right"><span className="text-[9px] not-italic text-muted-foreground uppercase">Costo USD</span><span>u$s {(item.calculatedCostUSD || 0).toLocaleString('es-AR')}</span></div></div></div>)}</CardContent></Card>); })}</section>)}</div></div></TabsContent>
+            <TabsContent value="inventory" className="m-0 space-y-6"><div className="flex flex-col md:flex-row gap-8 items-start"><Card className="hidden md:block w-64 glass-card p-4 shrink-0 sticky top-8 max-h-[calc(100vh-100px)] overflow-y-auto"><FilterPanel /></Card><div className="flex-1 space-y-6 w-full"><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><input placeholder="Buscar por nombre..." className="w-full pl-10 h-11 bg-white/50 backdrop-blur-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>{isLoading ? (<div className="flex flex-col items-center justify-center h-48 gap-3"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="text-sm text-muted-foreground italic">Sincronizando inventario...</p></div>) : filteredItems.length === 0 ? (<div className="text-center py-20 border-2 border-dashed rounded-2xl bg-muted/5"><Package className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" /><p className="text-muted-foreground font-medium">No se encontraron productos o servicios.</p>{selectedCategories.length > 0 && (<Button variant="link" onClick={clearFilters} className="text-primary font-bold mt-2">Limpiar filtros para ver todo</Button>)}</div>) : (<section className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6">{filteredItems.map((item: any) => { const tracksStock = item.trackStock !== false; const isLowStock = tracksStock && !item.isService && (item.stock || 0) <= (item.minStock || 0); const catName = categoryMap[item.categoryId] || "Sin Categoría"; const marginARS = getMarginInfo(item.priceARS, item.calculatedCostARS); const marginUSD = getMarginInfo(item.priceUSD, item.calculatedCostUSD); const isCostInUSD = item.costCurrency === 'USD'; return (<Card key={item.id} className={cn("glass-card hover:shadow-md transition-all group border-l-4", isLowStock ? "border-l-rose-500 bg-rose-50/30" : "border-l-primary")}><CardHeader className="pb-2"><div className="flex justify-between items-start"><div className="flex flex-wrap gap-1"><Badge variant={item.isService ? "secondary" : "default"} className="text-[9px] font-black uppercase">{item.isService ? 'SERVICIO' : 'PRODUCTO'}</Badge>{item.isCompuesto && <Badge className="text-[9px] font-black uppercase bg-amber-500 hover:bg-amber-600"><Layers className="h-2 w-2 mr-1" /> COMPUESTO</Badge>}{!tracksStock && <Badge variant="outline" className="text-[9px] font-black uppercase text-blue-600 border-blue-200 bg-blue-50">ENTREGA DIRECTA</Badge>}<Badge variant="outline" className="text-[9px] font-bold bg-white text-muted-foreground border-muted-foreground/20">{catName}</Badge></div><div className="flex items-center gap-1"><Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-primary opacity-40 group-hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); handleExportBOM(item); }} title="Ver Ficha / Exportar"><Printer className="h-4 w-4" /></Button><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onClick={() => handleExportBOM(item)}><Printer className="mr-2 h-4 w-4" /> Exportar Ficha (PDF)</DropdownMenuItem>{isAdmin && (<><DropdownMenuItem onClick={() => handleOpenDialog(item)}><Edit className="mr-2 h-4 w-4" /> Editar parámetros</DropdownMenuItem>{item.isCompuesto && (<DropdownMenuItem className="text-amber-600 font-bold" onClick={() => { setSelectedForAssembly(item); setAssemblyQty(1); setManualSuppliers({}); setIsAssemblyOpen(true); }}><Hammer className="mr-2 h-4 w-4" /> Orden de Armado</DropdownMenuItem>)}<DropdownMenuItem className="text-destructive" onClick={() => setItemToDelete(item)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem></>)}</DropdownMenuContent></DropdownMenu></div></div><CardTitle className="text-lg mt-2 truncate font-bold">{item.name}</CardTitle></CardHeader><CardContent className="space-y-4">{tracksStock && !item.isService && (<div className="flex items-center justify-between p-2 bg-white rounded-lg border shadow-sm"><div className="flex flex-col"><span className="text-[9px] font-black text-muted-foreground uppercase tracking-wider">Stock Actual</span><span className={cn("text-xl font-black", isLowStock ? "text-rose-600" : "text-emerald-600")}>{item.stock || 0}</span></div>{isLowStock && <AlertTriangle className="h-5 w-5 text-rose-500 animate-pulse" />}</div>)}<div className="grid grid-cols-2 gap-2"><div className="p-2 bg-primary/5 rounded-lg border border-primary/10 relative overflow-hidden"><span className="text-[9px] font-black text-primary uppercase block">Venta ARS</span><span className="text-md font-black">${(item.priceARS || 0).toLocaleString('es-AR')}</span>{isAdmin && marginARS && (<div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginARS.color)}>{marginARS.icon} {marginARS.value}%</div>)}</div><div className="p-2 bg-emerald-50 rounded-lg border border-emerald-100 relative overflow-hidden"><span className="text-[9px] font-black text-emerald-700 uppercase block">Venta USD</span><span className="text-md font-black">u$s {(item.priceUSD || 0).toLocaleString('es-AR')}</span>{isAdmin && marginUSD && (<div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginUSD.color)}>{marginUSD.icon} {marginUSD.value}%</div>)}</div></div>{isAdmin && (<div className="pt-2 border-t border-dashed"><div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground mb-1.5"><div className="flex items-center gap-1 uppercase tracking-widest">Costo Normalizado {isCostInUSD ? <Badge className="h-3 text-[7px] bg-emerald-600 font-black">BASE USD</Badge> : <Badge className="h-3 text-[7px] bg-blue-600 font-black">BASE ARS</Badge>}</div><Badge variant="outline" className="h-4 text-[8px] font-black bg-white uppercase">Costo real</Badge></div><div className="grid grid-cols-2 gap-3 text-xs font-bold italic opacity-80"><div className="flex flex-col"><span className="text-[9px] not-italic text-muted-foreground uppercase">Costo ARS</span><span>${(item.calculatedCostARS || 0).toLocaleString('es-AR')}</span></div><div className="flex flex-col text-right"><span className="text-[9px] not-italic text-muted-foreground uppercase">Costo USD</span><span>u$s {(item.calculatedCostUSD || 0).toLocaleString('es-AR')}</span></div></div></div>)}</CardContent></Card>); })}</section>)}</div></div></TabsContent>
             <TabsContent value="orders" className="m-0"><OrdersList /></TabsContent>
           </Tabs>
         </SidebarInset>
@@ -1143,8 +1203,8 @@ export default function CatalogPage() {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto w-[95vw]">
           <DialogHeader><div className="flex justify-between items-start pr-8"><div><DialogTitle className="text-2xl font-black font-headline text-primary">{editingItemId ? 'Configurar Ítem' : 'Nuevo Ítem'}</DialogTitle><DialogDescription>Gestión de precios, categoría y estructura de armado.</DialogDescription></div>{editingItemId && (<Button variant="outline" size="icon" onClick={() => handleExportBOM(items?.find(i => i.id === editingItemId))} className="text-primary border-primary/20"><Printer className="h-4 w-4" /></Button>)}</div></DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
-            <div className="space-y-4"><div className="space-y-2"><Label className="font-bold">Nombre del Producto / Servicio</Label><Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Dosificador G4" /></div><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label className="font-bold">Categoría</Label><Select value={formData.categoryId} onValueChange={(v) => setFormData({...formData, categoryId: v})}><SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger><SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label className="font-bold">Proveedor</Label><Select value={formData.supplier} onValueChange={(v) => setFormData({...formData, supplier: v})}><SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger><SelectContent><SelectItem value="none">SIN PROVEEDOR</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div></div><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label className="text-primary font-black">Venta ARS ($)</Label><Input type="number" value={formData.priceARS} onChange={(e) => setFormData({...formData, priceARS: Number(e.target.value)})} /></div><div className="space-y-2"><Label className="text-emerald-700 font-black">Venta USD (u$s)</Label><Input type="number" value={formData.priceUSD} onChange={(e) => setFormData({...formData, priceUSD: Number(e.target.value)})} /></div></div>{!formData.isCompuesto ? (<div className="grid grid-cols-2 gap-4 p-3 bg-muted/20 rounded-xl border border-dashed"><div className="space-y-2"><Label className="text-xs font-bold text-muted-foreground uppercase">Costo ARS</Label><Input type="number" value={formData.costARS} onChange={(e) => setFormData({...formData, costARS: Number(e.target.value)})} className="h-8" /></div><div className="space-y-2"><Label className="text-xs font-bold text-muted-foreground uppercase">Costo USD</Label><Input type="number" value={formData.costUSD} onChange={(e) => setFormData({...formData, costUSD: Number(e.target.value)})} className="h-8" /></div></div>) : (<div className="grid grid-cols-2 gap-4 p-3 bg-amber-50 rounded-xl border border-amber-200"><div className="space-y-2"><Label className="text-xs font-bold text-amber-800 uppercase">Mano Obra ARS</Label><Input type="number" value={formData.laborCostARS} onChange={(e) => setFormData({...formData, laborCostARS: Number(e.target.value)})} className="h-8 border-amber-200" /></div><div className="space-y-2"><Label className="text-xs font-bold text-amber-800 uppercase">Mano Obra USD</Label><Input type="number" value={formData.laborCostUSD} onChange={(e) => setFormData({...formData, laborCostUSD: Number(e.target.value)})} className="h-8 border-amber-200" /></div></div>)}<div className="flex flex-col gap-3 pt-2"><div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/10"><Switch checked={formData.isService} onCheckedChange={(v) => { setFormData({...formData, isService: v, trackStock: !v && formData.trackStock, isCompuesto: v ? false : formData.isCompuesto}); }} /><div><Label className="font-bold">Es un servicio técnico</Label><p className="text-[10px] text-muted-foreground">No controla stock ni tiene armado.</p></div></div>{!formData.isService && (<div className={cn("flex items-center gap-3 p-3 border rounded-lg transition-colors", formData.trackStock ? "bg-emerald-50/50 border-emerald-200" : "bg-blue-50/50 border-blue-200")}><Switch checked={formData.trackStock} onCheckedChange={(v) => setFormData({...formData, trackStock: v})} /><div><Label className={cn("font-bold", formData.trackStock ? "text-emerald-800" : "text-blue-800")}>Controlar Stock de este ítem</Label><p className={cn("text-[10px]", formData.trackStock ? "text-emerald-600" : "text-blue-600")}>{formData.trackStock ? "Descuenta unidades en cada venta." : "Producto de entrega directa (sin inventario)."}</p></div></div>)}{!formData.isService && (<div className="flex items-center gap-3 p-3 border rounded-lg bg-amber-50/50 border-amber-200"><Switch checked={formData.isCompuesto} onCheckedChange={(v) => { setFormData({...formData, isCompuesto: v, trackStock: v ? true : formData.trackStock}); }} /><div><Label className="font-bold text-amber-800">Es un producto compuesto</Label><p className="text-[10px] text-amber-600">Se fabrica a partir de otros ítems.</p></div></div>)}</div>{!formData.isService && formData.trackStock && (<div className="grid grid-cols-2 gap-4 animate-in fade-in zoom-in duration-200"><div className="space-y-2"><Label className="font-bold">Stock Inicial</Label><Input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} /></div><div className="space-y-2"><Label className="font-bold text-rose-600">Stock Mínimo (Alerta)</Label><Input type="number" value={formData.minStock} onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} /></div></div>)}</div>
-            <div className="space-y-4">{formData.isCompuesto ? (<div className="flex flex-col h-full border rounded-xl bg-white shadow-inner overflow-hidden"><div className="p-3 bg-amber-50 border-b border-amber-100 flex items-center justify-between"><span className="text-xs font-black text-amber-800 uppercase tracking-widest flex items-center gap-2"><Layers className="h-4 w-4" /> Estructura de Armado (BOM)</span><Badge variant="outline" className="bg-white text-amber-700 border-amber-200 font-bold text-[10px]">{formData.components.length} PIEZAS</Badge></div><div className="p-3 border-b space-y-3"><div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Filtrar por Categoría</Label><Select value={bomFilterCategory} onValueChange={setBomFilterCategory}><SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas las categorías</SelectItem>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Añadir Componente</Label><Select onValueChange={addComponent}><SelectTrigger className="h-9"><SelectValue placeholder="Elegir parte..." /></SelectTrigger><SelectContent>{items?.filter(i => i.id !== editingItemId && !i.isService && (bomFilterCategory === "all" || i.categoryId === bomFilterCategory)).sort((a, b) => (a.name || "").localeCompare(b.name || "")).map(i => (<SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>))}</SelectContent></Select></div></div><ScrollArea className="flex-1 p-2">{formData.components.length === 0 ? (<div className="py-10 text-center text-xs text-muted-foreground italic">Agrega componentes para armar este producto.</div>) : (<div className="space-y-2">{sortedAddedComponents.map((comp) => { const product = items?.find(i => i.id === comp.productId); return (<div key={`${comp.productId}-${comp.originalIndex}`} className="flex items-center justify-between p-2 rounded bg-muted/20 border border-muted/30"><div className="flex flex-col min-w-0"><span className="text-xs font-bold truncate">{product?.name || 'Cargando...'}</span>{product?.trackStock !== false && (<span className="text-[9px] text-muted-foreground">Stock: {product?.stock || 0} | {product?.supplier || "---"}</span>)}</div><div className="flex items-center gap-2 shrink-0"><div className="flex items-center gap-1 border rounded bg-white px-1"><span className="text-[10px] font-bold text-muted-foreground">x</span><input type="number" value={comp.quantity} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="w-10 h-7 text-xs font-bold text-center focus:outline-none" /></div><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeComponent(comp.originalIndex)}><Minus className="h-4 w-4" /></Button></div></div>); })}</div>)}</ScrollArea></div>) : (<div className="space-y-2"><Label className="font-bold">Descripción (opcional)</Label><Textarea value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="min-h-[200px]" placeholder="Detalles del producto o servicio..." /></div>)}</div>
+            <div className="space-y-4"><div className="space-y-2"><Label className="font-bold">Nombre del Producto / Servicio</Label><Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Dosificador G4" /></div><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label className="font-bold">Categoría</Label><Select value={formData.categoryId} onValueChange={(v) => setFormData({...formData, categoryId: v})}><SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger><SelectContent className="max-h-60">{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label className="font-bold">Proveedor</Label><Select value={formData.supplier} onValueChange={(v) => setFormData({...formData, supplier: v})}><SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger><SelectContent className="max-h-60"><SelectItem value="none">SIN PROVEEDOR</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div></div><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label className="text-primary font-black">Venta ARS ($)</Label><Input type="number" value={formData.priceARS} onChange={(e) => setFormData({...formData, priceARS: Number(e.target.value)})} /></div><div className="space-y-2"><Label className="text-emerald-700 font-black">Venta USD (u$s)</Label><Input type="number" value={formData.priceUSD} onChange={(e) => setFormData({...formData, priceUSD: Number(e.target.value)})} /></div></div>{!formData.isCompuesto ? (<div className="p-4 bg-muted/20 rounded-2xl border border-dashed space-y-3"><div className="flex items-center justify-between mb-1"><Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Costo de Reposición</Label><Badge variant="outline" className="bg-white text-[8px] font-black">BASE {formData.costCurrency}</Badge></div><div className="flex gap-2"><div className="relative flex-1"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">{formData.costCurrency === 'USD' ? 'u$s' : '$'}</span><Input type="number" value={formData.costAmount} onChange={(e) => setFormData({...formData, costAmount: Number(e.target.value)})} className="pl-8 font-black" /></div><Tabs value={formData.costCurrency} onValueChange={(v: any) => setFormData({...formData, costCurrency: v})} className="shrink-0"><TabsList className="grid grid-cols-2 w-24 h-10"><TabsTrigger value="ARS" className="text-[10px] font-bold">ARS</TabsTrigger><TabsTrigger value="USD" className="text-[10px] font-bold">USD</TabsTrigger></TabsList></Tabs></div><p className="text-[10px] font-bold italic text-muted-foreground text-center">Equivale a {formData.costCurrency === 'ARS' ? `u$s ${(formData.costAmount / currentRate).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : `$ ${(formData.costAmount * currentRate).toLocaleString('es-AR')}`} según dólar {rateType === 'blue' ? 'Blue' : 'Oficial'}</p></div>) : (<div className="grid grid-cols-2 gap-4 p-3 bg-amber-50 rounded-xl border border-amber-200"><div className="space-y-2"><Label className="text-xs font-bold text-amber-800 uppercase">Mano Obra ARS</Label><Input type="number" value={formData.laborCostARS} onChange={(e) => setFormData({...formData, laborCostARS: Number(e.target.value)})} className="h-8 border-amber-200" /></div><div className="space-y-2"><Label className="text-xs font-bold text-amber-800 uppercase">Mano Obra USD</Label><Input type="number" value={formData.laborCostUSD} onChange={(e) => setFormData({...formData, laborCostUSD: Number(e.target.value)})} className="h-8 border-amber-200" /></div></div>)}<div className="flex flex-col gap-3 pt-2"><div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/10"><Switch checked={formData.isService} onCheckedChange={(v) => { setFormData({...formData, isService: v, trackStock: !v && formData.trackStock, isCompuesto: v ? false : formData.isCompuesto}); }} /><div><Label className="font-bold">Es un servicio técnico</Label><p className="text-[10px] text-muted-foreground">No controla stock ni tiene armado.</p></div></div>{!formData.isService && (<div className={cn("flex items-center gap-3 p-3 border rounded-lg transition-colors", formData.trackStock ? "bg-emerald-50/50 border-emerald-200" : "bg-blue-50/50 border-blue-200")}><Switch checked={formData.trackStock} onCheckedChange={(v) => setFormData({...formData, trackStock: v})} /><div><Label className={cn("font-bold", formData.trackStock ? "text-emerald-800" : "text-blue-800")}>Controlar Stock de este ítem</Label><p className={cn("text-[10px]", formData.trackStock ? "text-emerald-600" : "text-blue-600")}>{formData.trackStock ? "Descuenta unidades en cada venta." : "Producto de entrega directa (sin inventario)."}</p></div></div>)}{!formData.isService && (<div className="flex items-center gap-3 p-3 border rounded-lg bg-amber-50/50 border-amber-200"><Switch checked={formData.isCompuesto} onCheckedChange={(v) => { setFormData({...formData, isCompuesto: v, trackStock: v ? true : formData.trackStock}); }} /><div><Label className="font-bold text-amber-800">Es un producto compuesto</Label><p className="text-[10px] text-amber-600">Se fabrica a partir de otros ítems.</p></div></div>)}</div>{!formData.isService && formData.trackStock && (<div className="grid grid-cols-2 gap-4 animate-in fade-in zoom-in duration-200"><div className="space-y-2"><Label className="font-bold">Stock Inicial</Label><Input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} /></div><div className="space-y-2"><Label className="font-bold text-rose-600">Stock Mínimo (Alerta)</Label><Input type="number" value={formData.minStock} onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} /></div></div>)}</div>
+            <div className="space-y-4">{formData.isCompuesto ? (<div className="flex flex-col h-full border rounded-xl bg-white shadow-inner overflow-hidden"><div className="p-3 bg-amber-50 border-b border-amber-100 flex items-center justify-between"><span className="text-xs font-black text-amber-800 uppercase tracking-widest flex items-center gap-2"><Layers className="h-4 w-4" /> Estructura de Armado (BOM)</span><Badge variant="outline" className="bg-white text-amber-700 border-amber-200 font-bold text-[10px]">{formData.components.length} PIEZAS</Badge></div><div className="p-3 border-b space-y-3"><div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Filtrar por Categoría</Label><Select value={bomFilterCategory} onValueChange={setBomFilterCategory}><SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent className="max-h-60"><SelectItem value="all">Todas las categorías</SelectItem>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Añadir Componente</Label><Select onValueChange={addComponent}><SelectTrigger className="h-9"><SelectValue placeholder="Elegir parte..." /></SelectTrigger><SelectContent className="max-h-60">{items?.filter(i => i.id !== editingItemId && !i.isService && (bomFilterCategory === "all" || i.categoryId === bomFilterCategory)).sort((a, b) => (a.name || "").localeCompare(b.name || "")).map(i => (<SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>))}</SelectContent></Select></div></div><ScrollArea className="flex-1 p-2">{formData.components.length === 0 ? (<div className="py-10 text-center text-xs text-muted-foreground italic">Agrega componentes para armar este producto.</div>) : (<div className="space-y-2">{sortedAddedComponents.map((comp) => { const product = items?.find(i => i.id === comp.productId); return (<div key={`${comp.productId}-${comp.originalIndex}`} className="flex items-center justify-between p-2 rounded bg-muted/20 border border-muted/30"><div className="flex flex-col min-w-0"><span className="text-xs font-bold truncate">{product?.name || 'Cargando...'}</span>{product?.trackStock !== false && (<span className="text-[9px] text-muted-foreground">Stock: {product?.stock || 0} | {product?.supplier || "---"}</span>)}</div><div className="flex items-center gap-2 shrink-0"><div className="flex items-center gap-1 border rounded bg-white px-1"><span className="text-[10px] font-bold text-muted-foreground">x</span><input type="number" value={comp.quantity} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="w-10 h-7 text-xs font-bold text-center focus:outline-none" /></div><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeComponent(comp.originalIndex)}><Minus className="h-4 w-4" /></Button></div></div>); })}</div>)}</ScrollArea></div>) : (<div className="space-y-2"><Label className="font-bold">Descripción (opcional)</Label><Textarea value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="min-h-[200px]" placeholder="Detalles del producto o servicio..." /></div>)}</div>
           </div>
           <DialogFooter className="border-t pt-4 mt-4"><Button variant="outline" onClick={() => setIsDialogOpen(false)} className="font-bold">Cancelar</Button><Button onClick={handleSave} className="font-black px-8 shadow-xl shadow-primary/20"><CheckCircle2 className="mr-2 h-4 w-4" /> GUARDAR ÍTEM</Button></DialogFooter>
         </DialogContent>
