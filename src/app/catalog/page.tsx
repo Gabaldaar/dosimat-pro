@@ -217,9 +217,10 @@ export default function CatalogPage() {
 
   const [manualPurchaseQtys, setManualPurchaseQtys] = useState<Record<string, number>>({})
   const [manualPurchasePrices, setManualPurchasePrices] = useState<Record<string, number>>({})
+  const [manualPurchaseCurrencies, setManualPurchaseCurrencies] = useState<Record<string, 'ARS' | 'USD'>>({})
   const [manualSuppliers, setManualSuppliers] = useState<Record<string, string>>({})
   const [supplierStatuses, setSupplierStatuses] = useState<Record<string, 'pending' | 'ordered'>>({})
-  const [initialPlanData, setInitialPlanData] = useState({ qtys: {}, sups: {}, prices: {}, statuses: {}, qty: 0 })
+  const [initialPlanData, setInitialPlanData] = useState({ qtys: {}, sups: {}, prices: {}, currencies: {}, statuses: {}, qty: 0 })
 
   const [formData, setFormData] = useState({
     name: "",
@@ -312,6 +313,7 @@ export default function CatalogPage() {
       const currentStock = item.stock || 0;
       
       if (!requirements[productId]) {
+        const costCurrency = item.costCurrency || (item.costUSD > 0 && !item.costARS ? 'USD' : 'ARS');
         requirements[productId] = {
           id: item.id,
           name: item.name,
@@ -321,7 +323,7 @@ export default function CatalogPage() {
           minStock: item.minStock || 0,
           costARS: item.costARS || 0,
           costUSD: item.costUSD || 0,
-          costCurrency: item.costCurrency || (item.costUSD > 0 && !item.costARS ? 'USD' : 'ARS'),
+          costCurrency: costCurrency,
           isCompuesto: item.isCompuesto || false,
           supplier: item.supplier || "Sin Proveedor"
         };
@@ -367,23 +369,28 @@ export default function CatalogPage() {
     if (orderToView && explosionSummary) {
       const newManualQtys: Record<string, number> = {};
       const newManualPrices: Record<string, number> = {};
+      const newManualCurrencies: Record<string, 'ARS' | 'USD'> = {};
       const newManualSups: Record<string, string> = {};
       const newStatuses: Record<string, 'pending' | 'ordered'> = orderToView.supplierStatuses || {};
       
       explosionSummary.toBuySuggested.forEach(item => {
         newManualQtys[item.id] = orderToView.purchaseQtys?.[item.id] ?? item.suggestedToBuy;
-        const baseCost = item.costCurrency === 'USD' ? item.costUSD : item.costARS;
+        const defaultCurrency = item.costCurrency as 'ARS' | 'USD' || 'ARS';
+        newManualCurrencies[item.id] = orderToView.purchaseCurrencies?.[item.id] ?? defaultCurrency;
+        const baseCost = newManualCurrencies[item.id] === 'USD' ? item.costUSD : item.costARS;
         newManualPrices[item.id] = orderToView.purchasePrices?.[item.id] ?? baseCost;
         newManualSups[item.id] = orderToView.purchaseSuppliers?.[item.id] ?? (item.supplier || "Sin Proveedor");
       });
       
       setManualPurchaseQtys(newManualQtys);
       setManualPurchasePrices(newManualPrices);
+      setManualPurchaseCurrencies(newManualCurrencies);
       setManualSuppliers(newManualSups);
       setSupplierStatuses(newStatuses);
       setInitialPlanData({ 
         qtys: JSON.parse(JSON.stringify(newManualQtys)), 
         prices: JSON.parse(JSON.stringify(newManualPrices)),
+        currencies: JSON.parse(JSON.stringify(newManualCurrencies)),
         sups: JSON.parse(JSON.stringify(newManualSups)),
         statuses: JSON.parse(JSON.stringify(newStatuses)),
         qty: orderToView.quantity
@@ -391,15 +398,19 @@ export default function CatalogPage() {
     } else if (isAssemblyOpen && !orderToView && explosionSummary) {
       const newManualQtys: Record<string, number> = {};
       const newManualPrices: Record<string, number> = {};
+      const newManualCurrencies: Record<string, 'ARS' | 'USD'> = {};
       const newManualSups: Record<string, string> = {};
       explosionSummary.toBuySuggested.forEach(item => {
         newManualQtys[item.id] = item.suggestedToBuy;
-        const baseCost = item.costCurrency === 'USD' ? item.costUSD : item.costARS;
+        const defaultCurrency = item.costCurrency as 'ARS' | 'USD' || 'ARS';
+        newManualCurrencies[item.id] = defaultCurrency;
+        const baseCost = defaultCurrency === 'USD' ? item.costUSD : item.costARS;
         newManualPrices[item.id] = baseCost;
         newManualSups[item.id] = item.supplier || "Sin Proveedor";
       });
       setManualPurchaseQtys(newManualQtys);
       setManualPurchasePrices(newManualPrices);
+      setManualPurchaseCurrencies(newManualCurrencies);
       setManualSuppliers(newManualSups);
       setSupplierStatuses({});
     }
@@ -409,10 +420,11 @@ export default function CatalogPage() {
     if (!orderToView) return false;
     return JSON.stringify(manualPurchaseQtys) !== JSON.stringify(initialPlanData.qtys) ||
            JSON.stringify(manualPurchasePrices) !== JSON.stringify(initialPlanData.prices) ||
+           JSON.stringify(manualPurchaseCurrencies) !== JSON.stringify(initialPlanData.currencies) ||
            JSON.stringify(manualSuppliers) !== JSON.stringify(initialPlanData.sups) ||
            JSON.stringify(supplierStatuses) !== JSON.stringify(initialPlanData.statuses) ||
            orderToView.quantity !== initialPlanData.qty;
-  }, [manualPurchaseQtys, manualPurchasePrices, manualSuppliers, supplierStatuses, initialPlanData, orderToView]);
+  }, [manualPurchaseQtys, manualPurchasePrices, manualPurchaseCurrencies, manualSuppliers, supplierStatuses, initialPlanData, orderToView]);
 
   const handleCloseOrderView = () => {
     if (hasUnsavedChanges) {
@@ -427,7 +439,8 @@ export default function CatalogPage() {
 
     const itemsToBuy = explosionSummary.toBuySuggested.map(item => {
       const manualQty = manualPurchaseQtys[item.id] ?? item.suggestedToBuy;
-      const baseCost = item.costCurrency === 'USD' ? item.costUSD : item.costARS;
+      const manualCurrency = manualPurchaseCurrencies[item.id] ?? (item.costCurrency as 'ARS' | 'USD' || 'ARS');
+      const baseCost = manualCurrency === 'USD' ? item.costUSD : item.costARS;
       const manualPrice = manualPurchasePrices[item.id] ?? baseCost;
       const futureStock = item.available + manualQty - item.required;
       const isCritical = futureStock < item.minStock;
@@ -438,6 +451,7 @@ export default function CatalogPage() {
         ...item,
         manualQty,
         manualPrice,
+        manualCurrency,
         futureStock,
         isCritical,
         isInsufficient,
@@ -447,10 +461,10 @@ export default function CatalogPage() {
 
     return {
       items: itemsToBuy,
-      totalARS: itemsToBuy.reduce((sum, item) => sum + (item.manualQty * (item.costCurrency === 'ARS' ? item.manualPrice : 0)), 0),
-      totalUSD: itemsToBuy.reduce((sum, item) => sum + (item.manualQty * (item.costCurrency === 'USD' ? item.manualPrice : 0)), 0)
+      totalARS: itemsToBuy.reduce((sum, item) => sum + (item.manualQty * (item.manualCurrency === 'ARS' ? item.manualPrice : 0)), 0),
+      totalUSD: itemsToBuy.reduce((sum, item) => sum + (item.manualQty * (item.manualCurrency === 'USD' ? item.manualPrice : 0)), 0)
     };
-  }, [explosionSummary, manualPurchaseQtys, manualPurchasePrices, manualSuppliers, items]);
+  }, [explosionSummary, manualPurchaseQtys, manualPurchasePrices, manualPurchaseCurrencies, manualSuppliers, items]);
 
   const sortedAddedComponents = useMemo(() => {
     if (!items || !formData.components) return []
@@ -570,6 +584,7 @@ export default function CatalogPage() {
       createdAt: new Date().toISOString(),
       purchaseQtys: manualPurchaseQtys,
       purchasePrices: manualPurchasePrices,
+      purchaseCurrencies: manualPurchaseCurrencies,
       purchaseSuppliers: manualSuppliers,
       supplierStatuses: supplierStatuses
     };
@@ -592,6 +607,7 @@ export default function CatalogPage() {
       quantity: orderToView.quantity,
       purchaseQtys: manualPurchaseQtys,
       purchasePrices: manualPurchasePrices,
+      purchaseCurrencies: manualPurchaseCurrencies,
       purchaseSuppliers: manualSuppliers,
       supplierStatuses: supplierStatuses,
       status
@@ -599,6 +615,7 @@ export default function CatalogPage() {
     setInitialPlanData({ 
       qtys: JSON.parse(JSON.stringify(manualPurchaseQtys)), 
       prices: JSON.parse(JSON.stringify(manualPurchasePrices)),
+      currencies: JSON.parse(JSON.stringify(manualPurchaseCurrencies)),
       sups: JSON.parse(JSON.stringify(manualSuppliers)),
       statuses: JSON.parse(JSON.stringify(supplierStatuses)),
       qty: orderToView.quantity
@@ -620,12 +637,13 @@ export default function CatalogPage() {
         
         // Actualizar Costo Real en el catálogo y Moneda
         if (item.manualPrice > 0) {
-          const costField = item.costCurrency === 'USD' ? 'costUSD' : 'costARS';
-          const otherCostField = item.costCurrency === 'USD' ? 'costARS' : 'costUSD';
+          const manualCurrency = manualPurchaseCurrencies[item.id] || (item.costCurrency as 'ARS' | 'USD' || 'ARS');
+          const costField = manualCurrency === 'USD' ? 'costUSD' : 'costARS';
+          const otherCostField = manualCurrency === 'USD' ? 'costARS' : 'costUSD';
           updateDocumentNonBlocking(doc(db, 'products_services', item.id), {
             [costField]: item.manualPrice,
             [otherCostField]: 0,
-            costCurrency: item.costCurrency
+            costCurrency: manualCurrency
           });
         }
         
@@ -812,13 +830,14 @@ export default function CatalogPage() {
     }
     const sortedItemsToInclude = [...itemsToInclude].sort((a, b) => a.name.localeCompare(b.name));
     sortedItemsToInclude.forEach(f => {
-      text += `- *${f.name}*: ${f.manualQty} unidades. (Precio Ref: ${f.costCurrency === 'USD' ? 'u$s' : '$'}${f.manualPrice.toLocaleString('es-AR')})\n`;
+      const currency = manualPurchaseCurrencies[f.id] || (f.costCurrency as 'ARS' | 'USD' || 'ARS');
+      text += `- *${f.name}*: ${f.manualQty} unidades. (Precio Ref: ${currency === 'USD' ? 'u$s' : '$'}${f.manualPrice.toLocaleString('es-AR')})\n`;
     });
-    const ars = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * (i.costCurrency === 'ARS' ? i.manualPrice : 0)), 0);
-    const usd = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * (i.costCurrency === 'USD' ? i.manualPrice : 0)), 0);
+    const ars = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * (manualPurchaseCurrencies[i.id] === 'ARS' ? manualPurchasePrices[i.id] : 0)), 0);
+    const usd = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * (manualPurchaseCurrencies[i.id] === 'USD' ? manualPurchasePrices[i.id] : 0)), 0);
     text += `\n*INVERSIÓN ESTIMADA:*\n`;
     if (ars > 0) text += `ARS: $${ars.toLocaleString('es-AR')}\n`;
-    if (usd > 0) text += `USD: u$s ${usd.toLocaleString('es-AR')}`;
+    if (usd > 0) text += `USD: u$s {usd.toLocaleString('es-AR')}`;
     navigator.clipboard.writeText(text);
     toast({ title: "Lista de compras copiada", description: `Lista filtrada para ${supplierFilter}.` });
   }
@@ -946,10 +965,10 @@ export default function CatalogPage() {
           </div>
         ) : (
           supplierNames.map(sup => {
-            const items = itemsBySupplier[sup];
+            const itemsInGroup = itemsBySupplier[sup];
             const isOrdered = supplierStatuses[sup] === 'ordered';
-            const groupARS = items.reduce((sum, i) => sum + (i.manualQty * (i.costCurrency === 'ARS' ? i.manualPrice : 0)), 0);
-            const groupUSD = items.reduce((sum, i) => sum + (i.manualQty * (i.costCurrency === 'USD' ? i.manualPrice : 0)), 0);
+            const groupARS = itemsInGroup.reduce((sum, i) => sum + (i.manualQty * (manualPurchaseCurrencies[i.id] === 'ARS' ? manualPurchasePrices[i.id] : 0)), 0);
+            const groupUSD = itemsInGroup.reduce((sum, i) => sum + (i.manualQty * (manualPurchaseCurrencies[i.id] === 'USD' ? manualPurchasePrices[i.id] : 0)), 0);
             
             return (
               <div key={sup} className={cn("space-y-4 p-4 rounded-2xl border transition-all", isOrdered ? "bg-slate-50 border-slate-200" : "bg-white border-primary/10 shadow-sm")}>
@@ -963,7 +982,7 @@ export default function CatalogPage() {
                         <h4 className="text-sm font-black uppercase tracking-widest text-slate-900">{sup}</h4>
                         {isOrdered && <Badge className="bg-slate-600 text-[8px] font-black uppercase">PEDIDO CONFIRMADO</Badge>}
                       </div>
-                      <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">{items.length} ÍTEMS • {isOrdered ? 'VALORES BLOQUEADOS' : 'VALORES EDITABLES'}</p>
+                      <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">{itemsInGroup.length} ÍTEMS • {isOrdered ? 'VALORES BLOQUEADOS' : 'VALORES EDITABLES'}</p>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -987,7 +1006,7 @@ export default function CatalogPage() {
                           size="sm" 
                           className="h-8 gap-2 bg-emerald-600 hover:bg-emerald-700 font-bold text-xs flex-1 md:flex-none" 
                           onClick={() => handleReceiveMaterials(sup)} 
-                          disabled={items.every(i => i.manualQty <= 0)}
+                          disabled={itemsInGroup.every(i => i.manualQty <= 0)}
                         >
                           <Save className="h-3.5 w-3.5" /> INGRESAR COMPRA
                         </Button>
@@ -1002,16 +1021,18 @@ export default function CatalogPage() {
                       <TableRow>
                         <TableHead className="text-[9px] font-black uppercase">Material</TableHead>
                         <TableHead className="text-center font-black text-[9px] uppercase w-20">Cantidad</TableHead>
-                        <TableHead className="text-center font-black text-[9px] uppercase w-32">Precio Ref.</TableHead>
-                        <TableHead className="text-center font-black text-[9px] uppercase w-32">Precio Compra</TableHead>
+                        <TableHead className="text-center font-black text-[9px] uppercase w-28">Precio Ref.</TableHead>
+                        <TableHead className="text-center font-black text-[9px] uppercase w-48">Precio Compra</TableHead>
                         <TableHead className="text-center font-black text-[9px] uppercase w-20">Stock Post</TableHead>
                         <TableHead className="text-right font-black text-[9px] uppercase w-28">Subtotal</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {items.map(f => {
-                        const isZero = f.manualPrice <= 0;
+                      {itemsInGroup.map(f => {
+                        const isZero = manualPurchasePrices[f.id] <= 0;
                         const originalCost = f.costCurrency === 'USD' ? f.costUSD : f.costARS;
+                        const currentCurrency = manualPurchaseCurrencies[f.id] || (f.costCurrency as 'ARS' | 'USD' || 'ARS');
+                        
                         return (
                           <TableRow key={f.id} className="hover:bg-muted/5 h-10">
                             <TableCell className="py-1">
@@ -1031,25 +1052,37 @@ export default function CatalogPage() {
                               <span className="text-[9px] font-bold text-slate-400">{f.costCurrency === 'USD' ? 'u$s' : '$'} {originalCost.toLocaleString('es-AR')}</span>
                             </TableCell>
                             <TableCell className="py-1">
-                              <div className="relative group">
-                                <input 
-                                  type="number" 
-                                  disabled={orderToView?.status === 'completed' || isOrdered} 
-                                  value={manualPurchasePrices[f.id] ?? originalCost} 
-                                  onChange={(e) => setManualPurchasePrices(prev => ({ ...prev, [f.id]: Number(e.target.value) }))} 
-                                  className={cn(
-                                    "w-full text-center font-black text-xs h-7 border rounded transition-all focus:outline-none focus:ring-2",
-                                    isZero ? "bg-rose-50 border-rose-300 text-rose-600 animate-pulse" : "bg-white border-emerald-100 text-emerald-700"
-                                  )} 
-                                />
-                                {isZero && !isOrdered && <span className="absolute -top-4 left-1/2 -translate-x-1/2 bg-rose-600 text-white text-[7px] font-black px-1 py-0.5 rounded opacity-0 group-hover:opacity-100">PRECIO REQUERIDO</span>}
+                              <div className="flex items-center gap-1.5">
+                                <div className="relative group flex-1">
+                                  <input 
+                                    type="number" 
+                                    disabled={orderToView?.status === 'completed' || isOrdered} 
+                                    value={manualPurchasePrices[f.id] ?? originalCost} 
+                                    onChange={(e) => setManualPurchasePrices(prev => ({ ...prev, [f.id]: Number(e.target.value) }))} 
+                                    className={cn(
+                                      "w-full text-center font-black text-xs h-7 border rounded transition-all focus:outline-none focus:ring-2",
+                                      isZero ? "bg-rose-50 border-rose-300 text-rose-600 animate-pulse" : "bg-white border-emerald-100 text-emerald-700"
+                                    )} 
+                                  />
+                                  {isZero && !isOrdered && <span className="absolute -top-4 left-1/2 -translate-x-1/2 bg-rose-600 text-white text-[7px] font-black px-1 py-0.5 rounded opacity-0 group-hover:opacity-100">PRECIO REQUERIDO</span>}
+                                </div>
+                                <Tabs 
+                                  value={currentCurrency} 
+                                  onValueChange={(v: any) => setManualPurchaseCurrencies(prev => ({ ...prev, [f.id]: v }))}
+                                  className={cn("shrink-0 h-7", (orderToView?.status === 'completed' || isOrdered) && "pointer-events-none opacity-50")}
+                                >
+                                  <TabsList className="h-7 p-0 gap-0 border">
+                                    <TabsTrigger value="ARS" className="h-6 text-[8px] font-black px-1.5 data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
+                                    <TabsTrigger value="USD" className="h-6 text-[8px] font-black px-1.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
+                                  </TabsList>
+                                </Tabs>
                               </div>
                             </TableCell>
                             <TableCell className="text-center py-1">
                               <span className={cn("font-black text-[9px] px-1.5 py-0.5 rounded", f.isInsufficient ? "bg-rose-600 text-white" : f.isCritical ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700")}>{f.futureStock}</span>
                             </TableCell>
                             <TableCell className="text-right py-1">
-                              <p className="text-[10px] font-bold">{f.costCurrency === 'USD' ? 'u$s' : '$'} {(f.manualQty * (manualPurchasePrices[f.id] ?? originalCost)).toLocaleString('es-AR')}</p>
+                              <p className="text-[10px] font-bold">{currentCurrency === 'USD' ? 'u$s' : '$'} {( (manualPurchaseQtys[f.id] ?? f.suggestedToBuy) * (manualPurchasePrices[f.id] ?? originalCost)).toLocaleString('es-AR')}</p>
                             </TableCell>
                           </TableRow>
                         );
@@ -1063,9 +1096,11 @@ export default function CatalogPage() {
                 </div>
 
                 <div className="md:hidden space-y-2">
-                  {items.map(f => {
-                    const isZero = f.manualPrice <= 0;
+                  {itemsInGroup.map(f => {
+                    const isZero = manualPurchasePrices[f.id] <= 0;
                     const originalCost = f.costCurrency === 'USD' ? f.costUSD : f.costARS;
+                    const currentCurrency = manualPurchaseCurrencies[f.id] || (f.costCurrency as 'ARS' | 'USD' || 'ARS');
+                    
                     return (
                       <Card key={f.id} className="p-2.5 bg-white border shadow-sm space-y-2.5">
                         <div className="flex justify-between items-start">
@@ -1084,22 +1119,34 @@ export default function CatalogPage() {
                             />
                           </div>
                           <div className="space-y-1">
-                            <Label className="text-[8px] font-black uppercase text-emerald-700">Precio Compra ({f.costCurrency === 'USD' ? 'u$s' : '$'})</Label>
-                            <input 
-                              type="number" 
-                              disabled={orderToView?.status === 'completed' || isOrdered} 
-                              value={manualPurchasePrices[f.id] ?? originalCost} 
-                              onChange={(e) => setManualPurchasePrices(prev => ({ ...prev, [f.id]: Number(e.target.value) }))} 
-                              className={cn(
-                                "w-full text-center font-black text-xs border rounded h-8 transition-all focus:outline-none focus:ring-2",
-                                isZero ? "bg-rose-50 border-rose-300 text-rose-600 animate-pulse" : "bg-white border-emerald-100 text-emerald-700"
-                              )} 
-                            />
+                            <Label className="text-[8px] font-black uppercase text-emerald-700">Precio Compra</Label>
+                            <div className="flex flex-col gap-1">
+                              <input 
+                                type="number" 
+                                disabled={orderToView?.status === 'completed' || isOrdered} 
+                                value={manualPurchasePrices[f.id] ?? originalCost} 
+                                onChange={(e) => setManualPurchasePrices(prev => ({ ...prev, [f.id]: Number(e.target.value) }))} 
+                                className={cn(
+                                  "w-full text-center font-black text-xs border rounded h-8 transition-all focus:outline-none focus:ring-2",
+                                  isZero ? "bg-rose-50 border-rose-300 text-rose-600 animate-pulse" : "bg-white border-emerald-100 text-emerald-700"
+                                )} 
+                              />
+                              <Tabs 
+                                value={currentCurrency} 
+                                onValueChange={(v: any) => setManualPurchaseCurrencies(prev => ({ ...prev, [f.id]: v }))}
+                                className={cn("h-6 w-full", (orderToView?.status === 'completed' || isOrdered) && "pointer-events-none opacity-50")}
+                              >
+                                <TabsList className="h-6 w-full p-0 grid grid-cols-2 border">
+                                  <TabsTrigger value="ARS" className="h-5 text-[7px] font-black">ARS</TabsTrigger>
+                                  <TabsTrigger value="USD" className="h-5 text-[7px] font-black">USD</TabsTrigger>
+                                </TabsList>
+                              </Tabs>
+                            </div>
                           </div>
                         </div>
                         <div className="flex justify-between items-center text-[8px] italic text-slate-400 px-1">
                           <span>Precio Ref: {f.costCurrency === 'USD' ? 'u$s' : '$'} {originalCost.toLocaleString('es-AR')}</span>
-                          <span className="not-italic font-black text-slate-600">Sub: {f.costCurrency === 'USD' ? 'u$s' : '$'} {(f.manualQty * (manualPurchasePrices[f.id] ?? originalCost)).toLocaleString('es-AR')}</span>
+                          <span className="not-italic font-black text-slate-600">Sub: {currentCurrency === 'USD' ? 'u$s' : '$'} {( (manualPurchaseQtys[f.id] ?? f.suggestedToBuy) * (manualPurchasePrices[f.id] ?? originalCost)).toLocaleString('es-AR')}</span>
                         </div>
                       </Card>
                     );
@@ -1168,35 +1215,35 @@ export default function CatalogPage() {
 
       <Dialog open={isAuditOpen} onOpenChange={setIsAuditOpen}>
         <DialogContent className="max-w-5xl h-[95vh] flex flex-col p-0 w-[95vw]">
-          <DialogHeader className="p-4 pb-1 shrink-0"><DialogTitle className="flex items-center gap-2 text-xl font-black text-slate-800"><Calculator className="h-5 w-5 text-primary" /> Auditoría de Stock y Proveedores</DialogTitle><DialogDescription className="text-xs">Ajusta los niveles de inventario y asigna proveedores rápidamente.</DialogDescription></DialogHeader>
-          <div className="px-4 py-1 shrink-0"><div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2"><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Buscar material..." className="pl-9 h-9 text-sm" value={auditSearch} onChange={(e) => setAuditSearch(e.target.value)} /></div><Select value={auditCategoryFilter} onValueChange={setAuditCategoryFilter}><SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Categoría" /></SelectTrigger><SelectContent className="max-h-[40vh] overflow-y-auto"><SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem>{categories.map(c => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}</SelectContent></Select></div></div>
-          <div className="flex-1 min-h-0 px-4 pb-4 overflow-y-auto">
-            <div className="space-y-1.5 md:hidden">{items?.filter(i => !i.isService && i.trackStock !== false && i.name.toLowerCase().includes(auditSearch.toLowerCase()) && (auditCategoryFilter === "all" || i.categoryId === auditCategoryFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(item => (<Card key={item.id} className="p-2 bg-white border shadow-sm space-y-3"><div className="flex justify-between items-start gap-2"><div className="flex-1 min-w-0"><p className="font-bold text-xs truncate leading-tight">{item.name}</p><p className="text-[9px] text-muted-foreground uppercase mt-0.5">Stock actual: <span className="font-black text-primary">{item.stock || 0}</span></p></div><div className="shrink-0 flex items-center gap-2"><Label className="text-[8px] font-black uppercase text-muted-foreground">Nuevo:</Label><Input type="number" className="w-16 h-8 text-right font-black px-2 text-sm" defaultValue={item.stock || 0} onBlur={(e) => { const val = Number(e.target.value); if (val !== item.stock) handleUpdateStockAudit(item.id, val); }} /></div></div><div className="pt-2 border-t flex flex-col gap-1"><Label className="text-[8px] font-black uppercase text-muted-foreground">Proveedor Asignado:</Label><Select defaultValue={item.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateGlobalSupplier(item.id, v)}><SelectTrigger className="h-8 text-[10px] bg-muted/20 border-none"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div></Card>))}</div>
-            <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-hidden"><Table className="min-w-[700px]"><TableHeader className="bg-slate-50 sticky top-0 z-10"><TableRow><TableHead className="font-black text-[10px] uppercase h-8">Artículo</TableHead><TableHead className="text-center font-black text-[10px] uppercase w-24 h-8">Stock Act.</TableHead><TableHead className="text-center font-black text-[10px] uppercase w-48 h-8">Proveedor Asignado</TableHead><TableHead className="text-right font-black text-[10px] uppercase w-32 h-8">Recuento</TableHead></TableRow></TableHeader><TableBody>{items?.filter(i => !i.isService && i.trackStock !== false && i.name.toLowerCase().includes(auditSearch.toLowerCase()) && (auditCategoryFilter === "all" || i.categoryId === auditCategoryFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(item => (<TableRow key={item.id} className="h-10 hover:bg-muted/5 transition-colors"><TableCell className="py-1"><p className="font-bold text-xs">{item.name}</p><p className="text-[9px] text-muted-foreground uppercase">{categoryMap[item.categoryId] || 'S/C'}</p></TableCell><TableCell className="text-center font-black text-primary text-xs">{item.stock || 0}</TableCell><TableCell className="text-center py-1"><Select defaultValue={item.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateGlobalSupplier(item.id, v)}><SelectTrigger className="h-8 text-[10px] bg-transparent border-none focus:ring-0"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></TableCell><TableCell className="text-right py-1"><Input type="number" className="w-20 ml-auto text-right font-black h-8 text-xs" defaultValue={item.stock || 0} onBlur={(e) => { const val = Number(e.target.value); if (val !== item.stock) handleUpdateStockAudit(item.id, val); }} /></TableCell></TableRow>))}</TableBody></Table></div></div>
-          <DialogFooter className="p-3 bg-slate-50 border-t shrink-0"><Button onClick={() => setIsAuditOpen(false)} className="w-full h-9 font-bold text-xs">Cerrar Auditoría</Button></DialogFooter>
+          <DialogHeader className="p-2 pb-1 shrink-0 flex-row items-center justify-between"><div className="flex items-center gap-2"><Calculator className="h-4 w-4 text-primary" /><DialogTitle className="text-base font-black text-slate-800">Auditoría</DialogTitle></div></DialogHeader>
+          <div className="px-3 py-1 shrink-0"><div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2"><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Buscar..." className="pl-9 h-8 text-sm" value={auditSearch} onChange={(e) => setAuditSearch(e.target.value)} /></div><Select value={auditCategoryFilter} onValueChange={setAuditCategoryFilter}><SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Categoría" /></SelectTrigger><SelectContent className="max-h-[60vh] overflow-y-auto"><SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem>{categories.map(c => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}</SelectContent></Select></div></div>
+          <div className="flex-1 min-h-0 px-3 pb-2 overflow-y-auto">
+            <div className="space-y-1.5 md:hidden">{items?.filter(i => !i.isService && i.trackStock !== false && i.name.toLowerCase().includes(auditSearch.toLowerCase()) && (auditCategoryFilter === "all" || i.categoryId === auditCategoryFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(item => (<Card key={item.id} className="p-2 bg-white border shadow-sm flex flex-col gap-2"><div className="flex justify-between items-center gap-2"><div className="flex-1 min-w-0"><p className="font-bold text-[11px] truncate leading-tight">{item.name}</p><p className="text-[9px] text-muted-foreground uppercase">Disp: <span className="font-black text-primary">{item.stock || 0}</span></p></div><div className="shrink-0 flex items-center gap-1.5"><Label className="text-[8px] font-black uppercase text-muted-foreground">Nuevo:</Label><Input type="number" className="w-12 h-7 text-right font-black px-1.5 text-[11px]" defaultValue={item.stock || 0} onBlur={(e) => { const val = Number(e.target.value); if (val !== item.stock) handleUpdateStockAudit(item.id, val); }} /></div></div><div className="pt-1.5 border-t grid grid-cols-2 gap-2"><div className="flex flex-col gap-0.5"><Label className="text-[7px] font-black uppercase text-muted-foreground">Proveedor:</Label><Select defaultValue={item.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateGlobalSupplier(item.id, v)}><SelectTrigger className="h-6 text-[9px] bg-muted/20 border-none p-1"><SelectValue /></SelectTrigger><SelectContent className="max-h-40"><SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div></div></Card>))}</div>
+            <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-hidden"><Table className="min-w-[700px]"><TableHeader className="bg-slate-50 sticky top-0 z-10"><TableRow><TableHead className="font-black text-[10px] uppercase h-8">Artículo</TableHead><TableHead className="text-center font-black text-[10px] uppercase w-24 h-8">Stock Act.</TableHead><TableHead className="text-center font-black text-[10px] uppercase w-48 h-8">Proveedor Asignado</TableHead><TableHead className="text-right font-black text-[10px] uppercase w-32 h-8">Recuento</TableHead></TableRow></TableHeader><TableBody>{items?.filter(i => !i.isService && i.trackStock !== false && i.name.toLowerCase().includes(auditSearch.toLowerCase()) && (auditCategoryFilter === "all" || i.categoryId === auditCategoryFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(item => (<TableRow key={item.id} className="h-9 hover:bg-muted/5 transition-colors"><TableCell className="py-1"><p className="font-bold text-xs">{item.name}</p></TableCell><TableCell className="text-center font-black text-primary text-xs">{item.stock || 0}</TableCell><TableCell className="text-center py-1"><Select defaultValue={item.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateGlobalSupplier(item.id, v)}><SelectTrigger className="h-7 text-[10px] bg-transparent border-none focus:ring-0"><SelectValue /></SelectTrigger><SelectContent className="max-h-60"><SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></TableCell><TableCell className="text-right py-1"><Input type="number" className="w-20 ml-auto text-right font-black h-7 text-xs" defaultValue={item.stock || 0} onBlur={(e) => { const val = Number(e.target.value); if (val !== item.stock) handleUpdateStockAudit(item.id, val); }} /></TableCell></TableRow>))}</TableBody></Table></div></div>
+          <DialogFooter className="p-2 bg-slate-50 border-t shrink-0"><Button onClick={() => setIsAuditOpen(false)} className="w-full h-8 font-bold text-xs">Cerrar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!orderToView} onOpenChange={handleCloseOrderView}>
         <DialogContent className="max-w-6xl h-[95vh] flex flex-col p-0 w-[95vw]">
-          <DialogHeader className="p-4 pb-1 shrink-0">
+          <DialogHeader className="p-3 pb-1 shrink-0">
             <div className="flex flex-col md:flex-row justify-between items-start pr-8 gap-2">
-              <div className="space-y-1">
-                <DialogTitle className="flex items-center gap-2 text-primary font-black text-xl"><Factory className="h-5 w-5" /> Orden #{orderToView?.id.toUpperCase().slice(0, 6)}</DialogTitle>
-                <div className="flex items-center gap-3"><DialogDescription className="text-xs">Fabricación de <b>{orderToView?.productName}</b></DialogDescription>{orderToView?.status !== 'completed' && (<div className="flex items-center gap-2 bg-primary/5 px-2 py-1 rounded-lg border border-primary/10"><Button variant="ghost" size="icon" className="h-6 w-6 text-primary" onClick={() => { const newQty = Math.max(1, orderToView.quantity - 1); setOrderToView({...orderToView, quantity: newQty}); }}><Minus className="h-3 w-3" /></Button><span className="text-sm font-black text-primary tabular-nums">{orderToView?.quantity}</span><Button variant="ghost" size="icon" className="h-6 w-6 text-primary" onClick={() => { const newQty = orderToView.quantity + 1; setOrderToView({...orderToView, quantity: newQty}); }}><Plus className="h-3 w-3" /></Button><span className="text-[9px] font-bold text-primary/60 uppercase">unidades</span></div>)}</div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2"><Factory className="h-4 w-4 text-primary" /><DialogTitle className="text-base font-black">Orden #{orderToView?.id.toUpperCase().slice(0, 6)}</DialogTitle></div>
+                <div className="flex items-center gap-3"><DialogDescription className="text-[11px]">Fabricar <b>{orderToView?.productName}</b></DialogDescription>{orderToView?.status !== 'completed' && (<div className="flex items-center gap-1.5 bg-primary/5 px-1.5 py-0.5 rounded-lg border"><Button variant="ghost" size="icon" className="h-5 w-5 text-primary" onClick={() => { const newQty = Math.max(1, orderToView.quantity - 1); setOrderToView({...orderToView, quantity: newQty}); }}><Minus className="h-3 w-3" /></Button><span className="text-xs font-black text-primary tabular-nums">{orderToView?.quantity}</span><Button variant="ghost" size="icon" className="h-5 w-5 text-primary" onClick={() => { const newQty = orderToView.quantity + 1; setOrderToView({...orderToView, quantity: newQty}); }}><Plus className="h-3 w-3" /></Button></div>)}</div>
               </div>
-              <div className="flex flex-row md:flex-col items-center md:items-end gap-2 w-full md:w-auto">{orderToView && (<Badge className={cn("font-black uppercase tracking-widest text-[9px] px-2 py-0.5", { draft: "bg-slate-100 text-slate-600", pending_purchase: "bg-amber-100 text-amber-700", ready: "bg-blue-100 text-blue-700", completed: "bg-emerald-100 text-emerald-700" }[orderToView.status as string])}>{orderToView.status === 'pending_purchase' ? 'FALTAN MATERIALES' : orderToView.status === 'ready' ? 'LISTO PARA ARMAR' : orderToView.status === 'completed' ? 'COMPLETADO' : orderToView.status}</Badge>)}{orderToView?.status !== 'completed' && (<Button variant={hasUnsavedChanges ? "default" : "outline"} size="sm" className={cn("h-7 gap-1 font-bold text-[10px] px-2", hasUnsavedChanges && "bg-primary animate-pulse")} onClick={handleUpdateOrderPlan}><Save className="h-3 w-3" /> GUARDAR {hasUnsavedChanges && "*"}</Button>)}</div>
+              <div className="flex items-center gap-2">{orderToView && (<Badge className={cn("font-black uppercase text-[8px] px-1.5 py-0.5", { draft: "bg-slate-100 text-slate-600", pending_purchase: "bg-amber-100 text-amber-700", ready: "bg-blue-100 text-blue-700", completed: "bg-emerald-100 text-emerald-700" }[orderToView.status as string])}>{orderToView.status === 'pending_purchase' ? 'FALTAN MATERIALES' : orderToView.status === 'ready' ? 'LISTO' : orderToView.status}</Badge>)}{orderToView?.status !== 'completed' && (<Button variant={hasUnsavedChanges ? "default" : "outline"} size="sm" className={cn("h-6 gap-1 font-bold text-[9px] px-2", hasUnsavedChanges && "bg-primary animate-pulse")} onClick={handleUpdateOrderPlan}><Save className="h-3 w-3" /> GUARDAR {hasUnsavedChanges && "*"}</Button>)}</div>
             </div>
           </DialogHeader>
-          <div className="flex-1 min-h-0 overflow-y-auto p-4 pt-1 space-y-6">
-            {orderToView && (<div className="space-y-6"><section className="space-y-4"><div className="space-y-2"><h3 className="text-[10px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><Layers className="h-3.5 w-3.5" /> Explosión de Insumos</h3><div className="grid grid-cols-1 gap-1.5 md:hidden">{explosionSummary?.all.sort((a,b) => a.name.localeCompare(b.name)).map(req => { const stockRestante = req.available - req.required; const esCritico = stockRestante < req.minStock; const faltaDirecto = stockRestante < 0; return (<Card key={req.id} className="p-2 bg-white shadow-sm border flex items-center justify-between gap-3"><div className="flex-1 min-w-0"><p className="font-bold text-xs truncate leading-tight">{req.name}</p><p className="text-[8px] text-muted-foreground uppercase truncate mt-0.5">{(manualSuppliers[req.id] || req.supplier) || "Sin Proveedor"}</p></div><div className="flex items-center gap-3 shrink-0"><div className="text-center px-2 py-0.5 bg-muted/30 rounded border"><p className="text-[7px] font-black text-slate-400 uppercase">Req/Disp</p><p className="text-[10px] font-black">{req.required}/{req.available}</p></div>{faltaDirecto ? <Badge className="bg-rose-600 text-[7px] h-4 leading-none uppercase font-black px-1.5">FALTA</Badge> : esCritico ? <Badge variant="outline" className="text-amber-600 border-amber-200 text-[7px] h-4 leading-none uppercase font-black px-1.5">BAJO</Badge> : <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />}</div></Card>) })}</div><div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-x-auto"><Table className="min-w-[500px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="text-[9px] font-black uppercase h-8">Pieza / Material</TableHead><TableHead className="text-center text-[9px] font-black uppercase h-8">Req.</TableHead><TableHead className="text-center text-[9px] font-black uppercase h-8">Stock Actual</TableHead><TableHead className="text-right text-[9px] font-black uppercase h-8">Disponibilidad</TableHead></TableRow></TableHeader><TableBody>{explosionSummary?.all.sort((a,b) => a.name.localeCompare(b.name)).map(req => { const stockRestante = req.available - req.required; const esCritico = stockRestante < req.minStock; const faltaDirecto = stockRestante < 0; return (<TableRow key={req.id} className="h-9"><TableCell className="py-1"><p className="font-bold text-xs">{req.name}</p><p className="text-[8px] text-muted-foreground uppercase">{(manualSuppliers[req.id] || req.supplier) || "Sin Proveedor"}</p></TableCell><TableCell className="text-center font-black text-primary text-xs">{req.required}</TableCell><TableCell className="text-center text-xs">{req.available}</TableCell><TableCell className="text-right">{faltaDirecto ? <Badge className="bg-rose-600 text-[8px] h-4 leading-none py-0 px-1 whitespace-nowrap">FALTA STOCK</Badge> : esCritico ? <Badge variant="outline" className="text-amber-600 border-amber-200 text-[8px] h-4 leading-none py-0 px-1 whitespace-nowrap">BAJO MÍNIMO</Badge> : <CheckCircle className="h-4 w-4 text-emerald-500 ml-auto" />}</TableCell></TableRow>) })}</TableBody></Table></div></div><div className="space-y-3"><h3 className="text-[10px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><ShoppingCart className="h-3.5 w-3.5" /> Plan de Compras por Proveedor</h3><GroupedPurchaseList /></div></section></div>)}
+          <div className="flex-1 min-h-0 overflow-y-auto p-3 pt-1 space-y-4">
+            {orderToView && (<div className="space-y-4"><section className="space-y-2"><div><h3 className="text-[9px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><Layers className="h-3 w-3" /> Explosión de Insumos</h3><div className="grid grid-cols-1 gap-1 md:hidden">{explosionSummary?.all.sort((a,b) => a.name.localeCompare(b.name)).map(req => { const stockRestante = req.available - req.required; const faltaDirecto = stockRestante < 0; return (<Card key={req.id} className="p-1.5 bg-white border flex items-center justify-between gap-2"><div className="flex-1 min-w-0"><p className="font-bold text-[10px] truncate">{req.name}</p><p className="text-[7px] text-muted-foreground uppercase">{(manualSuppliers[req.id] || req.supplier) || "S/P"}</p></div><div className="flex items-center gap-2 shrink-0"><div className="text-center px-1 py-0.5 bg-muted/30 rounded border"><p className="text-[9px] font-black">{req.required}/{req.available}</p></div>{faltaDirecto ? <Badge className="bg-rose-600 text-[7px] h-4 leading-none uppercase font-black px-1">FALTA</Badge> : <CheckCircle className="h-3 w-3 text-emerald-500" />}</div></Card>) })}</div><div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-x-auto"><Table className="min-w-[500px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="text-[8px] font-black uppercase h-7">Pieza</TableHead><TableHead className="text-center text-[8px] font-black uppercase h-7 w-12">Req.</TableHead><TableHead className="text-center text-[8px] font-black uppercase h-7 w-12">Stock</TableHead><TableHead className="text-right text-[8px] font-black uppercase h-7 w-20">Estado</TableHead></TableRow></TableHeader><TableBody>{explosionSummary?.all.sort((a,b) => a.name.localeCompare(b.name)).map(req => { const stockRestante = req.available - req.required; const faltaDirecto = stockRestante < 0; return (<TableRow key={req.id} className="h-7"><TableCell className="py-0.5"><div className="flex items-baseline gap-2"><span className="font-bold text-xs">{req.name}</span><span className="text-[7px] text-muted-foreground uppercase">{(manualSuppliers[req.id] || req.supplier) || "S/P"}</span></div></TableCell><TableCell className="text-center font-black text-primary text-[10px]">{req.required}</TableCell><TableCell className="text-center text-[10px]">{req.available}</TableCell><TableCell className="text-right py-0.5">{faltaDirecto ? <Badge className="bg-rose-600 text-[7px] h-4 leading-none py-0 px-1">FALTA</Badge> : <CheckCircle className="h-3.5 w-3.5 text-emerald-500 ml-auto" />}</TableCell></TableRow>) })}</TableBody></Table></div></div><div className="space-y-2"><h3 className="text-[9px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><ShoppingCart className="h-3 w-3" /> Compras por Proveedor</h3><GroupedPurchaseList /></div></section></div>)}
           </div>
-          <DialogFooter className="p-4 border-t bg-slate-50 shrink-0"><div className="flex flex-col md:flex-row items-center justify-between w-full gap-3"><div className="flex gap-4"><div className="text-left"><p className="text-[7px] font-black uppercase text-slate-400">Inversión ARS</p><p className="text-lg font-black">${purchaseCalculations?.totalARS.toLocaleString('es-AR')}</p></div><div className="text-left border-l pl-4 border-slate-200"><p className="text-[7px] font-black uppercase text-slate-400">Inversión USD</p><p className="text-lg font-black text-emerald-600">u$s {purchaseCalculations?.totalUSD.toLocaleString('es-AR')}</p></div></div><div className="flex gap-2 w-full md:w-auto"><Button variant="ghost" onClick={handleCloseOrderView} className="font-bold text-xs h-10 flex-1 md:flex-none">Cerrar</Button>{orderToView?.status === 'ready' && (<Button onClick={handleAssembleFinal} className="bg-blue-600 hover:bg-blue-700 px-6 font-black shadow-lg h-10 flex-1 md:flex-none text-xs"><Hammer className="mr-2 h-4 w-4" /> FINALIZAR ARMADO</Button>)}</div></div></DialogFooter>
+          <DialogFooter className="p-3 border-t bg-slate-50 shrink-0"><div className="flex flex-col md:flex-row items-center justify-between w-full gap-2"><div className="flex gap-3"><div className="text-left"><p className="text-[7px] font-black uppercase text-slate-400">Total ARS</p><p className="text-base font-black">${purchaseCalculations?.totalARS.toLocaleString('es-AR')}</p></div><div className="text-left border-l pl-3 border-slate-200"><p className="text-[7px] font-black uppercase text-slate-400">Total USD</p><p className="text-base font-black text-emerald-600">u$s {purchaseCalculations?.totalUSD.toLocaleString('es-AR')}</p></div></div><div className="flex gap-2 w-full md:w-auto"><Button variant="ghost" onClick={handleCloseOrderView} className="font-bold text-[10px] h-8 flex-1 md:flex-none">Cerrar</Button>{orderToView?.status === 'ready' && (<Button onClick={handleAssembleFinal} className="bg-blue-600 hover:bg-blue-700 px-4 font-black shadow-lg h-8 flex-1 md:flex-none text-[10px]"><Hammer className="mr-1.5 h-3 w-3" /> FINALIZAR ARMADO</Button>)}</div></div></DialogFooter>
         </DialogContent>
       </Dialog>
 
       <AlertDialog open={isExitAlertOpen} onOpenChange={setIsExitAlertOpen}>
-        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Guardar cambios antes de salir?</AlertDialogTitle><AlertDialogDescription>Has realizado modificaciones en la planificación o cantidad de esta orden que no han sido guardadas.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel onClick={() => { setIsExitAlertOpen(false); setOrderToView(null); }}>Descartar cambios</AlertDialogCancel><AlertDialogAction onClick={() => { handleUpdateOrderPlan(); setIsExitAlertOpen(false); setOrderToView(null); }}>Guardar y Salir</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Guardar cambios?</AlertDialogTitle><AlertDialogDescription>Modificaste la planificación. ¿Deseas guardarla?</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel onClick={() => { setIsExitAlertOpen(false); setOrderToView(null); }}>Descartar</AlertDialogCancel><AlertDialogAction onClick={() => { handleUpdateOrderPlan(); setIsExitAlertOpen(false); setOrderToView(null); }}>Guardar y Salir</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
       </AlertDialog>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -1220,25 +1267,25 @@ export default function CatalogPage() {
 
       <Dialog open={isAssemblyOpen} onOpenChange={setIsAssemblyOpen}>
         <DialogContent className="max-w-5xl h-[95vh] flex flex-col p-0 w-[95vw]">
-          <DialogHeader className="p-4 pb-1 shrink-0"><DialogTitle className="flex items-center gap-2 text-amber-600 font-black text-xl"><Hammer className="h-5 w-5" /> Nueva Orden de Armado</DialogTitle><DialogDescription className="text-xs">Planificación para <b>{selectedForAssembly?.name}</b></DialogDescription></DialogHeader>
-          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-6">
-            <section className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm">
-              <div className="space-y-0.5 text-center md:text-left"><Label className="font-black text-amber-800 uppercase tracking-widest text-[10px]">Cantidad a Fabricar</Label><p className="text-[10px] text-amber-600">Se analizará el stock recursivamente.</p></div>
-              <div className="flex items-center gap-3 bg-white p-1.5 rounded-xl border shadow-inner"><Button variant="ghost" size="icon" onClick={() => setAssemblyQty(Math.max(1, assemblyQty - 1))} className="h-8 w-8 text-amber-600"><Minus className="h-4 w-4" /></Button><input type="number" value={assemblyQty} onChange={(e) => setAssemblyQty(Number(e.target.value))} className="w-14 text-xl font-black text-center text-amber-900 focus:outline-none" /><Button variant="ghost" size="icon" onClick={() => setAssemblyQty(assemblyQty + 1)} className="h-8 w-8 text-amber-600"><Plus className="h-4 w-4" /></Button></div>
+          <DialogHeader className="p-3 pb-1 shrink-0"><div className="flex items-center gap-2"><Hammer className="h-4 w-4 text-amber-600" /><DialogTitle className="text-base font-black">Nuevo Armado</DialogTitle></div><DialogDescription className="text-[10px]">Planificar fabricación para <b>{selectedForAssembly?.name}</b></DialogDescription></DialogHeader>
+          <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-4">
+            <section className="bg-amber-50 border border-amber-100 p-3 rounded-2xl flex items-center justify-between gap-4">
+              <div><Label className="font-black text-amber-800 uppercase tracking-widest text-[9px]">Unidades a fabricar</Label></div>
+              <div className="flex items-center gap-2 bg-white p-1 rounded-xl border shadow-inner"><Button variant="ghost" size="icon" onClick={() => setAssemblyQty(Math.max(1, assemblyQty - 1))} className="h-7 w-7 text-amber-600"><Minus className="h-3 w-3" /></Button><input type="number" value={assemblyQty} onChange={(e) => setAssemblyQty(Number(e.target.value))} className="w-10 text-lg font-black text-center text-amber-900 focus:outline-none" /><Button variant="ghost" size="icon" onClick={() => setAssemblyQty(assemblyQty + 1)} className="h-7 w-7 text-amber-600"><Plus className="h-3 w-3" /></Button></div>
             </section>
-            {explosionSummary && (<div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
-              <section className="space-y-3">
-                <div className="flex items-center justify-between"><h3 className="text-[10px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><Layers className="h-3.5 w-3.5" /> Simulación de Insumos</h3><Badge variant="outline" className="font-bold border-amber-200 text-amber-700 bg-amber-50 text-[9px]">{explosionSummary.all.length} COMPONENTES</Badge></div>
-                <div className="grid grid-cols-1 gap-1.5 md:hidden">{explosionSummary.all.sort((a,b) => a.name.localeCompare(b.name)).map((req) => { const stockRestante = req.available - req.required; const esCritico = stockRestante < req.minStock; const faltaDirecto = stockRestante < 0; return (<Card key={req.id} className="p-2 border shadow-sm flex items-center justify-between gap-3"><div className="flex-1 min-w-0"><p className="font-bold text-xs truncate leading-tight">{req.name}</p><p className="text-[8px] text-muted-foreground uppercase truncate mt-0.5">{(manualSuppliers[req.id] || req.supplier) || "Sin Proveedor"}</p></div><div className="flex items-center gap-2 shrink-0"><div className="text-center px-1.5 py-0.5 bg-muted/20 rounded"><p className="text-[10px] font-black text-primary">{req.required}/{req.available}</p></div>{faltaDirecto ? <Badge className="bg-rose-600 text-[7px] px-1.5">FALTA</Badge> : esCritico ? <Badge variant="outline" className="text-amber-600 border-amber-200 text-[7px] px-1.5">BAJO</Badge> : <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />}</div></Card>); })}</div>
-                <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-x-auto"><Table className="min-w-[500px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="font-black text-[10px] uppercase h-8">Componente</TableHead><TableHead className="text-center font-black text-[10px] uppercase h-8">Requerido</TableHead><TableHead className="text-center font-black text-[10px] uppercase h-8">Stock Disp.</TableHead><TableHead className="text-right font-black text-[10px] uppercase h-8">Estado</TableHead></TableRow></TableHeader><TableBody>{explosionSummary.all.sort((a,b) => a.name.localeCompare(b.name)).map((req) => { const stockRestante = req.available - req.required; const esCritico = stockRestante < req.minStock; const faltaDirecto = stockRestante < 0; return (<TableRow key={req.id} className="h-9"><TableCell className="py-1"><div className="flex flex-col"><span className="font-bold text-xs">{req.name}</span><span className="text-[8px] text-muted-foreground uppercase">{(manualSuppliers[req.id] || req.supplier) || "Sin Proveedor"}</span></div></TableCell><TableCell className="text-center font-black text-primary text-xs">{req.required}</TableCell><TableCell className="text-center font-medium text-slate-500 text-xs">{req.available}</TableCell><TableCell className="text-right">{faltaDirecto ? (<Badge className="bg-rose-600 font-bold text-[8px] h-4">FALTA STOCK</Badge>) : esCritico ? (<Badge variant="outline" className="border-amber-500 text-amber-700 bg-amber-50 font-bold text-[8px] h-4">BAJO MÍNIMO</Badge>) : (<Badge variant="outline" className="text-emerald-600 bg-emerald-50 border-emerald-200 font-bold text-[8px] h-4">OK</Badge>)}</TableCell></TableRow>); })}</TableBody></Table></div>
+            {explosionSummary && (<div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
+              <section className="space-y-2">
+                <div className="flex items-center justify-between"><h3 className="text-[9px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><Layers className="h-3 w-3" /> Simulación de Insumos</h3><Badge variant="outline" className="font-bold border-amber-200 text-amber-700 bg-amber-50 text-[8px]">{explosionSummary.all.length} PIEZAS</Badge></div>
+                <div className="grid grid-cols-1 gap-1 md:hidden">{explosionSummary.all.sort((a,b) => a.name.localeCompare(b.name)).map((req) => { const stockRestante = req.available - req.required; const faltaDirecto = stockRestante < 0; return (<Card key={req.id} className="p-1.5 border shadow-sm flex items-center justify-between gap-2"><div className="flex-1 min-w-0"><p className="font-bold text-[10px] truncate">{req.name}</p><p className="text-[7px] text-muted-foreground uppercase">{(manualSuppliers[req.id] || req.supplier) || "S/P"}</p></div><div className="flex items-center gap-2 shrink-0"><div className="text-center px-1 py-0.5 bg-muted/20 rounded"><p className="text-[10px] font-black text-primary">{req.required}/{req.available}</p></div>{faltaDirecto ? <Badge className="bg-rose-600 text-[7px] px-1">FALTA</Badge> : <CheckCircle className="h-3 w-3 text-emerald-500" />}</div></Card>); })}</div>
+                <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-x-auto"><Table className="min-w-[500px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="font-black text-[8px] uppercase h-7">Componente</TableHead><TableHead className="text-center font-black text-[8px] uppercase h-7 w-12">Req.</TableHead><TableHead className="text-center font-black text-[8px] uppercase h-7 w-12">Stock</TableHead><TableHead className="text-right font-black text-[8px] uppercase h-7 w-20">Estado</TableHead></TableRow></TableHeader><TableBody>{explosionSummary.all.sort((a,b) => a.name.localeCompare(b.name)).map((req) => { const stockRestante = req.available - req.required; const faltaDirecto = stockRestante < 0; return (<TableRow key={req.id} className="h-7"><TableCell className="py-0.5"><div className="flex items-baseline gap-2"><span className="font-bold text-[11px]">{req.name}</span><span className="text-[7px] text-muted-foreground uppercase">{(manualSuppliers[req.id] || req.supplier) || "S/P"}</span></div></TableCell><TableCell className="text-center font-black text-primary text-[10px]">{req.required}</TableCell><TableCell className="text-center text-slate-500 text-[10px]">{req.available}</TableCell><TableCell className="text-right py-0.5">{faltaDirecto ? <Badge className="bg-rose-600 font-bold text-[7px] h-4">FALTA</Badge> : <CheckCircle className="h-3 w-3 text-emerald-500 ml-auto" />}</TableCell></TableRow>); })}</TableBody></Table></div>
               </section>
-              <section className="space-y-3">
-                <div className="flex items-center justify-between"><h3 className="text-[10px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><ShoppingCart className="h-3.5 w-3.5" /> Carrito de Compras</h3><Button variant="outline" size="sm" className="h-7 gap-1 font-bold text-[10px]" onClick={() => { setManualPurchaseQtys({}); setManualPurchasePrices({}); setManualSuppliers({}); }}><RefreshCw className="h-3 w-3" /> REINICIAR</Button></div>
+              <section className="space-y-2">
+                <div className="flex items-center justify-between"><h3 className="text-[9px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><ShoppingCart className="h-3 w-3" /> Carrito de Compras</h3><Button variant="outline" size="sm" className="h-6 gap-1 font-bold text-[8px]" onClick={() => { setManualPurchaseQtys({}); setManualPurchasePrices({}); setManualSuppliers({}); setManualPurchaseCurrencies({}); }}><RefreshCw className="h-2 w-2" /> REINICIAR</Button></div>
                 <GroupedPurchaseList />
               </section>
             </div>)}
           </div>
-          <DialogFooter className="p-4 border-t bg-slate-50 shrink-0"><Button variant="ghost" onClick={() => setIsAssemblyOpen(false)} className="font-bold text-xs h-10">Cancelar</Button><Button onClick={handleCreateOrder} className="px-6 font-black shadow-xl h-10 bg-primary text-white text-xs"><ClipboardList className="mr-2 h-4 w-4" /> GUARDAR COMO ORDEN</Button></DialogFooter>
+          <DialogFooter className="p-3 border-t bg-slate-50 shrink-0"><Button variant="ghost" onClick={() => setIsAssemblyOpen(false)} className="font-bold text-[10px] h-8">Cancelar</Button><Button onClick={handleCreateOrder} className="px-4 font-black shadow-xl h-8 bg-primary text-white text-[10px]"><ClipboardList className="mr-1.5 h-3 w-3" /> GUARDAR COMO ORDEN</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
