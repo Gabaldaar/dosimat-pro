@@ -53,7 +53,8 @@ import {
   Briefcase,
   Phone,
   MapPin,
-  Save
+  Save,
+  Calculator
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -162,6 +163,9 @@ export default function CatalogPage() {
   const [isAssemblyOpen, setIsAssemblyOpen] = useState(false)
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false)
   const [isSupplierManagerOpen, setIsSupplierManagerOpen] = useState(false)
+  const [isAuditOpen, setIsAuditOpen] = useState(false)
+  const [auditSearch, setAuditSearch] = useState("")
+  
   const [itemToDelete, setItemToDelete] = useState<any | null>(null)
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [selectedForAssembly, setSelectedForAssembly] = useState<any | null>(null)
@@ -177,12 +181,14 @@ export default function CatalogPage() {
   const [productToPreview, setProductToPreview] = useState<any | null>(null)
   const [orderToView, setOrderToView] = useState<any | null>(null)
   const [orderToDelete, setOrderToDelete] = useState<any | null>(null)
+  const [isExitAlertOpen, setIsExitAlertOpen] = useState(false)
   
   const [bomFilterCategory, setBomFilterCategory] = useState("all")
 
   // Carrito de compras manual para armado
   const [manualPurchaseQtys, setManualPurchaseQtys] = useState<Record<string, number>>({})
   const [manualSuppliers, setManualSuppliers] = useState<Record<string, string>>({})
+  const [initialPlanData, setInitialPlanData] = useState({ qtys: {}, sups: {} })
 
   const [formData, setFormData] = useState({
     name: "",
@@ -206,7 +212,7 @@ export default function CatalogPage() {
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        const anyOpen = isDialogOpen || !!itemToDelete || isAssemblyOpen || isCategoryManagerOpen || isSupplierManagerOpen || !!productToPreview || !!orderToView || !!orderToDelete;
+        const anyOpen = isDialogOpen || !!itemToDelete || isAssemblyOpen || isCategoryManagerOpen || isSupplierManagerOpen || !!productToPreview || !!orderToView || !!orderToDelete || isAuditOpen || isExitAlertOpen;
         if (!anyOpen) {
           document.body.style.pointerEvents = 'auto';
         }
@@ -214,7 +220,7 @@ export default function CatalogPage() {
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isDialogOpen, itemToDelete, isAssemblyOpen, isCategoryManagerOpen, isSupplierManagerOpen, productToPreview, orderToView, orderToDelete]);
+  }, [isDialogOpen, itemToDelete, isAssemblyOpen, isCategoryManagerOpen, isSupplierManagerOpen, productToPreview, orderToView, orderToDelete, isAuditOpen, isExitAlertOpen]);
 
   const calculateCost = useCallback((itemData: any, allItems: any[]): { ars: number, usd: number } => {
     if (!itemData.isCompuesto) {
@@ -321,14 +327,13 @@ export default function CatalogPage() {
       
       explosionSummary.toBuySuggested.forEach(item => {
         newManualQtys[item.id] = orderToView.purchaseQtys?.[item.id] ?? item.suggestedToBuy;
-        // Se agregaron paréntesis para evitar error de mezcla de operadores ?? y ||
         newManualSups[item.id] = orderToView.purchaseSuppliers?.[item.id] ?? (item.supplier || "Sin Proveedor");
       });
       
       setManualPurchaseQtys(newManualQtys);
       setManualSuppliers(newManualSups);
+      setInitialPlanData({ qtys: JSON.parse(JSON.stringify(newManualQtys)), sups: JSON.parse(JSON.stringify(newManualSups)) });
     } else if (isAssemblyOpen && !orderToView && explosionSummary) {
-      // Caso de creación de nueva orden
       const newManualQtys: Record<string, number> = {};
       const newManualSups: Record<string, string> = {};
       explosionSummary.toBuySuggested.forEach(item => {
@@ -339,6 +344,20 @@ export default function CatalogPage() {
       setManualSuppliers(newManualSups);
     }
   }, [isAssemblyOpen, orderToView, explosionSummary]);
+
+  const hasUnsavedChanges = useMemo(() => {
+    if (!orderToView) return false;
+    return JSON.stringify(manualPurchaseQtys) !== JSON.stringify(initialPlanData.qtys) ||
+           JSON.stringify(manualSuppliers) !== JSON.stringify(initialPlanData.sups);
+  }, [manualPurchaseQtys, manualSuppliers, initialPlanData, orderToView]);
+
+  const handleCloseOrderView = () => {
+    if (hasUnsavedChanges) {
+      setIsExitAlertOpen(true);
+    } else {
+      setOrderToView(null);
+    }
+  };
 
   const purchaseCalculations = useMemo(() => {
     if (!explosionSummary || !items) return null;
@@ -485,32 +504,32 @@ export default function CatalogPage() {
       purchaseSuppliers: manualSuppliers
     });
 
+    setInitialPlanData({ qtys: JSON.parse(JSON.stringify(manualPurchaseQtys)), sups: JSON.parse(JSON.stringify(manualSuppliers)) });
     toast({ title: "Planificación actualizada", description: "Se han guardado las cantidades y proveedores en la orden." });
   }
 
   const handleReceiveMaterials = (supplierName: string) => {
     if (!orderToView || !purchaseCalculations) return;
 
-    const newPurchaseQtys = { ...orderToView.purchaseQtys };
+    const newPurchaseQtys = { ...manualPurchaseQtys };
     const itemsToProcess = purchaseCalculations.items.filter(i => (i.supplier || "Sin Proveedor") === supplierName);
 
     itemsToProcess.forEach(item => {
       if (item.manualQty > 0) {
-        // Sumar al stock real
         updateDocumentNonBlocking(doc(db, 'products_services', item.id), {
           stock: increment(item.manualQty)
         });
-        // Limpiar la cantidad pendiente de compra en la orden
         newPurchaseQtys[item.id] = 0;
       }
     });
 
-    // Actualizar la orden con los ítems ya "comprados"
+    setManualPurchaseQtys(newPurchaseQtys);
     updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
       purchaseQtys: newPurchaseQtys,
       purchaseSuppliers: manualSuppliers
     });
 
+    setInitialPlanData(prev => ({ ...prev, qtys: JSON.parse(JSON.stringify(newPurchaseQtys)) }));
     toast({ title: `Materiales de ${supplierName} ingresados`, description: "Se actualizó el stock y se descontaron de la lista de pendientes." });
   }
 
@@ -521,14 +540,12 @@ export default function CatalogPage() {
     const product = items.find(i => i.id === order.productId);
     if (!product) return;
 
-    // Recalcular explosión para asegurar stock actual
     const explosion = explosionSummary;
     if (explosion?.all.some(f => (f.available - f.required) < 0)) {
       toast({ title: "Error de stock", description: "No hay materiales suficientes para finalizar el armado.", variant: "destructive" });
       return;
     }
 
-    // Descontar componentes (solo los de nivel 1 directo del producto final)
     product.components.forEach((comp: any) => {
       const child = items.find(i => i.id === comp.productId);
       if (child?.trackStock !== false) {
@@ -538,20 +555,23 @@ export default function CatalogPage() {
       }
     });
 
-    // Sumar producto final
     if (product.trackStock !== false) {
       updateDocumentNonBlocking(doc(db, 'products_services', product.id), {
         stock: increment(order.quantity)
       });
     }
 
-    // Actualizar orden
     updateDocumentNonBlocking(doc(db, 'production_orders', order.id), {
       status: 'completed'
     });
 
     setOrderToView(null);
     toast({ title: "Armado completado", description: `Se han fabricado ${order.quantity} unidades de ${order.productName}.` });
+  }
+
+  const handleUpdateStockAudit = (id: string, newStock: number) => {
+    updateDocumentNonBlocking(doc(db, 'products_services', id), { stock: newStock });
+    toast({ title: "Stock actualizado", description: "Recuento guardado." });
   }
 
   const handleSaveCategory = () => {
@@ -640,7 +660,6 @@ export default function CatalogPage() {
       return;
     }
 
-    // Sort items for the message
     const sortedItemsToInclude = [...itemsToInclude].sort((a, b) => a.name.localeCompare(b.name));
 
     sortedItemsToInclude.forEach(f => {
@@ -824,7 +843,6 @@ export default function CatalogPage() {
         if (!groups[sup]) groups[sup] = [];
         groups[sup].push(item);
       });
-      // Sort items within each group alphabetically
       Object.keys(groups).forEach(sup => {
         groups[sup].sort((a, b) => a.name.localeCompare(b.name));
       });
@@ -881,65 +899,67 @@ export default function CatalogPage() {
                   </div>
                 </div>
 
-                <div className="border-2 rounded-xl bg-white shadow-md overflow-hidden overflow-x-auto">
-                  <Table className="min-w-[600px]">
-                    <TableHeader className="bg-slate-50">
-                      <TableRow>
-                        <TableHead className="text-[9px] font-black uppercase">Material</TableHead>
-                        <TableHead className="text-[9px] font-black uppercase text-center w-24">Cantidad</TableHead>
-                        <TableHead className="text-[9px] font-black uppercase text-center w-24">Proveedor</TableHead>
-                        <TableHead className="text-[9px] font-black uppercase text-center w-24">Post-Stock</TableHead>
-                        <TableHead className="text-[9px] font-black uppercase text-right w-32">Subtotal</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {items.map(f => (
-                        <TableRow key={f.id} className="hover:bg-muted/5">
-                          <TableCell>
-                            <p className="font-bold text-xs">{f.name}</p>
-                            <p className="text-[8px] text-muted-foreground uppercase">Disp: {f.available} / Req: {f.required}</p>
-                          </TableCell>
-                          <TableCell>
-                            <input 
-                              type="number" 
-                              disabled={orderToView?.status === 'completed'}
-                              value={manualPurchaseQtys[f.id] ?? f.suggestedToBuy} 
-                              onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [f.id]: Number(e.target.value) }))}
-                              className="w-full text-center font-black text-sm bg-muted/30 border-none rounded py-1 focus:ring-2 focus:ring-primary/20 focus:outline-none"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Select 
-                              disabled={orderToView?.status === 'completed'}
-                              value={manualSuppliers[f.id] || f.supplier || "Sin Proveedor"} 
-                              onValueChange={(v) => setManualSuppliers(prev => ({ ...prev, [f.id]: v }))}
-                            >
-                              <SelectTrigger className="h-7 text-[9px] py-0 px-2 bg-muted/30 border-none">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
-                                {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <span className={cn(
-                              "font-black text-[10px] px-2 py-0.5 rounded",
-                              f.isInsufficient ? "bg-rose-600 text-white" : f.isCritical ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
-                            )}>
-                              {f.futureStock}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <p className="text-[10px] font-bold">
-                              {f.costARS > 0 ? `$${(f.manualQty * f.costARS).toLocaleString('es-AR')}` : `u$s ${(f.manualQty * f.costUSD).toLocaleString('es-AR')}`}
-                            </p>
-                          </TableCell>
+                <div className="border-2 rounded-xl bg-white shadow-md overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <Table className="min-w-[600px]">
+                      <TableHeader className="bg-slate-50">
+                        <TableRow>
+                          <TableHead className="text-[9px] font-black uppercase">Material</TableHead>
+                          <TableHead className="text-[9px] font-black uppercase text-center w-24">Cantidad</TableHead>
+                          <TableHead className="text-[9px] font-black uppercase text-center w-24">Proveedor</TableHead>
+                          <TableHead className="text-[9px] font-black uppercase text-center w-24">Post-Stock</TableHead>
+                          <TableHead className="text-[9px] font-black uppercase text-right w-32">Subtotal</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {items.map(f => (
+                          <TableRow key={f.id} className="hover:bg-muted/5">
+                            <TableCell>
+                              <p className="font-bold text-xs">{f.name}</p>
+                              <p className="text-[8px] text-muted-foreground uppercase">Disp: {f.available} / Req: {f.required}</p>
+                            </TableCell>
+                            <TableCell>
+                              <input 
+                                type="number" 
+                                disabled={orderToView?.status === 'completed'}
+                                value={manualPurchaseQtys[f.id] ?? f.suggestedToBuy} 
+                                onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [f.id]: Number(e.target.value) }))}
+                                className="w-full text-center font-black text-sm bg-muted/30 border-none rounded py-1 focus:ring-2 focus:ring-primary/20 focus:outline-none"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Select 
+                                disabled={orderToView?.status === 'completed'}
+                                value={manualSuppliers[f.id] || f.supplier || "Sin Proveedor"} 
+                                onValueChange={(v) => setManualSuppliers(prev => ({ ...prev, [f.id]: v }))}
+                              >
+                                <SelectTrigger className="h-7 text-[9px] py-0 px-2 bg-muted/30 border-none">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
+                                  {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <span className={cn(
+                                "font-black text-[10px] px-2 py-0.5 rounded",
+                                f.isInsufficient ? "bg-rose-600 text-white" : f.isCritical ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
+                              )}>
+                                {f.futureStock}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <p className="text-[10px] font-bold">
+                                {f.costARS > 0 ? `$${(f.manualQty * f.costARS).toLocaleString('es-AR')}` : `u$s ${(f.manualQty * f.costUSD).toLocaleString('es-AR')}`}
+                              </p>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                   <div className="bg-slate-50 border-t p-3 grid grid-cols-2 gap-4">
                     <div className="flex items-center gap-2">
                       <span className="text-[8px] font-black uppercase text-slate-400">Total {sup} ARS:</span>
@@ -987,7 +1007,7 @@ export default function CatalogPage() {
               <h1 className="text-xl md:text-3xl font-bold text-primary font-headline">Catálogo e Inventario</h1>
             </div>
             
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Tabs value={activeView} onValueChange={setActiveTab} className="bg-muted/50 p-1 rounded-xl border">
                 <TabsList className="bg-transparent h-9">
                   <TabsTrigger value="inventory" className="text-[10px] font-black h-7 px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm uppercase">Stock</TabsTrigger>
@@ -996,6 +1016,9 @@ export default function CatalogPage() {
               </Tabs>
               <div className="w-px h-6 bg-border mx-2 hidden md:block" />
               <div className="flex gap-2">
+                <Button variant="outline" className="font-bold gap-2" onClick={() => setIsAuditOpen(true)}>
+                  <Calculator className="h-4 w-4" /> <span className="hidden sm:inline">AUDITORÍA / BALANCES</span>
+                </Button>
                 <Sheet>
                   <SheetTrigger asChild>
                     <Button variant="outline" size="icon" className="md:hidden">
@@ -1017,7 +1040,7 @@ export default function CatalogPage() {
                 </Sheet>
                 {isAdmin && activeView === 'inventory' && (
                   <Button onClick={() => handleOpenDialog()} className="shadow-lg font-bold">
-                    <Plus className="mr-2 h-4 w-4" /> Nuevo Ítem
+                    <Plus className="mr-2 h-4 w-4" /> <span className="hidden sm:inline">Nuevo Ítem</span><span className="sm:hidden">Nuevo</span>
                   </Button>
                 )}
               </div>
@@ -1183,18 +1206,81 @@ export default function CatalogPage() {
         </SidebarInset>
       </div>
 
+      {/* DIÁLOGO DE AUDITORÍA RÁPIDA DE STOCK */}
+      <Dialog open={isAuditOpen} onOpenChange={setIsAuditOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col p-0">
+          <DialogHeader className="p-6 pb-2">
+            <DialogTitle className="flex items-center gap-2 text-2xl font-black text-slate-800">
+              <Calculator className="h-6 w-6 text-primary" /> Auditoría de Stock
+            </DialogTitle>
+            <DialogDescription>Ajusta los niveles de inventario de forma masiva y ágil.</DialogDescription>
+          </DialogHeader>
+          <div className="px-6 py-2">
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input 
+                placeholder="Buscar por nombre de material..." 
+                className="pl-10 h-11"
+                value={auditSearch}
+                onChange={(e) => setAuditSearch(e.target.value)}
+              />
+            </div>
+          </div>
+          <ScrollArea className="flex-1 px-6 pb-6">
+            <div className="border rounded-xl bg-white shadow-sm overflow-hidden">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="font-black text-[10px] uppercase">Artículo</TableHead>
+                    <TableHead className="text-center font-black text-[10px] uppercase w-32">Stock Actual</TableHead>
+                    <TableHead className="text-right font-black text-[10px] uppercase w-40">Nuevo Recuento</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items?.filter(i => !i.isService && i.trackStock !== false && i.name.toLowerCase().includes(auditSearch.toLowerCase())).sort((a,b) => a.name.localeCompare(b.name)).map(item => (
+                    <TableRow key={item.id}>
+                      <TableCell className="py-3">
+                        <p className="font-bold text-sm">{item.name}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase">{categoryMap[item.categoryId] || 'S/C'}</p>
+                      </TableCell>
+                      <TableCell className="text-center font-black text-primary">{item.stock || 0}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Input 
+                            type="number" 
+                            className="w-24 text-right font-black" 
+                            defaultValue={item.stock || 0}
+                            onBlur={(e) => {
+                              const val = Number(e.target.value);
+                              if (val !== item.stock) handleUpdateStockAudit(item.id, val);
+                            }}
+                          />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </ScrollArea>
+          <DialogFooter className="p-6 bg-slate-50 border-t">
+            <Button onClick={() => setIsAuditOpen(false)} className="w-full font-bold">Cerrar Auditoría</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* MODAL DE DETALLE DE ORDEN DE PRODUCCIÓN */}
-      <Dialog open={!!orderToView} onOpenChange={(o) => { if(!o) setOrderToView(null); }}>
-        <DialogContent className="max-w-6xl max-h-[95vh] overflow-y-auto">
+      <Dialog open={!!orderToView} onOpenChange={handleCloseOrderView}>
+        <DialogContent className="max-w-6xl max-h-[95vh] overflow-y-auto w-[95vw]">
           <DialogHeader>
-            <div className="flex justify-between items-start pr-8">
+            <div className="flex flex-col md:flex-row justify-between items-start pr-8 gap-4">
               <div>
                 <DialogTitle className="flex items-center gap-2 text-primary font-black text-2xl">
                   <Factory className="h-6 w-6" /> Orden #{orderToView?.id.toUpperCase()}
                 </DialogTitle>
                 <DialogDescription>Gestión de fabricación para <b>{orderToView?.quantity} x {orderToView?.productName}</b></DialogDescription>
               </div>
-              <div className="flex flex-col items-end gap-2">
+              <div className="flex flex-col items-end gap-2 w-full md:w-auto">
                 {orderToView && (
                   <Badge className={cn(
                     "font-black uppercase tracking-widest text-[10px] px-3 py-1",
@@ -1211,8 +1297,8 @@ export default function CatalogPage() {
                   </Badge>
                 )}
                 {orderToView?.status !== 'completed' && (
-                  <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs" onClick={handleUpdateOrderPlan}>
-                    <Save className="h-3.5 w-3.5" /> GUARDAR PLAN
+                  <Button variant={hasUnsavedChanges ? "default" : "outline"} size="sm" className={cn("h-8 gap-2 font-bold text-xs w-full", hasUnsavedChanges && "bg-primary animate-pulse")} onClick={handleUpdateOrderPlan}>
+                    <Save className="h-3.5 w-3.5" /> GUARDAR PLAN {hasUnsavedChanges && "*"}
                   </Button>
                 )}
               </div>
@@ -1286,11 +1372,11 @@ export default function CatalogPage() {
                   <p className="text-xl font-black text-emerald-600">u$s {purchaseCalculations?.totalUSD.toLocaleString('es-AR')}</p>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <Button variant="ghost" onClick={() => setOrderToView(null)} className="font-bold">Cerrar</Button>
+              <div className="flex gap-2 w-full md:w-auto">
+                <Button variant="ghost" onClick={handleCloseOrderView} className="font-bold flex-1 md:flex-none">Cerrar</Button>
                 {orderToView?.status === 'ready' && (
-                  <Button onClick={handleAssembleFinal} className="bg-blue-600 hover:bg-blue-700 px-10 font-black shadow-xl h-12">
-                    <Hammer className="mr-2 h-5 w-5" /> FINALIZAR ARMADO Y SUMAR STOCK
+                  <Button onClick={handleAssembleFinal} className="bg-blue-600 hover:bg-blue-700 px-10 font-black shadow-xl h-12 flex-1 md:flex-none">
+                    <Hammer className="mr-2 h-5 w-5" /> FINALIZAR ARMADO
                   </Button>
                 )}
               </div>
@@ -1299,8 +1385,24 @@ export default function CatalogPage() {
         </DialogContent>
       </Dialog>
 
+      {/* ALERTAS DE SALIDA */}
+      <AlertDialog open={isExitAlertOpen} onOpenChange={setIsExitAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Guardar cambios antes de salir?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Has realizado modificaciones en la planificación de esta orden que no han sido guardadas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setIsExitAlertOpen(false); setOrderToView(null); }}>Descartar cambios</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { handleUpdateOrderPlan(); setIsExitAlertOpen(false); setOrderToView(null); }}>Guardar y Salir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto w-[95vw]">
           <DialogHeader>
             <div className="flex justify-between items-start pr-8">
               <div>
@@ -1532,7 +1634,7 @@ export default function CatalogPage() {
       </Dialog>
 
       <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] overflow-y-auto w-[95vw]">
           <DialogHeader><DialogTitle>Categorías de Productos</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="flex gap-2">
@@ -1561,7 +1663,7 @@ export default function CatalogPage() {
       </Dialog>
 
       <Dialog open={isSupplierManagerOpen} onOpenChange={setIsSupplierManagerOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto w-[95vw]">
           <DialogHeader><DialogTitle>Gestionar Proveedores</DialogTitle></DialogHeader>
           <div className="space-y-6 py-4">
             <div className="p-4 bg-muted/20 rounded-xl border border-dashed space-y-4">
@@ -1628,7 +1730,7 @@ export default function CatalogPage() {
       </Dialog>
 
       <Dialog open={isAssemblyOpen} onOpenChange={setIsAssemblyOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto w-[95vw]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-amber-600 font-black text-2xl">
               <Hammer className="h-6 w-6" /> Nueva Orden de Armado
