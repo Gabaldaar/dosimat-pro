@@ -813,9 +813,13 @@ function TransactionsContent() {
             <h1 className="text-xl md:text-3xl font-bold text-primary font-headline">{editingTx ? "Editar" : "Operaciones"}</h1>
           </div>
           <Tabs value={mainView} onValueChange={(v) => { if(v === "register" && !editingTx) resetRegisterForm(); setMainView(v); }}>
-            <TabsList>
-              <TabsTrigger value="register">{editingTx ? "Modificando" : "Nueva"}</TabsTrigger>
-              <TabsTrigger value="history">Operaciones</TabsTrigger>
+            <TabsList className="bg-muted/40 h-10 p-1 rounded-xl shadow-inner border">
+              <TabsTrigger value="register" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-md data-[state=active]:scale-105 transition-all uppercase">
+                {editingTx ? "MODIFICANDO" : "NUEVA"}
+              </TabsTrigger>
+              <TabsTrigger value="history" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-md data-[state=active]:scale-105 transition-all uppercase">
+                OPERACIONES
+              </TabsTrigger>
             </TabsList>
           </Tabs>
         </header>
@@ -887,8 +891,11 @@ function TransactionsContent() {
                       <div className="space-y-2">
                         <Label>Moneda</Label>
                         <Select value={manualCurrency} onValueChange={setManualCurrency}>
-                          <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                          <SelectContent><SelectItem value="ARS">Pesos ($)</SelectItem><SelectItem value="USD">Dólares (u$s)</SelectItem></SelectContent>
+                          <SelectTrigger className={cn("bg-white border-2", manualCurrency === 'ARS' ? "border-primary/20" : "border-emerald-200")}><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ARS" className="text-primary font-bold">PESOS ($)</SelectItem>
+                            <SelectItem value="USD" className="text-emerald-600 font-bold">DÓLARES (u$s)</SelectItem>
+                          </SelectContent>
                         </Select>
                       </div>
                       {(activeTab === 'adjustment' || activeTab === 'Adjustment') && (
@@ -1004,10 +1011,12 @@ function TransactionsContent() {
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  <Select value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)}>
-                                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                                    <SelectContent><SelectItem value="ARS">$</SelectItem><SelectItem value="USD">u$s</SelectItem></SelectContent>
-                                  </Select>
+                                  <Tabs value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)} className="h-8 p-0.5 border rounded-lg bg-muted/20">
+                                    <TabsList className="grid grid-cols-2 h-7 p-0 gap-0">
+                                      <TabsTrigger value="ARS" className="h-6 text-[10px] font-black data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
+                                      <TabsTrigger value="USD" className="h-6 text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
+                                    </TabsList>
+                                  </Tabs>
                                 </TableCell>
                                 <TableCell className="text-right font-black">{item.currency === 'ARS' ? '$' : 'u$s'} {sub.toLocaleString('es-AR')}</TableCell>
                                 <TableCell><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeItem(i)}><Trash2 className="h-4 w-4" /></Button></TableCell>
@@ -1041,11 +1050,13 @@ function TransactionsContent() {
                               </div>
                             </div>
                             <div className="flex justify-between items-center mt-3 pt-3 border-t">
-                              <div className="w-24">
-                                <Select value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)}>
-                                  <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                                  <SelectContent><SelectItem value="ARS">$ (ARS)</SelectItem><SelectItem value="USD">u$s (USD)</SelectItem></SelectContent>
-                                </Select>
+                              <div className="w-32">
+                                <Tabs value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)} className="h-8 p-0.5 border rounded-lg bg-muted/20">
+                                  <TabsList className="grid grid-cols-2 h-7 p-0 gap-0">
+                                    <TabsTrigger value="ARS" className="h-6 text-[10px] font-black data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
+                                    <TabsTrigger value="USD" className="h-6 text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
+                                  </TabsList>
+                                </Tabs>
                               </div>
                               <div className="text-right">
                                 <p className="text-[10px] font-bold text-muted-foreground uppercase">Subtotal</p>
@@ -1068,10 +1079,11 @@ function TransactionsContent() {
                     {['ARS', 'USD'].map(curr => {
                       const total = cartTotals[curr as 'ARS' | 'USD']
                       if (total <= 0) return null
+                      const isUSD = curr === 'USD';
                       return (
-                        <div key={curr} className="p-4 rounded-xl border space-y-3 bg-muted/5">
+                        <div key={curr} className={cn("p-4 rounded-xl border space-y-3", isUSD ? "bg-emerald-50/30 border-emerald-100" : "bg-primary/5 border-primary/10")}>
                           <div className="flex justify-between items-center">
-                            <p className="text-[10px] font-black uppercase tracking-widest">Total {curr}</p>
+                            <p className={cn("text-[10px] font-black uppercase tracking-widest", isUSD ? "text-emerald-700" : "text-primary")}>Total {curr}</p>
                             <p className="text-xl font-black">{curr === 'ARS' ? '$' : 'u$s'} {total.toLocaleString('es-AR')}</p>
                           </div>
                           <div className="space-y-2">
@@ -1321,7 +1333,7 @@ function TransactionsContent() {
                     <div className="grid grid-cols-2 gap-4 border-t pt-3 mb-4">
                       <div>
                         <p className="text-[10px] font-bold text-muted-foreground uppercase mb-0.5">Total</p>
-                        <p className="font-black text-sm flex items-center gap-1">{tx.amount > 0 ? <ArrowUpCircle className="h-3 w-3 text-emerald-500" /> : <ArrowDownCircle className="h-3 w-3 text-rose-500" />}{tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}</p>
+                        <p className="font-black text-sm flex items-center gap-1">{tx.amount > 0 ? <ArrowUpCircle className="h-3 w-3 text-emerald-500" /> : <ArrowDownCircle className="h-3 w-3 text-rose-500" luxury-nums="true" />}{tx.currency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-[10px] font-bold text-muted-foreground uppercase mb-0.5">Abonado</p>

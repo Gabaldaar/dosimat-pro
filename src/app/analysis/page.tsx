@@ -299,12 +299,12 @@ export default function AnalysisPage() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 bg-muted/50 p-1 rounded-xl border shadow-sm">
+          <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-2xl border shadow-inner">
             <Coins className="h-4 w-4 text-muted-foreground ml-2" />
             <Tabs value={analysisCurrency} onValueChange={setAnalysisCurrency} className="w-auto">
-              <TabsList className="bg-transparent h-9">
-                <TabsTrigger value="ARS" className="text-[10px] font-black h-7 px-4 data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm uppercase">Pesos (ARS)</TabsTrigger>
-                <TabsTrigger value="USD" className="text-[10px] font-black h-7 px-4 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm uppercase">Dólares (USD)</TabsTrigger>
+              <TabsList className="bg-transparent h-9 p-0 gap-1">
+                <TabsTrigger value="ARS" className="text-[10px] font-black h-7 px-5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-md transition-all uppercase">PESOS (ARS)</TabsTrigger>
+                <TabsTrigger value="USD" className="text-[10px] font-black h-7 px-5 rounded-lg data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all uppercase">DÓLARES (USD)</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -416,7 +416,7 @@ export default function AnalysisPage() {
                 </CardTitle>
                 <CardDescription>Comparativa de flujos reales de dinero en {analysisCurrency === 'ARS' ? 'Pesos' : 'Dólares'}</CardDescription>
               </div>
-              <Badge variant="outline" className="font-bold border-primary/20">{analysisCurrency}</Badge>
+              <Badge variant="outline" className={cn("font-bold border-2", analysisCurrency === 'ARS' ? "border-primary/30 text-primary" : "border-emerald-500/30 text-emerald-700")}>{analysisCurrency}</Badge>
             </CardHeader>
             <CardContent>
               <div className="h-[400px] w-full">
@@ -430,9 +430,9 @@ export default function AnalysisPage() {
                       contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                     />
                     <Legend verticalAlign="top" align="right" iconType="circle" />
-                    <Bar dataKey="ingresos" name="Ingresos" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="ingresos" name="Ingresos" fill={analysisCurrency === 'ARS' ? "#3b82f6" : "#10b981"} radius={[4, 4, 0, 0]} />
                     <Bar dataKey="gastos" name="Gastos" fill="#f43f5e" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="saldo" name="Saldo" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="saldo" name="Saldo" fill={analysisCurrency === 'ARS' ? "#0ea5e9" : "#059669"} radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
