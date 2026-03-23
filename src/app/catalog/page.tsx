@@ -16,7 +16,6 @@ import {
   Loader2, 
   Package, 
   AlertTriangle, 
-  Droplet,
   Droplets, 
   Layers, 
   Wrench, 
@@ -59,7 +58,8 @@ import {
   Beaker,
   Lock,
   Unlock,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Droplet
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -692,9 +692,25 @@ export default function CatalogPage() {
     toast({ title: next === 'ordered' ? "Pedido confirmado" : "Pedido desbloqueado para edición" });
   }
 
-  const handleUpdateStockAudit = (id: string, newStock: number) => {
-    updateDocumentNonBlocking(doc(db, 'products_services', id), { stock: newStock });
-    toast({ title: "Stock actualizado", description: "Recuento guardado." });
+  const handleUpdateItemAudit = (id: string, updates: any) => {
+    const item = items?.find(i => i.id === id);
+    if (!item) return;
+
+    const finalUpdates = { ...updates };
+    
+    // Si viene un cambio de costo o moneda, normalizar campos ARS/USD antiguos
+    if ('costAmount' in updates || 'costCurrency' in updates) {
+      const amount = updates.costAmount ?? (item.costCurrency === 'USD' ? item.costUSD : item.costARS);
+      const currency = updates.costCurrency ?? item.costCurrency;
+      
+      finalUpdates.costARS = currency === 'ARS' ? amount : 0;
+      finalUpdates.costUSD = currency === 'USD' ? amount : 0;
+      finalUpdates.costCurrency = currency;
+      delete finalUpdates.costAmount;
+    }
+
+    updateDocumentNonBlocking(doc(db, 'products_services', id), finalUpdates);
+    toast({ title: "Item actualizado", description: "Cambios guardados en auditoría." });
   }
 
   const handleUpdateGlobalSupplier = (productId: string, newSupplier: string) => {
@@ -837,7 +853,7 @@ export default function CatalogPage() {
     const usd = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * (manualPurchaseCurrencies[i.id] === 'USD' ? manualPurchasePrices[i.id] : 0)), 0);
     text += `\n*INVERSIÓN ESTIMADA:*\n`;
     if (ars > 0) text += `ARS: $${ars.toLocaleString('es-AR')}\n`;
-    if (usd > 0) text += `USD: u$s {usd.toLocaleString('es-AR')}`;
+    if (usd > 0) text += `USD: u$s ${usd.toLocaleString('es-AR')}`;
     navigator.clipboard.writeText(text);
     toast({ title: "Lista de compras copiada", description: `Lista filtrada para ${supplierFilter}.` });
   }
@@ -1207,20 +1223,290 @@ export default function CatalogPage() {
             </div>
           </header>
           <Tabs value={activeView} className="w-full">
-            <TabsContent value="inventory" className="m-0 space-y-6"><div className="flex flex-col md:flex-row gap-8 items-start"><Card className="hidden md:block w-64 glass-card p-4 shrink-0 sticky top-8 max-h-[calc(100vh-100px)] overflow-y-auto"><FilterPanel /></Card><div className="flex-1 space-y-6 w-full"><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><input placeholder="Buscar por nombre..." className="w-full pl-10 h-11 bg-white/50 backdrop-blur-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>{isLoading ? (<div className="flex flex-col items-center justify-center h-48 gap-3"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="text-sm text-muted-foreground italic">Sincronizando inventario...</p></div>) : filteredItems.length === 0 ? (<div className="text-center py-20 border-2 border-dashed rounded-2xl bg-muted/5"><Package className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" /><p className="text-muted-foreground font-medium">No se encontraron productos o servicios.</p>{selectedCategories.length > 0 && (<Button variant="link" onClick={clearFilters} className="text-primary font-bold mt-2">Limpiar filtros para ver todo</Button>)}</div>) : (<section className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6">{filteredItems.map((item: any) => { const tracksStock = item.trackStock !== false; const isLowStock = tracksStock && !item.isService && (item.stock || 0) <= (item.minStock || 0); const catName = categoryMap[item.categoryId] || "Sin Categoría"; const marginARS = getMarginInfo(item.priceARS, item.calculatedCostARS); const marginUSD = getMarginInfo(item.priceUSD, item.calculatedCostUSD); const isCostInUSD = item.costCurrency === 'USD' || (!item.costCurrency && (item.costUSD > 0 && !item.costARS)); return (<Card key={item.id} className={cn("glass-card hover:shadow-md transition-all group border-l-4", isLowStock ? "border-l-rose-500 bg-rose-50/30" : "border-l-primary")}><CardHeader className="pb-2"><div className="flex justify-between items-start"><div className="flex flex-wrap gap-1"><Badge variant={item.isService ? "secondary" : "default"} className="text-[9px] font-black uppercase">{item.isService ? 'SERVICIO' : 'PRODUCTO'}</Badge>{item.isCompuesto && <Badge className="text-[9px] font-black uppercase bg-amber-500 hover:bg-amber-600"><Layers className="h-2 w-2 mr-1" /> COMPUESTO</Badge>}{!tracksStock && <Badge variant="outline" className="text-[9px] font-black uppercase text-blue-600 border-blue-200 bg-blue-50">ENTREGA DIRECTA</Badge>}<Badge variant="outline" className="text-[9px] font-bold bg-white text-muted-foreground border-muted-foreground/20">{catName}</Badge></div><div className="flex items-center gap-1"><Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-primary opacity-40 group-hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); handleExportBOM(item); }} title="Ver Ficha / Exportar"><Printer className="h-4 w-4" /></Button><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onClick={() => handleExportBOM(item)}><Printer className="mr-2 h-4 w-4" /> Exportar Ficha (PDF)</DropdownMenuItem>{isAdmin && (<><DropdownMenuItem onClick={() => handleOpenDialog(item)}><Edit className="mr-2 h-4 w-4" /> Editar parámetros</DropdownMenuItem>{item.isCompuesto && (<DropdownMenuItem className="text-amber-600 font-bold" onClick={() => { setSelectedForAssembly(item); setAssemblyQty(1); setManualSuppliers({}); setIsAssemblyOpen(true); }}><Hammer className="mr-2 h-4 w-4" /> Orden de Armado</DropdownMenuItem>)}<DropdownMenuItem className="text-destructive" onClick={() => setItemToDelete(item)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem></>)}</DropdownMenuContent></DropdownMenu></div></div><CardTitle className="text-lg mt-2 truncate font-bold">{item.name}</CardTitle></CardHeader><CardContent className="space-y-4">{tracksStock && !item.isService && (<div className="flex items-center justify-between p-2 bg-white rounded-lg border shadow-sm"><div className="flex flex-col"><span className="text-[9px] font-black text-muted-foreground uppercase tracking-wider">Stock Actual</span><span className={cn("text-xl font-black", isLowStock ? "text-rose-600" : "text-emerald-600")}>{item.stock || 0}</span></div>{isLowStock && <AlertTriangle className="h-5 w-5 text-rose-500 animate-pulse" />}</div>)}<div className="grid grid-cols-2 gap-2"><div className="p-2 bg-primary/5 rounded-lg border border-primary/10 relative overflow-hidden"><span className="text-[9px] font-black text-primary uppercase block">Venta ARS</span><span className="text-md font-black">${(item.priceARS || 0).toLocaleString('es-AR')}</span>{isAdmin && marginARS && (<div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginARS.color)}>{marginARS.icon} {marginARS.value}%</div>)}</div><div className="p-2 bg-emerald-50 rounded-lg border border-emerald-100 relative overflow-hidden"><span className="text-[9px] font-black text-emerald-700 uppercase block">Venta USD</span><span className="text-md font-black">u$s {(item.priceUSD || 0).toLocaleString('es-AR')}</span>{isAdmin && marginUSD && (<div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginUSD.color)}>{marginUSD.icon} {marginUSD.value}%</div>)}</div></div>{isAdmin && (<div className="pt-2 border-t border-dashed"><div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground mb-1.5"><div className="flex items-center gap-1 uppercase tracking-widest">Costo Normalizado {isCostInUSD ? <Badge className="h-3 text-[7px] bg-emerald-600 font-black">BASE USD</Badge> : <Badge className="h-3 text-[7px] bg-blue-600 font-black">BASE ARS</Badge>}</div><Badge variant="outline" className="h-4 text-[8px] font-black bg-white uppercase">Costo real</Badge></div><div className="grid grid-cols-2 gap-3 text-xs font-bold italic opacity-80"><div className="flex flex-col"><span className="text-[9px] not-italic text-muted-foreground uppercase">Costo ARS</span><span>${(item.calculatedCostARS || 0).toLocaleString('es-AR')}</span></div><div className="flex flex-col text-right"><span className="text-[9px] not-italic text-muted-foreground uppercase">Costo USD</span><span>u$s {(item.calculatedCostUSD || 0).toLocaleString('es-AR')}</span></div></div></div>)}</CardContent></Card>); })}</section>)}</div></div></TabsContent>
+            <TabsContent value="inventory" className="m-0 space-y-6">
+              <div className="flex flex-col md:flex-row gap-8 items-start">
+                <Card className="hidden md:block w-64 glass-card p-4 shrink-0 sticky top-8 max-h-[calc(100vh-100px)] overflow-y-auto">
+                  <FilterPanel />
+                </Card>
+                <div className="flex-1 space-y-6 w-full">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <input placeholder="Buscar por nombre..." className="w-full pl-10 h-11 bg-white/50 backdrop-blur-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                    </div>
+                    <Sheet>
+                      <SheetTrigger asChild>
+                        <Button variant="outline" size="icon" className="md:hidden h-11 w-11 shrink-0">
+                          <ListFilter className="h-5 w-5" />
+                        </Button>
+                      </SheetTrigger>
+                      <SheetContent side="left" className="w-[280px] p-0">
+                        <SheetHeader className="p-4 border-b">
+                          <SheetTitle>Filtrar Catálogo</SheetTitle>
+                        </SheetHeader>
+                        <div className="p-4">
+                          <FilterPanel />
+                        </div>
+                      </SheetContent>
+                    </Sheet>
+                  </div>
+                  
+                  {isLoading ? (
+                    <div className="flex flex-col items-center justify-center h-48 gap-3">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                      <p className="text-sm text-muted-foreground italic">Sincronizando inventario...</p>
+                    </div>
+                  ) : filteredItems.length === 0 ? (
+                    <div className="text-center py-20 border-2 border-dashed rounded-2xl bg-muted/5">
+                      <Package className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
+                      <p className="text-muted-foreground font-medium">No se encontraron productos o servicios.</p>
+                      {selectedCategories.length > 0 && (
+                        <Button variant="link" onClick={clearFilters} className="text-primary font-bold mt-2">Limpiar filtros para ver todo</Button>
+                      )}
+                    </div>
+                  ) : (
+                    <section className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6">
+                      {filteredItems.map((item: any) => { 
+                        const tracksStock = item.trackStock !== false; 
+                        const isLowStock = tracksStock && !item.isService && (item.stock || 0) <= (item.minStock || 0); 
+                        const catName = categoryMap[item.categoryId] || "Sin Categoría"; 
+                        const marginARS = getMarginInfo(item.priceARS, item.calculatedCostARS); 
+                        const marginUSD = getMarginInfo(item.priceUSD, item.calculatedCostUSD); 
+                        const isCostInUSD = item.costCurrency === 'USD' || (!item.costCurrency && (item.costUSD > 0 && !item.costARS)); 
+                        return (
+                          <Card key={item.id} className={cn("glass-card hover:shadow-md transition-all group border-l-4", isLowStock ? "border-l-rose-500 bg-rose-50/30" : "border-l-primary")}>
+                            <CardHeader className="pb-2">
+                              <div className="flex justify-between items-start">
+                                <div className="flex flex-wrap gap-1">
+                                  <Badge variant={item.isService ? "secondary" : "default"} className="text-[9px] font-black uppercase">{item.isService ? 'SERVICIO' : 'PRODUCTO'}</Badge>
+                                  {item.isCompuesto && <Badge className="text-[9px] font-black uppercase bg-amber-500 hover:bg-amber-600"><Layers className="h-2 w-2 mr-1" /> COMPUESTO</Badge>}
+                                  {!tracksStock && <Badge variant="outline" className="text-[9px] font-black uppercase text-blue-600 border-blue-200 bg-blue-50">ENTREGA DIRECTA</Badge>}
+                                  <Badge variant="outline" className="text-[9px] font-bold bg-white text-muted-foreground border-muted-foreground/20">{catName}</Badge>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-primary opacity-40 group-hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); handleExportBOM(item); }} title="Ver Ficha / Exportar"><Printer className="h-4 w-4" /></Button>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem onClick={() => handleExportBOM(item)}><Printer className="mr-2 h-4 w-4" /> Exportar Ficha (PDF)</DropdownMenuItem>
+                                      {isAdmin && (
+                                        <>
+                                          <DropdownMenuItem onClick={() => handleOpenDialog(item)}><Edit className="mr-2 h-4 w-4" /> Editar parámetros</DropdownMenuItem>
+                                          {item.isCompuesto && (
+                                            <DropdownMenuItem className="text-amber-600 font-bold" onClick={() => { setSelectedForAssembly(item); setAssemblyQty(1); setManualSuppliers({}); setIsAssemblyOpen(true); }}><Hammer className="mr-2 h-4 w-4" /> Orden de Armado</DropdownMenuItem>
+                                          )}
+                                          <DropdownMenuItem className="text-destructive" onClick={() => setItemToDelete(item)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem>
+                                        </>
+                                      )}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </div>
+                              </div>
+                              <CardTitle className="text-lg mt-2 truncate font-bold">{item.name}</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                              {tracksStock && !item.isService && (
+                                <div className="flex items-center justify-between p-2 bg-white rounded-lg border shadow-sm">
+                                  <div className="flex flex-col">
+                                    <span className="text-[9px] font-black text-muted-foreground uppercase tracking-wider">Stock Actual</span>
+                                    <span className={cn("text-xl font-black", isLowStock ? "text-rose-600" : "text-emerald-600")}>{item.stock || 0}</span>
+                                  </div>
+                                  {isLowStock && <AlertTriangle className="h-5 w-5 text-rose-500 animate-pulse" />}
+                                </div>
+                              )}
+                              <div className="grid grid-cols-2 gap-2">
+                                <div className="p-2 bg-primary/5 rounded-lg border border-primary/10 relative overflow-hidden">
+                                  <span className="text-[9px] font-black text-primary uppercase block">Venta ARS</span>
+                                  <span className="text-md font-black">${(item.priceARS || 0).toLocaleString('es-AR')}</span>
+                                  {isAdmin && marginARS && (
+                                    <div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginARS.color)}>{marginARS.icon} {marginARS.value}%</div>
+                                  )}
+                                </div>
+                                <div className="p-2 bg-emerald-50 rounded-lg border border-emerald-100 relative overflow-hidden">
+                                  <span className="text-[9px] font-black text-emerald-700 uppercase block">Venta USD</span>
+                                  <span className="text-md font-black">u$s {(item.priceUSD || 0).toLocaleString('es-AR')}</span>
+                                  {isAdmin && marginUSD && (
+                                    <div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginUSD.color)}>{marginUSD.icon} {marginUSD.value}%</div>
+                                  )}
+                                </div>
+                              </div>
+                              {isAdmin && (
+                                <div className="pt-2 border-t border-dashed">
+                                  <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground mb-1.5">
+                                    <div className="flex items-center gap-1 uppercase tracking-widest">Costo Normalizado {isCostInUSD ? <Badge className="h-3 text-[7px] bg-emerald-600 font-black">BASE USD</Badge> : <Badge className="h-3 text-[7px] bg-blue-600 font-black">BASE ARS</Badge>}</div>
+                                    <Badge variant="outline" className="h-4 text-[8px] font-black bg-white uppercase">Costo real</Badge>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-3 text-xs font-bold italic opacity-80">
+                                    <div className="flex flex-col">
+                                      <span className="text-[9px] not-italic text-muted-foreground uppercase">Costo ARS</span>
+                                      <span>${(item.calculatedCostARS || 0).toLocaleString('es-AR')}</span>
+                                    </div>
+                                    <div className="flex flex-col text-right">
+                                      <span className="text-[9px] not-italic text-muted-foreground uppercase">Costo USD</span>
+                                      <span>u$s {(item.calculatedCostUSD || 0).toLocaleString('es-AR')}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        ); 
+                      })}
+                    </section>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
             <TabsContent value="orders" className="m-0"><OrdersList /></TabsContent>
           </Tabs>
         </SidebarInset>
       </div>
 
       <Dialog open={isAuditOpen} onOpenChange={setIsAuditOpen}>
-        <DialogContent className="max-w-5xl h-[95vh] flex flex-col p-0 w-[95vw]">
-          <DialogHeader className="p-2 pb-1 shrink-0 flex-row items-center justify-between"><div className="flex items-center gap-2"><Calculator className="h-4 w-4 text-primary" /><DialogTitle className="text-base font-black text-slate-800">Auditoría</DialogTitle></div></DialogHeader>
-          <div className="px-3 py-1 shrink-0"><div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2"><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Buscar..." className="pl-9 h-8 text-sm" value={auditSearch} onChange={(e) => setAuditSearch(e.target.value)} /></div><Select value={auditCategoryFilter} onValueChange={setAuditCategoryFilter}><SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Categoría" /></SelectTrigger><SelectContent className="max-h-[60vh] overflow-y-auto"><SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem>{categories.map(c => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}</SelectContent></Select></div></div>
-          <div className="flex-1 min-h-0 px-3 pb-2 overflow-y-auto">
-            <div className="space-y-1.5 md:hidden">{items?.filter(i => !i.isService && i.trackStock !== false && i.name.toLowerCase().includes(auditSearch.toLowerCase()) && (auditCategoryFilter === "all" || i.categoryId === auditCategoryFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(item => (<Card key={item.id} className="p-2 bg-white border shadow-sm flex flex-col gap-2"><div className="flex justify-between items-center gap-2"><div className="flex-1 min-w-0"><p className="font-bold text-[11px] truncate leading-tight">{item.name}</p><p className="text-[9px] text-muted-foreground uppercase">Disp: <span className="font-black text-primary">{item.stock || 0}</span></p></div><div className="shrink-0 flex items-center gap-1.5"><Label className="text-[8px] font-black uppercase text-muted-foreground">Nuevo:</Label><Input type="number" className="w-12 h-7 text-right font-black px-1.5 text-[11px]" defaultValue={item.stock || 0} onBlur={(e) => { const val = Number(e.target.value); if (val !== item.stock) handleUpdateStockAudit(item.id, val); }} /></div></div><div className="pt-1.5 border-t grid grid-cols-2 gap-2"><div className="flex flex-col gap-0.5"><Label className="text-[7px] font-black uppercase text-muted-foreground">Proveedor:</Label><Select defaultValue={item.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateGlobalSupplier(item.id, v)}><SelectTrigger className="h-6 text-[9px] bg-muted/20 border-none p-1"><SelectValue /></SelectTrigger><SelectContent className="max-h-40"><SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div></div></Card>))}</div>
-            <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-hidden"><Table className="min-w-[700px]"><TableHeader className="bg-slate-50 sticky top-0 z-10"><TableRow><TableHead className="font-black text-[10px] uppercase h-8">Artículo</TableHead><TableHead className="text-center font-black text-[10px] uppercase w-24 h-8">Stock Act.</TableHead><TableHead className="text-center font-black text-[10px] uppercase w-48 h-8">Proveedor Asignado</TableHead><TableHead className="text-right font-black text-[10px] uppercase w-32 h-8">Recuento</TableHead></TableRow></TableHeader><TableBody>{items?.filter(i => !i.isService && i.trackStock !== false && i.name.toLowerCase().includes(auditSearch.toLowerCase()) && (auditCategoryFilter === "all" || i.categoryId === auditCategoryFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(item => (<TableRow key={item.id} className="h-9 hover:bg-muted/5 transition-colors"><TableCell className="py-1"><p className="font-bold text-xs">{item.name}</p></TableCell><TableCell className="text-center font-black text-primary text-xs">{item.stock || 0}</TableCell><TableCell className="text-center py-1"><Select defaultValue={item.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateGlobalSupplier(item.id, v)}><SelectTrigger className="h-7 text-[10px] bg-transparent border-none focus:ring-0"><SelectValue /></SelectTrigger><SelectContent className="max-h-60"><SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></TableCell><TableCell className="text-right py-1"><Input type="number" className="w-20 ml-auto text-right font-black h-7 text-xs" defaultValue={item.stock || 0} onBlur={(e) => { const val = Number(e.target.value); if (val !== item.stock) handleUpdateStockAudit(item.id, val); }} /></TableCell></TableRow>))}</TableBody></Table></div></div>
-          <DialogFooter className="p-2 bg-slate-50 border-t shrink-0"><Button onClick={() => setIsAuditOpen(false)} className="w-full h-8 font-bold text-xs">Cerrar</Button></DialogFooter>
+        <DialogContent className="max-w-6xl h-[95vh] flex flex-col p-0 w-[95vw]">
+          <DialogHeader className="p-3 pb-1 shrink-0 flex-row items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Calculator className="h-5 w-5 text-primary" />
+              <DialogTitle className="text-lg font-black text-slate-800">Panel de Auditoría y Actualización Masiva</DialogTitle>
+            </div>
+          </DialogHeader>
+          <div className="px-4 py-2 shrink-0 border-b bg-muted/10">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="Filtrar artículos..." className="pl-10 h-10" value={auditSearch} onChange={(e) => setAuditSearch(e.target.value)} />
+              </div>
+              <Select value={auditCategoryFilter} onValueChange={setAuditCategoryFilter}>
+                <SelectTrigger className="h-10">
+                  <SelectValue placeholder="Todas las categorías" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[60vh]">
+                  <SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem>
+                  {categories.map(c => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex-1 min-h-0 px-4 py-2 overflow-y-auto">
+            <div className="space-y-3 md:hidden">
+              {items?.filter(i => !i.isService && i.trackStock !== false && i.name.toLowerCase().includes(auditSearch.toLowerCase()) && (auditCategoryFilter === "all" || i.categoryId === auditCategoryFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(item => (
+                <Card key={item.id} className="p-3 bg-white border shadow-sm flex flex-col gap-3">
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-sm truncate leading-tight">{item.name}</p>
+                      <p className="text-[10px] text-muted-foreground uppercase mt-1">Disp Actual: <span className="font-black text-primary">{item.stock || 0}</span></p>
+                    </div>
+                    <div className="shrink-0 flex items-center gap-2">
+                      <Label className="text-[10px] font-bold uppercase">STOCK:</Label>
+                      <Input type="number" className="w-16 h-8 text-right font-black" defaultValue={item.stock || 0} onBlur={(e) => { const val = Number(e.target.value); if (val !== item.stock) handleUpdateItemAudit(item.id, { stock: val }); }} />
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t grid grid-cols-1 gap-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase">Costo Reposición</Label>
+                        <Input 
+                          type="number" 
+                          className="h-8 font-black" 
+                          defaultValue={item.costCurrency === 'USD' ? item.costUSD : item.costARS} 
+                          onBlur={(e) => handleUpdateItemAudit(item.id, { costAmount: Number(e.target.value) })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase">Moneda Base</Label>
+                        <Tabs 
+                          defaultValue={item.costCurrency || (item.costUSD > 0 && !item.costARS ? 'USD' : 'ARS')} 
+                          onValueChange={(v: any) => handleUpdateItemAudit(item.id, { costCurrency: v })}
+                          className="h-8"
+                        >
+                          <TabsList className="grid grid-cols-2 h-8">
+                            <TabsTrigger value="ARS" className="text-[10px] font-bold">ARS</TabsTrigger>
+                            <TabsTrigger value="USD" className="text-[10px] font-bold">USD</TabsTrigger>
+                          </TabsList>
+                        </Tabs>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Label className="text-[10px] font-bold uppercase">Proveedor Asignado</Label>
+                      <Select defaultValue={item.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateGlobalSupplier(item.id, v)}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
+                          {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+            <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-hidden">
+              <Table>
+                <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
+                  <TableRow>
+                    <TableHead className="font-black text-[10px] uppercase">Artículo</TableHead>
+                    <TableHead className="text-center font-black text-[10px] uppercase w-24">Stock</TableHead>
+                    <TableHead className="text-center font-black text-[10px] uppercase w-32">Costo Rep.</TableHead>
+                    <TableHead className="text-center font-black text-[10px] uppercase w-32">Moneda</TableHead>
+                    <TableHead className="text-center font-black text-[10px] uppercase w-48">Proveedor</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items?.filter(i => !i.isService && i.trackStock !== false && i.name.toLowerCase().includes(auditSearch.toLowerCase()) && (auditCategoryFilter === "all" || i.categoryId === auditCategoryFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(item => (
+                    <TableRow key={item.id} className="h-12 hover:bg-muted/5 transition-colors">
+                      <TableCell className="py-1">
+                        <p className="font-bold text-xs">{item.name}</p>
+                      </TableCell>
+                      <TableCell className="text-center py-1">
+                        <Input 
+                          type="number" 
+                          className="w-20 mx-auto text-center font-black h-8 text-xs" 
+                          defaultValue={item.stock || 0} 
+                          onBlur={(e) => { const val = Number(e.target.value); if (val !== item.stock) handleUpdateItemAudit(item.id, { stock: val }); }} 
+                        />
+                      </TableCell>
+                      <TableCell className="text-center py-1">
+                        <Input 
+                          type="number" 
+                          className="w-24 mx-auto text-center font-black h-8 text-xs border-primary/20" 
+                          defaultValue={item.costCurrency === 'USD' ? item.costUSD : item.costARS} 
+                          onBlur={(e) => handleUpdateItemAudit(item.id, { costAmount: Number(e.target.value) })}
+                        />
+                      </TableCell>
+                      <TableCell className="text-center py-1">
+                        <Tabs 
+                          defaultValue={item.costCurrency || (item.costUSD > 0 && !item.costARS ? 'USD' : 'ARS')} 
+                          onValueChange={(v: any) => handleUpdateItemAudit(item.id, { costCurrency: v })}
+                          className="w-24 mx-auto"
+                        >
+                          <TabsList className="grid grid-cols-2 h-8 p-0.5">
+                            <TabsTrigger value="ARS" className="text-[9px] font-black h-7">ARS</TabsTrigger>
+                            <TabsTrigger value="USD" className="text-[9px] font-black h-7">USD</TabsTrigger>
+                          </TabsList>
+                        </Tabs>
+                      </TableCell>
+                      <TableCell className="text-center py-1">
+                        <Select defaultValue={item.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateGlobalSupplier(item.id, v)}>
+                          <SelectTrigger className="h-8 text-[10px] bg-transparent border-none focus:ring-0">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
+                            {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+          <DialogFooter className="p-3 bg-slate-50 border-t shrink-0">
+            <Button onClick={() => setIsAuditOpen(false)} className="w-full h-10 font-bold text-sm">Cerrar Auditoría</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1236,7 +1522,90 @@ export default function CatalogPage() {
             </div>
           </DialogHeader>
           <div className="flex-1 min-h-0 overflow-y-auto p-3 pt-1 space-y-4">
-            {orderToView && (<div className="space-y-4"><section className="space-y-2"><div><h3 className="text-[9px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><Layers className="h-3 w-3" /> Explosión de Insumos</h3><div className="grid grid-cols-1 gap-1 md:hidden">{explosionSummary?.all.sort((a,b) => a.name.localeCompare(b.name)).map(req => { const stockRestante = req.available - req.required; const faltaDirecto = stockRestante < 0; return (<Card key={req.id} className="p-1.5 bg-white border flex items-center justify-between gap-2"><div className="flex-1 min-w-0"><p className="font-bold text-[10px] truncate">{req.name}</p><p className="text-[7px] text-muted-foreground uppercase">{(manualSuppliers[req.id] || req.supplier) || "S/P"}</p></div><div className="flex items-center gap-2 shrink-0"><div className="text-center px-1 py-0.5 bg-muted/30 rounded border"><p className="text-[9px] font-black">{req.required}/{req.available}</p></div>{faltaDirecto ? <Badge className="bg-rose-600 text-[7px] h-4 leading-none uppercase font-black px-1">FALTA</Badge> : <CheckCircle className="h-3 w-3 text-emerald-500" />}</div></Card>) })}</div><div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-x-auto"><Table className="min-w-[500px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="text-[8px] font-black uppercase h-7">Pieza</TableHead><TableHead className="text-center text-[8px] font-black uppercase h-7 w-12">Req.</TableHead><TableHead className="text-center text-[8px] font-black uppercase h-7 w-12">Stock</TableHead><TableHead className="text-right text-[8px] font-black uppercase h-7 w-20">Estado</TableHead></TableRow></TableHeader><TableBody>{explosionSummary?.all.sort((a,b) => a.name.localeCompare(b.name)).map(req => { const stockRestante = req.available - req.required; const faltaDirecto = stockRestante < 0; return (<TableRow key={req.id} className="h-7"><TableCell className="py-0.5"><div className="flex items-baseline gap-2"><span className="font-bold text-xs">{req.name}</span><span className="text-[7px] text-muted-foreground uppercase">{(manualSuppliers[req.id] || req.supplier) || "S/P"}</span></div></TableCell><TableCell className="text-center font-black text-primary text-[10px]">{req.required}</TableCell><TableCell className="text-center text-[10px]">{req.available}</TableCell><TableCell className="text-right py-0.5">{faltaDirecto ? <Badge className="bg-rose-600 text-[7px] h-4 leading-none py-0 px-1">FALTA</Badge> : <CheckCircle className="h-3.5 w-3.5 text-emerald-500 ml-auto" />}</TableCell></TableRow>) })}</TableBody></Table></div></div><div className="space-y-2"><h3 className="text-[9px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><ShoppingCart className="h-3 w-3" /> Compras por Proveedor</h3><GroupedPurchaseList /></div></section></div>)}
+            {orderToView && (
+              <div className="space-y-4">
+                <section className="space-y-2">
+                  <div>
+                    <h3 className="text-[9px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><Layers className="h-3 w-3" /> Explosión de Insumos</h3>
+                    <div className="grid grid-cols-1 gap-1 md:hidden">
+                      {explosionSummary?.all.sort((a,b) => a.name.localeCompare(b.name)).map(req => { 
+                        const stockRestante = req.available - req.required; 
+                        const faltaDirecto = stockRestante < 0; 
+                        return (
+                          <Card key={req.id} className="p-2 bg-white border flex flex-col gap-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <p className="font-bold text-[10px] truncate">{req.name}</p>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <div className="text-center px-1 py-0.5 bg-muted/30 rounded border"><p className="text-[9px] font-black">{req.required}/{req.available}</p></div>
+                                {faltaDirecto ? <Badge className="bg-rose-600 text-[7px] h-4 leading-none uppercase font-black px-1">FALTA</Badge> : <CheckCircle className="h-3 w-3 text-emerald-500" />}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 border-t pt-1.5">
+                              <span className="text-[8px] font-bold uppercase text-muted-foreground">PROV:</span>
+                              <Select defaultValue={manualSuppliers[req.id] || req.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateItemSupplierGlobally(req.id, v)}>
+                                <SelectTrigger className="h-6 text-[9px] bg-muted/20 border-none p-1 flex-1">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
+                                  {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </Card>
+                        ) 
+                      })}
+                    </div>
+                    <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-x-auto">
+                      <Table className="min-w-[600px]">
+                        <TableHeader className="bg-slate-50">
+                          <TableRow>
+                            <TableHead className="text-[8px] font-black uppercase h-7">Pieza</TableHead>
+                            <TableHead className="text-center text-[8px] font-black uppercase h-7 w-12">Req.</TableHead>
+                            <TableHead className="text-center text-[8px] font-black uppercase h-7 w-12">Stock</TableHead>
+                            <TableHead className="text-center text-[8px] font-black uppercase h-7 w-48">Proveedor Asignado</TableHead>
+                            <TableHead className="text-right text-[8px] font-black uppercase h-7 w-20">Estado</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {explosionSummary?.all.sort((a,b) => a.name.localeCompare(b.name)).map(req => { 
+                            const stockRestante = req.available - req.required; 
+                            const faltaDirecto = stockRestante < 0; 
+                            return (
+                              <TableRow key={req.id} className="h-10">
+                                <TableCell className="py-0.5">
+                                  <span className="font-bold text-xs">{req.name}</span>
+                                </TableCell>
+                                <TableCell className="text-center font-black text-primary text-[10px]">{req.required}</TableCell>
+                                <TableCell className="text-center text-[10px]">{req.available}</TableCell>
+                                <TableCell className="text-center py-0.5">
+                                  <Select defaultValue={manualSuppliers[req.id] || req.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateItemSupplierGlobally(req.id, v)}>
+                                    <SelectTrigger className="h-7 text-[9px] bg-transparent border-none focus:ring-0">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
+                                      {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                </TableCell>
+                                <TableCell className="text-right py-0.5">{faltaDirecto ? <Badge className="bg-rose-600 text-[7px] h-4 leading-none py-0 px-1">FALTA</Badge> : <CheckCircle className="h-3.5 w-3.5 text-emerald-500 ml-auto" />}</TableCell>
+                              </TableRow>
+                            ) 
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-[9px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><ShoppingCart className="h-3 w-3" /> Compras por Proveedor</h3>
+                    <GroupedPurchaseList />
+                  </div>
+                </section>
+              </div>
+            )}
           </div>
           <DialogFooter className="p-3 border-t bg-slate-50 shrink-0"><div className="flex flex-col md:flex-row items-center justify-between w-full gap-2"><div className="flex gap-3"><div className="text-left"><p className="text-[7px] font-black uppercase text-slate-400">Total ARS</p><p className="text-base font-black">${purchaseCalculations?.totalARS.toLocaleString('es-AR')}</p></div><div className="text-left border-l pl-3 border-slate-200"><p className="text-[7px] font-black uppercase text-slate-400">Total USD</p><p className="text-base font-black text-emerald-600">u$s {purchaseCalculations?.totalUSD.toLocaleString('es-AR')}</p></div></div><div className="flex gap-2 w-full md:w-auto"><Button variant="ghost" onClick={handleCloseOrderView} className="font-bold text-[10px] h-8 flex-1 md:flex-none">Cerrar</Button>{orderToView?.status === 'ready' && (<Button onClick={handleAssembleFinal} className="bg-blue-600 hover:bg-blue-700 px-4 font-black shadow-lg h-8 flex-1 md:flex-none text-[10px]"><Hammer className="mr-1.5 h-3 w-3" /> FINALIZAR ARMADO</Button>)}</div></div></DialogFooter>
         </DialogContent>
@@ -1276,8 +1645,8 @@ export default function CatalogPage() {
             {explosionSummary && (<div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
               <section className="space-y-2">
                 <div className="flex items-center justify-between"><h3 className="text-[9px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><Layers className="h-3 w-3" /> Simulación de Insumos</h3><Badge variant="outline" className="font-bold border-amber-200 text-amber-700 bg-amber-50 text-[8px]">{explosionSummary.all.length} PIEZAS</Badge></div>
-                <div className="grid grid-cols-1 gap-1 md:hidden">{explosionSummary.all.sort((a,b) => a.name.localeCompare(b.name)).map((req) => { const stockRestante = req.available - req.required; const faltaDirecto = stockRestante < 0; return (<Card key={req.id} className="p-1.5 border shadow-sm flex items-center justify-between gap-2"><div className="flex-1 min-w-0"><p className="font-bold text-[10px] truncate">{req.name}</p><p className="text-[7px] text-muted-foreground uppercase">{(manualSuppliers[req.id] || req.supplier) || "S/P"}</p></div><div className="flex items-center gap-2 shrink-0"><div className="text-center px-1 py-0.5 bg-muted/20 rounded"><p className="text-[10px] font-black text-primary">{req.required}/{req.available}</p></div>{faltaDirecto ? <Badge className="bg-rose-600 text-[7px] px-1">FALTA</Badge> : <CheckCircle className="h-3 w-3 text-emerald-500" />}</div></Card>); })}</div>
-                <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-x-auto"><Table className="min-w-[500px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="font-black text-[8px] uppercase h-7">Componente</TableHead><TableHead className="text-center font-black text-[8px] uppercase h-7 w-12">Req.</TableHead><TableHead className="text-center font-black text-[8px] uppercase h-7 w-12">Stock</TableHead><TableHead className="text-right font-black text-[8px] uppercase h-7 w-20">Estado</TableHead></TableRow></TableHeader><TableBody>{explosionSummary.all.sort((a,b) => a.name.localeCompare(b.name)).map((req) => { const stockRestante = req.available - req.required; const faltaDirecto = stockRestante < 0; return (<TableRow key={req.id} className="h-7"><TableCell className="py-0.5"><div className="flex items-baseline gap-2"><span className="font-bold text-[11px]">{req.name}</span><span className="text-[7px] text-muted-foreground uppercase">{(manualSuppliers[req.id] || req.supplier) || "S/P"}</span></div></TableCell><TableCell className="text-center font-black text-primary text-[10px]">{req.required}</TableCell><TableCell className="text-center text-slate-500 text-[10px]">{req.available}</TableCell><TableCell className="text-right py-0.5">{faltaDirecto ? <Badge className="bg-rose-600 font-bold text-[7px] h-4">FALTA</Badge> : <CheckCircle className="h-3 w-3 text-emerald-500 ml-auto" />}</TableCell></TableRow>); })}</TableBody></Table></div>
+                <div className="grid grid-cols-1 gap-1 md:hidden">{explosionSummary.all.sort((a,b) => a.name.localeCompare(b.name)).map((req) => { const stockRestante = req.available - req.required; const faltaDirecto = stockRestante < 0; return (<Card key={req.id} className="p-1.5 border shadow-sm flex flex-col gap-2"><div className="flex items-center justify-between gap-2"><div className="flex-1 min-w-0"><p className="font-bold text-[10px] truncate">{req.name}</p></div><div className="flex items-center gap-2 shrink-0"><div className="text-center px-1 py-0.5 bg-muted/20 rounded"><p className="text-[10px] font-black text-primary">{req.required}/{req.available}</p></div>{faltaDirecto ? <Badge className="bg-rose-600 text-[7px] px-1">FALTA</Badge> : <CheckCircle className="h-3 w-3 text-emerald-500" />}</div></div><div className="flex items-center gap-2 border-t pt-1"><span className="text-[8px] font-bold text-muted-foreground uppercase">PROV:</span><Select defaultValue={manualSuppliers[req.id] || req.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateItemSupplierGlobally(req.id, v)}><SelectTrigger className="h-6 text-[9px] bg-muted/20 border-none p-1 flex-1"><SelectValue /></SelectTrigger><SelectContent className="max-h-40"><SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div></Card>); })}</div>
+                <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-x-auto"><Table className="min-w-[500px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="font-black text-[8px] uppercase h-7">Componente</TableHead><TableHead className="text-center font-black text-[8px] uppercase h-7 w-12">Req.</TableHead><TableHead className="text-center font-black text-[8px] uppercase h-7 w-12">Stock</TableHead><TableHead className="text-center font-black text-[8px] uppercase h-7 w-40">Proveedor</TableHead><TableHead className="text-right font-black text-[8px] uppercase h-7 w-20">Estado</TableHead></TableRow></TableHeader><TableBody>{explosionSummary.all.sort((a,b) => a.name.localeCompare(b.name)).map((req) => { const stockRestante = req.available - req.required; const faltaDirecto = stockRestante < 0; return (<TableRow key={req.id} className="h-10"><TableCell className="py-0.5"><span className="font-bold text-[11px]">{req.name}</span></TableCell><TableCell className="text-center font-black text-primary text-[10px]">{req.required}</TableCell><TableCell className="text-center text-slate-500 text-[10px]">{req.available}</TableCell><TableCell className="text-center py-0.5"><Select defaultValue={manualSuppliers[req.id] || req.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateItemSupplierGlobally(req.id, v)}><SelectTrigger className="h-7 text-[9px] bg-transparent border-none focus:ring-0"><SelectValue /></SelectTrigger><SelectContent className="max-h-60"><SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></TableCell><TableCell className="text-right py-0.5">{faltaDirecto ? <Badge className="bg-rose-600 font-bold text-[7px] h-4">FALTA</Badge> : <CheckCircle className="h-3 w-3 text-emerald-500 ml-auto" />}</TableCell></TableRow>); })}</TableBody></Table></div>
               </section>
               <section className="space-y-2">
                 <div className="flex items-center justify-between"><h3 className="text-[9px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><ShoppingCart className="h-3 w-3" /> Carrito de Compras</h3><Button variant="outline" size="sm" className="h-6 gap-1 font-bold text-[8px]" onClick={() => { setManualPurchaseQtys({}); setManualPurchasePrices({}); setManualSuppliers({}); setManualPurchaseCurrencies({}); }}><RefreshCw className="h-2 w-2" /> REINICIAR</Button></div>
