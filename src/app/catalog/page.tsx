@@ -332,7 +332,9 @@ export default function CatalogPage() {
       requirements[productId].required += qtyNeeded;
 
       if (item.isCompuesto) {
-        const neededToProduce = Math.max(0, qtyNeeded - currentStock);
+        // CORRECCIÓN: Para disparar un plan independiente del stock, 
+        // explotamos siempre la cantidad total solicitada para los componentes.
+        const neededToProduce = qtyNeeded;
         if (neededToProduce > 0) {
           const groupedComponents: Record<string, number> = {};
           item.components?.forEach((comp: any) => {
@@ -1214,11 +1216,11 @@ export default function CatalogPage() {
                 </div>
               </div>
               <Tabs value={activeView} onValueChange={setActiveTab} className="bg-transparent">
-                <TabsList className="bg-muted/40 h-10 p-1 rounded-xl shadow-inner border">
-                  <TabsTrigger value="inventory" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-md data-[state=active]:scale-105 transition-all uppercase">
+                <TabsList className="bg-muted/40 h-10 p-1 rounded-xl shadow-inner border overflow-hidden">
+                  <TabsTrigger value="inventory" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-md transition-all uppercase">
                     STOCK
                   </TabsTrigger>
-                  <TabsTrigger value="orders" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-md data-[state=active]:scale-105 transition-all uppercase">
+                  <TabsTrigger value="orders" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-amber-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all uppercase">
                     PRODUCCIÓN
                   </TabsTrigger>
                 </TabsList>
