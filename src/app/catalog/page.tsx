@@ -173,7 +173,6 @@ export default function CatalogPage() {
   const [assemblyQty, setAssemblyQty] = useState(1)
   const [newCategoryName, setNewCategoryName] = useState("")
   
-  // Supplier Form State
   const [newSupplierName, setNewSupplierName] = useState("")
   const [newSupplierPhone, setNewSupplierPhone] = useState("")
   const [newSupplierAddress, setNewSupplierAddress] = useState("")
@@ -186,7 +185,6 @@ export default function CatalogPage() {
   
   const [bomFilterCategory, setBomFilterCategory] = useState("all")
 
-  // Carrito de compras manual para armado
   const [manualPurchaseQtys, setManualPurchaseQtys] = useState<Record<string, number>>({})
   const [manualSuppliers, setManualSuppliers] = useState<Record<string, string>>({})
   const [initialPlanData, setInitialPlanData] = useState({ qtys: {}, sups: {} })
@@ -259,7 +257,6 @@ export default function CatalogPage() {
       .sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""))
   }, [items, searchTerm, selectedCategories, calculateCost])
 
-  // LÓGICA DE EXPLOSIÓN DE MATERIALES (MRP)
   const explosionSummary = useMemo(() => {
     const target = orderToView ? items?.find(i => i.id === orderToView.productId) : selectedForAssembly;
     const qty = orderToView ? orderToView.quantity : assemblyQty;
@@ -320,7 +317,6 @@ export default function CatalogPage() {
     };
   }, [selectedForAssembly, assemblyQty, items, orderToView]);
 
-  // Inicializar el carrito de compras manual cada vez que la explosión cambie o se cargue una orden
   useEffect(() => {
     if (orderToView && explosionSummary) {
       const newManualQtys: Record<string, number> = {};
@@ -537,6 +533,45 @@ export default function CatalogPage() {
   const handleUpdateStockAudit = (id: string, newStock: number) => {
     updateDocumentNonBlocking(doc(db, 'products_services', id), { stock: newStock });
     toast({ title: "Stock actualizado", description: "Recuento guardado." });
+  }
+
+  const handleAssembleFinal = () => {
+    if (!orderToView || !items) return;
+    const target = items.find(i => i.id === orderToView.productId);
+    if (!target) return;
+
+    const confirmAssembly = confirm(`¿Finalizar armado de ${orderToView.quantity} unidades de ${orderToView.productName}? Se descontarán todos los insumos del stock.`);
+    if (!confirmAssembly) return;
+
+    const explodeAndSubtract = (productId: string, qtyToSubtract: number) => {
+      const item = items.find(i => i.id === productId);
+      if (!item) return;
+
+      if (item.trackStock !== false) {
+        updateDocumentNonBlocking(doc(db, 'products_services', item.id), {
+          stock: increment(-qtyToSubtract)
+        });
+      }
+
+      if (item.isCompuesto) {
+        item.components?.forEach((comp: any) => {
+          explodeAndSubtract(comp.productId, comp.quantity * qtyToSubtract);
+        });
+      }
+    };
+
+    explodeAndSubtract(target.id, orderToView.quantity);
+
+    updateDocumentNonBlocking(doc(db, 'products_services', target.id), {
+      stock: increment(orderToView.quantity)
+    });
+
+    updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
+      status: 'completed'
+    });
+
+    setOrderToView(null);
+    toast({ title: "Armado completado", description: "Insumos descontados y producto final sumado al stock." });
   }
 
   const handleSaveCategory = () => {
@@ -864,67 +899,66 @@ export default function CatalogPage() {
                   </div>
                 </div>
 
-                <div className="border-2 rounded-xl bg-white shadow-md overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <Table className="min-w-[600px]">
-                      <TableHeader className="bg-slate-50">
-                        <TableRow>
-                          <TableHead className="text-[9px] font-black uppercase">Material</TableHead>
-                          <TableHead className="text-[9px] font-black uppercase text-center w-24">Cantidad</TableHead>
-                          <TableHead className="text-[9px] font-black uppercase text-center w-24">Proveedor</TableHead>
-                          <TableHead className="text-[9px] font-black uppercase text-center w-24">Post-Stock</TableHead>
-                          <TableHead className="text-[9px] font-black uppercase text-right w-32">Subtotal</TableHead>
+                {/* VISTA TABLA (DESKTOP) */}
+                <div className="hidden md:block border-2 rounded-xl bg-white shadow-md overflow-hidden">
+                  <Table className="min-w-[600px]">
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="text-[9px] font-black uppercase">Material</TableHead>
+                        <TableHead className="text-center font-black text-[9px] uppercase w-24">Cantidad</TableHead>
+                        <TableHead className="text-center font-black text-[9px] uppercase w-24">Proveedor</TableHead>
+                        <TableHead className="text-center font-black text-[9px] uppercase w-24">Post-Stock</TableHead>
+                        <TableHead className="text-right font-black text-[9px] uppercase w-32">Subtotal</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {items.map(f => (
+                        <TableRow key={f.id} className="hover:bg-muted/5">
+                          <TableCell>
+                            <p className="font-bold text-xs">{f.name}</p>
+                            <p className="text-[8px] text-muted-foreground uppercase">Disp: {f.available} / Req: {f.required}</p>
+                          </TableCell>
+                          <TableCell>
+                            <input 
+                              type="number" 
+                              disabled={orderToView?.status === 'completed'}
+                              value={manualPurchaseQtys[f.id] ?? f.suggestedToBuy} 
+                              onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [f.id]: Number(e.target.value) }))}
+                              className="w-full text-center font-black text-sm bg-muted/30 border-none rounded py-1 focus:ring-2 focus:ring-primary/20 focus:outline-none"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Select 
+                              disabled={orderToView?.status === 'completed'}
+                              value={manualSuppliers[f.id] || (f.supplier || "Sin Proveedor")} 
+                              onValueChange={(v) => setManualSuppliers(prev => ({ ...prev, [f.id]: v }))}
+                            >
+                              <SelectTrigger className="h-7 text-[9px] py-0 px-2 bg-muted/30 border-none">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
+                                {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <span className={cn(
+                              "font-black text-[10px] px-2 py-0.5 rounded",
+                              f.isInsufficient ? "bg-rose-600 text-white" : f.isCritical ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
+                            )}>
+                              {f.futureStock}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <p className="text-[10px] font-bold">
+                              {f.costARS > 0 ? `$${(f.manualQty * f.costARS).toLocaleString('es-AR')}` : `u$s ${(f.manualQty * f.costUSD).toLocaleString('es-AR')}`}
+                            </p>
+                          </TableCell>
                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {items.map(f => (
-                          <TableRow key={f.id} className="hover:bg-muted/5">
-                            <TableCell>
-                              <p className="font-bold text-xs">{f.name}</p>
-                              <p className="text-[8px] text-muted-foreground uppercase">Disp: {f.available} / Req: {f.required}</p>
-                            </TableCell>
-                            <TableCell>
-                              <input 
-                                type="number" 
-                                disabled={orderToView?.status === 'completed'}
-                                value={manualPurchaseQtys[f.id] ?? f.suggestedToBuy} 
-                                onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [f.id]: Number(e.target.value) }))}
-                                className="w-full text-center font-black text-sm bg-muted/30 border-none rounded py-1 focus:ring-2 focus:ring-primary/20 focus:outline-none"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Select 
-                                disabled={orderToView?.status === 'completed'}
-                                value={manualSuppliers[f.id] || (f.supplier || "Sin Proveedor")} 
-                                onValueChange={(v) => setManualSuppliers(prev => ({ ...prev, [f.id]: v }))}
-                              >
-                                <SelectTrigger className="h-7 text-[9px] py-0 px-2 bg-muted/30 border-none">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
-                                  {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <span className={cn(
-                                "font-black text-[10px] px-2 py-0.5 rounded",
-                                f.isInsufficient ? "bg-rose-600 text-white" : f.isCritical ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
-                              )}>
-                                {f.futureStock}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <p className="text-[10px] font-bold">
-                                {f.costARS > 0 ? `$${(f.manualQty * f.costARS).toLocaleString('es-AR')}` : `u$s ${(f.manualQty * f.costUSD).toLocaleString('es-AR')}`}
-                              </p>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                      ))}
+                    </TableBody>
+                  </Table>
                   <div className="bg-slate-50 border-t p-3 grid grid-cols-2 gap-4">
                     <div className="flex items-center gap-2">
                       <span className="text-[8px] font-black uppercase text-slate-400">Total {sup} ARS:</span>
@@ -933,6 +967,73 @@ export default function CatalogPage() {
                     <div className="flex items-center gap-2 justify-end">
                       <span className="text-[8px] font-black uppercase text-slate-400">Total {sup} USD:</span>
                       <span className="font-black text-xs text-emerald-700">u$s {groupUSD.toLocaleString('es-AR')}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* VISTA TARJETAS (MOBILE) */}
+                <div className="md:hidden space-y-3">
+                  {items.map(f => (
+                    <Card key={f.id} className="p-3 bg-white border shadow-sm space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <p className="font-bold text-sm leading-tight">{f.name}</p>
+                          <p className="text-[9px] text-muted-foreground uppercase mt-0.5">Disp: {f.available} / Req: {f.required}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className={cn(
+                            "font-black text-[10px] px-2 py-0.5 rounded uppercase tracking-tighter",
+                            f.isInsufficient ? "bg-rose-600 text-white" : f.isCritical ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
+                          )}>
+                            Stock Post: {f.futureStock}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3 pt-2 border-t">
+                        <div className="space-y-1">
+                          <Label className="text-[8px] font-black uppercase text-muted-foreground">Cantidad Compra</Label>
+                          <input 
+                            type="number" 
+                            disabled={orderToView?.status === 'completed'}
+                            value={manualPurchaseQtys[f.id] ?? f.suggestedToBuy} 
+                            onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [f.id]: Number(e.target.value) }))}
+                            className="w-full text-center font-black text-lg bg-muted/30 border rounded h-10 focus:ring-2 focus:ring-primary/20 focus:outline-none"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[8px] font-black uppercase text-muted-foreground">Proveedor</Label>
+                          <Select 
+                            disabled={orderToView?.status === 'completed'}
+                            value={manualSuppliers[f.id] || (f.supplier || "Sin Proveedor")} 
+                            onValueChange={(v) => setManualSuppliers(prev => ({ ...prev, [f.id]: v }))}
+                          >
+                            <SelectTrigger className="h-10 text-[10px] bg-white border">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
+                              {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center bg-slate-50 -mx-3 -mb-3 p-2 rounded-b-lg border-t">
+                        <span className="text-[8px] font-black uppercase text-slate-400">Subtotal Compra</span>
+                        <span className="font-black text-xs">
+                          {f.costARS > 0 ? `$${(f.manualQty * f.costARS).toLocaleString('es-AR')}` : `u$s ${(f.manualQty * f.costUSD).toLocaleString('es-AR')}`}
+                        </span>
+                      </div>
+                    </Card>
+                  ))}
+                  <div className="p-3 bg-slate-900 rounded-xl text-white space-y-1">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[8px] font-black uppercase text-slate-400">Total {sup} ARS</span>
+                      <span className="font-black text-sm">${groupARS.toLocaleString('es-AR')}</span>
+                    </div>
+                    <div className="flex justify-between items-center border-t border-white/10 pt-1">
+                      <span className="text-[8px] font-black uppercase text-slate-400">Total {sup} USD</span>
+                      <span className="font-black text-sm text-emerald-400">u$s {groupUSD.toLocaleString('es-AR')}</span>
                     </div>
                   </div>
                 </div>
@@ -1171,7 +1272,6 @@ export default function CatalogPage() {
         </SidebarInset>
       </div>
 
-      {/* DIÁLOGO DE AUDITORÍA RÁPIDA DE STOCK */}
       <Dialog open={isAuditOpen} onOpenChange={setIsAuditOpen}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col p-0 w-[95vw]">
           <DialogHeader className="p-6 pb-2">
@@ -1204,8 +1304,43 @@ export default function CatalogPage() {
               </Select>
             </div>
           </div>
+          
           <ScrollArea className="flex-1 px-6 pb-6">
-            <div className="border rounded-xl bg-white shadow-sm overflow-x-auto">
+            <div className="space-y-3 md:hidden">
+              {items?.filter(i => 
+                !i.isService && 
+                i.trackStock !== false && 
+                i.name.toLowerCase().includes(auditSearch.toLowerCase()) &&
+                (auditCategoryFilter === "all" || i.categoryId === auditCategoryFilter)
+              ).sort((a,b) => a.name.localeCompare(b.name)).map(item => (
+                <Card key={item.id} className="p-4 flex flex-col gap-3">
+                  <div>
+                    <p className="font-bold text-sm">{item.name}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase">{categoryMap[item.categoryId] || 'S/C'}</p>
+                  </div>
+                  <div className="flex justify-between items-center bg-muted/20 p-2 rounded-lg">
+                    <div className="flex flex-col">
+                      <span className="text-[8px] font-black text-muted-foreground uppercase">Stock Actual</span>
+                      <span className="font-black text-primary">{item.stock || 0}</span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-[8px] font-black text-muted-foreground uppercase">Nuevo Recuento</span>
+                      <Input 
+                        type="number" 
+                        className="w-24 text-right font-black h-8 mt-1" 
+                        defaultValue={item.stock || 0}
+                        onBlur={(e) => {
+                          const val = Number(e.target.value);
+                          if (val !== item.stock) handleUpdateStockAudit(item.id, val);
+                        }}
+                      />
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+
+            <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-x-auto">
               <Table className="min-w-[500px]">
                 <TableHeader className="bg-slate-50">
                   <TableRow>
@@ -1246,16 +1381,16 @@ export default function CatalogPage() {
               </Table>
             </div>
           </ScrollArea>
+          
           <DialogFooter className="p-6 bg-slate-50 border-t">
             <Button onClick={() => setIsAuditOpen(false)} className="w-full font-bold">Cerrar Auditoría</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* MODAL DE DETALLE DE ORDEN DE PRODUCCIÓN */}
       <Dialog open={!!orderToView} onOpenChange={handleCloseOrderView}>
-        <DialogContent className="max-w-6xl max-h-[95vh] overflow-y-auto w-[95vw]">
-          <DialogHeader>
+        <DialogContent className="max-w-6xl max-h-[95vh] overflow-hidden flex flex-col p-0 w-[95vw]">
+          <DialogHeader className="p-6 pb-2">
             <div className="flex flex-col md:flex-row justify-between items-start pr-8 gap-4">
               <div>
                 <DialogTitle className="flex items-center gap-2 text-primary font-black text-2xl">
@@ -1288,62 +1423,98 @@ export default function CatalogPage() {
             </div>
           </DialogHeader>
 
-          {orderToView && (
-            <div className="py-4 space-y-10">
-              <section className="grid grid-cols-1 gap-8">
-                {/* EXPLOSION DE INSUMOS */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
-                    <Layers className="h-4 w-4" /> Explosión de Insumos (Multinivel)
-                  </h3>
-                  <div className="border rounded-xl bg-white shadow-sm overflow-x-auto">
-                    <Table className="min-w-[500px]">
-                      <TableHeader className="bg-slate-50">
-                        <TableRow>
-                          <TableHead className="text-[9px] font-black uppercase">Pieza / Material</TableHead>
-                          <TableHead className="text-center text-[9px] font-black uppercase">Req.</TableHead>
-                          <TableHead className="text-center text-[9px] font-black uppercase">Stock Actual</TableHead>
-                          <TableHead className="text-right text-[9px] font-black uppercase">Disponibilidad</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {explosionSummary?.all.sort((a,b) => a.name.localeCompare(b.name)).map(req => {
-                          const stockRestante = req.available - req.required;
-                          const esCritico = stockRestante < req.minStock;
-                          const faltaDirecto = stockRestante < 0;
-                          return (
-                            <TableRow key={req.id}>
-                              <TableCell className="py-2">
-                                <p className="font-bold text-xs">{req.name}</p>
+          <ScrollArea className="flex-1 p-6 pt-2">
+            {orderToView && (
+              <div className="space-y-10">
+                <section className="grid grid-cols-1 gap-8">
+                  {/* EXPLOSION DE INSUMOS */}
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
+                      <Layers className="h-4 w-4" /> Explosión de Insumos (Multinivel)
+                    </h3>
+                    
+                    {/* MOBILE EXPLOSION */}
+                    <div className="grid grid-cols-1 gap-3 md:hidden">
+                      {explosionSummary?.all.sort((a,b) => a.name.localeCompare(b.name)).map(req => {
+                        const stockRestante = req.available - req.required;
+                        const esCritico = stockRestante < req.minStock;
+                        const faltaDirecto = stockRestante < 0;
+                        return (
+                          <Card key={req.id} className="p-3 bg-white shadow-sm border space-y-2">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <p className="font-bold text-sm">{req.name}</p>
                                 <p className="text-[8px] text-muted-foreground uppercase">{(manualSuppliers[req.id] || req.supplier) || "Sin Proveedor"}</p>
-                              </TableCell>
-                              <TableCell className="text-center font-black text-primary text-xs">{req.required}</TableCell>
-                              <TableCell className="text-center text-xs">{req.available}</TableCell>
-                              <TableCell className="text-right">
-                                {faltaDirecto ? <Badge className="bg-rose-600 text-[8px] h-4 leading-none py-0 px-1 whitespace-nowrap">FALTA STOCK</Badge> : 
-                                 esCritico ? <Badge variant="outline" className="text-amber-600 border-amber-200 text-[8px] h-4 leading-none py-0 px-1 whitespace-nowrap">BAJO MÍNIMO</Badge> : 
-                                 <CheckCircle className="h-4 w-4 text-emerald-500 ml-auto" />}
-                              </TableCell>
-                            </TableRow>
-                          )
-                        })}
-                      </TableBody>
-                    </Table>
+                              </div>
+                              {faltaDirecto ? <Badge className="bg-rose-600 text-[8px] h-4 uppercase font-black">FALTA STOCK</Badge> : 
+                               esCritico ? <Badge variant="outline" className="text-amber-600 border-amber-200 text-[8px] h-4 uppercase font-black">BAJO MÍNIMO</Badge> : 
+                               <CheckCircle className="h-4 w-4 text-emerald-500 ml-auto" />}
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-center bg-muted/20 p-2 rounded">
+                              <div>
+                                <p className="text-[8px] font-black uppercase text-slate-400">Requerido</p>
+                                <p className="text-sm font-black text-primary">{req.required}</p>
+                              </div>
+                              <div className="border-l border-slate-200">
+                                <p className="text-[8px] font-black uppercase text-slate-400">Actual</p>
+                                <p className="text-sm font-black">{req.available}</p>
+                              </div>
+                            </div>
+                          </Card>
+                        )
+                      })}
+                    </div>
+
+                    {/* DESKTOP EXPLOSION */}
+                    <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-x-auto">
+                      <Table className="min-w-[500px]">
+                        <TableHeader className="bg-slate-50">
+                          <TableRow>
+                            <TableHead className="text-[9px] font-black uppercase">Pieza / Material</TableHead>
+                            <TableHead className="text-center text-[9px] font-black uppercase">Req.</TableHead>
+                            <TableHead className="text-center text-[9px] font-black uppercase">Stock Actual</TableHead>
+                            <TableHead className="text-right text-[9px] font-black uppercase">Disponibilidad</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {explosionSummary?.all.sort((a,b) => a.name.localeCompare(b.name)).map(req => {
+                            const stockRestante = req.available - req.required;
+                            const esCritico = stockRestante < req.minStock;
+                            const faltaDirecto = stockRestante < 0;
+                            return (
+                              <TableRow key={req.id}>
+                                <TableCell className="py-2">
+                                  <p className="font-bold text-xs">{req.name}</p>
+                                  <p className="text-[8px] text-muted-foreground uppercase">{(manualSuppliers[req.id] || req.supplier) || "Sin Proveedor"}</p>
+                                </TableCell>
+                                <TableCell className="text-center font-black text-primary text-xs">{req.required}</TableCell>
+                                <TableCell className="text-center text-xs">{req.available}</TableCell>
+                                <TableCell className="text-right">
+                                  {faltaDirecto ? <Badge className="bg-rose-600 text-[8px] h-4 leading-none py-0 px-1 whitespace-nowrap">FALTA STOCK</Badge> : 
+                                   esCritico ? <Badge variant="outline" className="text-amber-600 border-amber-200 text-[8px] h-4 leading-none py-0 px-1 whitespace-nowrap">BAJO MÍNIMO</Badge> : 
+                                   <CheckCircle className="h-4 w-4 text-emerald-500 ml-auto" />}
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
-                </div>
 
-                {/* COMPRAS POR PROVEEDOR */}
-                <div className="space-y-6">
-                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
-                    <ShoppingCart className="h-4 w-4" /> Plan de Compras por Proveedor
-                  </h3>
-                  <GroupedPurchaseList />
-                </div>
-              </section>
-            </div>
-          )}
+                  {/* COMPRAS POR PROVEEDOR */}
+                  <div className="space-y-6">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
+                      <ShoppingCart className="h-4 w-4" /> Plan de Compras por Proveedor
+                    </h3>
+                    <GroupedPurchaseList />
+                  </div>
+                </section>
+              </div>
+            )}
+          </ScrollArea>
 
-          <DialogFooter className="mt-6 border-t pt-6">
+          <DialogFooter className="p-6 border-t bg-slate-50">
             <div className="flex flex-col md:flex-row items-center justify-between w-full gap-4">
               <div className="flex gap-4">
                 <div className="text-left">
@@ -1754,7 +1925,40 @@ export default function CatalogPage() {
                       {explosionSummary.all.length} COMPONENTES IMPACTADOS
                     </Badge>
                   </div>
-                  <div className="border rounded-xl bg-white shadow-sm overflow-x-auto">
+                  
+                  {/* MOBILE EXPLOSION NEW ASSEMBLY */}
+                  <div className="grid grid-cols-1 gap-3 md:hidden">
+                    {explosionSummary.all.sort((a,b) => a.name.localeCompare(b.name)).map((req) => {
+                      const stockRestante = req.available - req.required;
+                      const esCritico = stockRestante < req.minStock;
+                      const faltaDirecto = stockRestante < 0;
+                      return (
+                        <Card key={req.id} className="p-3 border shadow-sm space-y-2">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <p className="font-bold text-sm">{req.name}</p>
+                              <p className="text-[8px] text-muted-foreground uppercase">{(manualSuppliers[req.id] || req.supplier) || "Sin Proveedor"}</p>
+                            </div>
+                            {faltaDirecto ? <Badge className="bg-rose-600 text-[8px] h-4 uppercase font-black">FALTA STOCK</Badge> : 
+                             esCritico ? <Badge variant="outline" className="text-amber-600 border-amber-200 text-[8px] h-4 uppercase font-black">BAJO MÍNIMO</Badge> : 
+                             <CheckCircle className="h-4 w-4 text-emerald-500 ml-auto" />}
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-center bg-muted/20 p-2 rounded">
+                            <div>
+                              <p className="text-[8px] font-black uppercase text-slate-400">Requerido</p>
+                              <p className="text-sm font-black text-primary">{req.required}</p>
+                            </div>
+                            <div className="border-l border-slate-200">
+                              <p className="text-[8px] font-black uppercase text-slate-400">Actual</p>
+                              <p className="text-sm font-black">{req.available}</p>
+                            </div>
+                          </div>
+                        </Card>
+                      );
+                    })}
+                  </div>
+
+                  <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-x-auto">
                     <Table className="min-w-[500px]">
                       <TableHeader className="bg-slate-50">
                         <TableRow>
