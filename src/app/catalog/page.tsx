@@ -293,8 +293,14 @@ export default function CatalogPage() {
       if (item.isCompuesto) {
         const neededToProduce = Math.max(0, qtyNeeded - currentStock);
         if (neededToProduce > 0) {
+          // Agrupar componentes para evitar duplicaciones si los datos están sucios
+          const groupedComponents: Record<string, number> = {};
           item.components?.forEach((comp: any) => {
-            explode(comp.productId, comp.quantity * neededToProduce);
+            groupedComponents[comp.productId] = (groupedComponents[comp.productId] || 0) + (Number(comp.quantity) || 0);
+          });
+
+          Object.entries(groupedComponents).forEach(([compProductId, compQty]) => {
+            explode(compProductId, compQty * neededToProduce);
           });
         }
       }
@@ -392,11 +398,13 @@ export default function CatalogPage() {
 
   const sortedAddedComponents = useMemo(() => {
     if (!items || !formData.components) return []
-    return [...formData.components].sort((a, b) => {
-      const nameA = items.find(i => i.id === a.productId)?.name || ""
-      const nameB = items.find(i => i.id === b.productId)?.name || ""
-      return nameA.localeCompare(nameB)
-    })
+    return formData.components
+      .map((c, i) => ({ ...c, originalIndex: i }))
+      .sort((a, b) => {
+        const nameA = items.find(i => i.id === a.productId)?.name || ""
+        const nameB = items.find(i => i.id === b.productId)?.name || ""
+        return nameA.localeCompare(nameB)
+      })
   }, [formData.components, items])
 
   const categoryCounts = useMemo(() => {
@@ -415,6 +423,18 @@ export default function CatalogPage() {
     }
     if (item) {
       setEditingItemId(item.id)
+      
+      // Sanitización de componentes: agrupar duplicados si los hay
+      const sanitizedComponents: { productId: string, quantity: number }[] = [];
+      (item.components || []).forEach((c: any) => {
+        const existing = sanitizedComponents.find(sc => sc.productId === c.productId);
+        if (existing) {
+          existing.quantity += (Number(c.quantity) || 0);
+        } else {
+          sanitizedComponents.push({ ...c });
+        }
+      });
+
       setFormData({
         ...formData,
         name: item.name || "",
@@ -432,7 +452,7 @@ export default function CatalogPage() {
         description: item.description || "",
         stock: item.stock || 0,
         minStock: item.minStock || 0,
-        components: item.components || []
+        components: sanitizedComponents
       })
     } else {
       setEditingItemId(null)
@@ -1843,11 +1863,10 @@ export default function CatalogPage() {
                       <div className="py-10 text-center text-xs text-muted-foreground italic">Agrega componentes para armar este producto.</div>
                     ) : (
                       <div className="space-y-2">
-                        {sortedAddedComponents.map((comp, idx) => {
+                        {sortedAddedComponents.map((comp) => {
                           const product = items?.find(i => i.id === comp.productId);
-                          const actualIdx = formData.components.findIndex(c => c.productId === comp.productId);
                           return (
-                            <div key={comp.productId} className="flex items-center justify-between p-2 rounded bg-muted/20 border border-muted/30">
+                            <div key={`${comp.productId}-${comp.originalIndex}`} className="flex items-center justify-between p-2 rounded bg-muted/20 border border-muted/30">
                               <div className="flex flex-col min-w-0">
                                 <span className="text-xs font-bold truncate">{product?.name || 'Cargando...'}</span>
                                 {product?.trackStock !== false && (
@@ -1860,11 +1879,11 @@ export default function CatalogPage() {
                                   <input 
                                     type="number" 
                                     value={comp.quantity} 
-                                    onChange={(e) => updateComponentQty(actualIdx, Number(e.target.value))}
+                                    onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))}
                                     className="w-10 h-7 text-xs font-bold text-center focus:outline-none"
                                   />
                                 </div>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeComponent(actualIdx)}><Minus className="h-4 w-4" /></Button>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeComponent(comp.originalIndex)}><Minus className="h-4 w-4" /></Button>
                               </div>
                             </div>
                           );
