@@ -1273,14 +1273,14 @@ export default function CatalogPage() {
       </div>
 
       <Dialog open={isAuditOpen} onOpenChange={setIsAuditOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col p-0 w-[95vw]">
-          <DialogHeader className="p-6 pb-2">
+        <DialogContent className="max-w-5xl h-[95vh] flex flex-col p-0 w-[95vw]">
+          <DialogHeader className="p-6 pb-2 shrink-0">
             <DialogTitle className="flex items-center gap-2 text-2xl font-black text-slate-800">
               <Calculator className="h-6 w-6 text-primary" /> Auditoría de Stock
             </DialogTitle>
             <DialogDescription>Ajusta los niveles de inventario de forma masiva y ágil.</DialogDescription>
           </DialogHeader>
-          <div className="px-6 py-2">
+          <div className="px-6 py-2 shrink-0">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1305,7 +1305,7 @@ export default function CatalogPage() {
             </div>
           </div>
           
-          <ScrollArea className="flex-1 px-6 pb-6">
+          <div className="flex-1 min-h-0 px-6 pb-6 overflow-y-auto">
             <div className="space-y-3 md:hidden">
               {items?.filter(i => 
                 !i.isService && 
@@ -1340,9 +1340,9 @@ export default function CatalogPage() {
               ))}
             </div>
 
-            <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-x-auto">
+            <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-hidden">
               <Table className="min-w-[500px]">
-                <TableHeader className="bg-slate-50">
+                <TableHeader className="bg-slate-50 sticky top-0 z-10">
                   <TableRow>
                     <TableHead className="font-black text-[10px] uppercase">Artículo</TableHead>
                     <TableHead className="text-center font-black text-[10px] uppercase w-32">Stock Actual</TableHead>
@@ -1380,17 +1380,17 @@ export default function CatalogPage() {
                 </TableBody>
               </Table>
             </div>
-          </ScrollArea>
+          </div>
           
-          <DialogFooter className="p-6 bg-slate-50 border-t">
+          <DialogFooter className="p-6 bg-slate-50 border-t shrink-0">
             <Button onClick={() => setIsAuditOpen(false)} className="w-full font-bold">Cerrar Auditoría</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!orderToView} onOpenChange={handleCloseOrderView}>
-        <DialogContent className="max-w-6xl max-h-[95vh] overflow-hidden flex flex-col p-0 w-[95vw]">
-          <DialogHeader className="p-6 pb-2">
+        <DialogContent className="max-w-6xl h-[95vh] flex flex-col p-0 w-[95vw]">
+          <DialogHeader className="p-6 pb-2 shrink-0">
             <div className="flex flex-col md:flex-row justify-between items-start pr-8 gap-4">
               <div>
                 <DialogTitle className="flex items-center gap-2 text-primary font-black text-2xl">
@@ -1423,7 +1423,7 @@ export default function CatalogPage() {
             </div>
           </DialogHeader>
 
-          <ScrollArea className="flex-1 p-6 pt-2">
+          <div className="flex-1 min-h-0 overflow-y-auto p-6 pt-2">
             {orderToView && (
               <div className="space-y-10">
                 <section className="grid grid-cols-1 gap-8">
@@ -1512,9 +1512,9 @@ export default function CatalogPage() {
                 </section>
               </div>
             )}
-          </ScrollArea>
+          </div>
 
-          <DialogFooter className="p-6 border-t bg-slate-50">
+          <DialogFooter className="p-6 border-t bg-slate-50 shrink-0">
             <div className="flex flex-col md:flex-row items-center justify-between w-full gap-4">
               <div className="flex gap-4">
                 <div className="text-left">
@@ -1884,15 +1884,15 @@ export default function CatalogPage() {
       </Dialog>
 
       <Dialog open={isAssemblyOpen} onOpenChange={setIsAssemblyOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto w-[95vw]">
-          <DialogHeader>
+        <DialogContent className="max-w-5xl h-[95vh] flex flex-col p-0 w-[95vw]">
+          <DialogHeader className="p-6 pb-2 shrink-0">
             <DialogTitle className="flex items-center gap-2 text-amber-600 font-black text-2xl">
               <Hammer className="h-6 w-6" /> Nueva Orden de Armado
             </DialogTitle>
             <DialogDescription>Planificación de fabricación para <b>{selectedForAssembly?.name}</b></DialogDescription>
           </DialogHeader>
           
-          <div className="py-4 space-y-8">
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-8">
             <section className="bg-amber-50 border border-amber-100 p-6 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
               <div className="space-y-1">
                 <Label className="font-black text-amber-800 uppercase tracking-widest text-xs">Cantidad a Fabricar</Label>
@@ -2019,7 +2019,7 @@ export default function CatalogPage() {
             )}
           </div>
 
-          <DialogFooter className="mt-6 border-t pt-6">
+          <DialogFooter className="mt-6 border-t pt-6 shrink-0 p-6">
             <Button variant="ghost" onClick={() => setIsAssemblyOpen(false)} className="font-bold">Cancelar</Button>
             <Button 
               onClick={handleCreateOrder} 
