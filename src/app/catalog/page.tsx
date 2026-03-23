@@ -558,6 +558,14 @@ export default function CatalogPage() {
     toast({ title: "Stock actualizado", description: "Recuento guardado." });
   }
 
+  const handleUpdateGlobalSupplier = (productId: string, newSupplier: string) => {
+    const cleanSupplier = newSupplier === "Sin Proveedor" ? "" : newSupplier;
+    updateDocumentNonBlocking(doc(db, 'products_services', productId), {
+      supplier: cleanSupplier
+    });
+    toast({ title: "Proveedor actualizado" });
+  }
+
   const handleAssembleFinal = () => {
     if (!orderToView || !items) return;
     const target = items.find(i => i.id === orderToView.productId);
@@ -1324,9 +1332,9 @@ export default function CatalogPage() {
         <DialogContent className="max-w-5xl h-[95vh] flex flex-col p-0 w-[95vw]">
           <DialogHeader className="p-4 pb-1 shrink-0">
             <DialogTitle className="flex items-center gap-2 text-xl font-black text-slate-800">
-              <Calculator className="h-5 w-5 text-primary" /> Auditoría de Stock
+              <Calculator className="h-5 w-5 text-primary" /> Auditoría de Stock y Proveedores
             </DialogTitle>
-            <DialogDescription className="text-xs">Ajusta los niveles de inventario rápidamente.</DialogDescription>
+            <DialogDescription className="text-xs">Ajusta los niveles de inventario y asigna proveedores rápidamente.</DialogDescription>
           </DialogHeader>
           <div className="px-4 py-1 shrink-0">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
@@ -1361,36 +1369,54 @@ export default function CatalogPage() {
                 i.name.toLowerCase().includes(auditSearch.toLowerCase()) &&
                 (auditCategoryFilter === "all" || i.categoryId === auditCategoryFilter)
               ).sort((a,b) => a.name.localeCompare(b.name)).map(item => (
-                <Card key={item.id} className="p-2.5 flex items-center justify-between gap-3 bg-white border shadow-sm">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-xs truncate leading-tight">{item.name}</p>
-                    <p className="text-[9px] text-muted-foreground uppercase mt-0.5">
-                      Stock actual: <span className="font-black text-primary">{item.stock || 0}</span>
-                    </p>
+                <Card key={item.id} className="p-2 bg-white border shadow-sm space-y-3">
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-xs truncate leading-tight">{item.name}</p>
+                      <p className="text-[9px] text-muted-foreground uppercase mt-0.5">
+                        Stock actual: <span className="font-black text-primary">{item.stock || 0}</span>
+                      </p>
+                    </div>
+                    <div className="shrink-0 flex items-center gap-2">
+                      <Label className="text-[8px] font-black uppercase text-muted-foreground">Nuevo:</Label>
+                      <Input 
+                        type="number" 
+                        className="w-16 h-8 text-right font-black px-2 text-sm" 
+                        defaultValue={item.stock || 0}
+                        onBlur={(e) => {
+                          const val = Number(e.target.value);
+                          if (val !== item.stock) handleUpdateStockAudit(item.id, val);
+                        }}
+                      />
+                    </div>
                   </div>
-                  <div className="shrink-0 flex items-center gap-2">
-                    <Label className="text-[8px] font-black uppercase text-muted-foreground">Nuevo:</Label>
-                    <Input 
-                      type="number" 
-                      className="w-16 h-8 text-right font-black px-2 text-sm" 
-                      defaultValue={item.stock || 0}
-                      onBlur={(e) => {
-                        const val = Number(e.target.value);
-                        if (val !== item.stock) handleUpdateStockAudit(item.id, val);
-                      }}
-                    />
+                  <div className="pt-2 border-t flex flex-col gap-1">
+                    <Label className="text-[8px] font-black uppercase text-muted-foreground">Proveedor Asignado:</Label>
+                    <Select 
+                      defaultValue={item.supplier || "Sin Proveedor"} 
+                      onValueChange={(v) => handleUpdateGlobalSupplier(item.id, v)}
+                    >
+                      <SelectTrigger className="h-8 text-[10px] bg-muted/20 border-none">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
+                        {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </Card>
               ))}
             </div>
 
             <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-hidden">
-              <Table className="min-w-[500px]">
+              <Table className="min-w-[700px]">
                 <TableHeader className="bg-slate-50 sticky top-0 z-10">
                   <TableRow>
                     <TableHead className="font-black text-[10px] uppercase h-8">Artículo</TableHead>
-                    <TableHead className="text-center font-black text-[10px] uppercase w-32 h-8">Stock Actual</TableHead>
-                    <TableHead className="text-right font-black text-[10px] uppercase w-40 h-8">Nuevo Recuento</TableHead>
+                    <TableHead className="text-center font-black text-[10px] uppercase w-24 h-8">Stock Act.</TableHead>
+                    <TableHead className="text-center font-black text-[10px] uppercase w-48 h-8">Proveedor Asignado</TableHead>
+                    <TableHead className="text-right font-black text-[10px] uppercase w-32 h-8">Recuento</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1406,18 +1432,30 @@ export default function CatalogPage() {
                         <p className="text-[9px] text-muted-foreground uppercase">{categoryMap[item.categoryId] || 'S/C'}</p>
                       </TableCell>
                       <TableCell className="text-center font-black text-primary text-xs">{item.stock || 0}</TableCell>
+                      <TableCell className="text-center py-1">
+                        <Select 
+                          defaultValue={item.supplier || "Sin Proveedor"} 
+                          onValueChange={(v) => handleUpdateGlobalSupplier(item.id, v)}
+                        >
+                          <SelectTrigger className="h-8 text-[10px] bg-transparent border-none focus:ring-0">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
+                            {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
                       <TableCell className="text-right py-1">
-                        <div className="flex items-center justify-end gap-2">
-                          <Input 
-                            type="number" 
-                            className="w-20 text-right font-black h-8 text-xs" 
-                            defaultValue={item.stock || 0}
-                            onBlur={(e) => {
-                              const val = Number(e.target.value);
-                              if (val !== item.stock) handleUpdateStockAudit(item.id, val);
-                            }}
-                          />
-                        </div>
+                        <Input 
+                          type="number" 
+                          className="w-20 ml-auto text-right font-black h-8 text-xs" 
+                          defaultValue={item.stock || 0}
+                          onBlur={(e) => {
+                            const val = Number(e.target.value);
+                            if (val !== item.stock) handleUpdateStockAudit(item.id, val);
+                          }}
+                        />
                       </TableCell>
                     </TableRow>
                   ))}
