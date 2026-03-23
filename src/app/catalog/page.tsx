@@ -1343,7 +1343,7 @@ export default function CatalogPage() {
                 <SelectTrigger className="h-9 text-sm">
                   <SelectValue placeholder="Categoría" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-[40vh] overflow-y-auto">
                   <SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem>
                   {categories.map(c => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
