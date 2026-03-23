@@ -87,7 +87,9 @@
         "quantity": { "type": "number" },
         "status": { "type": "string", "enum": ["draft", "pending_purchase", "ready", "completed"] },
         "createdAt": { "type": "string", "format": "date-time" },
-        "purchaseQtys": { "type": "object", "description": "Manual purchase quantities defined for this order." }
+        "purchaseQtys": { "type": "object", "description": "Manual purchase quantities defined for this order." },
+        "purchasePrices": { "type": "object", "description": "Real purchase prices defined for this order." },
+        "supplierStatuses": { "type": "object", "description": "Statuses of the purchase orders for each supplier." }
       }
     },
     "Supplier": {

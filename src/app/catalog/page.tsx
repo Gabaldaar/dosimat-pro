@@ -56,7 +56,9 @@ import {
   MapPin,
   Save,
   Calculator,
-  Beaker
+  Beaker,
+  Lock,
+  Unlock
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -188,8 +190,10 @@ export default function CatalogPage() {
   const [bomFilterCategory, setBomFilterCategory] = useState("all")
 
   const [manualPurchaseQtys, setManualPurchaseQtys] = useState<Record<string, number>>({})
+  const [manualPurchasePrices, setManualPurchasePrices] = useState<Record<string, number>>({})
   const [manualSuppliers, setManualSuppliers] = useState<Record<string, string>>({})
-  const [initialPlanData, setInitialPlanData] = useState({ qtys: {}, sups: {}, qty: 0 })
+  const [supplierStatuses, setSupplierStatuses] = useState<Record<string, 'pending' | 'ordered'>>({})
+  const [initialPlanData, setInitialPlanData] = useState({ qtys: {}, sups: {}, prices: {}, statuses: {}, qty: 0 })
 
   const [formData, setFormData] = useState({
     name: "",
@@ -328,38 +332,51 @@ export default function CatalogPage() {
   useEffect(() => {
     if (orderToView && explosionSummary) {
       const newManualQtys: Record<string, number> = {};
+      const newManualPrices: Record<string, number> = {};
       const newManualSups: Record<string, string> = {};
+      const newStatuses: Record<string, 'pending' | 'ordered'> = orderToView.supplierStatuses || {};
       
       explosionSummary.toBuySuggested.forEach(item => {
         newManualQtys[item.id] = orderToView.purchaseQtys?.[item.id] ?? item.suggestedToBuy;
+        newManualPrices[item.id] = orderToView.purchasePrices?.[item.id] ?? (item.costARS > 0 ? item.costARS : item.costUSD);
         newManualSups[item.id] = orderToView.purchaseSuppliers?.[item.id] ?? (item.supplier || "Sin Proveedor");
       });
       
       setManualPurchaseQtys(newManualQtys);
+      setManualPurchasePrices(newManualPrices);
       setManualSuppliers(newManualSups);
+      setSupplierStatuses(newStatuses);
       setInitialPlanData({ 
         qtys: JSON.parse(JSON.stringify(newManualQtys)), 
+        prices: JSON.parse(JSON.stringify(newManualPrices)),
         sups: JSON.parse(JSON.stringify(newManualSups)),
+        statuses: JSON.parse(JSON.stringify(newStatuses)),
         qty: orderToView.quantity
       });
     } else if (isAssemblyOpen && !orderToView && explosionSummary) {
       const newManualQtys: Record<string, number> = {};
+      const newManualPrices: Record<string, number> = {};
       const newManualSups: Record<string, string> = {};
       explosionSummary.toBuySuggested.forEach(item => {
         newManualQtys[item.id] = item.suggestedToBuy;
+        newManualPrices[item.id] = item.costARS > 0 ? item.costARS : item.costUSD;
         newManualSups[item.id] = item.supplier || "Sin Proveedor";
       });
       setManualPurchaseQtys(newManualQtys);
+      setManualPurchasePrices(newManualPrices);
       setManualSuppliers(newManualSups);
+      setSupplierStatuses({});
     }
   }, [isAssemblyOpen, orderToView, explosionSummary]);
 
   const hasUnsavedChanges = useMemo(() => {
     if (!orderToView) return false;
     return JSON.stringify(manualPurchaseQtys) !== JSON.stringify(initialPlanData.qtys) ||
+           JSON.stringify(manualPurchasePrices) !== JSON.stringify(initialPlanData.prices) ||
            JSON.stringify(manualSuppliers) !== JSON.stringify(initialPlanData.sups) ||
+           JSON.stringify(supplierStatuses) !== JSON.stringify(initialPlanData.statuses) ||
            orderToView.quantity !== initialPlanData.qty;
-  }, [manualPurchaseQtys, manualSuppliers, initialPlanData, orderToView]);
+  }, [manualPurchaseQtys, manualPurchasePrices, manualSuppliers, supplierStatuses, initialPlanData, orderToView]);
 
   const handleCloseOrderView = () => {
     if (hasUnsavedChanges) {
@@ -374,6 +391,7 @@ export default function CatalogPage() {
 
     const itemsToBuy = explosionSummary.toBuySuggested.map(item => {
       const manualQty = manualPurchaseQtys[item.id] ?? item.suggestedToBuy;
+      const manualPrice = manualPurchasePrices[item.id] ?? (item.costARS > 0 ? item.costARS : item.costUSD);
       const futureStock = item.available + manualQty - item.required;
       const isCritical = futureStock < item.minStock;
       const isInsufficient = futureStock < 0;
@@ -382,6 +400,7 @@ export default function CatalogPage() {
       return {
         ...item,
         manualQty,
+        manualPrice,
         futureStock,
         isCritical,
         isInsufficient,
@@ -391,10 +410,10 @@ export default function CatalogPage() {
 
     return {
       items: itemsToBuy,
-      totalARS: itemsToBuy.reduce((sum, item) => sum + (item.manualQty * item.costARS), 0),
-      totalUSD: itemsToBuy.reduce((sum, item) => sum + (item.manualQty * item.costUSD), 0)
+      totalARS: itemsToBuy.reduce((sum, item) => sum + (item.manualQty * (item.costARS > 0 ? item.manualPrice : 0)), 0),
+      totalUSD: itemsToBuy.reduce((sum, item) => sum + (item.manualQty * (item.costARS === 0 ? item.manualPrice : 0)), 0)
     };
-  }, [explosionSummary, manualPurchaseQtys, manualSuppliers, items]);
+  }, [explosionSummary, manualPurchaseQtys, manualPurchasePrices, manualSuppliers, items]);
 
   const sortedAddedComponents = useMemo(() => {
     if (!items || !formData.components) return []
@@ -508,7 +527,9 @@ export default function CatalogPage() {
       status,
       createdAt: new Date().toISOString(),
       purchaseQtys: manualPurchaseQtys,
-      purchaseSuppliers: manualSuppliers
+      purchasePrices: manualPurchasePrices,
+      purchaseSuppliers: manualSuppliers,
+      supplierStatuses: supplierStatuses
     };
 
     setDocumentNonBlocking(doc(db, 'production_orders', id), newOrder, { merge: true });
@@ -524,12 +545,16 @@ export default function CatalogPage() {
     updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
       quantity: orderToView.quantity,
       purchaseQtys: manualPurchaseQtys,
+      purchasePrices: manualPurchasePrices,
       purchaseSuppliers: manualSuppliers,
+      supplierStatuses: supplierStatuses,
       status
     });
     setInitialPlanData({ 
       qtys: JSON.parse(JSON.stringify(manualPurchaseQtys)), 
+      prices: JSON.parse(JSON.stringify(manualPurchasePrices)),
       sups: JSON.parse(JSON.stringify(manualSuppliers)),
+      statuses: JSON.parse(JSON.stringify(supplierStatuses)),
       qty: orderToView.quantity
     });
     toast({ title: "Planificación guardada", description: "Se han actualizado los cambios en la orden." });
@@ -539,26 +564,65 @@ export default function CatalogPage() {
     if (!orderToView || !purchaseCalculations) return;
     const newPurchaseQtys = { ...manualPurchaseQtys };
     const itemsToProcess = purchaseCalculations.items.filter(i => (i.supplier || "Sin Proveedor") === supplierName);
+    
     itemsToProcess.forEach(item => {
       if (item.manualQty > 0) {
+        // Actualizar Stock
         updateDocumentNonBlocking(doc(db, 'products_services', item.id), {
           stock: increment(item.manualQty)
         });
+        
+        // Actualizar Costo Real en el catálogo
+        if (item.manualPrice > 0) {
+          const costField = item.costARS > 0 ? 'costARS' : 'costUSD';
+          updateDocumentNonBlocking(doc(db, 'products_services', item.id), {
+            [costField]: item.manualPrice
+          });
+        }
+        
         newPurchaseQtys[item.id] = 0;
       }
     });
+
     setManualPurchaseQtys(newPurchaseQtys);
     const status = explosionSummary?.all.some(f => {
       const stockAfterEntry = f.id in newPurchaseQtys ? (f.available + (manualPurchaseQtys[f.id] || 0)) : f.available;
       return (stockAfterEntry - f.required) < 0;
     }) ? 'pending_purchase' : 'ready';
+    
     updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
       purchaseQtys: newPurchaseQtys,
-      purchaseSuppliers: manualSuppliers,
       status
     });
     setInitialPlanData(prev => ({ ...prev, qtys: JSON.parse(JSON.stringify(newPurchaseQtys)) }));
-    toast({ title: `Materiales de ${supplierName} ingresados`, description: "Se actualizó el stock y el plan de compras." });
+    toast({ title: `Materiales de ${supplierName} ingresados`, description: "Se actualizó el stock y los costos del catálogo." });
+  }
+
+  const handleToggleSupplierStatus = (supplierName: string) => {
+    const current = supplierStatuses[supplierName] || 'pending';
+    const next = current === 'pending' ? 'ordered' : 'pending';
+    
+    if (next === 'ordered') {
+      const itemsInSupplier = purchaseCalculations?.items.filter(i => (i.supplier || "Sin Proveedor") === supplierName) || [];
+      const hasZeroPrice = itemsInSupplier.some(i => i.manualPrice <= 0);
+      if (hasZeroPrice) {
+        toast({ 
+          title: "Precios incompletos", 
+          description: "No puedes marcar como pedido si hay artículos con precio $0.", 
+          variant: "destructive" 
+        });
+        return;
+      }
+    }
+
+    const newStatuses = { ...supplierStatuses, [supplierName]: next };
+    setSupplierStatuses(newStatuses);
+    if (orderToView) {
+      updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
+        supplierStatuses: newStatuses
+      });
+    }
+    toast({ title: next === 'ordered' ? "Pedido confirmado" : "Pedido desbloqueado para edición" });
   }
 
   const handleUpdateStockAudit = (id: string, newStock: number) => {
@@ -699,10 +763,10 @@ export default function CatalogPage() {
     }
     const sortedItemsToInclude = [...itemsToInclude].sort((a, b) => a.name.localeCompare(b.name));
     sortedItemsToInclude.forEach(f => {
-      text += `- *${f.name}*: ${f.manualQty} unidades.\n`;
+      text += `- *${f.name}*: ${f.manualQty} unidades. (Precio Ref: ${f.costARS > 0 ? '$' : 'u$s'}${f.manualPrice.toLocaleString('es-AR')})\n`;
     });
-    const ars = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * i.costARS), 0);
-    const usd = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * i.costUSD), 0);
+    const ars = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * (i.costARS > 0 ? i.manualPrice : 0)), 0);
+    const usd = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * (i.costARS === 0 ? i.manualPrice : 0)), 0);
     text += `\n*INVERSIÓN ESTIMADA:*\n`;
     if (ars > 0) text += `ARS: $${ars.toLocaleString('es-AR')}\n`;
     if (usd > 0) text += `USD: u$s ${usd.toLocaleString('es-AR')}`;
@@ -824,6 +888,7 @@ export default function CatalogPage() {
       return groups;
     }, [purchaseCalculations.items]);
     const supplierNames = Object.keys(itemsBySupplier).sort();
+    
     return (
       <div className="space-y-10">
         {supplierNames.length === 0 ? (
@@ -833,19 +898,168 @@ export default function CatalogPage() {
         ) : (
           supplierNames.map(sup => {
             const items = itemsBySupplier[sup];
-            const groupARS = items.reduce((sum, i) => sum + (i.manualQty * i.costARS), 0);
-            const groupUSD = items.reduce((sum, i) => sum + (i.manualQty * i.costUSD), 0);
+            const isOrdered = supplierStatuses[sup] === 'ordered';
+            const groupARS = items.reduce((sum, i) => sum + (i.manualQty * (i.costARS > 0 ? i.manualPrice : 0)), 0);
+            const groupUSD = items.reduce((sum, i) => sum + (i.manualQty * (i.costARS === 0 ? i.manualPrice : 0)), 0);
+            
             return (
-              <div key={sup} className="space-y-4">
+              <div key={sup} className={cn("space-y-4 p-4 rounded-2xl border transition-all", isOrdered ? "bg-slate-50 border-slate-200" : "bg-white border-primary/10 shadow-sm")}>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3"><div className="bg-slate-900 p-2 rounded-lg text-white"><Truck className="h-4 w-4" /></div><div><h4 className="text-sm font-black uppercase tracking-widest text-slate-900">{sup}</h4><p className="text-[10px] text-muted-foreground font-bold">{items.length} ÍTEMS PENDIENTES</p></div></div>
-                  <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs flex-1 md:flex-none" onClick={() => handleCopyShoppingList(sup)}><Copy className="h-3.5 w-3.5" /> COPIAR</Button>{orderToView?.status !== 'completed' && (<Button size="sm" className="h-8 gap-2 bg-emerald-600 hover:bg-emerald-700 font-bold text-xs flex-1 md:flex-none" onClick={() => handleReceiveMaterials(sup)} disabled={items.every(i => i.manualQty <= 0)}><Save className="h-3.5 w-3.5" /> INGRESAR COMPRA</Button>)}</div>
+                  <div className="flex items-center gap-3">
+                    <div className={cn("p-2 rounded-lg text-white", isOrdered ? "bg-slate-400" : "bg-slate-900")}>
+                      {isOrdered ? <Lock className="h-4 w-4" /> : <Truck className="h-4 w-4" />}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-black uppercase tracking-widest text-slate-900">{sup}</h4>
+                        {isOrdered && <Badge className="bg-slate-600 text-[8px] font-black uppercase">PEDIDO CONFIRMADO</Badge>}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">{items.length} ÍTEMS • {isOrdered ? 'VALORES BLOQUEADOS' : 'VALORES EDITABLES'}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs flex-1 md:flex-none" onClick={() => handleCopyShoppingList(sup)}>
+                      <Copy className="h-3.5 w-3.5" /> COPIAR
+                    </Button>
+                    
+                    {orderToView?.status !== 'completed' && (
+                      <>
+                        <Button 
+                          variant={isOrdered ? "ghost" : "outline"} 
+                          size="sm" 
+                          className={cn("h-8 gap-2 font-bold text-xs flex-1 md:flex-none", isOrdered ? "text-amber-600 hover:bg-amber-50" : "border-emerald-600 text-emerald-700")}
+                          onClick={() => handleToggleSupplierStatus(sup)}
+                        >
+                          {isOrdered ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                          {isOrdered ? "DESBLOQUEAR" : "MARCAR COMO PEDIDO"}
+                        </Button>
+                        
+                        <Button 
+                          size="sm" 
+                          className="h-8 gap-2 bg-emerald-600 hover:bg-emerald-700 font-bold text-xs flex-1 md:flex-none" 
+                          onClick={() => handleReceiveMaterials(sup)} 
+                          disabled={items.every(i => i.manualQty <= 0)}
+                        >
+                          <Save className="h-3.5 w-3.5" /> INGRESAR COMPRA
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </div>
+
                 <div className="hidden md:block border-2 rounded-xl bg-white shadow-md overflow-hidden">
-                  <Table className="min-w-[600px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="text-[9px] font-black uppercase">Material</TableHead><TableHead className="text-center font-black text-[9px] uppercase w-24">Cantidad</TableHead><TableHead className="text-center font-black text-[9px] uppercase w-24">Proveedor</TableHead><TableHead className="text-center font-black text-[9px] uppercase w-24">Post-Stock</TableHead><TableHead className="text-right font-black text-[9px] uppercase w-32">Subtotal</TableHead></TableRow></TableHeader><TableBody>{items.map(f => (<TableRow key={f.id} className="hover:bg-muted/5"><TableCell><p className="font-bold text-xs">{f.name}</p><p className="text-[8px] text-muted-foreground uppercase">Disp: {f.available} / Req: {f.required}</p></TableCell><TableCell><input type="number" disabled={orderToView?.status === 'completed'} value={manualPurchaseQtys[f.id] ?? f.suggestedToBuy} onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [f.id]: Number(e.target.value) }))} className="w-full text-center font-black text-sm bg-muted/30 border-none rounded py-1 focus:ring-2 focus:ring-primary/20 focus:outline-none" /></TableCell><TableCell><Select disabled={orderToView?.status === 'completed'} value={manualSuppliers[f.id] || (f.supplier || "Sin Proveedor")} onValueChange={(v) => handleUpdateItemSupplierGlobally(f.id, v)}><SelectTrigger className="h-7 text-[9px] py-0 px-2 bg-muted/30 border-none"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></TableCell><TableCell className="text-center"><span className={cn("font-black text-[10px] px-2 py-0.5 rounded", f.isInsufficient ? "bg-rose-600 text-white" : f.isCritical ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700")}>{f.futureStock}</span></TableCell><TableCell className="text-right"><p className="text-[10px] font-bold">{f.costARS > 0 ? `$${(f.manualQty * f.costARS).toLocaleString('es-AR')}` : `u$s ${(f.manualQty * f.costUSD).toLocaleString('es-AR')}`}</p></TableCell></TableRow>))}</TableBody></Table>
-                  <div className="bg-slate-50 border-t p-3 grid grid-cols-2 gap-4"><div className="flex items-center gap-2"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} ARS:</span><span className="font-black text-xs">${groupARS.toLocaleString('es-AR')}</span></div><div className="flex items-center gap-2 justify-end"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} USD:</span><span className="font-black text-xs text-emerald-700">u$s {groupUSD.toLocaleString('es-AR')}</span></div></div>
+                  <Table className="min-w-[600px]">
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="text-[9px] font-black uppercase">Material</TableHead>
+                        <TableHead className="text-center font-black text-[9px] uppercase w-20">Cantidad</TableHead>
+                        <TableHead className="text-center font-black text-[9px] uppercase w-32">Precio Ref.</TableHead>
+                        <TableHead className="text-center font-black text-[9px] uppercase w-32">Precio Compra</TableHead>
+                        <TableHead className="text-center font-black text-[9px] uppercase w-20">Stock Post</TableHead>
+                        <TableHead className="text-right font-black text-[9px] uppercase w-28">Subtotal</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {items.map(f => {
+                        const isZero = f.manualPrice <= 0;
+                        const originalCost = f.costARS > 0 ? f.costARS : f.costUSD;
+                        return (
+                          <TableRow key={f.id} className="hover:bg-muted/5 h-10">
+                            <TableCell className="py-1">
+                              <p className="font-bold text-xs">{f.name}</p>
+                              <p className="text-[8px] text-muted-foreground uppercase">Disp: {f.available} / Req: {f.required}</p>
+                            </TableCell>
+                            <TableCell className="py-1">
+                              <input 
+                                type="number" 
+                                disabled={orderToView?.status === 'completed' || isOrdered} 
+                                value={manualPurchaseQtys[f.id] ?? f.suggestedToBuy} 
+                                onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [f.id]: Number(e.target.value) }))} 
+                                className="w-full text-center font-black text-xs bg-muted/30 border-none rounded h-7 focus:ring-2 focus:ring-primary/20 focus:outline-none" 
+                              />
+                            </TableCell>
+                            <TableCell className="text-center py-1">
+                              <span className="text-[9px] font-bold text-slate-400">{f.costARS > 0 ? '$' : 'u$s'} {originalCost.toLocaleString('es-AR')}</span>
+                            </TableCell>
+                            <TableCell className="py-1">
+                              <div className="relative group">
+                                <input 
+                                  type="number" 
+                                  disabled={orderToView?.status === 'completed' || isOrdered} 
+                                  value={manualPurchasePrices[f.id] ?? originalCost} 
+                                  onChange={(e) => setManualPurchasePrices(prev => ({ ...prev, [f.id]: Number(e.target.value) }))} 
+                                  className={cn(
+                                    "w-full text-center font-black text-xs h-7 border rounded transition-all focus:outline-none focus:ring-2",
+                                    isZero ? "bg-rose-50 border-rose-300 text-rose-600 animate-pulse" : "bg-white border-emerald-100 text-emerald-700"
+                                  )} 
+                                />
+                                {isZero && !isOrdered && <span className="absolute -top-4 left-1/2 -translate-x-1/2 bg-rose-600 text-white text-[7px] font-black px-1 py-0.5 rounded opacity-0 group-hover:opacity-100">PRECIO REQUERIDO</span>}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center py-1">
+                              <span className={cn("font-black text-[9px] px-1.5 py-0.5 rounded", f.isInsufficient ? "bg-rose-600 text-white" : f.isCritical ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700")}>{f.futureStock}</span>
+                            </TableCell>
+                            <TableCell className="text-right py-1">
+                              <p className="text-[10px] font-bold">{f.costARS > 0 ? '$' : 'u$s'} {(f.manualQty * (manualPurchasePrices[f.id] ?? originalCost)).toLocaleString('es-AR')}</p>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                  <div className="bg-slate-50 border-t p-3 grid grid-cols-2 gap-4">
+                    <div className="flex items-center gap-2"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} ARS:</span><span className="font-black text-xs">${groupARS.toLocaleString('es-AR')}</span></div>
+                    <div className="flex items-center gap-2 justify-end"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} USD:</span><span className="font-black text-xs text-emerald-700">u$s {groupUSD.toLocaleString('es-AR')}</span></div>
+                  </div>
                 </div>
-                <div className="md:hidden space-y-2">{items.map(f => (<Card key={f.id} className="p-2.5 bg-white border shadow-sm space-y-2.5"><div className="flex justify-between items-start"><div className="flex-1 min-w-0"><p className="font-bold text-xs leading-tight truncate">{f.name}</p><p className="text-[8px] text-muted-foreground uppercase mt-0.5">Disp: {f.available} / Req: {f.required}</p></div><div className="text-right shrink-0"><span className={cn("font-black text-[9px] px-1.5 py-0.5 rounded uppercase tracking-tighter", f.isInsufficient ? "bg-rose-600 text-white" : f.isCritical ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700")}>Stock Post: {f.futureStock}</span></div></div><div className="grid grid-cols-2 gap-3 pt-2 border-t"><div className="space-y-1"><Label className="text-[8px] font-black uppercase text-muted-foreground">Cant. Compra</Label><input type="number" disabled={orderToView?.status === 'completed'} value={manualPurchaseQtys[f.id] ?? f.suggestedToBuy} onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [f.id]: Number(e.target.value) }))} className="w-full text-center font-black text-sm bg-muted/30 border rounded h-8 focus:ring-2 focus:ring-primary/20 focus:outline-none" /></div><div className="space-y-1"><Label className="text-[8px] font-black uppercase text-muted-foreground">Proveedor</Label><Select disabled={orderToView?.status === 'completed'} value={manualSuppliers[f.id] || (f.supplier || "Sin Proveedor")} onValueChange={(v) => handleUpdateItemSupplierGlobally(f.id, v)}><SelectTrigger className="h-8 text-[10px] bg-white border"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div></div><div className="flex justify-between items-center bg-slate-50 -mx-2.5 -mb-2.5 p-1.5 rounded-b-lg border-t"><span className="text-[8px] font-black uppercase text-slate-400">Subtotal Compra</span><span className="font-black text-[10px]">{f.costARS > 0 ? `$${(f.manualQty * f.costARS).toLocaleString('es-AR')}` : `u$s ${(f.manualQty * f.costUSD).toLocaleString('es-AR')}`}</span></div></Card>))}<div className="p-2.5 bg-slate-900 rounded-xl text-white space-y-1"><div className="flex justify-between items-center"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} ARS</span><span className="font-black text-xs">${groupARS.toLocaleString('es-AR')}</span></div><div className="flex justify-between items-center border-t border-white/10 pt-1"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} USD</span><span className="font-black text-xs text-emerald-400">u$s {groupUSD.toLocaleString('es-AR')}</span></div></div></div>
+
+                <div className="md:hidden space-y-2">
+                  {items.map(f => {
+                    const isZero = f.manualPrice <= 0;
+                    const originalCost = f.costARS > 0 ? f.costARS : f.costUSD;
+                    return (
+                      <Card key={f.id} className="p-2.5 bg-white border shadow-sm space-y-2.5">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1 min-w-0"><p className="font-bold text-xs truncate">{f.name}</p></div>
+                          <span className={cn("font-black text-[8px] px-1.5 py-0.5 rounded uppercase", f.isInsufficient ? "bg-rose-600 text-white" : f.isCritical ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700")}>Post: {f.futureStock}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 pt-2 border-t">
+                          <div className="space-y-1">
+                            <Label className="text-[8px] font-black uppercase text-muted-foreground">Cant. Compra</Label>
+                            <input 
+                              type="number" 
+                              disabled={orderToView?.status === 'completed' || isOrdered} 
+                              value={manualPurchaseQtys[f.id] ?? f.suggestedToBuy} 
+                              onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [f.id]: Number(e.target.value) }))} 
+                              className="w-full text-center font-black text-xs bg-muted/30 border rounded h-8 focus:ring-2 focus:ring-primary/20 focus:outline-none" 
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[8px] font-black uppercase text-emerald-700">Precio Compra ({f.costARS > 0 ? '$' : 'u$s'})</Label>
+                            <input 
+                              type="number" 
+                              disabled={orderToView?.status === 'completed' || isOrdered} 
+                              value={manualPurchasePrices[f.id] ?? originalCost} 
+                              onChange={(e) => setManualPurchasePrices(prev => ({ ...prev, [f.id]: Number(e.target.value) }))} 
+                              className={cn(
+                                "w-full text-center font-black text-xs border rounded h-8 transition-all focus:outline-none focus:ring-2",
+                                isZero ? "bg-rose-50 border-rose-300 text-rose-600 animate-pulse" : "bg-white border-emerald-100 text-emerald-700"
+                              )} 
+                            />
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-center text-[8px] italic text-slate-400 px-1">
+                          <span>Precio Ref: {f.costARS > 0 ? '$' : 'u$s'} {originalCost.toLocaleString('es-AR')}</span>
+                          <span className="not-italic font-black text-slate-600">Sub: {f.costARS > 0 ? '$' : 'u$s'} {(f.manualQty * (manualPurchasePrices[f.id] ?? originalCost)).toLocaleString('es-AR')}</span>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                  <div className="p-2.5 bg-slate-900 rounded-xl text-white space-y-1">
+                    <div className="flex justify-between items-center"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} ARS</span><span className="font-black text-xs">${groupARS.toLocaleString('es-AR')}</span></div>
+                    <div className="flex justify-between items-center border-t border-white/10 pt-1"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} USD</span><span className="font-black text-xs text-emerald-400">u$s {groupUSD.toLocaleString('es-AR')}</span></div>
+                  </div>
+                </div>
               </div>
             );
           })
@@ -898,8 +1112,7 @@ export default function CatalogPage() {
           <div className="px-4 py-1 shrink-0"><div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2"><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Buscar material..." className="pl-9 h-9 text-sm" value={auditSearch} onChange={(e) => setAuditSearch(e.target.value)} /></div><Select value={auditCategoryFilter} onValueChange={setAuditCategoryFilter}><SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Categoría" /></SelectTrigger><SelectContent className="max-h-[40vh] overflow-y-auto"><SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem>{categories.map(c => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}</SelectContent></Select></div></div>
           <div className="flex-1 min-h-0 px-4 pb-4 overflow-y-auto">
             <div className="space-y-1.5 md:hidden">{items?.filter(i => !i.isService && i.trackStock !== false && i.name.toLowerCase().includes(auditSearch.toLowerCase()) && (auditCategoryFilter === "all" || i.categoryId === auditCategoryFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(item => (<Card key={item.id} className="p-2 bg-white border shadow-sm space-y-3"><div className="flex justify-between items-start gap-2"><div className="flex-1 min-w-0"><p className="font-bold text-xs truncate leading-tight">{item.name}</p><p className="text-[9px] text-muted-foreground uppercase mt-0.5">Stock actual: <span className="font-black text-primary">{item.stock || 0}</span></p></div><div className="shrink-0 flex items-center gap-2"><Label className="text-[8px] font-black uppercase text-muted-foreground">Nuevo:</Label><Input type="number" className="w-16 h-8 text-right font-black px-2 text-sm" defaultValue={item.stock || 0} onBlur={(e) => { const val = Number(e.target.value); if (val !== item.stock) handleUpdateStockAudit(item.id, val); }} /></div></div><div className="pt-2 border-t flex flex-col gap-1"><Label className="text-[8px] font-black uppercase text-muted-foreground">Proveedor Asignado:</Label><Select defaultValue={item.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateGlobalSupplier(item.id, v)}><SelectTrigger className="h-8 text-[10px] bg-muted/20 border-none"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div></Card>))}</div>
-            <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-hidden"><Table className="min-w-[700px]"><TableHeader className="bg-slate-50 sticky top-0 z-10"><TableRow><TableHead className="font-black text-[10px] uppercase h-8">Artículo</TableHead><TableHead className="text-center font-black text-[10px] uppercase w-24 h-8">Stock Act.</TableHead><TableHead className="text-center font-black text-[10px] uppercase w-48 h-8">Proveedor Asignado</TableHead><TableHead className="text-right font-black text-[10px] uppercase w-32 h-8">Recuento</TableHead></TableRow></TableHeader><TableBody>{items?.filter(i => !i.isService && i.trackStock !== false && i.name.toLowerCase().includes(auditSearch.toLowerCase()) && (auditCategoryFilter === "all" || i.categoryId === auditCategoryFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(item => (<TableRow key={item.id} className="h-10 hover:bg-muted/5 transition-colors"><TableCell className="py-1"><p className="font-bold text-xs">{item.name}</p><p className="text-[9px] text-muted-foreground uppercase">{categoryMap[item.categoryId] || 'S/C'}</p></TableCell><TableCell className="text-center font-black text-primary text-xs">{item.stock || 0}</TableCell><TableCell className="text-center py-1"><Select defaultValue={item.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateGlobalSupplier(item.id, v)}><SelectTrigger className="h-8 text-[10px] bg-transparent border-none focus:ring-0"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></TableCell><TableCell className="text-right py-1"><Input type="number" className="w-20 ml-auto text-right font-black h-8 text-xs" defaultValue={item.stock || 0} onBlur={(e) => { const val = Number(e.target.value); if (val !== item.stock) handleUpdateStockAudit(item.id, val); }} /></TableCell></TableRow>))}</TableBody></Table></div>
-          </div>
+            <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-hidden"><Table className="min-w-[700px]"><TableHeader className="bg-slate-50 sticky top-0 z-10"><TableRow><TableHead className="font-black text-[10px] uppercase h-8">Artículo</TableHead><TableHead className="text-center font-black text-[10px] uppercase w-24 h-8">Stock Act.</TableHead><TableHead className="text-center font-black text-[10px] uppercase w-48 h-8">Proveedor Asignado</TableHead><TableHead className="text-right font-black text-[10px] uppercase w-32 h-8">Recuento</TableHead></TableRow></TableHeader><TableBody>{items?.filter(i => !i.isService && i.trackStock !== false && i.name.toLowerCase().includes(auditSearch.toLowerCase()) && (auditCategoryFilter === "all" || i.categoryId === auditCategoryFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(item => (<TableRow key={item.id} className="h-10 hover:bg-muted/5 transition-colors"><TableCell className="py-1"><p className="font-bold text-xs">{item.name}</p><p className="text-[9px] text-muted-foreground uppercase">{categoryMap[item.categoryId] || 'S/C'}</p></TableCell><TableCell className="text-center font-black text-primary text-xs">{item.stock || 0}</TableCell><TableCell className="text-center py-1"><Select defaultValue={item.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateGlobalSupplier(item.id, v)}><SelectTrigger className="h-8 text-[10px] bg-transparent border-none focus:ring-0"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></TableCell><TableCell className="text-right py-1"><Input type="number" className="w-20 ml-auto text-right font-black h-8 text-xs" defaultValue={item.stock || 0} onBlur={(e) => { const val = Number(e.target.value); if (val !== item.stock) handleUpdateStockAudit(item.id, val); }} /></TableCell></TableRow>))}</TableBody></Table></div></div>
           <DialogFooter className="p-3 bg-slate-50 border-t shrink-0"><Button onClick={() => setIsAuditOpen(false)} className="w-full h-9 font-bold text-xs">Cerrar Auditoría</Button></DialogFooter>
         </DialogContent>
       </Dialog>
@@ -960,7 +1173,7 @@ export default function CatalogPage() {
                 <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-x-auto"><Table className="min-w-[500px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="font-black text-[10px] uppercase h-8">Componente</TableHead><TableHead className="text-center font-black text-[10px] uppercase h-8">Requerido</TableHead><TableHead className="text-center font-black text-[10px] uppercase h-8">Stock Disp.</TableHead><TableHead className="text-right font-black text-[10px] uppercase h-8">Estado</TableHead></TableRow></TableHeader><TableBody>{explosionSummary.all.sort((a,b) => a.name.localeCompare(b.name)).map((req) => { const stockRestante = req.available - req.required; const esCritico = stockRestante < req.minStock; const faltaDirecto = stockRestante < 0; return (<TableRow key={req.id} className="h-9"><TableCell className="py-1"><div className="flex flex-col"><span className="font-bold text-xs">{req.name}</span><span className="text-[8px] text-muted-foreground uppercase">{(manualSuppliers[req.id] || req.supplier) || "Sin Proveedor"}</span></div></TableCell><TableCell className="text-center font-black text-primary text-xs">{req.required}</TableCell><TableCell className="text-center font-medium text-slate-500 text-xs">{req.available}</TableCell><TableCell className="text-right">{faltaDirecto ? (<Badge className="bg-rose-600 font-bold text-[8px] h-4">FALTA STOCK</Badge>) : esCritico ? (<Badge variant="outline" className="border-amber-500 text-amber-700 bg-amber-50 font-bold text-[8px] h-4">BAJO MÍNIMO</Badge>) : (<Badge variant="outline" className="text-emerald-600 bg-emerald-50 border-emerald-200 font-bold text-[8px] h-4">OK</Badge>)}</TableCell></TableRow>); })}</TableBody></Table></div>
               </section>
               <section className="space-y-3">
-                <div className="flex items-center justify-between"><h3 className="text-[10px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><ShoppingCart className="h-3.5 w-3.5" /> Carrito de Compras</h3><Button variant="outline" size="sm" className="h-7 gap-1 font-bold text-[10px]" onClick={() => { setManualPurchaseQtys({}); setManualSuppliers({}); }}><RefreshCw className="h-3 w-3" /> REINICIAR</Button></div>
+                <div className="flex items-center justify-between"><h3 className="text-[10px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><ShoppingCart className="h-3.5 w-3.5" /> Carrito de Compras</h3><Button variant="outline" size="sm" className="h-7 gap-1 font-bold text-[10px]" onClick={() => { setManualPurchaseQtys({}); setManualPurchasePrices({}); setManualSuppliers({}); }}><RefreshCw className="h-3 w-3" /> REINICIAR</Button></div>
                 <GroupedPurchaseList />
               </section>
             </div>)}
