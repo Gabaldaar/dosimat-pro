@@ -1425,36 +1425,6 @@ export default function CatalogPage() {
             {orderToView && (
               <div className="space-y-6">
                 <section className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <Card className="bg-blue-600 border-none shadow-md relative overflow-hidden text-white">
-                      <Package className="absolute -right-2 -bottom-2 h-16 w-16 opacity-10 -rotate-12" />
-                      <CardContent className="p-3 flex items-center gap-4">
-                        <div className="p-2 bg-white/20 rounded-xl backdrop-blur-md"><Droplet className="h-5 w-5 text-white" /></div>
-                        <div>
-                          <p className="text-[8px] font-black uppercase text-blue-100 tracking-widest">CLORO REQUERIDO</p>
-                          <div className="flex items-baseline gap-2">
-                            <h3 className="text-2xl font-black">{explosionSummary?.all.find(i => i.name.toLowerCase().includes('cloro'))?.required || 0}</h3>
-                            <p className="text-[8px] font-bold text-blue-200">BIDONES</p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                    
-                    <Card className="bg-rose-600 border-none shadow-md relative overflow-hidden text-white">
-                      <Package className="absolute -right-2 -bottom-2 h-16 w-16 opacity-10 -rotate-12" />
-                      <CardContent className="p-3 flex items-center gap-4">
-                        <div className="p-2 bg-white/20 rounded-xl backdrop-blur-md"><Beaker className="h-5 w-5 text-white" /></div>
-                        <div>
-                          <p className="text-[8px] font-black uppercase text-rose-100 tracking-widest">ÁCIDO REQUERIDO</p>
-                          <div className="flex items-baseline gap-2">
-                            <h3 className="text-2xl font-black">{explosionSummary?.all.find(i => i.name.toLowerCase().includes('acido'))?.required || 0}</h3>
-                            <p className="text-[8px] font-bold text-rose-200">BIDONES</p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-
                   <div className="space-y-2">
                     <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
                       <Layers className="h-3.5 w-3.5" /> Explosión de Insumos
