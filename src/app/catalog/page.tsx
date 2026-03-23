@@ -321,7 +321,8 @@ export default function CatalogPage() {
       
       explosionSummary.toBuySuggested.forEach(item => {
         newManualQtys[item.id] = orderToView.purchaseQtys?.[item.id] ?? item.suggestedToBuy;
-        newManualSups[item.id] = orderToView.purchaseSuppliers?.[item.id] ?? item.supplier || "Sin Proveedor";
+        // Se agregaron paréntesis para evitar error de mezcla de operadores ?? y ||
+        newManualSups[item.id] = orderToView.purchaseSuppliers?.[item.id] ?? (item.supplier || "Sin Proveedor");
       });
       
       setManualPurchaseQtys(newManualQtys);
