@@ -189,7 +189,7 @@ export default function CatalogPage() {
 
   const [manualPurchaseQtys, setManualPurchaseQtys] = useState<Record<string, number>>({})
   const [manualSuppliers, setManualSuppliers] = useState<Record<string, string>>({})
-  const [initialPlanData, setInitialPlanData] = useState({ qtys: {}, sups: {} })
+  const [initialPlanData, setInitialPlanData] = useState({ qtys: {}, sups: {}, qty: 0 })
 
   const [formData, setFormData] = useState({
     name: "",
@@ -331,7 +331,11 @@ export default function CatalogPage() {
       
       setManualPurchaseQtys(newManualQtys);
       setManualSuppliers(newManualSups);
-      setInitialPlanData({ qtys: JSON.parse(JSON.stringify(newManualQtys)), sups: JSON.parse(JSON.stringify(newManualSups)) });
+      setInitialPlanData({ 
+        qtys: JSON.parse(JSON.stringify(newManualQtys)), 
+        sups: JSON.parse(JSON.stringify(newManualSups)),
+        qty: orderToView.quantity
+      });
     } else if (isAssemblyOpen && !orderToView && explosionSummary) {
       const newManualQtys: Record<string, number> = {};
       const newManualSups: Record<string, string> = {};
@@ -347,7 +351,8 @@ export default function CatalogPage() {
   const hasUnsavedChanges = useMemo(() => {
     if (!orderToView) return false;
     return JSON.stringify(manualPurchaseQtys) !== JSON.stringify(initialPlanData.qtys) ||
-           JSON.stringify(manualSuppliers) !== JSON.stringify(initialPlanData.sups);
+           JSON.stringify(manualSuppliers) !== JSON.stringify(initialPlanData.sups) ||
+           orderToView.quantity !== initialPlanData.qty;
   }, [manualPurchaseQtys, manualSuppliers, initialPlanData, orderToView]);
 
   const handleCloseOrderView = () => {
@@ -498,13 +503,21 @@ export default function CatalogPage() {
   const handleUpdateOrderPlan = () => {
     if (!orderToView) return;
     
+    const status = explosionSummary?.all.some(f => (f.available - f.required) < 0) ? 'pending_purchase' : 'ready';
+
     updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
+      quantity: orderToView.quantity,
       purchaseQtys: manualPurchaseQtys,
-      purchaseSuppliers: manualSuppliers
+      purchaseSuppliers: manualSuppliers,
+      status
     });
 
-    setInitialPlanData({ qtys: JSON.parse(JSON.stringify(manualPurchaseQtys)), sups: JSON.parse(JSON.stringify(manualSuppliers)) });
-    toast({ title: "Planificación actualizada", description: "Se han guardado las cantidades y proveedores en la orden." });
+    setInitialPlanData({ 
+      qtys: JSON.parse(JSON.stringify(manualPurchaseQtys)), 
+      sups: JSON.parse(JSON.stringify(manualSuppliers)),
+      qty: orderToView.quantity
+    });
+    toast({ title: "Planificación actualizada", description: "Se han guardado los cambios en la orden." });
   }
 
   const handleReceiveMaterials = (supplierName: string) => {
@@ -523,13 +536,21 @@ export default function CatalogPage() {
     });
 
     setManualPurchaseQtys(newPurchaseQtys);
+    
+    // Recalcular estado después de la compra
+    const status = explosionSummary?.all.some(f => {
+      const stockAfterEntry = f.id in newPurchaseQtys ? (f.available + (manualPurchaseQtys[f.id] || 0)) : f.available;
+      return (stockAfterEntry - f.required) < 0;
+    }) ? 'pending_purchase' : 'ready';
+
     updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
       purchaseQtys: newPurchaseQtys,
-      purchaseSuppliers: manualSuppliers
+      purchaseSuppliers: manualSuppliers,
+      status
     });
 
     setInitialPlanData(prev => ({ ...prev, qtys: JSON.parse(JSON.stringify(newPurchaseQtys)) }));
-    toast({ title: `Materiales de ${supplierName} ingresados`, description: "Se actualizó el stock y se descuentaron de la lista de pendientes." });
+    toast({ title: `Materiales de ${supplierName} ingresados`, description: "Se actualizó el stock y el plan de compras." });
   }
 
   const handleUpdateStockAudit = (id: string, newStock: number) => {
@@ -1415,11 +1436,41 @@ export default function CatalogPage() {
         <DialogContent className="max-w-6xl h-[95vh] flex flex-col p-0 w-[95vw]">
           <DialogHeader className="p-4 pb-1 shrink-0">
             <div className="flex flex-col md:flex-row justify-between items-start pr-8 gap-2">
-              <div>
+              <div className="space-y-1">
                 <DialogTitle className="flex items-center gap-2 text-primary font-black text-xl">
                   <Factory className="h-5 w-5" /> Orden #{orderToView?.id.toUpperCase().slice(0, 6)}
                 </DialogTitle>
-                <DialogDescription className="text-xs">Fabricación de <b>{orderToView?.quantity} x {orderToView?.productName}</b></DialogDescription>
+                <div className="flex items-center gap-3">
+                  <DialogDescription className="text-xs">Fabricación de <b>{orderToView?.productName}</b></DialogDescription>
+                  {orderToView?.status !== 'completed' && (
+                    <div className="flex items-center gap-2 bg-primary/5 px-2 py-1 rounded-lg border border-primary/10">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-6 w-6 text-primary" 
+                        onClick={() => {
+                          const newQty = Math.max(1, orderToView.quantity - 1);
+                          setOrderToView({...orderToView, quantity: newQty});
+                        }}
+                      >
+                        <Minus className="h-3 w-3" />
+                      </Button>
+                      <span className="text-sm font-black text-primary tabular-nums">{orderToView?.quantity}</span>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-6 w-6 text-primary" 
+                        onClick={() => {
+                          const newQty = orderToView.quantity + 1;
+                          setOrderToView({...orderToView, quantity: newQty});
+                        }}
+                      >
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                      <span className="text-[9px] font-bold text-primary/60 uppercase">unidades</span>
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="flex flex-row md:flex-col items-center md:items-end gap-2 w-full md:w-auto">
                 {orderToView && (
@@ -1560,7 +1611,7 @@ export default function CatalogPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Guardar cambios antes de salir?</AlertDialogTitle>
             <AlertDialogDescription>
-              Has realizado modificaciones en la planificación de esta orden que no han sido guardadas.
+              Has realizado modificaciones en la planificación o cantidad de esta orden que no han sido guardadas.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
