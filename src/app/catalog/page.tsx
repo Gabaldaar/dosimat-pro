@@ -606,6 +606,31 @@ export default function CatalogPage() {
     toast({ title: "Proveedor eliminado" })
   }
 
+  const handleUpdateItemSupplierGlobally = useCallback((productId: string, newSupplier: string) => {
+    const cleanSupplier = newSupplier === "Sin Proveedor" ? "" : newSupplier;
+    
+    // 1. Actualizar estado local para el agrupamiento inmediato en el carrito
+    setManualSuppliers(prev => ({ ...prev, [productId]: newSupplier }));
+    
+    // 2. Persistir permanentemente en la ficha del producto
+    updateDocumentNonBlocking(doc(db, 'products_services', productId), {
+      supplier: cleanSupplier
+    });
+
+    // 3. Si hay una orden abierta, también reflejarlo allí para coherencia
+    if (orderToView) {
+      const currentManualSups = { ...manualSuppliers, [productId]: newSupplier };
+      updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
+        purchaseSuppliers: currentManualSups
+      });
+    }
+
+    toast({ 
+      title: "Proveedor asignado permanentemente", 
+      description: `El ítem ahora tiene a ${newSupplier} como su proveedor oficial.` 
+    });
+  }, [db, orderToView, manualSuppliers, toast]);
+
   const toggleCategory = (cid: string) => {
     setSelectedCategories(prev => 
       prev.includes(cid) ? prev.filter(i => i !== cid) : [...prev, cid]
@@ -933,7 +958,7 @@ export default function CatalogPage() {
                             <Select 
                               disabled={orderToView?.status === 'completed'}
                               value={manualSuppliers[f.id] || (f.supplier || "Sin Proveedor")} 
-                              onValueChange={(v) => setManualSuppliers(prev => ({ ...prev, [f.id]: v }))}
+                              onValueChange={(v) => handleUpdateItemSupplierGlobally(f.id, v)}
                             >
                               <SelectTrigger className="h-7 text-[9px] py-0 px-2 bg-muted/30 border-none">
                                 <SelectValue />
@@ -1008,7 +1033,7 @@ export default function CatalogPage() {
                           <Select 
                             disabled={orderToView?.status === 'completed'}
                             value={manualSuppliers[f.id] || (f.supplier || "Sin Proveedor")} 
-                            onValueChange={(v) => setManualSuppliers(prev => ({ ...prev, [f.id]: v }))}
+                            onValueChange={(v) => handleUpdateItemSupplierGlobally(f.id, v)}
                           >
                             <SelectTrigger className="h-8 text-[10px] bg-white border">
                               <SelectValue />
