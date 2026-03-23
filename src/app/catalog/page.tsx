@@ -165,6 +165,7 @@ export default function CatalogPage() {
   const [isSupplierManagerOpen, setIsSupplierManagerOpen] = useState(false)
   const [isAuditOpen, setIsAuditOpen] = useState(false)
   const [auditSearch, setAuditSearch] = useState("")
+  const [auditCategoryFilter, setAuditCategoryFilter] = useState("all")
   
   const [itemToDelete, setItemToDelete] = useState<any | null>(null)
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
@@ -367,7 +368,7 @@ export default function CatalogPage() {
       const futureStock = item.available + manualQty - item.required;
       const isCritical = futureStock < item.minStock;
       const isInsufficient = futureStock < 0;
-      const currentSupplier = manualSuppliers[item.id] || item.supplier || "Sin Proveedor";
+      const currentSupplier = manualSuppliers[item.id] || (item.supplier || "Sin Proveedor");
 
       return {
         ...item,
@@ -531,42 +532,6 @@ export default function CatalogPage() {
 
     setInitialPlanData(prev => ({ ...prev, qtys: JSON.parse(JSON.stringify(newPurchaseQtys)) }));
     toast({ title: `Materiales de ${supplierName} ingresados`, description: "Se actualizó el stock y se descontaron de la lista de pendientes." });
-  }
-
-  const handleAssembleFinal = () => {
-    const order = orderToView;
-    if (!order || !items) return;
-
-    const product = items.find(i => i.id === order.productId);
-    if (!product) return;
-
-    const explosion = explosionSummary;
-    if (explosion?.all.some(f => (f.available - f.required) < 0)) {
-      toast({ title: "Error de stock", description: "No hay materiales suficientes para finalizar el armado.", variant: "destructive" });
-      return;
-    }
-
-    product.components.forEach((comp: any) => {
-      const child = items.find(i => i.id === comp.productId);
-      if (child?.trackStock !== false) {
-        updateDocumentNonBlocking(doc(db, 'products_services', comp.productId), {
-          stock: increment(-(comp.quantity * order.quantity))
-        });
-      }
-    });
-
-    if (product.trackStock !== false) {
-      updateDocumentNonBlocking(doc(db, 'products_services', product.id), {
-        stock: increment(order.quantity)
-      });
-    }
-
-    updateDocumentNonBlocking(doc(db, 'production_orders', order.id), {
-      status: 'completed'
-    });
-
-    setOrderToView(null);
-    toast({ title: "Armado completado", description: `Se han fabricado ${order.quantity} unidades de ${order.productName}.` });
   }
 
   const handleUpdateStockAudit = (id: string, newStock: number) => {
@@ -930,7 +895,7 @@ export default function CatalogPage() {
                             <TableCell>
                               <Select 
                                 disabled={orderToView?.status === 'completed'}
-                                value={manualSuppliers[f.id] || f.supplier || "Sin Proveedor"} 
+                                value={manualSuppliers[f.id] || (f.supplier || "Sin Proveedor")} 
                                 onValueChange={(v) => setManualSuppliers(prev => ({ ...prev, [f.id]: v }))}
                               >
                                 <SelectTrigger className="h-7 text-[9px] py-0 px-2 bg-muted/30 border-none">
@@ -1208,7 +1173,7 @@ export default function CatalogPage() {
 
       {/* DIÁLOGO DE AUDITORÍA RÁPIDA DE STOCK */}
       <Dialog open={isAuditOpen} onOpenChange={setIsAuditOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col p-0">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col p-0 w-[95vw]">
           <DialogHeader className="p-6 pb-2">
             <DialogTitle className="flex items-center gap-2 text-2xl font-black text-slate-800">
               <Calculator className="h-6 w-6 text-primary" /> Auditoría de Stock
@@ -1216,19 +1181,32 @@ export default function CatalogPage() {
             <DialogDescription>Ajusta los niveles de inventario de forma masiva y ágil.</DialogDescription>
           </DialogHeader>
           <div className="px-6 py-2">
-            <div className="relative mb-4">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input 
-                placeholder="Buscar por nombre de material..." 
-                className="pl-10 h-11"
-                value={auditSearch}
-                onChange={(e) => setAuditSearch(e.target.value)}
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  placeholder="Buscar por nombre de material..." 
+                  className="pl-10 h-11"
+                  value={auditSearch}
+                  onChange={(e) => setAuditSearch(e.target.value)}
+                />
+              </div>
+              <Select value={auditCategoryFilter} onValueChange={setAuditCategoryFilter}>
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="Todas las categorías" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem>
+                  {categories.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <ScrollArea className="flex-1 px-6 pb-6">
-            <div className="border rounded-xl bg-white shadow-sm overflow-hidden">
-              <Table>
+            <div className="border rounded-xl bg-white shadow-sm overflow-x-auto">
+              <Table className="min-w-[500px]">
                 <TableHeader className="bg-slate-50">
                   <TableRow>
                     <TableHead className="font-black text-[10px] uppercase">Artículo</TableHead>
@@ -1237,7 +1215,12 @@ export default function CatalogPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items?.filter(i => !i.isService && i.trackStock !== false && i.name.toLowerCase().includes(auditSearch.toLowerCase())).sort((a,b) => a.name.localeCompare(b.name)).map(item => (
+                  {items?.filter(i => 
+                    !i.isService && 
+                    i.trackStock !== false && 
+                    i.name.toLowerCase().includes(auditSearch.toLowerCase()) &&
+                    (auditCategoryFilter === "all" || i.categoryId === auditCategoryFilter)
+                  ).sort((a,b) => a.name.localeCompare(b.name)).map(item => (
                     <TableRow key={item.id}>
                       <TableCell className="py-3">
                         <p className="font-bold text-sm">{item.name}</p>
@@ -1332,13 +1315,13 @@ export default function CatalogPage() {
                             <TableRow key={req.id}>
                               <TableCell className="py-2">
                                 <p className="font-bold text-xs">{req.name}</p>
-                                <p className="text-[8px] text-muted-foreground uppercase">{manualSuppliers[req.id] || req.supplier || "Sin Proveedor"}</p>
+                                <p className="text-[8px] text-muted-foreground uppercase">{(manualSuppliers[req.id] || req.supplier) || "Sin Proveedor"}</p>
                               </TableCell>
                               <TableCell className="text-center font-black text-primary text-xs">{req.required}</TableCell>
                               <TableCell className="text-center text-xs">{req.available}</TableCell>
                               <TableCell className="text-right">
-                                {faltaDirecto ? <Badge className="bg-rose-600 text-[8px] h-4 leading-none py-0 px-1">FALTA STOCK</Badge> : 
-                                 esCritico ? <Badge variant="outline" className="text-amber-600 border-amber-200 text-[8px] h-4 leading-none py-0 px-1">BAJO MÍNIMO</Badge> : 
+                                {faltaDirecto ? <Badge className="bg-rose-600 text-[8px] h-4 leading-none py-0 px-1 whitespace-nowrap">FALTA STOCK</Badge> : 
+                                 esCritico ? <Badge variant="outline" className="text-amber-600 border-amber-200 text-[8px] h-4 leading-none py-0 px-1 whitespace-nowrap">BAJO MÍNIMO</Badge> : 
                                  <CheckCircle className="h-4 w-4 text-emerald-500 ml-auto" />}
                               </TableCell>
                             </TableRow>
@@ -1792,18 +1775,18 @@ export default function CatalogPage() {
                               <TableCell>
                                 <div className="flex flex-col">
                                   <span className="font-bold text-sm">{req.name}</span>
-                                  <span className="text-[8px] text-muted-foreground uppercase">{manualSuppliers[req.id] || req.supplier || "Sin Proveedor"}</span>
+                                  <span className="text-[8px] text-muted-foreground uppercase">{(manualSuppliers[req.id] || req.supplier) || "Sin Proveedor"}</span>
                                 </div>
                               </TableCell>
                               <TableCell className="text-center font-black text-primary">{req.required}</TableCell>
                               <TableCell className="text-center font-medium text-slate-500">{req.available}</TableCell>
                               <TableCell className="text-right">
                                 {faltaDirecto ? (
-                                  <Badge className="bg-rose-600 font-bold text-[9px] leading-none py-0 px-1">FALTA STOCK</Badge>
+                                  <Badge className="bg-rose-600 font-bold text-[9px] leading-none py-0 px-1 whitespace-nowrap">FALTA STOCK</Badge>
                                 ) : esCritico ? (
-                                  <Badge variant="outline" className="border-amber-500 text-amber-700 bg-amber-50 font-bold text-[9px] leading-none py-0 px-1">BAJO MÍNIMO</Badge>
+                                  <Badge variant="outline" className="border-amber-500 text-amber-700 bg-amber-50 font-bold text-[9px] leading-none py-0 px-1 whitespace-nowrap">BAJO MÍNIMO</Badge>
                                 ) : (
-                                  <Badge variant="outline" className="text-emerald-600 bg-emerald-50 border-emerald-200 font-bold text-[9px] leading-none py-0 px-1">OK</Badge>
+                                  <Badge variant="outline" className="text-emerald-600 bg-emerald-50 border-emerald-200 font-bold text-[9px] leading-none py-0 px-1 whitespace-nowrap">OK</Badge>
                                 )}
                               </TableCell>
                             </TableRow>
