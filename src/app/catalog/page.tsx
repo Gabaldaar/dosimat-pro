@@ -301,6 +301,10 @@ export default function CatalogPage() {
   }, [items, searchTerm, selectedCategories, calculateCost, currentRate])
 
   const explosionSummary = useMemo(() => {
+    if (orderToView?.status === 'completed' && orderToView.explosionSnapshot) {
+      return orderToView.explosionSnapshot;
+    }
+
     const target = orderToView ? items?.find(i => i.id === orderToView.productId) : selectedForAssembly;
     const qty = orderToView ? orderToView.quantity : assemblyQty;
     
@@ -424,7 +428,7 @@ export default function CatalogPage() {
   }, [isAssemblyOpen, orderToView, explosionSummary]);
 
   const hasUnsavedChanges = useMemo(() => {
-    if (!orderToView) return false;
+    if (!orderToView || orderToView.status === 'completed') return false;
     return JSON.stringify(manualPurchaseQtys) !== JSON.stringify(initialPlanData.qtys) ||
            JSON.stringify(manualPurchasePrices) !== JSON.stringify(initialPlanData.prices) ||
            JSON.stringify(manualPurchaseCurrencies) !== JSON.stringify(initialPlanData.currencies) ||
@@ -733,7 +737,7 @@ export default function CatalogPage() {
     updateDocumentNonBlocking(doc(db, 'products_services', productId), {
       supplier: cleanSupplier
     });
-    if (orderToView) {
+    if (orderToView && orderToView.status !== 'completed') {
       const currentManualSups = { ...manualSuppliers, [productId]: newSupplier };
       updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
         purchaseSuppliers: currentManualSups
@@ -750,8 +754,37 @@ export default function CatalogPage() {
     setOrderToFinalize(orderToView);
   }
 
+  const getSmartExplosion = useCallback((productId: string, qtyNeeded: number, level = 0): any[] => {
+    if (!items) return [];
+    const item = items.find(i => i.id === productId);
+    if (!item) return [];
+
+    const available = (level === 0 || item.trackStock === false) ? 0 : (item.stock || 0);
+    const takenFromStock = Math.min(qtyNeeded, available);
+    const deficit = Math.max(0, qtyNeeded - takenFromStock);
+
+    let results: any[] = [{
+      id: item.id,
+      name: item.name,
+      requested: qtyNeeded,
+      fromStock: takenFromStock,
+      toProduce: deficit,
+      level,
+      isCompuesto: item.isCompuesto
+    }];
+
+    if (deficit > 0 && item.isCompuesto) {
+      item.components?.forEach((comp: any) => {
+        const subResults = getSmartExplosion(comp.productId, comp.quantity * deficit, level + 1);
+        results = [...results, ...subResults];
+      });
+    }
+
+    return results;
+  }, [items]);
+
   const handleConfirmFinalize = () => {
-    if (!orderToFinalize || !items) return;
+    if (!orderToFinalize || !items || !explosionSummary) return;
     const target = items.find(i => i.id === orderToFinalize.productId);
     if (!target) {
       toast({ title: "Error", description: "No se encontró el producto a armar.", variant: "destructive" });
@@ -759,6 +792,10 @@ export default function CatalogPage() {
     }
 
     try {
+      // Capturar snapshots históricos antes de modificar el stock
+      const currentExplosionSnapshot = JSON.parse(JSON.stringify(explosionSummary));
+      const currentSmartExplosionSnapshot = JSON.parse(JSON.stringify(getSmartExplosion(orderToFinalize.productId, orderToFinalize.quantity, 0)));
+
       toast({ title: "Procesando armado...", description: "Descontando insumos y actualizando stock final." });
 
       const smartDeduct = (productId: string, qtyNeeded: number) => {
@@ -769,14 +806,12 @@ export default function CatalogPage() {
         const availableToDeduct = item.trackStock !== false ? Math.min(currentStock, qtyNeeded) : 0;
         const deficitToExplode = qtyNeeded - (item.trackStock !== false ? availableToDeduct : 0);
 
-        // 1. Descontar lo disponible en stock (si trackea stock)
         if (item.trackStock !== false && availableToDeduct > 0) {
           updateDocumentNonBlocking(doc(db, 'products_services', item.id), {
             stock: increment(-availableToDeduct)
           });
         }
 
-        // 2. Si hay un faltante y el producto es compuesto, descontar sus partes recursivamente
         if (item.isCompuesto && deficitToExplode > 0) {
           const groupedComponents: Record<string, number> = {};
           item.components?.forEach((comp: any) => {
@@ -789,7 +824,6 @@ export default function CatalogPage() {
         }
       };
 
-      // Agrupar componentes raíz para evitar duplicidad de transacciones
       const rootComponents: Record<string, number> = {};
       target.components?.forEach((comp: any) => {
         rootComponents[comp.productId] = (rootComponents[comp.productId] || 0) + (Number(comp.quantity) || 0);
@@ -799,14 +833,14 @@ export default function CatalogPage() {
         smartDeduct(compId, compQty * orderToFinalize.quantity);
       });
 
-      // Sumar el producto terminado al stock
       updateDocumentNonBlocking(doc(db, 'products_services', target.id), {
         stock: increment(orderToFinalize.quantity)
       });
 
-      // Marcar orden como completada
       updateDocumentNonBlocking(doc(db, 'production_orders', orderToFinalize.id), {
-        status: 'completed'
+        status: 'completed',
+        explosionSnapshot: currentExplosionSnapshot,
+        smartExplosionSnapshot: currentSmartExplosionSnapshot
       });
 
       setOrderToFinalize(null);
@@ -915,39 +949,6 @@ export default function CatalogPage() {
       document.title = originalTitle;
     }, 150);
   };
-
-  const getSmartExplosion = useCallback((productId: string, qtyNeeded: number, level = 0): any[] => {
-    if (!items) return [];
-    const item = items.find(i => i.id === productId);
-    if (!item) return [];
-
-    // Lógica para el PDF: Solo bajamos de nivel si NO hay stock disponible.
-    // Para el nivel 0 (el producto que estamos armando), forzamos disponible = 0 
-    // para que siempre muestre sus componentes directos.
-    const available = (level === 0 || item.trackStock === false) ? 0 : (item.stock || 0);
-    const takenFromStock = Math.min(qtyNeeded, available);
-    const deficit = Math.max(0, qtyNeeded - takenFromStock);
-
-    let results: any[] = [{
-      id: item.id,
-      name: item.name,
-      requested: qtyNeeded,
-      fromStock: takenFromStock,
-      toProduce: deficit,
-      level,
-      isCompuesto: item.isCompuesto
-    }];
-
-    // Si falta stock y es compuesto, bajamos un nivel recursivamente
-    if (deficit > 0 && item.isCompuesto) {
-      item.components?.forEach((comp: any) => {
-        const subResults = getSmartExplosion(comp.productId, comp.quantity * deficit, level + 1);
-        results = [...results, ...subResults];
-      });
-    }
-
-    return results;
-  }, [items]);
 
   const handlePrintProductionOrder = (order: any) => {
     setOrderToPrint(order);
@@ -1665,7 +1666,7 @@ export default function CatalogPage() {
                             </div>
                             <div className="flex items-center gap-2 border-t pt-1.5">
                               <span className="text-[8px] font-bold uppercase text-muted-foreground">PROV:</span>
-                              <Select defaultValue={manualSuppliers[req.id] || req.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateItemSupplierGlobally(req.id, v)}>
+                              <Select disabled={orderToView.status === 'completed'} defaultValue={manualSuppliers[req.id] || req.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateItemSupplierGlobally(req.id, v)}>
                                 <SelectTrigger className="h-6 text-[9px] bg-muted/20 border-none p-1 flex-1">
                                   <SelectValue />
                                 </SelectTrigger>
@@ -1702,7 +1703,7 @@ export default function CatalogPage() {
                                 <TableCell className="text-center font-black text-primary text-[10px]">{req.required}</TableCell>
                                 <TableCell className="text-center text-[10px]">{req.available}</TableCell>
                                 <TableCell className="text-center py-0.5">
-                                  <Select defaultValue={manualSuppliers[req.id] || req.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateItemSupplierGlobally(req.id, v)}>
+                                  <Select disabled={orderToView.status === 'completed'} defaultValue={manualSuppliers[req.id] || req.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateItemSupplierGlobally(req.id, v)}>
                                     <SelectTrigger className="h-7 text-[9px] bg-transparent border-none focus:ring-0">
                                       <SelectValue />
                                     </SelectTrigger>
@@ -1712,7 +1713,15 @@ export default function CatalogPage() {
                                     </SelectContent>
                                   </Select>
                                 </TableCell>
-                                <TableCell className="text-right py-0.5">{faltaDirecto ? <Badge className="bg-rose-600 text-[7px] h-4 leading-none py-0 px-1">FALTA</Badge> : <CheckCircle className="h-3.5 w-3.5 text-emerald-500 ml-auto" />}</TableCell>
+                                <TableCell className="text-right py-0.5">
+                                  {orderToView.status === 'completed' ? (
+                                    <CheckCircle className="h-3.5 w-3.5 text-emerald-500 ml-auto" />
+                                  ) : faltaDirecto ? (
+                                    <Badge className="bg-rose-600 text-[7px] h-4 leading-none py-0 px-1">FALTA</Badge>
+                                  ) : (
+                                    <CheckCircle className="h-3.5 w-3.5 text-emerald-500 ml-auto" />
+                                  )}
+                                </TableCell>
                               </TableRow>
                             ) 
                           })}
@@ -1997,8 +2006,11 @@ export default function CatalogPage() {
                 </tr>
               </thead>
               <tbody>
-                {getSmartExplosion(orderToPrint.productId, orderToPrint.quantity, 0).map((row, idx) => {
-                  if (row.level === 0) return null; // Saltar el producto raíz
+                {(orderToPrint.status === 'completed' && orderToPrint.smartExplosionSnapshot 
+                  ? orderToPrint.smartExplosionSnapshot 
+                  : getSmartExplosion(orderToPrint.productId, orderToPrint.quantity, 0)
+                ).map((row: any, idx: number) => {
+                  if (row.level === 0) return null;
                   return (
                     <tr key={idx} className={cn("border-b border-slate-300", row.level > 1 && "bg-slate-50/50")}>
                       <td className="border border-slate-900 p-2">
@@ -2011,7 +2023,12 @@ export default function CatalogPage() {
                         {row.requested}
                       </td>
                       <td className="border border-slate-900 p-2">
-                        {row.fromStock > 0 ? (
+                        {orderToPrint.status === 'completed' ? (
+                          <div className="flex items-center gap-1.5 text-emerald-700 font-bold">
+                            <CheckCircle className="h-3 w-3" />
+                            <span>COMPLETADO</span>
+                          </div>
+                        ) : row.fromStock > 0 ? (
                           <div className="flex items-center gap-1.5 text-emerald-700 font-bold">
                             <CheckCircle className="h-3 w-3" />
                             <span>Retirar {row.fromStock} de STOCK</span>
