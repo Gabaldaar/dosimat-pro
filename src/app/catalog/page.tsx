@@ -211,6 +211,7 @@ export default function CatalogPage() {
   const [itemToPrint, setItemToPrint] = useState<any | null>(null)
   const [orderToView, setOrderToView] = useState<any | null>(null)
   const [orderToDelete, setOrderToDelete] = useState<any | null>(null)
+  const [orderToFinalize, setOrderToFinalize] = useState<any | null>(null)
   const [isExitAlertOpen, setIsExitAlertOpen] = useState(false)
   
   const [bomFilterCategory, setBomFilterCategory] = useState("all")
@@ -245,7 +246,7 @@ export default function CatalogPage() {
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        const anyOpen = isDialogOpen || !!itemToDelete || isAssemblyOpen || isCategoryManagerOpen || isSupplierManagerOpen || !!orderToView || !!orderToDelete || isAuditOpen || isExitAlertOpen;
+        const anyOpen = isDialogOpen || !!itemToDelete || isAssemblyOpen || isCategoryManagerOpen || isSupplierManagerOpen || !!orderToView || !!orderToDelete || isAuditOpen || isExitAlertOpen || !!orderToFinalize;
         if (!anyOpen) {
           document.body.style.pointerEvents = 'auto';
         }
@@ -253,7 +254,7 @@ export default function CatalogPage() {
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isDialogOpen, itemToDelete, isAssemblyOpen, isCategoryManagerOpen, isSupplierManagerOpen, orderToView, orderToDelete, isAuditOpen, isExitAlertOpen]);
+  }, [isDialogOpen, itemToDelete, isAssemblyOpen, isCategoryManagerOpen, isSupplierManagerOpen, orderToView, orderToDelete, isAuditOpen, isExitAlertOpen, orderToFinalize]);
 
   const calculateCost = useCallback((itemData: any, allItems: any[], currentExchangeRate: number): { ars: number, usd: number } => {
     if (!itemData.isCompuesto) {
@@ -745,16 +746,18 @@ export default function CatalogPage() {
 
   const handleAssembleFinal = () => {
     if (!orderToView || !items) return;
-    const target = items.find(i => i.id === orderToView.productId);
+    setOrderToFinalize(orderToView);
+  }
+
+  const handleConfirmFinalize = () => {
+    if (!orderToFinalize || !items) return;
+    const target = items.find(i => i.id === orderToFinalize.productId);
     if (!target) {
       toast({ title: "Error", description: "No se encontró el producto a armar.", variant: "destructive" });
       return;
     }
 
     try {
-      const confirmAssembly = window.confirm(`¿Finalizar armado de ${orderToView.quantity} unidades de ${orderToView.productName}? Se descontarán los insumos del stock según disponibilidad.`);
-      if (!confirmAssembly) return;
-
       toast({ title: "Procesando armado...", description: "Descontando insumos y actualizando stock final." });
 
       const smartDeduct = (productId: string, qtyNeeded: number) => {
@@ -792,19 +795,20 @@ export default function CatalogPage() {
       });
 
       Object.entries(rootComponents).forEach(([compId, compQty]) => {
-        smartDeduct(compId, compQty * orderToView.quantity);
+        smartDeduct(compId, compQty * orderToFinalize.quantity);
       });
 
       // Sumar el producto terminado al stock
       updateDocumentNonBlocking(doc(db, 'products_services', target.id), {
-        stock: increment(orderToView.quantity)
+        stock: increment(orderToFinalize.quantity)
       });
 
       // Marcar orden como completada
-      updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
+      updateDocumentNonBlocking(doc(db, 'production_orders', orderToFinalize.id), {
         status: 'completed'
       });
 
+      setOrderToFinalize(null);
       setOrderToView(null);
       toast({ title: "Armado completado", description: "Insumos descontados inteligentemente del inventario." });
     } catch (error) {
@@ -1657,7 +1661,31 @@ export default function CatalogPage() {
               </div>
             )}
           </div>
-          <DialogFooter className="p-3 border-t bg-slate-50 shrink-0"><div className="flex flex-col md:flex-row items-center justify-between w-full gap-2"><div className="flex gap-3"><div className="text-left"><p className="text-[7px] font-black uppercase text-slate-400">Total ARS</p><p className="text-base font-black text-blue-700">${purchaseCalculations?.totalARS.toLocaleString('es-AR')}</p></div><div className="text-left border-l pl-3 border-slate-200"><p className="text-[7px] font-black uppercase text-slate-400">Total USD</p><p className="text-base font-black text-emerald-600">u$s {purchaseCalculations?.totalUSD.toLocaleString('es-AR')}</p></div></div><div className="flex gap-2 w-full md:w-auto"><Button variant="ghost" onClick={handleCloseOrderView} className="font-bold text-[10px] h-8 flex-1 md:flex-none">Cerrar</Button>{orderToView?.status === 'ready' && (<Button onClick={handleAssembleFinal} className="bg-blue-600 hover:bg-blue-700 px-4 font-black shadow-lg h-8 flex-1 md:flex-none text-[10px]"><Hammer className="mr-1.5 h-3 w-3" /> FINALIZAR ARMADO</Button>)}</div></div></DialogFooter>
+          <DialogFooter className="p-3 border-t bg-slate-50 shrink-0">
+            <div className="flex flex-col md:flex-row items-center justify-between w-full gap-2">
+              <div className="flex gap-3">
+                <div className="text-left">
+                  <p className="text-[7px] font-black uppercase text-slate-400">Total ARS</p>
+                  <p className="text-base font-black text-blue-700">${purchaseCalculations?.totalARS.toLocaleString('es-AR')}</p>
+                </div>
+                <div className="text-left border-l pl-3 border-slate-200">
+                  <p className="text-[7px] font-black uppercase text-slate-400">Total USD</p>
+                  <p className="text-base font-black text-emerald-600">u$s {purchaseCalculations?.totalUSD.toLocaleString('es-AR')}</p>
+                </div>
+              </div>
+              <div className="flex gap-2 w-full md:w-auto">
+                <Button variant="ghost" onClick={handleCloseOrderView} className="font-bold text-[10px] h-8 flex-1 md:flex-none">Cerrar</Button>
+                {orderToView?.status === 'ready' && (
+                  <Button 
+                    onClick={handleAssembleFinal} 
+                    className="bg-blue-600 hover:bg-blue-700 px-4 font-black shadow-lg h-8 flex-1 md:flex-none text-[10px]"
+                  >
+                    <Hammer className="mr-1.5 h-3 w-3" /> FINALIZAR ARMADO
+                  </Button>
+                )}
+              </div>
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1861,7 +1889,37 @@ export default function CatalogPage() {
       </Dialog>
 
       <AlertDialog open={!!itemToDelete} onOpenChange={(o) => { if(!o) setItemToDelete(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle><AlertDialogDescription>Se borrará permanentemente "{itemToDelete?.name}" y no podrá utilizarse en nuevas operaciones ni armados.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground">Eliminar definitivamente</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
-      <AlertDialog open={!!orderToDelete} onOpenChange={(o) => { if(!o) setOrderToDelete(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Eliminar orden de producción?</AlertDialogTitle><AlertDialogDescription>Esta acción borrará la planificación de esta orden. No afectará el stock actual.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteOrder} className="bg-destructive">Eliminar Orden</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+      
+      <AlertDialog open={!!orderToDelete} onOpenChange={(o) => { if(!o) setOrderToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar orden de producción?</AlertDialogTitle>
+            <AlertDialogDescription>Esta acción borrará la planificación de esta orden. No afectará el stock actual.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteOrder} className="bg-destructive text-white">Eliminar Orden</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!orderToFinalize} onOpenChange={(o) => { if(!o) setOrderToFinalize(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2"><CheckCircle className="h-5 w-5 text-emerald-600" /> Finalizar Armado</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Confirmar la finalización de <b>{orderToFinalize?.quantity} unidades</b> de <b>{orderToFinalize?.productName}</b>?<br /><br />
+              Se descontarán inteligentemente los insumos disponibles del inventario.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmFinalize} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
+              Confirmar y Descontar Stock
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {itemToPrint && (
         <div className="print-only w-full p-8 font-sans text-slate-900 bg-white">
