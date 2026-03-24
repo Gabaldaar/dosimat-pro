@@ -306,49 +306,62 @@ export default function CatalogPage() {
 
     const requirements: Record<string, { id: string, name: string, required: number, available: number, missing: number, minStock: number, costARS: number, costUSD: number, costCurrency: string, isCompuesto: boolean, supplier: string }> = {};
 
-    const explode = (productId: string, qtyNeeded: number) => {
+    /**
+     * Explode logic:
+     * - If skipAddingToRequirements is true, we don't add this item to the requirements list (shopping list).
+     * - For composite items, we check stock. If stock >= needed, we stop.
+     * - If stock < needed, we explode sub-components for the DEFICIT quantity.
+     */
+    const explode = (productId: string, qtyNeeded: number, skipAddingToRequirements: boolean = false) => {
       const item = items.find(i => i.id === productId);
       if (!item) return;
 
       const currentStock = item.stock || 0;
       
-      if (!requirements[productId]) {
-        const costCurrency = item.costCurrency || (item.costUSD > 0 && !item.costARS ? 'USD' : 'ARS');
-        requirements[productId] = {
-          id: item.id,
-          name: item.name,
-          required: 0,
-          available: currentStock,
-          missing: 0,
-          minStock: item.minStock || 0,
-          costARS: item.costARS || 0,
-          costUSD: item.costUSD || 0,
-          costCurrency: costCurrency,
-          isCompuesto: item.isCompuesto || false,
-          supplier: item.supplier || "Sin Proveedor"
-        };
+      if (!skipAddingToRequirements) {
+        if (!requirements[productId]) {
+          const costCurrency = item.costCurrency || (item.costUSD > 0 && !item.costARS ? 'USD' : 'ARS');
+          requirements[productId] = {
+            id: item.id,
+            name: item.name,
+            required: 0,
+            available: currentStock,
+            missing: 0,
+            minStock: item.minStock || 0,
+            costARS: item.costARS || 0,
+            costUSD: item.costUSD || 0,
+            costCurrency: costCurrency,
+            isCompuesto: item.isCompuesto || false,
+            supplier: item.supplier || "Sin Proveedor"
+          };
+        }
+        requirements[productId].required += qtyNeeded;
       }
-      
-      requirements[productId].required += qtyNeeded;
 
       if (item.isCompuesto) {
-        // CORRECCIÓN: Para disparar un plan independiente del stock, 
-        // explotamos siempre la cantidad total solicitada para los componentes.
-        const neededToProduce = qtyNeeded;
-        if (neededToProduce > 0) {
+        // How many do we actually need to produce of this intermediate composite item?
+        // If it's the root product, we produce the full qtyNeeded.
+        // If it's a component, we only produce what's missing from stock.
+        const availableStockToDeduct = skipAddingToRequirements ? 0 : currentStock;
+        const deficitToProduce = Math.max(0, qtyNeeded - availableStockToDeduct);
+
+        if (deficitToProduce > 0 || skipAddingToRequirements) {
+          const qtyToExplode = skipAddingToRequirements ? qtyNeeded : deficitToProduce;
+          
           const groupedComponents: Record<string, number> = {};
           item.components?.forEach((comp: any) => {
             groupedComponents[comp.productId] = (groupedComponents[comp.productId] || 0) + (Number(comp.quantity) || 0);
           });
 
           Object.entries(groupedComponents).forEach(([compProductId, compQty]) => {
-            explode(compProductId, compQty * neededToProduce);
+            explode(compProductId, compQty * qtyToExplode, false);
           });
         }
       }
     };
 
-    explode(target.id, qty);
+    // The root item being assembled should not be in the shopping list itself
+    explode(target.id, qty, true);
 
     const flatList = Object.values(requirements).map(req => {
       const missingForOrder = Math.max(0, req.required - req.available);
@@ -1108,7 +1121,7 @@ export default function CatalogPage() {
                     </TableBody>
                   </Table>
                   <div className="bg-slate-50 border-t p-3 grid grid-cols-2 gap-4">
-                    <div className="flex items-center gap-2"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} ARS:</span><span className="font-black text-xs">${groupARS.toLocaleString('es-AR')}</span></div>
+                    <div className="flex items-center gap-2"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} ARS:</span><span className="font-black text-xs text-primary">${groupARS.toLocaleString('es-AR')}</span></div>
                     <div className="flex items-center gap-2 justify-end"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} USD:</span><span className="font-black text-xs text-emerald-700">u$s {groupUSD.toLocaleString('es-AR')}</span></div>
                   </div>
                 </div>
@@ -1170,7 +1183,7 @@ export default function CatalogPage() {
                     );
                   })}
                   <div className="p-2.5 bg-slate-900 rounded-xl text-white space-y-1">
-                    <div className="flex justify-between items-center"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} ARS</span><span className="font-black text-xs">${groupARS.toLocaleString('es-AR')}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} ARS</span><span className="font-black text-xs text-primary">${groupARS.toLocaleString('es-AR')}</span></div>
                     <div className="flex justify-between items-center border-t border-white/10 pt-1"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} USD</span><span className="font-black text-xs text-emerald-400">u$s {groupUSD.toLocaleString('es-AR')}</span></div>
                   </div>
                 </div>
@@ -1326,14 +1339,14 @@ export default function CatalogPage() {
                               <div className="grid grid-cols-2 gap-2">
                                 <div className="p-2 bg-primary/5 rounded-lg border border-primary/10 relative overflow-hidden">
                                   <span className="text-[9px] font-black text-primary uppercase block">Venta ARS</span>
-                                  <span className="text-md font-black">${(item.priceARS || 0).toLocaleString('es-AR')}</span>
+                                  <span className="text-md font-black text-primary">${(item.priceARS || 0).toLocaleString('es-AR')}</span>
                                   {isAdmin && marginARS && (
                                     <div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginARS.color)}>{marginARS.icon} {marginARS.value}%</div>
                                   )}
                                 </div>
                                 <div className="p-2 bg-emerald-50 rounded-lg border border-emerald-100 relative overflow-hidden">
                                   <span className="text-[9px] font-black text-emerald-700 uppercase block">Venta USD</span>
-                                  <span className="text-md font-black">u$s {(item.priceUSD || 0).toLocaleString('es-AR')}</span>
+                                  <span className="text-md font-black text-emerald-700">u$s {(item.priceUSD || 0).toLocaleString('es-AR')}</span>
                                   {isAdmin && marginUSD && (
                                     <div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginUSD.color)}>{marginUSD.icon} {marginUSD.value}%</div>
                                   )}
@@ -1348,11 +1361,11 @@ export default function CatalogPage() {
                                   <div className="grid grid-cols-2 gap-3 text-xs font-bold italic opacity-80">
                                     <div className="flex flex-col">
                                       <span className="text-[9px] not-italic text-muted-foreground uppercase">Costo ARS</span>
-                                      <span>${(item.calculatedCostARS || 0).toLocaleString('es-AR')}</span>
+                                      <span className="text-primary">${(item.calculatedCostARS || 0).toLocaleString('es-AR')}</span>
                                     </div>
                                     <div className="flex flex-col text-right">
                                       <span className="text-[9px] not-italic text-muted-foreground uppercase">Costo USD</span>
-                                      <span>u$s {(item.calculatedCostUSD || 0).toLocaleString('es-AR')}</span>
+                                      <span className="text-emerald-700">u$s {(item.calculatedCostUSD || 0).toLocaleString('es-AR')}</span>
                                     </div>
                                   </div>
                                 </div>
@@ -1616,7 +1629,7 @@ export default function CatalogPage() {
               </div>
             )}
           </div>
-          <DialogFooter className="p-3 border-t bg-slate-50 shrink-0"><div className="flex flex-col md:flex-row items-center justify-between w-full gap-2"><div className="flex gap-3"><div className="text-left"><p className="text-[7px] font-black uppercase text-slate-400">Total ARS</p><p className="text-base font-black">${purchaseCalculations?.totalARS.toLocaleString('es-AR')}</p></div><div className="text-left border-l pl-3 border-slate-200"><p className="text-[7px] font-black uppercase text-slate-400">Total USD</p><p className="text-base font-black text-emerald-600">u$s {purchaseCalculations?.totalUSD.toLocaleString('es-AR')}</p></div></div><div className="flex gap-2 w-full md:w-auto"><Button variant="ghost" onClick={handleCloseOrderView} className="font-bold text-[10px] h-8 flex-1 md:flex-none">Cerrar</Button>{orderToView?.status === 'ready' && (<Button onClick={handleAssembleFinal} className="bg-blue-600 hover:bg-blue-700 px-4 font-black shadow-lg h-8 flex-1 md:flex-none text-[10px]"><Hammer className="mr-1.5 h-3 w-3" /> FINALIZAR ARMADO</Button>)}</div></div></DialogFooter>
+          <DialogFooter className="p-3 border-t bg-slate-50 shrink-0"><div className="flex flex-col md:flex-row items-center justify-between w-full gap-2"><div className="flex gap-3"><div className="text-left"><p className="text-[7px] font-black uppercase text-slate-400">Total ARS</p><p className="text-base font-black text-primary">${purchaseCalculations?.totalARS.toLocaleString('es-AR')}</p></div><div className="text-left border-l pl-3 border-slate-200"><p className="text-[7px] font-black uppercase text-slate-400">Total USD</p><p className="text-base font-black text-emerald-600">u$s {purchaseCalculations?.totalUSD.toLocaleString('es-AR')}</p></div></div><div className="flex gap-2 w-full md:w-auto"><Button variant="ghost" onClick={handleCloseOrderView} className="font-bold text-[10px] h-8 flex-1 md:flex-none">Cerrar</Button>{orderToView?.status === 'ready' && (<Button onClick={handleAssembleFinal} className="bg-blue-600 hover:bg-blue-700 px-4 font-black shadow-lg h-8 flex-1 md:flex-none text-[10px]"><Hammer className="mr-1.5 h-3 w-3" /> FINALIZAR ARMADO</Button>)}</div></div></DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1628,7 +1641,7 @@ export default function CatalogPage() {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto w-[95vw]">
           <DialogHeader><div className="flex justify-between items-start pr-8"><div><DialogTitle className="text-2xl font-black font-headline text-primary">{editingItemId ? 'Configurar Ítem' : 'Nuevo Ítem'}</DialogTitle><DialogDescription>Gestión de precios, categoría y estructura de armado.</DialogDescription></div>{editingItemId && (<Button variant="outline" size="icon" onClick={() => handleExportBOM(items?.find(i => i.id === editingItemId))} className="text-primary border-primary/20"><Printer className="h-4 w-4" /></Button>)}</div></DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
-            <div className="space-y-4"><div className="space-y-2"><Label className="font-bold">Nombre del Producto / Servicio</Label><Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Dosificador G4" /></div><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label className="font-bold">Categoría</Label><Select value={formData.categoryId} onValueChange={(v) => setFormData({...formData, categoryId: v})}><SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger><SelectContent className="max-h-60">{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label className="font-bold">Proveedor</Label><Select value={formData.supplier} onValueChange={(v) => setFormData({...formData, supplier: v})}><SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger><SelectContent className="max-h-60"><SelectItem value="none">SIN PROVEEDOR</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div></div><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label className="text-primary font-black">Venta ARS ($)</Label><Input type="number" value={formData.priceARS} onChange={(e) => setFormData({...formData, priceARS: Number(e.target.value)})} /></div><div className="space-y-2"><Label className="text-emerald-700 font-black">Venta USD (u$s)</Label><Input type="number" value={formData.priceUSD} onChange={(e) => setFormData({...formData, priceUSD: Number(e.target.value)})} /></div></div>{!formData.isCompuesto ? (<div className="p-4 bg-muted/20 rounded-2xl border border-dashed space-y-3"><div className="flex items-center justify-between mb-1"><Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Costo de Reposición</Label><Badge variant="outline" className="bg-white text-[8px] font-black">BASE {formData.costCurrency}</Badge></div><div className="flex gap-2"><div className="relative flex-1"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">{formData.costCurrency === 'USD' ? 'u$s' : '$'}</span><Input type="number" value={formData.costAmount} onChange={(e) => setFormData({...formData, costAmount: Number(e.target.value)})} className="pl-8 font-black" /></div><Tabs value={formData.costCurrency} onValueChange={(v: any) => setFormData({...formData, costCurrency: v})} className="shrink-0"><TabsList className="grid grid-cols-2 w-28 h-10 p-1 border shadow-inner">
+            <div className="space-y-4"><div className="space-y-2"><Label className="font-bold">Nombre del Producto / Servicio</Label><Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Dosificador G4" /></div><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label className="font-bold">Categoría</Label><Select value={formData.categoryId} onValueChange={(v) => setFormData({...formData, categoryId: v})}><SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger><SelectContent className="max-h-60">{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label className="font-bold">Proveedor</Label><Select value={formData.supplier} onValueChange={(v) => setFormData({...formData, supplier: v})}><SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger><SelectContent className="max-h-60"><SelectItem value="none">SIN PROVEEDOR</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div></div><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label className="text-primary font-black">Venta ARS ($)</Label><Input type="number" value={formData.priceARS} onChange={(e) => setFormData({...formData, priceARS: Number(e.target.value)})} className="border-primary/30" /></div><div className="space-y-2"><Label className="text-emerald-700 font-black">Venta USD (u$s)</Label><Input type="number" value={formData.priceUSD} onChange={(e) => setFormData({...formData, priceUSD: Number(e.target.value)})} className="border-emerald-200" /></div></div>{!formData.isCompuesto ? (<div className="p-4 bg-muted/20 rounded-2xl border border-dashed space-y-3"><div className="flex items-center justify-between mb-1"><Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Costo de Reposición</Label><Badge variant="outline" className={cn("text-[8px] font-black", formData.costCurrency === 'ARS' ? "bg-blue-50 text-primary border-primary/30" : "bg-emerald-50 text-emerald-700 border-emerald-300")}>BASE {formData.costCurrency}</Badge></div><div className="flex gap-2"><div className="relative flex-1"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">{formData.costCurrency === 'USD' ? 'u$s' : '$'}</span><Input type="number" value={formData.costAmount} onChange={(e) => setFormData({...formData, costAmount: Number(e.target.value)})} className={cn("pl-8 font-black", formData.costCurrency === 'ARS' ? "border-primary/30" : "border-emerald-200")} /></div><Tabs value={formData.costCurrency} onValueChange={(v: any) => setFormData({...formData, costCurrency: v})} className="shrink-0"><TabsList className="grid grid-cols-2 w-28 h-10 p-1 border shadow-inner">
               <TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
               <TabsTrigger value="USD" className="text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
             </TabsList></Tabs></div><p className="text-[10px] font-bold italic text-muted-foreground text-center">Equivale a {formData.costCurrency === 'ARS' ? `u$s ${(formData.costAmount / currentRate).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : `$ ${(formData.costAmount * currentRate).toLocaleString('es-AR')}`} según dólar {rateType === 'blue' ? 'Blue' : 'Oficial'}</p></div>) : (<div className="grid grid-cols-2 gap-4 p-3 bg-amber-50 rounded-xl border border-amber-200"><div className="space-y-2"><Label className="text-xs font-bold text-amber-800 uppercase">Mano Obra ARS</Label><Input type="number" value={formData.laborCostARS} onChange={(e) => setFormData({...formData, laborCostARS: Number(e.target.value)})} className="h-8 border-amber-200" /></div><div className="space-y-2"><Label className="text-xs font-bold text-amber-800 uppercase">Mano Obra USD</Label><Input type="number" value={formData.laborCostUSD} onChange={(e) => setFormData({...formData, laborCostUSD: Number(e.target.value)})} className="h-8 border-amber-200" /></div></div>)}<div className="flex flex-col gap-3 pt-2"><div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/10"><Switch checked={formData.isService} onCheckedChange={(v) => { setFormData({...formData, isService: v, trackStock: !v && formData.trackStock, isCompuesto: v ? false : formData.isCompuesto}); }} /><div><Label className="font-bold">Es un servicio técnico</Label><p className="text-[10px] text-muted-foreground">No controla stock ni tiene armado.</p></div></div>{!formData.isService && (<div className={cn("flex items-center gap-3 p-3 border rounded-lg transition-colors", formData.trackStock ? "bg-emerald-50/50 border-emerald-200" : "bg-blue-50/50 border-blue-200")}><Switch checked={formData.trackStock} onCheckedChange={(v) => setFormData({...formData, trackStock: v})} /><div><Label className={cn("font-bold", formData.trackStock ? "text-emerald-800" : "text-blue-800")}>Controlar Stock de este ítem</Label><p className={cn("text-[10px]", formData.trackStock ? "text-emerald-600" : "text-blue-600")}>{formData.trackStock ? "Descuenta unidades en cada venta." : "Producto de entrega directa (sin inventario)."}</p></div></div>)}{!formData.isService && (<div className="flex items-center gap-3 p-3 border rounded-lg bg-amber-50/50 border-amber-200"><Switch checked={formData.isCompuesto} onCheckedChange={(v) => { setFormData({...formData, isCompuesto: v, trackStock: v ? true : formData.trackStock}); }} /><div><Label className="font-bold text-amber-800">Es un producto compuesto</Label><p className="text-[10px] text-amber-600">Se fabrica a partir de otros ítems.</p></div></div>)}</div>{!formData.isService && formData.trackStock && (<div className="grid grid-cols-2 gap-4 animate-in fade-in zoom-in duration-200"><div className="space-y-2"><Label className="font-bold">Stock Inicial</Label><Input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} /></div><div className="space-y-2"><Label className="font-bold text-rose-600">Stock Mínimo (Alerta)</Label><Input type="number" value={formData.minStock} onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} /></div></div>)}</div>
@@ -1693,11 +1706,11 @@ export default function CatalogPage() {
               <div className="flex flex-col gap-2">
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-bold">PESOS (ARS):</span>
-                  <span className="text-lg font-black">${(itemToPrint.priceARS || 0).toLocaleString('es-AR')}</span>
+                  <span className="text-lg font-black text-primary">${(itemToPrint.priceARS || 0).toLocaleString('es-AR')}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-bold">DÓLARES (USD):</span>
-                  <span className="text-lg font-black">u$s {(itemToPrint.priceUSD || 0).toLocaleString('es-AR')}</span>
+                  <span className="text-lg font-black text-emerald-700">u$s {(itemToPrint.priceUSD || 0).toLocaleString('es-AR')}</span>
                 </div>
               </div>
             </div>
@@ -1708,11 +1721,11 @@ export default function CatalogPage() {
                 <div className="flex flex-col gap-2">
                   <div className="flex justify-between items-center">
                     <span className="text-xs font-bold">COSTO ARS:</span>
-                    <span className="text-sm font-black">${(itemToPrint.calculatedCostARS || 0).toLocaleString('es-AR')}</span>
+                    <span className="text-sm font-black text-primary">${(itemToPrint.calculatedCostARS || 0).toLocaleString('es-AR')}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-xs font-bold">COSTO USD:</span>
-                    <span className="text-sm font-black">u$s {(itemToPrint.calculatedCostUSD || 0).toLocaleString('es-AR')}</span>
+                    <span className="text-sm font-black text-emerald-700">u$s {(itemToPrint.calculatedCostUSD || 0).toLocaleString('es-AR')}</span>
                   </div>
                 </div>
               </div>
