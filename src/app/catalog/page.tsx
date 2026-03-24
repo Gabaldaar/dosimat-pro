@@ -306,12 +306,6 @@ export default function CatalogPage() {
 
     const requirements: Record<string, { id: string, name: string, required: number, available: number, missing: number, minStock: number, costARS: number, costUSD: number, costCurrency: string, isCompuesto: boolean, supplier: string }> = {};
 
-    /**
-     * Explode logic:
-     * - If skipAddingToRequirements is true, we don't add this item to the requirements list (shopping list).
-     * - For composite items, we check stock. If stock >= needed, we stop.
-     * - If stock < needed, we explode sub-components for the DEFICIT quantity.
-     */
     const explode = (productId: string, qtyNeeded: number, skipAddingToRequirements: boolean = false) => {
       const item = items.find(i => i.id === productId);
       if (!item) return;
@@ -339,9 +333,6 @@ export default function CatalogPage() {
       }
 
       if (item.isCompuesto) {
-        // How many do we actually need to produce of this intermediate composite item?
-        // If it's the root product, we produce the full qtyNeeded.
-        // If it's a component, we only produce what's missing from stock.
         const availableStockToDeduct = skipAddingToRequirements ? 0 : currentStock;
         const deficitToProduce = Math.max(0, qtyNeeded - availableStockToDeduct);
 
@@ -360,7 +351,6 @@ export default function CatalogPage() {
       }
     };
 
-    // The root item being assembled should not be in the shopping list itself
     explode(target.id, qty, true);
 
     const flatList = Object.values(requirements).map(req => {
@@ -713,7 +703,6 @@ export default function CatalogPage() {
 
     const finalUpdates = { ...updates };
     
-    // Si viene un cambio de costo o moneda, normalizar campos ARS/USD antiguos
     if ('costAmount' in updates || 'costCurrency' in updates) {
       const amount = updates.costAmount ?? (item.costCurrency === 'USD' ? item.costUSD : item.costARS);
       const currency = updates.costCurrency ?? item.costCurrency;
@@ -740,31 +729,59 @@ export default function CatalogPage() {
     if (!orderToView || !items) return;
     const target = items.find(i => i.id === orderToView.productId);
     if (!target) return;
-    const confirmAssembly = confirm(`¿Finalizar armado de ${orderToView.quantity} unidades de ${orderToView.productName}? Se descontarán todos los insumos del stock.`);
+    const confirmAssembly = confirm(`¿Finalizar armado de ${orderToView.quantity} unidades de ${orderToView.productName}? Se descontarán los insumos del stock según disponibilidad.`);
     if (!confirmAssembly) return;
-    const explodeAndSubtract = (productId: string, qtyToSubtract: number) => {
+
+    const smartDeduct = (productId: string, qtyNeeded: number) => {
       const item = items.find(i => i.id === productId);
       if (!item) return;
-      if (item.trackStock !== false) {
+
+      const currentStock = item.stock || 0;
+      const availableToDeduct = item.trackStock !== false ? Math.min(currentStock, qtyNeeded) : 0;
+      const deficitToExplode = qtyNeeded - (item.trackStock !== false ? availableToDeduct : 0);
+
+      // 1. Descontar lo disponible en stock (si trackea stock)
+      if (item.trackStock !== false && availableToDeduct > 0) {
         updateDocumentNonBlocking(doc(db, 'products_services', item.id), {
-          stock: increment(-qtyToSubtract)
+          stock: increment(-availableToDeduct)
         });
       }
-      if (item.isCompuesto) {
+
+      // 2. Si hay un faltante y el producto es compuesto, descontar sus partes recursivamente
+      if (item.isCompuesto && deficitToExplode > 0) {
+        const groupedComponents: Record<string, number> = {};
         item.components?.forEach((comp: any) => {
-          explodeAndSubtract(comp.productId, comp.quantity * qtyToSubtract);
+          groupedComponents[comp.productId] = (groupedComponents[comp.productId] || 0) + (Number(comp.quantity) || 0);
+        });
+
+        Object.entries(groupedComponents).forEach(([compProductId, compQty]) => {
+          smartDeduct(compProductId, compQty * deficitToExplode);
         });
       }
     };
-    explodeAndSubtract(target.id, orderToView.quantity);
+
+    // Agrupar componentes raíz para evitar duplicidad de transacciones si no están sanitizados
+    const rootComponents: Record<string, number> = {};
+    target.components?.forEach((comp: any) => {
+      rootComponents[comp.productId] = (rootComponents[comp.productId] || 0) + (Number(comp.quantity) || 0);
+    });
+
+    Object.entries(rootComponents).forEach(([compId, compQty]) => {
+      smartDeduct(compId, compQty * orderToView.quantity);
+    });
+
+    // Sumar el producto terminado al stock
     updateDocumentNonBlocking(doc(db, 'products_services', target.id), {
       stock: increment(orderToView.quantity)
     });
+
+    // Marcar orden como completada
     updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
       status: 'completed'
     });
+
     setOrderToView(null);
-    toast({ title: "Armado completado", description: "Insumos descontados y producto final sumado al stock." });
+    toast({ title: "Armado completado", description: "Insumos descontados inteligentemente del inventario." });
   }
 
   const handleSaveCategory = () => {
