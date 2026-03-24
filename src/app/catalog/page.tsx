@@ -917,12 +917,16 @@ export default function CatalogPage() {
   };
 
   const getSmartExplosion = useCallback((productId: string, qtyNeeded: number, level = 0): any[] => {
-    const item = items?.find(i => i.id === productId);
+    if (!items) return [];
+    const item = items.find(i => i.id === productId);
     if (!item) return [];
 
-    const available = item.trackStock !== false ? (item.stock || 0) : 0;
+    // Lógica para el PDF: Solo bajamos de nivel si NO hay stock disponible.
+    // Para el nivel 0 (el producto que estamos armando), forzamos disponible = 0 
+    // para que siempre muestre sus componentes directos.
+    const available = (level === 0 || item.trackStock === false) ? 0 : (item.stock || 0);
     const takenFromStock = Math.min(qtyNeeded, available);
-    const deficit = qtyNeeded - takenFromStock;
+    const deficit = Math.max(0, qtyNeeded - takenFromStock);
 
     let results: any[] = [{
       id: item.id,
@@ -934,9 +938,11 @@ export default function CatalogPage() {
       isCompuesto: item.isCompuesto
     }];
 
+    // Si falta stock y es compuesto, bajamos un nivel recursivamente
     if (deficit > 0 && item.isCompuesto) {
       item.components?.forEach((comp: any) => {
-        results = [...results, ...getSmartExplosion(comp.productId, comp.quantity * deficit, level + 1)];
+        const subResults = getSmartExplosion(comp.productId, comp.quantity * deficit, level + 1);
+        results = [...results, ...subResults];
       });
     }
 
@@ -947,10 +953,10 @@ export default function CatalogPage() {
     setOrderToPrint(order);
     setTimeout(() => {
       const originalTitle = document.title;
-      document.title = `Orden_Produccion_${order.id.slice(0,6)}`;
+      document.title = `Plan_Armado_${order.productName.replace(/\s+/g, '_')}`;
       window.print();
       document.title = originalTitle;
-    }, 150);
+    }, 300);
   };
 
   const FilterPanel = () => (
@@ -1821,154 +1827,6 @@ export default function CatalogPage() {
             </div>)}
           </div>
           <DialogFooter className="p-3 border-t bg-slate-50 shrink-0"><Button variant="ghost" onClick={() => setIsAssemblyOpen(false)} className="font-bold text-[10px] h-8">Cancelar</Button><Button onClick={handleCreateOrder} className="px-4 font-black shadow-xl h-8 bg-primary text-white text-[10px]"><ClipboardList className="mr-1.5 h-3 w-3" /> GUARDAR COMO ORDEN</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!orderToView} onOpenChange={handleCloseOrderView}>
-        <DialogContent className="max-w-6xl h-[95vh] flex flex-col p-0 w-[95vw]">
-          <DialogHeader className="p-3 pb-1 shrink-0">
-            <div className="flex flex-col md:flex-row justify-between items-start pr-8 gap-2">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2"><Factory className="h-4 w-4 text-primary" /><DialogTitle className="text-base font-black">Orden #{orderToView?.id.toUpperCase().slice(0, 6)}</DialogTitle></div>
-                <div className="flex items-center gap-3">
-                  <DialogDescription className="text-[11px]">Fabricar <b>{orderToView?.productName}</b></DialogDescription>
-                  {orderToView?.status !== 'completed' && (
-                    <div className="flex items-center gap-1.5 bg-primary/5 px-1.5 py-0.5 rounded-lg border">
-                      <Button variant="ghost" size="icon" className="h-5 w-5 text-primary" onClick={() => { const newQty = Math.max(1, orderToView.quantity - 1); setOrderToView({...orderToView, quantity: newQty}); }}><Minus className="h-3 w-3" /></Button>
-                      <span className="text-xs font-black text-primary tabular-nums">{orderToView?.quantity}</span>
-                      <Button variant="ghost" size="icon" className="h-5 w-5 text-primary" onClick={() => { const newQty = orderToView.quantity + 1; setOrderToView({...orderToView, quantity: newQty}); }}><Plus className="h-3 w-3" /></Button>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {orderToView && (
-                  <>
-                    <Button variant="outline" size="sm" className="h-7 gap-1.5 font-bold text-[9px]" onClick={() => handlePrintProductionOrder(orderToView)}>
-                      <Printer className="h-3 w-3" /> IMPRIMIR PLAN
-                    </Button>
-                    <Badge className={cn("font-black uppercase text-[8px] px-1.5 py-0.5", { draft: "bg-slate-100 text-slate-600", pending_purchase: "bg-amber-100 text-amber-700", ready: "bg-blue-100 text-blue-700", completed: "bg-emerald-100 text-emerald-700" }[orderToView.status as string])}>{orderToView.status === 'pending_purchase' ? 'FALTAN MATERIALES' : orderToView.status === 'ready' ? 'LISTO' : orderToView.status}</Badge>
-                  </>
-                )}
-                {orderToView?.status !== 'completed' && (
-                  <Button variant={hasUnsavedChanges ? "default" : "outline"} size="sm" className={cn("h-6 gap-1 font-bold text-[9px] px-2", hasUnsavedChanges && "bg-primary animate-pulse")} onClick={handleUpdateOrderPlan}>
-                    <Save className="h-3 w-3" /> GUARDAR {hasUnsavedChanges && "*"}
-                  </Button>
-                )}
-              </div>
-            </div>
-          </DialogHeader>
-          <div className="flex-1 min-h-0 overflow-y-auto p-3 pt-1 space-y-4">
-            {orderToView && (
-              <div className="space-y-4">
-                <section className="space-y-2">
-                  <div>
-                    <h3 className="text-[9px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><Layers className="h-3 w-3" /> Explosión de Insumos</h3>
-                    <div className="grid grid-cols-1 gap-1 md:hidden">
-                      {explosionSummary?.all.sort((a,b) => a.name.localeCompare(b.name)).map(req => { 
-                        const stockRestante = req.available - req.required; 
-                        const faltaDirecto = stockRestante < 0; 
-                        return (
-                          <Card key={req.id} className="p-2 bg-white border flex flex-col gap-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <p className="font-bold text-[10px] truncate">{req.name}</p>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <div className="text-center px-1 py-0.5 bg-muted/30 rounded border"><p className="text-[9px] font-black">{req.required}/{req.available}</p></div>
-                                {faltaDirecto ? <Badge className="bg-rose-600 text-[7px] h-4 leading-none uppercase font-black px-1">FALTA</Badge> : <CheckCircle className="h-3 w-3 text-emerald-500" />}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 border-t pt-1.5">
-                              <span className="text-[8px] font-bold uppercase text-muted-foreground">PROV:</span>
-                              <Select defaultValue={manualSuppliers[req.id] || req.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateItemSupplierGlobally(req.id, v)}>
-                                <SelectTrigger className="h-6 text-[9px] bg-muted/20 border-none p-1 flex-1">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
-                                  {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </Card>
-                        ) 
-                      })}
-                    </div>
-                    <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-x-auto">
-                      <Table className="min-w-[600px]">
-                        <TableHeader className="bg-slate-50">
-                          <TableRow>
-                            <TableHead className="text-[8px] font-black uppercase h-7">Pieza</TableHead>
-                            <TableHead className="text-center text-[8px] font-black uppercase h-7 w-12">Req.</TableHead>
-                            <TableHead className="text-center text-[8px] font-black uppercase h-7 w-12">Stock</TableHead>
-                            <TableHead className="text-center text-[8px] font-black uppercase h-7 w-48">Proveedor Asignado</TableHead>
-                            <TableHead className="text-right text-[8px] font-black uppercase h-7 w-20">Estado</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {explosionSummary?.all.sort((a,b) => a.name.localeCompare(b.name)).map(req => { 
-                            const stockRestante = req.available - req.required; 
-                            const faltaDirecto = stockRestante < 0; 
-                            return (
-                              <TableRow key={req.id} className="h-10">
-                                <TableCell className="py-0.5">
-                                  <span className="font-bold text-xs">{req.name}</span>
-                                </TableCell>
-                                <TableCell className="text-center font-black text-primary text-[10px]">{req.required}</TableCell>
-                                <TableCell className="text-center text-[10px]">{req.available}</TableCell>
-                                <TableCell className="text-center py-0.5">
-                                  <Select defaultValue={manualSuppliers[req.id] || req.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateItemSupplierGlobally(req.id, v)}>
-                                    <SelectTrigger className="h-7 text-[9px] bg-transparent border-none focus:ring-0">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
-                                      {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                                    </SelectContent>
-                                  </Select>
-                                </TableCell>
-                                <TableCell className="text-right py-0.5">{faltaDirecto ? <Badge className="bg-rose-600 text-[7px] h-4 leading-none py-0 px-1">FALTA</Badge> : <CheckCircle className="h-3.5 w-3.5 text-emerald-500 ml-auto" />}</TableCell>
-                              </TableRow>
-                            ) 
-                          })}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <h3 className="text-[9px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><ShoppingCart className="h-3 w-3" /> Compras por Proveedor</h3>
-                    <GroupedPurchaseList />
-                  </div>
-                </section>
-              </div>
-            )}
-          </div>
-          <DialogFooter className="p-3 border-t bg-slate-50 shrink-0">
-            <div className="flex flex-col md:flex-row items-center justify-between w-full gap-2">
-              <div className="flex gap-3">
-                <div className="text-left">
-                  <p className="text-[7px] font-black uppercase text-slate-400">Total ARS</p>
-                  <p className="text-base font-black text-blue-700">${purchaseCalculations?.totalARS.toLocaleString('es-AR')}</p>
-                </div>
-                <div className="text-left border-l pl-3 border-slate-200">
-                  <p className="text-[7px] font-black uppercase text-slate-400">Total USD</p>
-                  <p className="text-base font-black text-emerald-600">u$s {purchaseCalculations?.totalUSD.toLocaleString('es-AR')}</p>
-                </div>
-              </div>
-              <div className="flex gap-2 w-full md:w-auto">
-                <Button variant="ghost" onClick={handleCloseOrderView} className="font-bold text-[10px] h-8 flex-1 md:flex-none">Cerrar</Button>
-                {orderToView?.status === 'ready' && (
-                  <Button 
-                    onClick={handleAssembleFinal} 
-                    className="bg-blue-600 hover:bg-blue-700 px-4 font-black shadow-lg h-8 flex-1 md:flex-none text-[10px]"
-                  >
-                    <Hammer className="mr-1.5 h-3 w-3" /> FINALIZAR ARMADO
-                  </Button>
-                )}
-              </div>
-            </div>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
