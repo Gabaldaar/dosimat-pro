@@ -209,6 +209,7 @@ export default function CatalogPage() {
   
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
   const [itemToPrint, setItemToPrint] = useState<any | null>(null)
+  const [orderToPrint, setOrderToPrint] = useState<any | null>(null)
   const [orderToView, setOrderToView] = useState<any | null>(null)
   const [orderToDelete, setOrderToDelete] = useState<any | null>(null)
   const [orderToFinalize, setOrderToFinalize] = useState<any | null>(null)
@@ -915,6 +916,43 @@ export default function CatalogPage() {
     }, 150);
   };
 
+  const getSmartExplosion = useCallback((productId: string, qtyNeeded: number, level = 0): any[] => {
+    const item = items?.find(i => i.id === productId);
+    if (!item) return [];
+
+    const available = item.trackStock !== false ? (item.stock || 0) : 0;
+    const takenFromStock = Math.min(qtyNeeded, available);
+    const deficit = qtyNeeded - takenFromStock;
+
+    let results: any[] = [{
+      id: item.id,
+      name: item.name,
+      requested: qtyNeeded,
+      fromStock: takenFromStock,
+      toProduce: deficit,
+      level,
+      isCompuesto: item.isCompuesto
+    }];
+
+    if (deficit > 0 && item.isCompuesto) {
+      item.components?.forEach((comp: any) => {
+        results = [...results, ...getSmartExplosion(comp.productId, comp.quantity * deficit, level + 1)];
+      });
+    }
+
+    return results;
+  }, [items]);
+
+  const handlePrintProductionOrder = (order: any) => {
+    setOrderToPrint(order);
+    setTimeout(() => {
+      const originalTitle = document.title;
+      document.title = `Orden_Produccion_${order.id.slice(0,6)}`;
+      window.print();
+      document.title = originalTitle;
+    }, 150);
+  };
+
   const FilterPanel = () => (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -1570,9 +1608,32 @@ export default function CatalogPage() {
             <div className="flex flex-col md:flex-row justify-between items-start pr-8 gap-2">
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2"><Factory className="h-4 w-4 text-primary" /><DialogTitle className="text-base font-black">Orden #{orderToView?.id.toUpperCase().slice(0, 6)}</DialogTitle></div>
-                <div className="flex items-center gap-3"><DialogDescription className="text-[11px]">Fabricar <b>{orderToView?.productName}</b></DialogDescription>{orderToView?.status !== 'completed' && (<div className="flex items-center gap-1.5 bg-primary/5 px-1.5 py-0.5 rounded-lg border"><Button variant="ghost" size="icon" className="h-5 w-5 text-primary" onClick={() => { const newQty = Math.max(1, orderToView.quantity - 1); setOrderToView({...orderToView, quantity: newQty}); }}><Minus className="h-3 w-3" /></Button><span className="text-xs font-black text-primary tabular-nums">{orderToView?.quantity}</span><Button variant="ghost" size="icon" className="h-5 w-5 text-primary" onClick={() => { const newQty = orderToView.quantity + 1; setOrderToView({...orderToView, quantity: newQty}); }}><Plus className="h-3 w-3" /></Button></div>)}</div>
+                <div className="flex items-center gap-3">
+                  <DialogDescription className="text-[11px]">Fabricar <b>{orderToView?.productName}</b></DialogDescription>
+                  {orderToView?.status !== 'completed' && (
+                    <div className="flex items-center gap-1.5 bg-primary/5 px-1.5 py-0.5 rounded-lg border">
+                      <Button variant="ghost" size="icon" className="h-5 w-5 text-primary" onClick={() => { const newQty = Math.max(1, orderToView.quantity - 1); setOrderToView({...orderToView, quantity: newQty}); }}><Minus className="h-3 w-3" /></Button>
+                      <span className="text-xs font-black text-primary tabular-nums">{orderToView?.quantity}</span>
+                      <Button variant="ghost" size="icon" className="h-5 w-5 text-primary" onClick={() => { const newQty = orderToView.quantity + 1; setOrderToView({...orderToView, quantity: newQty}); }}><Plus className="h-3 w-3" /></Button>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2">{orderToView && (<Badge className={cn("font-black uppercase text-[8px] px-1.5 py-0.5", { draft: "bg-slate-100 text-slate-600", pending_purchase: "bg-amber-100 text-amber-700", ready: "bg-blue-100 text-blue-700", completed: "bg-emerald-100 text-emerald-700" }[orderToView.status as string])}>{orderToView.status === 'pending_purchase' ? 'FALTAN MATERIALES' : orderToView.status === 'ready' ? 'LISTO' : orderToView.status}</Badge>)}{orderToView?.status !== 'completed' && (<Button variant={hasUnsavedChanges ? "default" : "outline"} size="sm" className={cn("h-6 gap-1 font-bold text-[9px] px-2", hasUnsavedChanges && "bg-primary animate-pulse")} onClick={handleUpdateOrderPlan}><Save className="h-3 w-3" /> GUARDAR {hasUnsavedChanges && "*"}</Button>)}</div>
+              <div className="flex items-center gap-2">
+                {orderToView && (
+                  <>
+                    <Button variant="outline" size="sm" className="h-7 gap-1.5 font-bold text-[9px]" onClick={() => handlePrintProductionOrder(orderToView)}>
+                      <Printer className="h-3 w-3" /> IMPRIMIR PLAN
+                    </Button>
+                    <Badge className={cn("font-black uppercase text-[8px] px-1.5 py-0.5", { draft: "bg-slate-100 text-slate-600", pending_purchase: "bg-amber-100 text-amber-700", ready: "bg-blue-100 text-blue-700", completed: "bg-emerald-100 text-emerald-700" }[orderToView.status as string])}>{orderToView.status === 'pending_purchase' ? 'FALTAN MATERIALES' : orderToView.status === 'ready' ? 'LISTO' : orderToView.status}</Badge>
+                  </>
+                )}
+                {orderToView?.status !== 'completed' && (
+                  <Button variant={hasUnsavedChanges ? "default" : "outline"} size="sm" className={cn("h-6 gap-1 font-bold text-[9px] px-2", hasUnsavedChanges && "bg-primary animate-pulse")} onClick={handleUpdateOrderPlan}>
+                    <Save className="h-3 w-3" /> GUARDAR {hasUnsavedChanges && "*"}
+                  </Button>
+                )}
+              </div>
             </div>
           </DialogHeader>
           <div className="flex-1 min-h-0 overflow-y-auto p-3 pt-1 space-y-4">
@@ -1769,9 +1830,32 @@ export default function CatalogPage() {
             <div className="flex flex-col md:flex-row justify-between items-start pr-8 gap-2">
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2"><Factory className="h-4 w-4 text-primary" /><DialogTitle className="text-base font-black">Orden #{orderToView?.id.toUpperCase().slice(0, 6)}</DialogTitle></div>
-                <div className="flex items-center gap-3"><DialogDescription className="text-[11px]">Fabricar <b>{orderToView?.productName}</b></DialogDescription>{orderToView?.status !== 'completed' && (<div className="flex items-center gap-1.5 bg-primary/5 px-1.5 py-0.5 rounded-lg border"><Button variant="ghost" size="icon" className="h-5 w-5 text-primary" onClick={() => { const newQty = Math.max(1, orderToView.quantity - 1); setOrderToView({...orderToView, quantity: newQty}); }}><Minus className="h-3 w-3" /></Button><span className="text-xs font-black text-primary tabular-nums">{orderToView?.quantity}</span><Button variant="ghost" size="icon" className="h-5 w-5 text-primary" onClick={() => { const newQty = orderToView.quantity + 1; setOrderToView({...orderToView, quantity: newQty}); }}><Plus className="h-3 w-3" /></Button></div>)}</div>
+                <div className="flex items-center gap-3">
+                  <DialogDescription className="text-[11px]">Fabricar <b>{orderToView?.productName}</b></DialogDescription>
+                  {orderToView?.status !== 'completed' && (
+                    <div className="flex items-center gap-1.5 bg-primary/5 px-1.5 py-0.5 rounded-lg border">
+                      <Button variant="ghost" size="icon" className="h-5 w-5 text-primary" onClick={() => { const newQty = Math.max(1, orderToView.quantity - 1); setOrderToView({...orderToView, quantity: newQty}); }}><Minus className="h-3 w-3" /></Button>
+                      <span className="text-xs font-black text-primary tabular-nums">{orderToView?.quantity}</span>
+                      <Button variant="ghost" size="icon" className="h-5 w-5 text-primary" onClick={() => { const newQty = orderToView.quantity + 1; setOrderToView({...orderToView, quantity: newQty}); }}><Plus className="h-3 w-3" /></Button>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2">{orderToView && (<Badge className={cn("font-black uppercase text-[8px] px-1.5 py-0.5", { draft: "bg-slate-100 text-slate-600", pending_purchase: "bg-amber-100 text-amber-700", ready: "bg-blue-100 text-blue-700", completed: "bg-emerald-100 text-emerald-700" }[orderToView.status as string])}>{orderToView.status === 'pending_purchase' ? 'FALTAN MATERIALES' : orderToView.status === 'ready' ? 'LISTO' : orderToView.status}</Badge>)}{orderToView?.status !== 'completed' && (<Button variant={hasUnsavedChanges ? "default" : "outline"} size="sm" className={cn("h-6 gap-1 font-bold text-[9px] px-2", hasUnsavedChanges && "bg-primary animate-pulse")} onClick={handleUpdateOrderPlan}><Save className="h-3 w-3" /> GUARDAR {hasUnsavedChanges && "*"}</Button>)}</div>
+              <div className="flex items-center gap-2">
+                {orderToView && (
+                  <>
+                    <Button variant="outline" size="sm" className="h-7 gap-1.5 font-bold text-[9px]" onClick={() => handlePrintProductionOrder(orderToView)}>
+                      <Printer className="h-3 w-3" /> IMPRIMIR PLAN
+                    </Button>
+                    <Badge className={cn("font-black uppercase text-[8px] px-1.5 py-0.5", { draft: "bg-slate-100 text-slate-600", pending_purchase: "bg-amber-100 text-amber-700", ready: "bg-blue-100 text-blue-700", completed: "bg-emerald-100 text-emerald-700" }[orderToView.status as string])}>{orderToView.status === 'pending_purchase' ? 'FALTAN MATERIALES' : orderToView.status === 'ready' ? 'LISTO' : orderToView.status}</Badge>
+                  </>
+                )}
+                {orderToView?.status !== 'completed' && (
+                  <Button variant={hasUnsavedChanges ? "default" : "outline"} size="sm" className={cn("h-6 gap-1 font-bold text-[9px] px-2", hasUnsavedChanges && "bg-primary animate-pulse")} onClick={handleUpdateOrderPlan}>
+                    <Save className="h-3 w-3" /> GUARDAR {hasUnsavedChanges && "*"}
+                  </Button>
+                )}
+              </div>
             </div>
           </DialogHeader>
           <div className="flex-1 min-h-0 overflow-y-auto p-3 pt-1 space-y-4">
@@ -1921,6 +2005,7 @@ export default function CatalogPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* FICHA TÉCNICA DE PRODUCTO (PDF) */}
       {itemToPrint && (
         <div className="print-only w-full p-8 font-sans text-slate-900 bg-white">
           <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
@@ -2011,6 +2096,93 @@ export default function CatalogPage() {
           <div className="mt-12 pt-6 border-t-2 border-slate-900 flex justify-between items-end italic text-[10px] text-slate-400">
             <p>Este documento es una ficha técnica oficial generada por el sistema Dosimat Pro.</p>
             <p>Pág 1/1</p>
+          </div>
+        </div>
+      )}
+
+      {/* PLAN DE ARMADO DE ORDEN DE PRODUCCIÓN (PDF) */}
+      {orderToPrint && (
+        <div className="print-only w-full p-8 font-sans text-slate-900 bg-white">
+          <div className="flex justify-between items-center border-b-2 border-slate-900 pb-4 mb-6">
+            <div>
+              <h1 className="text-2xl font-black uppercase tracking-tight">Plan de Armado / Producción</h1>
+              <p className="text-sm font-bold text-slate-600">Orden #{orderToPrint.id.toUpperCase().slice(0, 6)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-black text-primary">CANTIDAD: {orderToPrint.quantity}</p>
+              <p className="text-xs font-bold text-slate-400">{new Date().toLocaleDateString('es-AR')}</p>
+            </div>
+          </div>
+
+          <div className="mb-8 p-4 border-2 border-slate-900 rounded-2xl bg-slate-50">
+            <h2 className="text-[10px] font-black uppercase text-slate-500 mb-1">Producto a Fabricar</h2>
+            <h3 className="text-3xl font-black uppercase">{orderToPrint.productName}</h3>
+          </div>
+
+          <div className="space-y-6">
+            <div className="flex items-center gap-2">
+              <Layers className="h-5 w-5" />
+              <h3 className="text-sm font-black uppercase tracking-widest">Explosión de Materiales Inteligente</h3>
+            </div>
+            
+            <p className="text-[10px] text-slate-500 italic mb-4">
+              * Nota: Los componentes con stock suficiente aparecen como "Retirar de Stock". 
+              Aquellos sin stock se han expandido en sus partes componentes para su fabricación.
+            </p>
+
+            <table className="w-full border-collapse border-2 border-slate-900 text-xs">
+              <thead>
+                <tr className="bg-slate-900 text-white">
+                  <th className="border border-slate-900 p-2 text-left uppercase font-black">Componente / Insumo</th>
+                  <th className="border border-slate-900 p-2 text-center uppercase font-black w-24">Cantidad</th>
+                  <th className="border border-slate-900 p-2 text-left uppercase font-black w-48">Instrucción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {getSmartExplosion(orderToPrint.productId, orderToPrint.quantity, 0).map((row, idx) => {
+                  if (row.level === 0) return null; // Saltar el producto raíz
+                  return (
+                    <tr key={idx} className={cn("border-b border-slate-300", row.level > 1 && "bg-slate-50/50")}>
+                      <td className="border border-slate-900 p-2">
+                        <div style={{ paddingLeft: `${(row.level - 1) * 20}px` }} className="flex items-center gap-2">
+                          {row.level > 1 && <ArrowRight className="h-3 w-3 text-slate-400" />}
+                          <span className={cn("font-bold", row.level === 1 && "text-sm font-black")}>{row.name}</span>
+                        </div>
+                      </td>
+                      <td className="border border-slate-900 p-2 text-center font-black text-lg">
+                        {row.requested}
+                      </td>
+                      <td className="border border-slate-900 p-2">
+                        {row.fromStock > 0 ? (
+                          <div className="flex items-center gap-1.5 text-emerald-700 font-bold">
+                            <CheckCircle className="h-3 w-3" />
+                            <span>Retirar {row.fromStock} de STOCK</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 text-rose-700 font-bold">
+                            <AlertTriangle className="h-3 w-3" />
+                            <span>FABRICAR / COMPRAR</span>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-12 grid grid-cols-2 gap-12">
+            <div className="border-t-2 border-slate-900 pt-2">
+              <p className="text-[10px] font-black uppercase text-slate-400">Salida de Materiales (Firma)</p>
+            </div>
+            <div className="border-t-2 border-slate-900 pt-2 text-right">
+              <p className="text-[10px] font-black uppercase text-slate-400">Recepción de Producto (Firma)</p>
+            </div>
+          </div>
+
+          <div className="mt-12 pt-6 border-t border-dashed border-slate-300 italic text-[9px] text-slate-400 text-center">
+            Este documento es una orden de producción interna generada por Dosimat Pro.
           </div>
         </div>
       )}
