@@ -102,8 +102,9 @@ function TransactionsContent() {
 
   // Notifications
   const [isWsDialogOpen, setIsWsDialogOpen] = useState(false)
-  const [selectedTxForWs, setSelectedTxForWs] = useState<any | null>(null)
-  const [selectedWsTemplateId, setSelectedWsTemplateId] = useState("")
+  const [isMailDialogOpen, setIsEmailDialogOpen] = useState(false)
+  const [selectedTxForComm, setSelectedTxForComm] = useState<any | null>(null)
+  const [selectedTemplateId, setSelectedTemplateId] = useState("")
   const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({})
 
   // Filters
@@ -121,6 +122,7 @@ function TransactionsContent() {
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
   const txQuery = useMemoFirebase(() => query(collection(db, 'transactions'), orderBy('date', 'desc')), [db])
   const wsTemplatesQuery = useMemoFirebase(() => collection(db, 'whatsapp_templates'), [db])
+  const emailTemplatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
   const productCatsQuery = useMemoFirebase(() => collection(db, 'product_categories'), [db])
 
   const { data: customers } = useCollection(clientsQuery)
@@ -128,6 +130,7 @@ function TransactionsContent() {
   const { data: accounts } = useCollection(accountsQuery)
   const { data: transactions } = useCollection(txQuery)
   const { data: wsTemplates } = useCollection(wsTemplatesQuery)
+  const { data: emailTemplates } = useCollection(emailTemplatesQuery)
   const { data: productCategories } = useCollection(productCatsQuery)
 
   // Initialization from URL
@@ -232,7 +235,6 @@ function TransactionsContent() {
         updateDocumentNonBlocking(doc(db, 'clients', client.id), { [field]: increment(finalAmount) });
       }
 
-      // Procesa imputaciones (matar deuda de facturas individuales)
       if (activeTab === 'cobro') {
         Object.entries(imputations).forEach(([targetTxId, amount]) => {
           updateDocumentNonBlocking(doc(db, 'transactions', targetTxId), {
@@ -297,52 +299,108 @@ function TransactionsContent() {
     }, { ars: 0, usd: 0 })
   }, [filteredTransactions]);
 
-  const handleOpenWsDialog = (tx: any) => {
-    setSelectedTxForWs(tx);
-    setSelectedWsTemplateId("");
+  const handleCopyTxDetail = (tx: any) => {
+    const client = customers?.find(c => c.id === tx.clientId);
+    const dateStr = formatLocalDate(tx.date);
+    const symbol = tx.currency === 'USD' ? 'u$s' : '$';
+    const typeLabel = txTypeMap[tx.type]?.label || tx.type;
+
+    let text = `*DOSIMAT PRO - DETALLE DE OPERACIÓN*\n\n`;
+    text += `*Fecha:* ${dateStr}\n`;
+    text += `*Cliente:* ${client ? `${client.apellido}, ${client.nombre}` : 'Global'}\n`;
+    text += `*Tipo:* ${typeLabel}\n`;
+    if (tx.description) text += `*Nota:* ${tx.description}\n\n`;
+
+    if (tx.items && tx.items.length > 0) {
+      text += `*Detalle:*\n`;
+      tx.items.forEach((i: any) => {
+        const iSymbol = i.currency === 'USD' ? 'u$s' : '$';
+        const sub = i.price * i.qty * (1 - (i.discount || 0)/100);
+        text += `- ${i.qty} x ${i.name} (${iSymbol} ${i.price.toLocaleString('es-AR')}) = ${iSymbol} ${sub.toLocaleString('es-AR')}\n`;
+      });
+      text += `\n`;
+    }
+
+    text += `*Total:* ${symbol} ${Math.abs(tx.amount).toLocaleString('es-AR')}\n`;
+    text += `*Abonado:* ${symbol} ${Number(tx.paidAmount || 0).toLocaleString('es-AR')}\n`;
+    text += `*Pendiente:* ${symbol} ${Math.abs(tx.pendingAmount || 0).toLocaleString('es-AR')}`;
+
+    navigator.clipboard.writeText(text);
+    toast({ title: "Detalle copiado" });
+  };
+
+  const handleOpenCommDialog = (tx: any, type: 'ws' | 'mail') => {
+    setSelectedTxForComm(tx);
+    setSelectedTemplateId("");
     setDynamicValues({});
-    setIsWsDialogOpen(true);
+    if (type === 'ws') setIsWsDialogOpen(true);
+    else setIsEmailDialogOpen(true);
   }
 
-  const dynamicKeys = useMemo(() => {
-    if (!selectedWsTemplateId || !wsTemplates) return [];
-    const template = wsTemplates.find(t => t.id === selectedWsTemplateId);
-    if (!template) return [];
-    const matches = template.body.match(/\{\{\?([^}]+)\}\}/g) || [];
+  const replaceMarkers = (text: string, tx: any, dynamicVals?: Record<string, string>) => {
+    let result = text;
+    const client = customers?.find(c => c.id === tx.clientId);
+    
+    if (client) {
+      result = result.replace(/\{\{Nombre\}\}/g, client.nombre || "");
+      result = result.replace(/\{\{Apellido\}\}/g, client.apellido || "");
+      result = result.replace(/\{\{Saldo_ARS\}\}/g, Number(client.saldoActual || 0).toLocaleString('es-AR'));
+      result = result.replace(/\{\{Saldo_USD\}\}/g, Number(client.saldoUSD || 0).toLocaleString('es-AR'));
+    }
+
+    result = result.replace(/\{\{Fecha\}\}/g, formatLocalDate(tx.date));
+    result = result.replace(/\{\{Total\}\}/g, Math.abs(tx.amount || 0).toLocaleString('es-AR'));
+    result = result.replace(/\{\{Pendiente_Operacion\}\}/g, Math.abs(tx.pendingAmount || 0).toLocaleString('es-AR'));
+    result = result.replace(/\{\{Moneda\}\}/g, tx.currency);
+    result = result.replace(/\{\{Descripción\}\}/g, tx.description || "");
+
+    if (catalog) {
+      catalog.forEach(item => {
+        const regexARS = new RegExp(`\\{\\{PrecioARS_${item.name}\\}\\}`, 'g');
+        const regexUSD = new RegExp(`\\{\\{PrecioUSD_${item.name}\\}\\}`, 'g');
+        result = result.replace(regexARS, Number(item.priceARS || 0).toLocaleString('es-AR'));
+        result = result.replace(regexUSD, Number(item.priceUSD || 0).toLocaleString('es-AR'));
+      });
+    }
+
+    if (dynamicVals) {
+      Object.entries(dynamicVals).forEach(([key, val]) => {
+        const regex = new RegExp(`\\{\\{\\?${key}\\}\\}`, 'g');
+        result = result.replace(regex, val);
+      });
+    }
+    return result;
+  };
+
+  const getDynamicKeys = (body: string) => {
+    const matches = body.match(/\{\{\?([^}]+)\}\}/g) || [];
     return Array.from(new Set(matches.map(m => m.replace(/\{\{\?|\}\}/g, ''))));
-  }, [selectedWsTemplateId, wsTemplates]);
+  };
 
-  const handleSendWs = () => {
-    if (!selectedTxForWs || !selectedWsTemplateId || !wsTemplates) return;
-    const template = wsTemplates.find(t => t.id === selectedWsTemplateId);
-    if (!template) return;
+  const activeTemplate = useMemo(() => {
+    const all = [...(emailTemplates || []), ...(wsTemplates || [])];
+    return all.find(t => t.id === selectedTemplateId);
+  }, [selectedTemplateId, emailTemplates, wsTemplates]);
 
-    const client = customers?.find(c => c.id === selectedTxForWs.clientId);
-    let message = template.body;
+  const dynamicKeys = useMemo(() => {
+    return activeTemplate ? getDynamicKeys(activeTemplate.body + (activeTemplate.subject || "")) : [];
+  }, [activeTemplate]);
 
-    const standardValues: Record<string, string> = {
-      "Nombre": client?.nombre || "Cliente",
-      "Apellido": client?.apellido || "",
-      "Fecha": formatLocalDate(selectedTxForWs.date),
-      "Total": Math.abs(selectedTxForWs.amount).toLocaleString('es-AR'),
-      "Pendiente_Operacion": Math.abs(selectedTxForWs.pendingAmount || 0).toLocaleString('es-AR'),
-      "Moneda": selectedTxForWs.currency,
-      "Descripción": selectedTxForWs.description || ""
-    };
+  const handleSendComm = (type: 'ws' | 'mail') => {
+    if (!selectedTxForComm || !activeTemplate) return;
+    const body = replaceMarkers(activeTemplate.body, selectedTxForComm, dynamicValues);
+    const client = customers?.find(c => c.id === selectedTxForComm.clientId);
 
-    Object.entries(standardValues).forEach(([key, val]) => {
-      const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-      message = message.replace(regex, val);
-    });
-
-    Object.entries(dynamicValues).forEach(([key, val]) => {
-      const regex = new RegExp(`\\{\\{\\?${key}\\}\\}`, 'g');
-      message = message.replace(regex, val);
-    });
-
-    const phone = client?.telefono?.replace(/\D/g, '') || "";
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
-    setIsWsDialogOpen(false);
+    if (type === 'ws') {
+      const phone = client?.telefono?.replace(/\D/g, '') || "";
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(body)}`, '_blank');
+      setIsWsDialogOpen(false);
+    } else {
+      const subject = replaceMarkers(activeTemplate.subject || "", selectedTxForComm, dynamicValues);
+      const mailtoUrl = `mailto:${client?.mail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body).replace(/%0A/g, '%0D%0A')}`;
+      window.open(mailtoUrl, '_blank');
+      setIsEmailDialogOpen(false);
+    }
   }
 
   if (isUserLoading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
@@ -354,7 +412,7 @@ function TransactionsContent() {
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <SidebarTrigger className="flex" />
-            <h1 className="text-xl md:text-3xl font-bold text-primary font-headline">{editingTx ? "Editar" : "Operaciones"}</h1>
+            <h1 className="text-xl md:text-3xl font-bold text-primary font-headline">Operaciones</h1>
           </div>
           <Tabs value={mainView} onValueChange={setMainView}>
             <TabsList className="bg-muted/40 h-10 p-1 rounded-xl shadow-inner border">
@@ -389,7 +447,7 @@ function TransactionsContent() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-muted/20 rounded-xl">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-muted/20 rounded-xl border border-dashed">
                   <div className="space-y-2"><Label className="flex items-center gap-2 text-primary font-bold"><User className="h-4 w-4" /> Cliente</Label>
                     <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
                       <SelectTrigger className="bg-white"><SelectValue placeholder="Buscar cliente..." /></SelectTrigger>
@@ -426,7 +484,7 @@ function TransactionsContent() {
                     {customerPendingTxs.length > 0 && (
                       <div className="space-y-3">
                         <Label className="text-xs font-black uppercase text-muted-foreground">Imputar a Facturas Pendientes ({manualCurrency})</Label>
-                        <div className="border rounded-xl overflow-hidden bg-white">
+                        <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
                           <Table>
                             <TableHeader className="bg-muted/30">
                               <TableRow>
@@ -503,14 +561,14 @@ function TransactionsContent() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="border rounded-xl overflow-hidden bg-white">
+                    <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
                       <Table>
                         <TableHeader className="bg-muted/30">
                           <TableRow>
                             <TableHead>Ítem</TableHead>
-                            <TableHead className="w-24 text-center">Cant.</TableHead>
+                            <TableHead className="w-28 text-center">Cant.</TableHead>
                             <TableHead className="w-32 text-center">Precio Unit.</TableHead>
-                            <TableHead className="w-24 text-center">Desc %</TableHead>
+                            <TableHead className="w-28 text-center">Desc %</TableHead>
                             <TableHead className="w-32 text-center">Moneda</TableHead>
                             <TableHead className="text-right">Subtotal</TableHead>
                             <TableHead className="w-10"></TableHead>
@@ -580,16 +638,16 @@ function TransactionsContent() {
               <Card className="bg-primary/5 border-l-4 border-l-primary"><CardContent className="p-4 flex items-center justify-between"><div><p className="text-[10px] font-black uppercase text-primary/60 tracking-widest">Flujo Neto ARS</p><h3 className={cn("text-2xl font-black mt-1", filteredTotals.ars < 0 ? "text-rose-600" : "text-emerald-600")}>${filteredTotals.ars.toLocaleString()}</h3></div><Calculator className="h-8 w-8 text-primary/20" /></CardContent></Card>
               <Card className="bg-emerald-50 border-l-4 border-l-emerald-500"><CardContent className="p-4 flex items-center justify-between"><div><p className="text-[10px] font-black uppercase text-emerald-700/60 tracking-widest">Flujo Neto USD</p><h3 className={cn("text-2xl font-black mt-1", filteredTotals.usd < 0 ? "text-rose-600" : "text-emerald-600")}>u$s {filteredTotals.usd.toLocaleString()}</h3></div><TrendingUp className="h-8 w-8 text-emerald-500/20" /></CardContent></Card>
             </div>
-            <Card className="glass-card p-4 flex flex-wrap gap-4 items-end">
+            <Card className="glass-card p-4 flex flex-wrap gap-4 items-end border-dashed">
                  <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Cliente</Label><Select value={filterCustomer} onValueChange={setFilterCustomer}><SelectTrigger className="w-[180px] h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem>{customers?.map(c => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}</SelectContent></Select></div>
                  <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Caja</Label><Select value={filterAccount} onValueChange={setFilterAccount}><SelectTrigger className="w-[160px] h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem><SelectItem value="null">Sin Caja / A Cuenta</SelectItem>{accounts?.map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent></Select></div>
                  <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Flujo</Label><Select value={filterFlow} onValueChange={setFilterFlow}><SelectTrigger className="w-[120px] h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem><SelectItem value="income" className="text-emerald-600">Ingresos</SelectItem><SelectItem value="expense" className="text-rose-600">Egresos</SelectItem></SelectContent></Select></div>
-                 <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Operación</Label><Select value={filterOpType} onValueChange={setFilterOpType}><SelectTrigger className="w-[140px] h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{Object.keys(txTypeMap).map(k => <SelectItem key={k} value={k}>{txTypeMap[k].label}</SelectItem>)}</SelectContent></Select></div>
+                 <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Operación</Label><Select value={filterOpType} onValueChange={setFilterOpType}><SelectTrigger className="w-[140px] h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{Object.keys(txTypeMap).filter(k => !['Adjustment','Expense'].includes(k)).map(k => <SelectItem key={k} value={k}>{txTypeMap[k].label}</SelectItem>)}</SelectContent></Select></div>
                  <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Desde</Label><Input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="h-10 w-[140px]" /></div>
                  <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Hasta</Label><Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="h-10 w-[140px]" /></div>
                  <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => { setFilterCustomer("all"); setFilterAccount("all"); setFilterStartDate(""); setFilterEndDate(""); setFilterOpType("all"); setFilterFlow("all"); }}><FilterX className="h-4 w-4" /></Button>
             </Card>
-            <Card className="glass-card overflow-hidden">
+            <Card className="glass-card overflow-hidden shadow-sm">
               <Table>
                 <TableHeader className="bg-muted/30">
                   <TableRow>
@@ -609,7 +667,7 @@ function TransactionsContent() {
                     const info = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
                     const Icon = info.icon;
                     return (
-                      <TableRow key={tx.id} className="cursor-pointer hover:bg-primary/5 transition-colors" onClick={() => setSelectedTxDetails(tx)}>
+                      <TableRow key={tx.id} className="cursor-pointer hover:bg-primary/5 transition-colors group" onClick={() => setSelectedTxDetails(tx)}>
                         <TableCell className="text-xs font-medium">{formatLocalDate(tx.date)}</TableCell>
                         <TableCell><span className="font-bold">{cust ? `${cust.apellido}, ${cust.nombre}` : 'Global'}</span></TableCell>
                         <TableCell><Badge variant="outline" className={cn("text-[9px] gap-1", info.color)}><Icon className="h-3 w-3" />{info.label}</Badge></TableCell>
@@ -618,12 +676,12 @@ function TransactionsContent() {
                         <TableCell className="text-right text-xs text-rose-600 font-bold">{tx.currency==='USD'?'u$s':'$'} {Math.abs(tx.pendingAmount || 0).toLocaleString()}</TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
-                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem onClick={() => setSelectedTxDetails(tx)}><Info className="h-4 w-4 mr-2" /> Ficha completa</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleOpenWsDialog(tx)}><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp (Plantilla)</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => { navigator.clipboard.writeText(`Operación: ${tx.description}\nMonto: ${tx.amount}\nFecha: ${tx.date}`); toast({title:"Copiado"}); }}><Copy className="h-4 w-4 mr-2" /> Copiar Detalle</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => { if(cust?.mail) window.open(`mailto:${cust.mail}?subject=Detalle Operación&body=${tx.description}`); }}><Mail className="h-4 w-4 mr-2" /> Enviar mail</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleOpenCommDialog(tx, 'ws')} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp (Plantilla)</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleCopyTxDetail(tx)}><Copy className="h-4 w-4 mr-2" /> Copiar Detalle</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleOpenCommDialog(tx, 'mail')}><Mail className="h-4 w-4 mr-2" /> Enviar mail</DropdownMenuItem>
                               {isAdmin && (
                                 <>
                                   <DropdownMenuItem onClick={() => { setEditingTx(tx); resetRegisterForm(); setActiveTab(tx.type); setMainView("register"); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
@@ -659,8 +717,8 @@ function TransactionsContent() {
                   <DialogDescription className="font-bold text-slate-800">{selectedTxDetails && formatLocalDate(selectedTxDetails.date)}</DialogDescription>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(`Detalle: ${selectedTxDetails?.description}\nTotal: ${selectedTxDetails?.amount}`); toast({title:"Detalle copiado"}); }} className="h-8 font-bold gap-2"><Copy className="h-3.5 w-3.5" /> COPIAR</Button>
-                  <Button variant="outline" size="sm" onClick={() => handleOpenWsDialog(selectedTxDetails)} className="h-8 font-bold gap-2 border-emerald-200 text-emerald-700 bg-emerald-50"><MessageSquare className="h-3.5 w-3.5" /> WHATSAPP</Button>
+                  <Button variant="outline" size="sm" onClick={() => handleCopyTxDetail(selectedTxDetails)} className="h-8 font-bold gap-2"><Copy className="h-3.5 w-3.5" /> COPIAR</Button>
+                  <Button variant="outline" size="sm" onClick={() => handleOpenCommDialog(selectedTxDetails, 'ws')} className="h-8 font-bold gap-2 border-emerald-200 text-emerald-700 bg-emerald-50"><MessageSquare className="h-3.5 w-3.5" /> WHATSAPP</Button>
                 </div>
               </div>
             </DialogHeader>
@@ -683,7 +741,7 @@ function TransactionsContent() {
 
                 <div className="space-y-2">
                   <p className="text-xs font-black uppercase text-muted-foreground flex items-center gap-2"><User className="h-3 w-3" /> Información del Cliente y Caja</p>
-                  <div className="p-3 border rounded-xl bg-white flex justify-between items-center">
+                  <div className="p-3 border rounded-xl bg-white flex justify-between items-center shadow-sm">
                     <span className="font-bold">{customers?.find(c => c.id === selectedTxDetails.clientId)?.apellido || 'Global'}, {customers?.find(c => c.id === selectedTxDetails.clientId)?.nombre || ''}</span>
                     <Badge variant="secondary">{selectedTxDetails.financialAccountId ? accounts?.find(a => a.id === selectedTxDetails.financialAccountId)?.name : 'Sin Caja / A Cuenta'}</Badge>
                   </div>
@@ -692,7 +750,7 @@ function TransactionsContent() {
                 {selectedTxDetails.imputations && (
                   <div className="space-y-2">
                     <p className="text-xs font-black uppercase text-muted-foreground">Facturas Canceladas con este Pago</p>
-                    <div className="border rounded-xl bg-white overflow-hidden">
+                    <div className="border rounded-xl bg-white overflow-hidden shadow-sm">
                       <Table>
                         <TableHeader className="bg-emerald-50"><TableRow><TableHead>Fecha Factura</TableHead><TableHead>Operación</TableHead><TableHead className="text-right">Monto Aplicado</TableHead></TableRow></TableHeader>
                         <TableBody>
@@ -715,7 +773,7 @@ function TransactionsContent() {
                 {selectedTxDetails.items && selectedTxDetails.items.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-xs font-black uppercase text-muted-foreground">Detalle de Productos</p>
-                    <div className="border rounded-xl bg-white overflow-hidden">
+                    <div className="border rounded-xl bg-white overflow-hidden shadow-sm">
                       <Table>
                         <TableHeader className="bg-muted/10"><TableRow><TableHead>Ítem</TableHead><TableHead className="text-center">Cant.</TableHead><TableHead className="text-right">Subtotal</TableHead></TableRow></TableHeader>
                         <TableBody>
@@ -744,20 +802,22 @@ function TransactionsContent() {
           </DialogContent>
         </Dialog>
 
-        {/* Notification Dialog */}
-        <Dialog open={isWsDialogOpen} onOpenChange={setIsWsDialogOpen}>
+        {/* Notification Dialogs (WS/Mail) */}
+        <Dialog open={isWsDialogOpen || isMailDialogOpen} onOpenChange={(o) => { if(!o) { setIsWsDialogOpen(false); setIsEmailDialogOpen(false); } }}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle className="flex items-center gap-2"><MessageSquare className="h-5 w-5 text-emerald-600" /> Notificación por WhatsApp</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle className="flex items-center gap-2">{isWsDialogOpen ? <MessageSquare className="h-5 w-5 text-emerald-600" /> : <Mail className="h-5 w-5 text-primary" />} Notificación de Operación</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl space-y-2">
-                <p className="text-xs font-bold text-amber-800 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Verificar Remitente</p>
-                <p className="text-[11px] leading-relaxed text-amber-700">Al abrir tu aplicación de correo, asegurate de seleccionar la cuenta Remitente (De:) correspondiente a DOSIMAT antes de enviar este mensaje.</p>
-              </div>
+              {!isWsDialogOpen && (
+                <Card className="bg-amber-50 border-amber-100 p-4 space-y-2">
+                  <p className="text-xs font-bold text-amber-800 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Verificar Remitente</p>
+                  <p className="text-[11px] leading-relaxed text-amber-700">Al abrir tu aplicación de correo, asegurate de seleccionar la cuenta Remitente (De:) correspondiente a DOSIMAT antes de enviar este mensaje.</p>
+                </Card>
+              )}
               <div className="space-y-2">
                 <Label>Seleccionar Plantilla</Label>
-                <Select value={selectedWsTemplateId} onValueChange={setSelectedWsTemplateId}>
+                <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                  <SelectContent>{wsTemplates?.map((t: any) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}</SelectContent>
+                  <SelectContent>{(isWsDialogOpen ? wsTemplates : emailTemplates)?.map((t: any) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}</SelectContent>
                 </Select>
               </div>
               {dynamicKeys.length > 0 && (
@@ -767,16 +827,27 @@ function TransactionsContent() {
                     {dynamicKeys.map(key => (
                       <div key={key} className="space-y-1">
                         <Label className="text-xs font-bold">{key}</Label>
-                        <Input value={dynamicValues[key] || ""} onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})} className="bg-white" />
+                        <Input value={dynamicValues[key] || ""} onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})} className="bg-white h-9" />
                       </div>
                     ))}
                   </div>
                 </div>
               )}
+              {activeTemplate && (
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground">Vista Previa</Label>
+                  <ScrollArea className="h-48 border rounded-xl bg-white p-4 italic text-sm text-slate-700 shadow-inner">
+                    {isMailDialogOpen && <p className="font-bold mb-2">Asunto: {replaceMarkers(activeTemplate.subject || "", selectedTxForComm, dynamicValues)}</p>}
+                    <div className="whitespace-pre-wrap">{replaceMarkers(activeTemplate.body, selectedTxForComm, dynamicValues)}</div>
+                  </ScrollArea>
+                </div>
+              )}
             </div>
             <DialogFooter className="border-t pt-4">
-              <Button variant="outline" onClick={() => setIsWsDialogOpen(false)}>Cerrar</Button>
-              <Button onClick={handleSendWs} disabled={!selectedWsTemplateId || dynamicKeys.some(k => !dynamicValues[k])} className="bg-emerald-600 hover:bg-emerald-700 font-bold"><Send className="mr-2 h-4 w-4" /> Abrir WhatsApp</Button>
+              <Button variant="outline" onClick={() => { setIsWsDialogOpen(false); setIsEmailDialogOpen(false); }}>Cerrar</Button>
+              <Button onClick={() => handleSendComm(isWsDialogOpen ? 'ws' : 'mail')} disabled={!selectedTemplateId || dynamicKeys.some(k => !dynamicValues[k])} className={cn("font-bold", isWsDialogOpen ? "bg-emerald-600 hover:bg-emerald-700" : "bg-primary")}>
+                {isWsDialogOpen ? <Send className="mr-2 h-4 w-4" /> : <Mail className="mr-2 h-4 w-4" />} Abrir {isWsDialogOpen ? 'WhatsApp' : 'Mail App'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

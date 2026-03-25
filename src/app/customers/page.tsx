@@ -60,6 +60,7 @@ import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
+import { Progress } from "@/components/ui/progress"
 
 const txTypeMap: Record<string, { label: string, color: string }> = {
   sale: { label: "Venta", color: "text-blue-600 bg-blue-50" },
@@ -87,12 +88,14 @@ function CustomersContent() {
   const txQuery = useMemoFirebase(() => query(collection(db, 'transactions'), orderBy('date', 'desc')), [db])
   const emailTemplatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
   const wsTemplatesQuery = useMemoFirebase(() => collection(db, 'whatsapp_templates'), [db])
+  const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   
   const { data: customers, isLoading } = useCollection(clientsQuery)
   const { data: zones } = useCollection(zonesQuery)
   const { data: transactions } = useCollection(txQuery)
   const { data: emailTemplates } = useCollection(emailTemplatesQuery)
   const { data: wsTemplates } = useCollection(wsTemplatesQuery)
+  const { data: catalog } = useCollection(catalogQuery)
   
   // States
   const [searchTerm, setSearchTerm] = useState("")
@@ -107,10 +110,14 @@ function CustomersContent() {
   const [customerToDelete, setCustomerToDelete] = useState<any | null>(null)
   const [editingCustomer, setEditingCustomer] = useState<any>(null)
 
-  // Bulk Actions States
+  // Communication States
   const [isBulkEmailOpen, setIsBulkEmailOpen] = useState(false)
   const [isBulkWsOpen, setIsBulkWsOpen] = useState(false)
+  const [isSingleCommOpen, setIsSingleEmailOpen] = useState(false)
+  const [isSingleWsOpen, setIsSingleWsOpen] = useState(false)
   const [selectedTemplateId, setSelectedTemplateId] = useState("")
+  const [selectedCommCustomer, setSelectedCommCustomer] = useState<any>(null)
+  const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({})
   const [bulkStep, setBulkStep] = useState(0)
 
   const defaultFormData = {
@@ -124,11 +131,10 @@ function CustomersContent() {
     mail: "",
     cuit_dni: "",
     observaciones: "", 
+    observacionesUbicacion: "",
     equipoInstalado: {
       medidasPileta: "",
       volumen: 0,
-      dosisCloro: "",
-      cantidadBidones: 0,
       modeloEquipo: "",
       enComodato: false,
       notas: ""
@@ -197,7 +203,11 @@ function CustomersContent() {
   const handleOpenDialog = (customer?: any) => {
     if (customer) {
       setEditingCustomer(customer)
-      setFormData({ ...defaultFormData, ...customer, equipoInstalado: { ...defaultFormData.equipoInstalado, ...(customer.equipoInstalado || {}) } })
+      setFormData({ 
+        ...defaultFormData, 
+        ...customer, 
+        equipoInstalado: { ...defaultFormData.equipoInstalado, ...(customer.equipoInstalado || {}) } 
+      })
     } else {
       setEditingCustomer(null)
       setFormData(defaultFormData)
@@ -262,44 +272,98 @@ email: ${c.mail || '---'}`;
     toast({ title: "Copiado", description: "Resumen de deuda listo para pegar." });
   }
 
-  const handleBulkEmail = () => {
-    if (filteredCustomers.length === 0) return
-    setIsBulkEmailOpen(true)
-  }
+  // Robust Marker Replacement
+  const replaceMarkers = (text: string, client?: any, dynamicVals?: Record<string, string>) => {
+    let result = text;
+    if (client) {
+      result = result.replace(/\{\{Nombre\}\}/g, client.nombre || "");
+      result = result.replace(/\{\{Apellido\}\}/g, client.apellido || "");
+      result = result.replace(/\{\{Direccion\}\}/g, client.direccion || "");
+      result = result.replace(/\{\{Localidad\}\}/g, client.localidad || "");
+      result = result.replace(/\{\{Saldo_ARS\}\}/g, Number(client.saldoActual || 0).toLocaleString('es-AR'));
+      result = result.replace(/\{\{Saldo_USD\}\}/g, Number(client.saldoUSD || 0).toLocaleString('es-AR'));
+    }
+    
+    // Product Prices {{PrecioARS_ItemName}}
+    if (catalog) {
+      catalog.forEach(item => {
+        const regexARS = new RegExp(`\\{\\{PrecioARS_${item.name}\\}\\}`, 'g');
+        const regexUSD = new RegExp(`\\{\\{PrecioUSD_${item.name}\\}\\}`, 'g');
+        result = result.replace(regexARS, Number(item.priceARS || 0).toLocaleString('es-AR'));
+        result = result.replace(regexUSD, Number(item.priceUSD || 0).toLocaleString('es-AR'));
+      });
+    }
 
-  const handleBulkWs = () => {
-    if (filteredCustomers.length === 0) return
-    setBulkStep(0)
-    setIsBulkWsOpen(true)
-  }
+    // Dynamic inputs {{?Dato}}
+    if (dynamicVals) {
+      Object.entries(dynamicVals).forEach(([key, val]) => {
+        const regex = new RegExp(`\\{\\{\\?${key}\\}\\}`, 'g');
+        result = result.replace(regex, val);
+      });
+    }
+    return result;
+  };
+
+  const getDynamicKeys = (body: string) => {
+    const matches = body.match(/\{\{\?([^}]+)\}\}/g) || [];
+    return Array.from(new Set(matches.map(m => m.replace(/\{\{\?|\}\}/g, ''))));
+  };
+
+  const handleSendSingleEmail = () => {
+    const template = emailTemplates?.find(t => t.id === selectedTemplateId);
+    if (!template || !selectedCommCustomer) return;
+    const body = replaceMarkers(template.body, selectedCommCustomer, dynamicValues);
+    const subject = replaceMarkers(template.subject, selectedCommCustomer, dynamicValues);
+    const mailtoUrl = `mailto:${selectedCommCustomer.mail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body).replace(/%0A/g, '%0D%0A')}`;
+    window.open(mailtoUrl, '_blank');
+    setIsSingleEmailOpen(false);
+  };
+
+  const handleSendSingleWs = () => {
+    const template = wsTemplates?.find(t => t.id === selectedTemplateId);
+    if (!template || !selectedCommCustomer) return;
+    const message = replaceMarkers(template.body, selectedCommCustomer, dynamicValues);
+    const phone = selectedCommCustomer.telefono?.replace(/\D/g, "");
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+    setIsSingleWsOpen(false);
+  };
 
   const handleSendBulkWsNext = () => {
     if (bulkStep >= filteredCustomers.length) {
-      setIsBulkWsOpen(false)
-      return
+      setIsBulkWsOpen(false);
+      return;
     }
-    const client = filteredCustomers[bulkStep]
-    const template = wsTemplates?.find(t => t.id === selectedTemplateId)
-    if (!template) return
+    const client = filteredCustomers[bulkStep];
+    const template = wsTemplates?.find(t => t.id === selectedTemplateId);
+    if (!template) return;
 
-    let message = template.body
-    message = message.replace(/\{\{Nombre\}\}/g, client.nombre || "")
-    message = message.replace(/\{\{Apellido\}\}/g, client.apellido || "")
-    
-    const phone = client.telefono?.replace(/\D/g, "")
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank')
-    setBulkStep(prev => prev + 1)
-  }
+    const message = replaceMarkers(template.body, client, dynamicValues);
+    const phone = client.telefono?.replace(/\D/g, "");
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+    setBulkStep(prev => prev + 1);
+  };
 
   const handleSendBulkEmail = () => {
-    const template = emailTemplates?.find(t => t.id === selectedTemplateId)
-    if (!template) return
+    const template = emailTemplates?.find(t => t.id === selectedTemplateId);
+    if (!template) return;
 
-    const bcc = filteredCustomers.map(c => c.mail).filter(m => !!m).join(';')
-    const mailtoUrl = `mailto:?bcc=${bcc}&subject=${encodeURIComponent(template.subject)}&body=${encodeURIComponent(template.body)}`
-    window.open(mailtoUrl, '_blank')
-    setIsBulkEmailOpen(false)
-  }
+    const bcc = filteredCustomers.map(c => c.mail).filter(m => !!m).join(';');
+    // In bulk, we can only replace product prices and global dynamic values, not client names
+    const body = replaceMarkers(template.body, null, dynamicValues);
+    const subject = replaceMarkers(template.subject, null, dynamicValues);
+    const mailtoUrl = `mailto:?bcc=${bcc}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body).replace(/%0A/g, '%0D%0A')}`;
+    window.open(mailtoUrl, '_blank');
+    setIsBulkEmailOpen(false);
+  };
+
+  const activeTemplate = useMemo(() => {
+    const all = [...(emailTemplates || []), ...(wsTemplates || [])];
+    return all.find(t => t.id === selectedTemplateId);
+  }, [selectedTemplateId, emailTemplates, wsTemplates]);
+
+  const dynamicKeys = useMemo(() => {
+    return activeTemplate ? getDynamicKeys(activeTemplate.body + (activeTemplate.subject || "")) : [];
+  }, [activeTemplate]);
 
   return (
     <div className="flex min-h-screen bg-background w-full">
@@ -316,8 +380,8 @@ email: ${c.mail || '---'}`;
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={handleCopyAll} className="h-9 gap-2 font-bold"><Copy className="h-4 w-4" /> Copiar Todo</Button>
-                <Button variant="outline" size="sm" onClick={handleBulkEmail} className="h-9 gap-2 font-bold"><Mail className="h-4 w-4" /> Mail Masivo</Button>
-                <Button variant="outline" size="sm" onClick={handleBulkWs} className="h-9 gap-2 font-bold border-emerald-200 text-emerald-700 bg-emerald-50"><MessageSquare className="h-4 w-4" /> WhatsApp Masivo</Button>
+                <Button variant="outline" size="sm" onClick={() => { setBulkStep(0); setDynamicValues({}); setSelectedTemplateId(""); setIsBulkEmailOpen(true); }} className="h-9 gap-2 font-bold"><Mail className="h-4 w-4" /> Mail Masivo</Button>
+                <Button variant="outline" size="sm" onClick={() => { setBulkStep(0); setDynamicValues({}); setSelectedTemplateId(""); setIsBulkWsOpen(true); }} className="h-9 gap-2 font-bold border-emerald-200 text-emerald-700 bg-emerald-50"><MessageSquare className="h-4 w-4" /> WhatsApp Masivo</Button>
                 {!isUserLoading && isAdmin && (
                   <Button onClick={() => handleOpenDialog()} className="shadow-lg font-bold bg-primary h-9">
                     <Plus className="mr-2 h-5 w-5" /> Nuevo Cliente
@@ -346,17 +410,17 @@ email: ${c.mail || '---'}`;
             <div className="flex flex-col gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-                <input placeholder="Buscar por nombre, apellido o CUIT/DNI..." className="w-full pl-10 h-11 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                <input placeholder="Buscar por nombre, apellido o CUIT/DNI..." className="w-full pl-10 h-11 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
               </div>
-              <div className="flex flex-wrap gap-3 items-end">
+              <div className="flex flex-wrap gap-3 items-end p-4 bg-muted/20 rounded-xl border border-dashed">
                 <div className="space-y-1">
                   <Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Saldo</Label>
                   <Select value={filterBalance} onValueChange={setFilterBalance}>
-                    <SelectTrigger className="w-[140px] h-9 text-xs"><SelectValue placeholder="Saldo" /></SelectTrigger>
+                    <SelectTrigger className="w-[140px] h-9 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all" className="text-xs">Todos</SelectItem>
-                      <SelectItem value="debt" className="text-rose-600 text-xs font-bold">Sólo Deuda</SelectItem>
-                      <SelectItem value="credit" className="text-emerald-600 text-xs font-bold">Sólo a Favor</SelectItem>
+                      <SelectItem value="debt" className="text-rose-600 text-xs font-bold">Sólo deuda</SelectItem>
+                      <SelectItem value="credit" className="text-emerald-600 text-xs font-bold">Sólo a favor</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -437,7 +501,8 @@ email: ${c.mail || '---'}`;
                         <Button variant="outline" size="icon" className="h-8 w-8 text-emerald-700 border-emerald-200 bg-emerald-50" onClick={() => window.open(`https://wa.me/${customer.telefono?.replace(/\D/g, '')}`, '_blank')} title="WhatsApp Directo"><PhoneCall className="h-3.5 w-3.5" /></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8 text-blue-700 border-blue-200 bg-blue-50" asChild title="Ver Historial"><Link href={`/transactions?clientId=${customer.id}`}><History className="h-3.5 w-3.5" /></Link></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenDialog(customer)} title="Editar"><Edit className="h-3.5 w-3.5" /></Button>
-                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => { if(customer.mail) window.open(`mailto:${customer.mail}`, '_blank'); }} title="Enviar Mail"><Mail className="h-3.5 w-3.5" /></Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => { if(customer.mail) { setSelectedCommCustomer(customer); setDynamicValues({}); setSelectedTemplateId(""); setIsSingleEmailOpen(true); } else { toast({title:"Sin Mail", variant:"destructive"}); } }} title="Enviar Mail (Plantilla)"><Mail className="h-3.5 w-3.5" /></Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8 text-emerald-600" onClick={() => { setSelectedCommCustomer(customer); setDynamicValues({}); setSelectedTemplateId(""); setIsSingleWsOpen(true); }} title="WhatsApp (Plantilla)"><MessageSquare className="h-3.5 w-3.5" /></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleCopyClientData(customer)} title="Copiar Datos"><Copy className="h-3.5 w-3.5" /></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8" asChild title="Llamar"><a href={`tel:${customer.telefono}`}><Phone className="h-3.5 w-3.5" /></a></Button>
                         {isAdmin && (
@@ -451,7 +516,7 @@ email: ${c.mail || '---'}`;
             </div>
           )}
 
-          {/* New/Edit Customer Dialog with Tabs */}
+          {/* New/Edit Customer Dialog */}
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle>{editingCustomer ? 'Editar Cliente' : 'Nuevo Cliente'}</DialogTitle></DialogHeader>
@@ -469,7 +534,33 @@ email: ${c.mail || '---'}`;
                     <div className="space-y-2"><Label>CUIT / DNI</Label><Input value={formData.cuit_dni} onChange={(e) => setFormData({...formData, cuit_dni: e.target.value})} /></div>
                     <div className="space-y-2"><Label>Teléfono</Label><Input value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: e.target.value})} /></div>
                     <div className="col-span-2 space-y-2"><Label>Email</Label><Input value={formData.mail} onChange={(e) => setFormData({...formData, mail: e.target.value})} /></div>
-                    <div className="flex items-center gap-2 pt-2"><Switch checked={formData.esClienteReposicion} onCheckedChange={(v) => setFormData({...formData, esClienteReposicion: v})} /><Label>Cliente de Reposición</Label></div>
+                    
+                    <div className="p-4 bg-muted/10 rounded-xl border border-dashed grid grid-cols-2 gap-4 col-span-2">
+                      <div className="space-y-2">
+                        <Label className="text-blue-700 font-bold">Saldo ARS ($)</Label>
+                        <Input type="number" value={formData.saldoActual} onChange={(e) => setFormData({...formData, saldoActual: Number(e.target.value)})} className="border-blue-200 font-bold" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-emerald-700 font-bold">Saldo USD (u$s)</Label>
+                        <Input type="number" value={formData.saldoUSD} onChange={(e) => setFormData({...formData, saldoUSD: Number(e.target.value)})} className="border-emerald-200 font-bold" />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-4 pt-2 col-span-2">
+                      <div className="flex items-center gap-3 p-3 border rounded-lg bg-white shadow-sm">
+                        <Switch checked={formData.esClienteReposicion} onCheckedChange={(v) => setFormData({...formData, esClienteReposicion: v})} />
+                        <Label className="font-bold">Cliente de Reposición</Label>
+                      </div>
+                      <div className={cn("flex items-center gap-3 p-3 border rounded-lg transition-colors", formData.equipoInstalado?.enComodato ? "bg-amber-50 border-amber-200 shadow-sm" : "bg-white")}>
+                        <Switch checked={formData.equipoInstalado?.enComodato} onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v}})} />
+                        <Label className={cn("font-bold", formData.equipoInstalado?.enComodato && "text-amber-800")}>Equipo en Comodato</Label>
+                      </div>
+                    </div>
+
+                    <div className="col-span-2 space-y-2 pt-2">
+                      <Label className="font-bold">Notas Generales</Label>
+                      <Textarea value={formData.observaciones} onChange={(e) => setFormData({...formData, observaciones: e.target.value})} className="min-h-[100px]" />
+                    </div>
                   </div>
                 </TabsContent>
 
@@ -479,6 +570,10 @@ email: ${c.mail || '---'}`;
                     <div className="space-y-2"><Label>Localidad</Label><Input value={formData.localidad} onChange={(e) => setFormData({...formData, localidad: e.target.value})} /></div>
                     <div className="space-y-2"><Label>Zona</Label><Select value={formData.zonaId} onValueChange={(v) => setFormData({...formData, zonaId: v})}><SelectTrigger><SelectValue placeholder="Zona..." /></SelectTrigger><SelectContent>{zones?.map((z: any) => (<SelectItem key={z.id} value={z.id}>{z.name}</SelectItem>))}</SelectContent></Select></div>
                     <div className="space-y-2"><Label>Provincia</Label><Input value={formData.provincia} onChange={(e) => setFormData({...formData, provincia: e.target.value})} /></div>
+                    <div className="col-span-2 space-y-2 pt-4">
+                      <Label className="font-bold">Observaciones de Ubicación</Label>
+                      <Textarea value={formData.observacionesUbicacion} onChange={(e) => setFormData({...formData, observacionesUbicacion: e.target.value})} placeholder="Ej: Portón verde, calle de tierra..." />
+                    </div>
                   </div>
                 </TabsContent>
 
@@ -487,31 +582,34 @@ email: ${c.mail || '---'}`;
                     <div className="space-y-2"><Label>Medidas Pileta</Label><Input value={formData.equipoInstalado.medidasPileta} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, medidasPileta: e.target.value}})} /></div>
                     <div className="space-y-2"><Label>Volumen (Lts)</Label><Input type="number" value={formData.equipoInstalado.volumen} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, volumen: Number(e.target.value)}})} /></div>
                     <div className="space-y-2"><Label>Modelo Equipo</Label><Input value={formData.equipoInstalado.modeloEquipo} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, modeloEquipo: e.target.value}})} /></div>
-                    <div className="flex items-center gap-2 pt-8"><Switch checked={formData.equipoInstalado.enComodato} onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v}})} /><Label>Equipo en Comodato</Label></div>
                     <div className="col-span-2 space-y-2"><Label>Notas de Equipo</Label><Textarea value={formData.equipoInstalado.notas} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, notas: e.target.value}})} /></div>
                   </div>
                 </TabsContent>
               </Tabs>
-              <DialogFooter><Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button><Button onClick={handleSave}>Guardar</Button></DialogFooter>
+              <DialogFooter><Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button><Button onClick={handleSave} className="px-8 font-bold">Guardar</Button></DialogFooter>
             </DialogContent>
           </Dialog>
 
-          {/* Bulk Email Dialog */}
-          <Dialog open={isBulkEmailOpen} onOpenChange={setIsBulkEmailOpen}>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader><DialogTitle>Envío Masivo de Email</DialogTitle></DialogHeader>
+          {/* Bulk/Single Email Dialog */}
+          <Dialog open={isBulkEmailOpen || isSingleCommOpen} onOpenChange={(o) => { if(!o) { setIsBulkEmailOpen(false); setIsSingleEmailOpen(false); } }}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader><DialogTitle>{isBulkEmailOpen ? 'Email Masivo' : `Enviar Email a ${selectedCommCustomer?.nombre}`}</DialogTitle></DialogHeader>
               <div className="space-y-4 py-4">
-                <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl space-y-2">
+                <Card className="bg-blue-50 border-blue-100 p-4 space-y-2">
                   <p className="text-xs font-bold text-blue-800 flex items-center gap-2"><Info className="h-4 w-4" /> Nota del sistema</p>
-                  <p className="text-[11px] leading-relaxed text-blue-700">Nota: En los envíos masivos, los marcadores dinámicos (como el nombre o saldo) no se personalizarán para cada cliente. Sin embargo, los precios de productos y los datos que ingreses arriba sí se actualizarán automáticamente.</p>
-                </div>
+                  <p className="text-[11px] leading-relaxed text-blue-700">
+                    {isBulkEmailOpen 
+                      ? "En los envíos masivos, marcadores como {{Nombre}} no se personalizarán por cliente. Pero los precios de productos y datos manuales sí."
+                      : "Los marcadores dinámicos se completarán automáticamente con los datos del cliente."}
+                  </p>
+                </Card>
                 
-                <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl space-y-2">
+                <Card className="bg-amber-50 border-amber-100 p-4 space-y-2">
                   <p className="text-xs font-bold text-amber-800 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Verificar Remitente</p>
                   <p className="text-[11px] leading-relaxed text-amber-700">Al abrir tu aplicación de correo, asegurate de seleccionar la cuenta Remitente (De:) correspondiente a DOSIMAT antes de enviar este mensaje.</p>
-                </div>
+                </Card>
 
-                <div className="space-y-2 pt-4">
+                <div className="space-y-2 pt-2">
                   <Label>Seleccionar Plantilla</Label>
                   <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
                     <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
@@ -519,31 +617,49 @@ email: ${c.mail || '---'}`;
                   </Select>
                 </div>
 
-                {selectedTemplateId && emailTemplates && (
-                  <div className="p-4 border rounded-xl bg-muted/10 space-y-2">
-                    <p className="text-[10px] font-black uppercase text-muted-foreground">Vista Previa</p>
-                    <p className="text-sm font-bold">{emailTemplates.find(t => t.id === selectedTemplateId)?.subject}</p>
-                    <div className="text-xs italic text-muted-foreground line-clamp-4">{emailTemplates.find(t => t.id === selectedTemplateId)?.body}</div>
+                {dynamicKeys.length > 0 && (
+                  <div className="p-4 border border-dashed rounded-xl space-y-4 bg-muted/5">
+                    <p className="text-[10px] font-black uppercase text-primary">Datos Manuales Requeridos</p>
+                    <div className="grid grid-cols-1 gap-4">
+                      {dynamicKeys.map(key => (
+                        <div key={key} className="space-y-1">
+                          <Label className="text-xs font-bold">{key}</Label>
+                          <Input value={dynamicValues[key] || ""} onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})} className="bg-white h-9" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {activeTemplate && (
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground">Vista Previa del Mensaje</Label>
+                    <ScrollArea className="h-48 border rounded-xl bg-white p-4 italic text-sm text-slate-700 shadow-inner">
+                      <p className="font-bold mb-2">Asunto: {replaceMarkers(activeTemplate.subject || "", selectedCommCustomer, dynamicValues)}</p>
+                      <div className="whitespace-pre-wrap">{replaceMarkers(activeTemplate.body, selectedCommCustomer, dynamicValues)}</div>
+                    </ScrollArea>
                   </div>
                 )}
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsBulkEmailOpen(false)}>Cerrar</Button>
-                <Button disabled={!selectedTemplateId} onClick={handleSendBulkEmail} className="bg-primary font-bold">Abrir Email App ({filteredCustomers.filter(c => c.mail).length} destinatarios)</Button>
+                <Button variant="outline" onClick={() => { setIsBulkEmailOpen(false); setIsSingleEmailOpen(false); }}>Cancelar</Button>
+                <Button disabled={!selectedTemplateId || dynamicKeys.some(k => !dynamicValues[k])} onClick={isBulkEmailOpen ? handleSendBulkEmail : handleSendSingleEmail} className="bg-primary font-bold">Abrir Mail App</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
 
-          {/* Bulk WhatsApp Dialog */}
-          <Dialog open={isBulkWsOpen} onOpenChange={setIsBulkWsOpen}>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader><DialogTitle>WhatsApp Masivo (Secuencial)</DialogTitle></DialogHeader>
+          {/* Bulk/Single WhatsApp Dialog */}
+          <Dialog open={isBulkWsOpen || isSingleWsOpen} onOpenChange={(o) => { if(!o) { setIsBulkWsOpen(false); setIsSingleWsOpen(false); } }}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader><DialogTitle>{isBulkWsOpen ? 'WhatsApp Masivo' : 'WhatsApp Individual'}</DialogTitle></DialogHeader>
               <div className="space-y-4 py-4">
-                {bulkStep === 0 ? (
+                {bulkStep === 0 || isSingleWsOpen ? (
                   <>
-                    <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
-                      <p className="text-[11px] leading-relaxed text-blue-700">Este proceso abrirá una ventana de WhatsApp para cada cliente filtrado uno por uno. Podrás revisar el mensaje antes de enviar en cada paso.</p>
-                    </div>
+                    {isBulkWsOpen && (
+                      <div className="p-4 bg-blue-50 border-blue-100 rounded-xl">
+                        <p className="text-[11px] leading-relaxed text-blue-700">Este proceso abrirá una ventana de WhatsApp para cada cliente filtrado uno por uno. Podrás revisar el mensaje antes de enviar en cada paso.</p>
+                      </div>
+                    )}
                     <div className="space-y-2">
                       <Label>Seleccionar Plantilla</Label>
                       <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
@@ -551,23 +667,46 @@ email: ${c.mail || '---'}`;
                         <SelectContent>{wsTemplates?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
+                    {dynamicKeys.length > 0 && (
+                      <div className="p-4 border border-dashed rounded-xl space-y-4 bg-muted/5">
+                        <p className="text-[10px] font-black uppercase text-primary">Datos Manuales Requeridos</p>
+                        <div className="grid grid-cols-1 gap-4">
+                          {dynamicKeys.map(key => (
+                            <div key={key} className="space-y-1">
+                              <Label className="text-xs font-bold">{key}</Label>
+                              <Input value={dynamicValues[key] || ""} onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})} className="bg-white h-9" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {activeTemplate && (
+                      <div className="space-y-2">
+                        <Label className="text-[10px] font-black uppercase text-muted-foreground">Vista Previa</Label>
+                        <div className="p-4 border rounded-xl bg-white italic text-sm text-slate-700 shadow-inner whitespace-pre-wrap">
+                          {replaceMarkers(activeTemplate.body, selectedCommCustomer || filteredCustomers[0], dynamicValues)}
+                        </div>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div className="space-y-6 text-center py-6">
                     <Progress value={(bulkStep / filteredCustomers.length) * 100} className="h-2" />
                     <div className="space-y-2">
                       <h3 className="text-2xl font-black">Paso {bulkStep} de {filteredCustomers.length}</h3>
-                      <p className="text-muted-foreground">Cliente actual: <b>{filteredCustomers[bulkStep-1]?.apellido}, {filteredCustomers[bulkStep-1]?.nombre}</b></p>
+                      <p className="text-muted-foreground">Enviando a: <b>{filteredCustomers[bulkStep-1]?.apellido}, {filteredCustomers[bulkStep-1]?.nombre}</b></p>
                     </div>
-                    <div className="p-4 bg-muted/20 rounded-xl text-left italic text-sm">
-                      "{wsTemplates?.find(t => t.id === selectedTemplateId)?.body.replace(/\{\{Nombre\}\}/g, filteredCustomers[bulkStep-1]?.nombre || "")}"
+                    <div className="p-4 bg-muted/20 rounded-xl text-left italic text-sm shadow-inner whitespace-pre-wrap">
+                      "{replaceMarkers(wsTemplates?.find(t => t.id === selectedTemplateId)?.body || "", filteredCustomers[bulkStep-1], dynamicValues)}"
                     </div>
                   </div>
                 )}
               </div>
               <DialogFooter>
-                {bulkStep === 0 ? (
-                  <Button disabled={!selectedTemplateId} onClick={() => setBulkStep(1)} className="w-full bg-emerald-600 font-bold">Comenzar Secuencia</Button>
+                {isSingleWsOpen ? (
+                  <Button disabled={!selectedTemplateId || dynamicKeys.some(k => !dynamicValues[k])} onClick={handleSendSingleWs} className="w-full bg-emerald-600 font-bold">Abrir WhatsApp</Button>
+                ) : bulkStep === 0 ? (
+                  <Button disabled={!selectedTemplateId || dynamicKeys.some(k => !dynamicValues[k])} onClick={() => setBulkStep(1)} className="w-full bg-emerald-600 font-bold">Comenzar Secuencia</Button>
                 ) : (
                   <div className="grid grid-cols-2 gap-2 w-full">
                     <Button variant="outline" onClick={() => setIsBulkWsOpen(false)}>Cancelar</Button>
@@ -596,7 +735,7 @@ email: ${c.mail || '---'}`;
                   <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl text-center"><p className="text-[10px] font-black uppercase text-rose-700">Deuda ARS</p><p className="text-2xl font-black text-rose-800">${Math.abs(selectedCustomerForStatement?.saldoActual || 0).toLocaleString('es-AR')}</p></div>
                   <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl text-center"><p className="text-[10px] font-black uppercase text-rose-700">Deuda USD</p><p className="text-2xl font-black text-rose-800">u$s {Math.abs(selectedCustomerForStatement?.saldoUSD || 0).toLocaleString('es-AR')}</p></div>
                 </div>
-                <ScrollArea className="max-h-[40vh] border rounded-xl bg-white overflow-hidden">
+                <ScrollArea className="max-h-[40vh] border rounded-xl bg-white overflow-hidden shadow-inner">
                   <Table>
                     <TableHeader className="bg-muted/30"><TableRow><TableHead className="text-[10px] font-bold uppercase">Fecha</TableHead><TableHead className="text-[10px] font-bold uppercase">Tipo</TableHead><TableHead className="text-right text-[10px] font-bold uppercase">Original</TableHead><TableHead className="text-right text-[10px] font-bold uppercase">Pendiente</TableHead></TableRow></TableHeader>
                     <TableBody>
