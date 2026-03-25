@@ -2,8 +2,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
-import Link from "next/link"
-import { useSearchParams, useRouter } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,7 +10,6 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { 
   Search, 
-  Plus, 
   MapPin, 
   PhoneCall, 
   User, 
@@ -35,7 +33,8 @@ import {
   Phone,
   AlertTriangle,
   Info,
-  ChevronRight
+  ChevronRight,
+  Plus
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import {
@@ -61,6 +60,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
 import { Progress } from "@/components/ui/progress"
+import Link from "next/link"
 
 const txTypeMap: Record<string, { label: string, color: string }> = {
   sale: { label: "Venta", color: "text-blue-600 bg-blue-50" },
@@ -82,7 +82,6 @@ function CustomersContent() {
   const { user, userData, isUserLoading } = useUser()
   const isAdmin = userData?.role === 'Admin'
   
-  // Queries
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const zonesQuery = useMemoFirebase(() => collection(db, 'zones'), [db])
   const txQuery = useMemoFirebase(() => query(collection(db, 'transactions'), orderBy('date', 'desc')), [db])
@@ -97,7 +96,6 @@ function CustomersContent() {
   const { data: wsTemplates } = useCollection(wsTemplatesQuery)
   const { data: catalog } = useCollection(catalogQuery)
   
-  // States
   const [searchTerm, setSearchTerm] = useState("")
   const [filterBalance, setFilterBalance] = useState("all") 
   const [filterComodato, setFilterComodato] = useState("all")
@@ -110,7 +108,6 @@ function CustomersContent() {
   const [customerToDelete, setCustomerToDelete] = useState<any | null>(null)
   const [editingCustomer, setEditingCustomer] = useState<any>(null)
 
-  // Communication States
   const [isBulkEmailOpen, setIsBulkEmailOpen] = useState(false)
   const [isBulkWsOpen, setIsBulkWsOpen] = useState(false)
   const [isSingleCommOpen, setIsSingleEmailOpen] = useState(false)
@@ -272,7 +269,10 @@ email: ${c.mail || '---'}`;
     toast({ title: "Copiado", description: "Resumen de deuda listo para pegar." });
   }
 
-  // Robust Marker Replacement
+  const escapeRegExp = (string: string) => {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
   const replaceMarkers = (text: string, client?: any, dynamicVals?: Record<string, string>) => {
     let result = text;
     if (client) {
@@ -280,24 +280,23 @@ email: ${c.mail || '---'}`;
       result = result.replace(/\{\{Apellido\}\}/g, client.apellido || "");
       result = result.replace(/\{\{Direccion\}\}/g, client.direccion || "");
       result = result.replace(/\{\{Localidad\}\}/g, client.localidad || "");
-      result = result.replace(/\{\{Saldo_ARS\}\}/g, Number(client.saldoActual || 0).toLocaleString('es-AR'));
-      result = result.replace(/\{\{Saldo_USD\}\}/g, Number(client.saldoUSD || 0).toLocaleString('es-AR'));
+      result = result.replace(/\{\{Saldo_ARS\}\}/g, `$ ${Number(client.saldoActual || 0).toLocaleString('es-AR')}`);
+      result = result.replace(/\{\{Saldo_USD\}\}/g, `u$s ${Number(client.saldoUSD || 0).toLocaleString('es-AR')}`);
     }
     
-    // Product Prices {{PrecioARS_ItemName}}
     if (catalog) {
       catalog.forEach(item => {
-        const regexARS = new RegExp(`\\{\\{PrecioARS_${item.name}\\}\\}`, 'g');
-        const regexUSD = new RegExp(`\\{\\{PrecioUSD_${item.name}\\}\\}`, 'g');
-        result = result.replace(regexARS, Number(item.priceARS || 0).toLocaleString('es-AR'));
-        result = result.replace(regexUSD, Number(item.priceUSD || 0).toLocaleString('es-AR'));
+        const escapedName = escapeRegExp(item.name);
+        const regexARS = new RegExp(`\\{\\{PrecioARS_${escapedName}\\}\\}`, 'g');
+        const regexUSD = new RegExp(`\\{\\{PrecioUSD_${escapedName}\\}\\}`, 'g');
+        result = result.replace(regexARS, `$ ${Number(item.priceARS || 0).toLocaleString('es-AR')}`);
+        result = result.replace(regexUSD, `u$s ${Number(item.priceUSD || 0).toLocaleString('es-AR')}`);
       });
     }
 
-    // Dynamic inputs {{?Dato}}
     if (dynamicVals) {
       Object.entries(dynamicVals).forEach(([key, val]) => {
-        const regex = new RegExp(`\\{\\{\\?${key}\\}\\}`, 'g');
+        const regex = new RegExp(`\\{\\{\\?${escapeRegExp(key)}\\}\\}`, 'g');
         result = result.replace(regex, val);
       });
     }
@@ -329,17 +328,31 @@ email: ${c.mail || '---'}`;
   };
 
   const handleSendBulkWsNext = () => {
-    if (bulkStep >= filteredCustomers.length) {
-      setIsBulkWsOpen(false);
+    if (bulkStep === 0) {
+      setBulkStep(1);
+      const client = filteredCustomers[0];
+      const template = wsTemplates?.find(t => t.id === selectedTemplateId);
+      if (template && client) {
+        const message = replaceMarkers(template.body, client, dynamicValues);
+        const phone = client.telefono?.replace(/\D/g, "");
+        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+      }
       return;
     }
+
+    if (bulkStep >= filteredCustomers.length) {
+      setIsBulkWsOpen(false);
+      setBulkStep(0);
+      return;
+    }
+
     const client = filteredCustomers[bulkStep];
     const template = wsTemplates?.find(t => t.id === selectedTemplateId);
-    if (!template) return;
-
-    const message = replaceMarkers(template.body, client, dynamicValues);
-    const phone = client.telefono?.replace(/\D/g, "");
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+    if (template && client) {
+      const message = replaceMarkers(template.body, client, dynamicValues);
+      const phone = client.telefono?.replace(/\D/g, "");
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+    }
     setBulkStep(prev => prev + 1);
   };
 
@@ -348,7 +361,6 @@ email: ${c.mail || '---'}`;
     if (!template) return;
 
     const bcc = filteredCustomers.map(c => c.mail).filter(m => !!m).join(';');
-    // In bulk, we can only replace product prices and global dynamic values, not client names
     const body = replaceMarkers(template.body, null, dynamicValues);
     const subject = replaceMarkers(template.subject, null, dynamicValues);
     const mailtoUrl = `mailto:?bcc=${bcc}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body).replace(/%0A/g, '%0D%0A')}`;
@@ -516,7 +528,6 @@ email: ${c.mail || '---'}`;
             </div>
           )}
 
-          {/* New/Edit Customer Dialog */}
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle>{editingCustomer ? 'Editar Cliente' : 'Nuevo Cliente'}</DialogTitle></DialogHeader>
@@ -590,7 +601,6 @@ email: ${c.mail || '---'}`;
             </DialogContent>
           </Dialog>
 
-          {/* Bulk/Single Email Dialog */}
           <Dialog open={isBulkEmailOpen || isSingleCommOpen} onOpenChange={(o) => { if(!o) { setIsBulkEmailOpen(false); setIsSingleEmailOpen(false); } }}>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle>{isBulkEmailOpen ? 'Email Masivo' : `Enviar Email a ${selectedCommCustomer?.nombre}`}</DialogTitle></DialogHeader>
@@ -648,7 +658,6 @@ email: ${c.mail || '---'}`;
             </DialogContent>
           </Dialog>
 
-          {/* Bulk/Single WhatsApp Dialog */}
           <Dialog open={isBulkWsOpen || isSingleWsOpen} onOpenChange={(o) => { if(!o) { setIsBulkWsOpen(false); setIsSingleWsOpen(false); } }}>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle>{isBulkWsOpen ? 'WhatsApp Masivo' : 'WhatsApp Individual'}</DialogTitle></DialogHeader>
@@ -706,7 +715,7 @@ email: ${c.mail || '---'}`;
                 {isSingleWsOpen ? (
                   <Button disabled={!selectedTemplateId || dynamicKeys.some(k => !dynamicValues[k])} onClick={handleSendSingleWs} className="w-full bg-emerald-600 font-bold">Abrir WhatsApp</Button>
                 ) : bulkStep === 0 ? (
-                  <Button disabled={!selectedTemplateId || dynamicKeys.some(k => !dynamicValues[k])} onClick={() => setBulkStep(1)} className="w-full bg-emerald-600 font-bold">Comenzar Secuencia</Button>
+                  <Button disabled={!selectedTemplateId || dynamicKeys.some(k => !dynamicValues[k])} onClick={handleSendBulkWsNext} className="w-full bg-emerald-600 font-bold">Comenzar Secuencia</Button>
                 ) : (
                   <div className="grid grid-cols-2 gap-2 w-full">
                     <Button variant="outline" onClick={() => setIsBulkWsOpen(false)}>Cancelar</Button>

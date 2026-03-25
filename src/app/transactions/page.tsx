@@ -93,21 +93,18 @@ function TransactionsContent() {
   const isAdmin = userData?.role === 'Admin'
   const searchParams = useSearchParams()
   
-  // Tabs & Views
   const [mainView, setMainView] = useState("history")
   const [activeTab, setActiveTab] = useState("refill")
   const [editingTx, setEditingTx] = useState<any | null>(null)
   const [txToDelete, setTxToDelete] = useState<any | null>(null)
   const [selectedTxDetails, setSelectedTxDetails] = useState<any | null>(null)
 
-  // Notifications
   const [isWsDialogOpen, setIsWsDialogOpen] = useState(false)
   const [isMailDialogOpen, setIsEmailDialogOpen] = useState(false)
   const [selectedTxForComm, setSelectedTxForComm] = useState<any | null>(null)
   const [selectedTemplateId, setSelectedTemplateId] = useState("")
   const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({})
 
-  // Filters
   const [filterCustomer, setFilterCustomer] = useState("all")
   const [filterAccount, setFilterAccount] = useState("all")
   const [filterStartDate, setFilterStartDate] = useState("")
@@ -116,7 +113,6 @@ function TransactionsContent() {
   const [filterFlow, setFilterFlow] = useState("all")
   const [itemFilterCategory, setItemFilterCategory] = useState("all")
 
-  // Queries
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
@@ -133,7 +129,6 @@ function TransactionsContent() {
   const { data: emailTemplates } = useCollection(emailTemplatesQuery)
   const { data: productCategories } = useCollection(productCatsQuery)
 
-  // Initialization from URL
   useEffect(() => {
     const mode = searchParams.get('mode')
     const clientId = searchParams.get('clientId')
@@ -166,7 +161,6 @@ function TransactionsContent() {
     return sortedCatalog.filter((item: any) => item.categoryId === itemFilterCategory)
   }, [sortedCatalog, itemFilterCategory])
 
-  // Register Form State
   const [selectedCustomerId, setSelectedCustomerId] = useState("")
   const [selectedItems, setSelectedItems] = useState<any[]>([])
   const [destinationAccounts, setDestinationAccounts] = useState<Record<string, string>>({ ARS: "pending", USD: "pending" })
@@ -329,12 +323,8 @@ function TransactionsContent() {
     toast({ title: "Detalle copiado" });
   };
 
-  const handleOpenCommDialog = (tx: any, type: 'ws' | 'mail') => {
-    setSelectedTxForComm(tx);
-    setSelectedTemplateId("");
-    setDynamicValues({});
-    if (type === 'ws') setIsWsDialogOpen(true);
-    else setIsEmailDialogOpen(true);
+  const escapeRegExp = (string: string) => {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   const replaceMarkers = (text: string, tx: any, dynamicVals?: Record<string, string>) => {
@@ -344,8 +334,8 @@ function TransactionsContent() {
     if (client) {
       result = result.replace(/\{\{Nombre\}\}/g, client.nombre || "");
       result = result.replace(/\{\{Apellido\}\}/g, client.apellido || "");
-      result = result.replace(/\{\{Saldo_ARS\}\}/g, Number(client.saldoActual || 0).toLocaleString('es-AR'));
-      result = result.replace(/\{\{Saldo_USD\}\}/g, Number(client.saldoUSD || 0).toLocaleString('es-AR'));
+      result = result.replace(/\{\{Saldo_ARS\}\}/g, `$ ${Number(client.saldoActual || 0).toLocaleString('es-AR')}`);
+      result = result.replace(/\{\{Saldo_USD\}\}/g, `u$s ${Number(client.saldoUSD || 0).toLocaleString('es-AR')}`);
     }
 
     result = result.replace(/\{\{Fecha\}\}/g, formatLocalDate(tx.date));
@@ -356,16 +346,17 @@ function TransactionsContent() {
 
     if (catalog) {
       catalog.forEach(item => {
-        const regexARS = new RegExp(`\\{\\{PrecioARS_${item.name}\\}\\}`, 'g');
-        const regexUSD = new RegExp(`\\{\\{PrecioUSD_${item.name}\\}\\}`, 'g');
-        result = result.replace(regexARS, Number(item.priceARS || 0).toLocaleString('es-AR'));
-        result = result.replace(regexUSD, Number(item.priceUSD || 0).toLocaleString('es-AR'));
+        const escapedName = escapeRegExp(item.name);
+        const regexARS = new RegExp(`\\{\\{PrecioARS_${escapedName}\\}\\}`, 'g');
+        const regexUSD = new RegExp(`\\{\\{PrecioUSD_${escapedName}\\}\\}`, 'g');
+        result = result.replace(regexARS, `$ ${Number(item.priceARS || 0).toLocaleString('es-AR')}`);
+        result = result.replace(regexUSD, `u$s ${Number(item.priceUSD || 0).toLocaleString('es-AR')}`);
       });
     }
 
     if (dynamicVals) {
       Object.entries(dynamicVals).forEach(([key, val]) => {
-        const regex = new RegExp(`\\{\\{\\?${key}\\}\\}`, 'g');
+        const regex = new RegExp(`\\{\\{\\?${escapeRegExp(key)}\\}\\}`, 'g');
         result = result.replace(regex, val);
       });
     }
@@ -385,6 +376,14 @@ function TransactionsContent() {
   const dynamicKeys = useMemo(() => {
     return activeTemplate ? getDynamicKeys(activeTemplate.body + (activeTemplate.subject || "")) : [];
   }, [activeTemplate]);
+
+  const handleOpenCommDialog = (tx: any, type: 'ws' | 'mail') => {
+    setSelectedTxForComm(tx);
+    setSelectedTemplateId("");
+    setDynamicValues({});
+    if (type === 'ws') setIsWsDialogOpen(true);
+    else setIsEmailDialogOpen(true);
+  }
 
   const handleSendComm = (type: 'ws' | 'mail') => {
     if (!selectedTxForComm || !activeTemplate) return;
@@ -700,7 +699,6 @@ function TransactionsContent() {
           </div>
         )}
 
-        {/* Full View Dialog */}
         <Dialog open={!!selectedTxDetails} onOpenChange={(o) => !o && setSelectedTxDetails(null)}>
           <DialogContent className="max-w-3xl">
             <DialogHeader>
@@ -802,7 +800,6 @@ function TransactionsContent() {
           </DialogContent>
         </Dialog>
 
-        {/* Notification Dialogs (WS/Mail) */}
         <Dialog open={isWsDialogOpen || isMailDialogOpen} onOpenChange={(o) => { if(!o) { setIsWsDialogOpen(false); setIsEmailDialogOpen(false); } }}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle className="flex items-center gap-2">{isWsDialogOpen ? <MessageSquare className="h-5 w-5 text-emerald-600" /> : <Mail className="h-5 w-5 text-primary" />} Notificación de Operación</DialogTitle></DialogHeader>
@@ -852,7 +849,7 @@ function TransactionsContent() {
           </DialogContent>
         </Dialog>
 
-        <AlertDialog open={!!txToDelete} onOpenChange={(o) => !o && setTxToDelete(null)}>
+        <AlertDialog open={!!txToDelete} onOpenChange={(o) => { if(!o) setTxToDelete(null); }}>
           <AlertDialogContent>
             <AlertDialogHeader><AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle><AlertDialogDescription>Se revertirán todos los saldos asociados e imputaciones. Esta acción no se puede deshacer.</AlertDialogDescription></AlertDialogHeader>
             <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => { if(txToDelete) { deleteDocumentNonBlocking(doc(db, 'transactions', txToDelete.id)); setTxToDelete(null); toast({title:"Eliminado"}); } }} className="bg-destructive">Eliminar</AlertDialogAction></AlertDialogFooter>
