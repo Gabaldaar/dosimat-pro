@@ -153,11 +153,13 @@ export default function CatalogPage() {
   const categoriesQuery = useMemoFirebase(() => collection(db, 'product_categories'), [db])
   const suppliersQuery = useMemoFirebase(() => collection(db, 'suppliers'), [db])
   const ordersQuery = useMemoFirebase(() => query(collection(db, 'production_orders'), orderBy('createdAt', 'desc')), [db])
+  const allPurchasesQuery = useMemoFirebase(() => query(collection(db, 'purchases'), orderBy('date', 'desc')), [db])
   
   const { data: items, isLoading } = useCollection(catalogQuery)
   const { data: rawCategories, isLoading: loadingCats } = useCollection(categoriesQuery)
   const { data: suppliers } = useCollection(suppliersQuery)
   const { data: orders, isLoading: loadingOrders } = useCollection(ordersQuery)
+  const { data: allPurchases } = useCollection(allPurchasesQuery)
   
   const categories = useMemo(() => {
     if (!rawCategories) return []
@@ -194,6 +196,9 @@ export default function CatalogPage() {
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false)
   const [isSupplierManagerOpen, setIsSupplierManagerOpen] = useState(false)
   const [isAuditOpen, setIsAuditOpen] = useState(false)
+  const [isPurchaseHistoryOpen, setIsPurchaseHistoryOpen] = useState(false)
+  const [selectedProductForHistory, setSelectedProductForHistory] = useState<any | null>(null)
+  
   const [auditSearch, setAuditSearch] = useState("")
   const [auditCategoryFilter, setAuditCategoryFilter] = useState("all")
   
@@ -247,7 +252,7 @@ export default function CatalogPage() {
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        const anyOpen = isDialogOpen || !!itemToDelete || isAssemblyOpen || isCategoryManagerOpen || isSupplierManagerOpen || !!orderToView || !!orderToDelete || isAuditOpen || isExitAlertOpen || !!orderToFinalize;
+        const anyOpen = isDialogOpen || !!itemToDelete || isAssemblyOpen || isCategoryManagerOpen || isSupplierManagerOpen || !!orderToView || !!orderToDelete || isAuditOpen || isExitAlertOpen || !!orderToFinalize || isPurchaseHistoryOpen;
         if (!anyOpen) {
           document.body.style.pointerEvents = 'auto';
         }
@@ -255,7 +260,7 @@ export default function CatalogPage() {
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isDialogOpen, itemToDelete, isAssemblyOpen, isCategoryManagerOpen, isSupplierManagerOpen, orderToView, orderToDelete, isAuditOpen, isExitAlertOpen, orderToFinalize]);
+  }, [isDialogOpen, itemToDelete, isAssemblyOpen, isCategoryManagerOpen, isSupplierManagerOpen, orderToView, orderToDelete, isAuditOpen, isExitAlertOpen, orderToFinalize, isPurchaseHistoryOpen]);
 
   const calculateCost = useCallback((itemData: any, allItems: any[], currentExchangeRate: number): { ars: number, usd: number } => {
     if (!itemData.isCompuesto) {
@@ -641,14 +646,31 @@ export default function CatalogPage() {
     
     itemsToProcess.forEach(item => {
       if (item.manualQty > 0) {
-        // Actualizar Stock
+        // 1. Guardar en Historial de Compras (Nueva colección)
+        const manualCurrency = manualPurchaseCurrencies[item.id] || (item.costCurrency as 'ARS' | 'USD' || 'ARS');
+        const purchaseId = Math.random().toString(36).substring(2, 11);
+        const purchaseRecord = {
+          id: purchaseId,
+          productId: item.id,
+          productName: item.name,
+          supplierName: supplierName,
+          quantity: item.manualQty,
+          price: item.manualPrice,
+          currency: manualCurrency,
+          date: new Date().toISOString(),
+          orderId: orderToView.id,
+          exchangeRate: currentRate,
+          rateType: rateType
+        };
+        setDocumentNonBlocking(doc(db, 'purchases', purchaseId), purchaseRecord, { merge: true });
+
+        // 2. Actualizar Stock
         updateDocumentNonBlocking(doc(db, 'products_services', item.id), {
           stock: increment(item.manualQty)
         });
         
-        // Actualizar Costo Real en el catálogo y Moneda
+        // 3. Actualizar Costo Real en el catálogo y Moneda
         if (item.manualPrice > 0) {
-          const manualCurrency = manualPurchaseCurrencies[item.id] || (item.costCurrency as 'ARS' | 'USD' || 'ARS');
           const costField = manualCurrency === 'USD' ? 'costUSD' : 'costARS';
           const otherCostField = manualCurrency === 'USD' ? 'costARS' : 'costUSD';
           updateDocumentNonBlocking(doc(db, 'products_services', item.id), {
@@ -673,7 +695,7 @@ export default function CatalogPage() {
       status
     });
     setInitialPlanData(prev => ({ ...prev, qtys: JSON.parse(JSON.stringify(newPurchaseQtys)) }));
-    toast({ title: `Materiales de ${supplierName} ingresados`, description: "Se actualizó el stock y los costos del catálogo." });
+    toast({ title: `Materiales de ${supplierName} ingresados`, description: "Se actualizó el stock, los costos y el historial." });
   }
 
   const handleToggleSupplierStatus = (supplierName: string) => {
@@ -935,7 +957,7 @@ export default function CatalogPage() {
     const usd = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * (manualPurchaseCurrencies[i.id] === 'USD' ? manualPurchasePrices[i.id] : 0)), 0);
     text += `\n*INVERSIÓN ESTIMADA:*\n`;
     if (ars > 0) text += `ARS: $${ars.toLocaleString('es-AR')}\n`;
-    if (usd > 0) text += `USD: u$s ${usd.toLocaleString('es-AR')}`;
+    if (usd > 0) text += `USD: u$s {usd.toLocaleString('es-AR')}`;
     navigator.clipboard.writeText(text);
     toast({ title: "Lista de compras copiada", description: `Lista filtrada para ${supplierFilter}.` });
   }
@@ -1004,52 +1026,81 @@ export default function CatalogPage() {
     </div>
   )
 
-  const OrdersList = () => (
-    <div className="space-y-4">
-      {loadingOrders ? (
-        <div className="py-20 flex flex-col items-center justify-center gap-3">
-          <RefreshCw className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground italic">Cargando órdenes de producción...</p>
-        </div>
-      ) : !orders || orders.length === 0 ? (
-        <Card className="p-20 text-center border-dashed border-2 bg-muted/5">
-          <Factory className="h-16 w-16 mx-auto text-muted-foreground opacity-20 mb-4" />
-          <h3 className="text-xl font-bold text-slate-800">No hay órdenes de producción</h3>
-          <p className="text-muted-foreground max-w-md mx-auto mt-2">Crea una orden desde el catálogo para planificar la fabricación de productos compuestos.</p>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {orders.map((order: any) => {
-            const statusInfo = {
-              draft: { label: "Borrador", icon: ClipboardList, color: "text-slate-600 bg-slate-100 border-slate-200" },
-              pending_purchase: { label: "Faltan Materiales", icon: ShoppingCart, color: "text-amber-700 bg-amber-50 border-amber-200" },
-              ready: { label: "Listo para Armar", icon: Hammer, color: "text-blue-700 bg-blue-50 border-blue-200" },
-              completed: { label: "Completado", icon: CheckCircle, color: "text-emerald-700 bg-emerald-50 border-emerald-200" }
-            }[order.status as keyof typeof statusInfo] || { label: order.status, icon: Factory, color: "bg-muted" };
-            const StatusIcon = statusInfo.icon;
-            return (
-              <Card key={order.id} className={cn("glass-card hover:shadow-lg transition-all cursor-pointer border-l-4 group", order.status === 'completed' ? 'border-l-emerald-500 opacity-70' : 'border-l-primary')} onClick={() => setOrderToView(order)}>
-                <CardHeader className="pb-3">
-                  <div className="flex justify-between items-start">
-                    <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5", statusInfo.color)}>
-                      <StatusIcon className="h-2.5 w-2.5 mr-1" /> {statusInfo.label}
-                    </Badge>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={(e) => { e.stopPropagation(); setOrderToDelete(order); }}><Trash2 className="h-4 w-4" /></Button>
-                    </div>
-                  </div>
-                  <CardTitle className="text-lg mt-2 font-bold leading-tight">{order.productName}</CardTitle>
-                  <CardDescription className="text-[10px] font-bold uppercase tracking-tighter">Creada el {new Date(order.createdAt).toLocaleDateString('es-AR')}</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4"><div className="bg-white/50 border rounded-lg p-3 flex items-center justify-between shadow-inner"><span className="text-[10px] font-black text-muted-foreground uppercase">Unidades a Fabricar</span><span className="text-2xl font-black text-primary">{order.quantity}</span></div></CardContent>
-                <CardFooter className="pt-0 border-t bg-muted/5 flex justify-between py-3"><Button variant="ghost" size="sm" className="h-8 text-[10px] font-bold uppercase p-0 px-2">VER DETALLE <ChevronRight className="h-3 w-3 ml-1" /></Button>{order.status === 'ready' && <Badge className="bg-blue-600 animate-pulse text-[8px] font-black">PRODUCCIÓN HABILITADA</Badge>}</CardFooter>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  )
+  const OrdersList = () => {
+    const supplierPurchasesCount = useMemo(() => {
+      const counts: Record<string, number> = {};
+      allPurchases?.forEach(p => {
+        if (p.supplierName) {
+          counts[p.supplierName] = (counts[p.supplierName] || 0) + 1;
+        }
+      });
+      return counts;
+    }, [allPurchases]);
+
+    return (
+      <div className="space-y-8">
+        {loadingOrders ? (
+          <div className="py-20 flex flex-col items-center justify-center gap-3">
+            <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground italic">Cargando órdenes de producción...</p>
+          </div>
+        ) : !orders || orders.length === 0 ? (
+          <Card className="p-20 text-center border-dashed border-2 bg-muted/5">
+            <Factory className="h-16 w-16 mx-auto text-muted-foreground opacity-20 mb-4" />
+            <h3 className="text-xl font-bold text-slate-800">No hay órdenes de producción</h3>
+            <p className="text-muted-foreground max-w-md mx-auto mt-2">Crea una orden desde el catálogo para planificar la fabricación de productos compuestos.</p>
+          </Card>
+        ) : (
+          <div className="space-y-8">
+            <section className="space-y-4">
+              <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2 px-1">
+                <Truck className="h-4 w-4" /> Análisis de Proveedores (Compras Realizadas)
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                {Object.entries(supplierPurchasesCount).sort((a,b) => b[1] - a[1]).slice(0, 12).map(([sup, count]) => (
+                  <Card key={sup} className="p-3 bg-white border-primary/10 flex flex-col items-center justify-center text-center group hover:border-primary/30 transition-all">
+                    <p className="text-[10px] font-black uppercase text-slate-400 group-hover:text-primary transition-colors">{sup}</p>
+                    <p className="text-2xl font-black text-slate-800">{count}</p>
+                    <p className="text-[8px] font-bold text-muted-foreground uppercase">OPERACIONES</p>
+                  </Card>
+                ))}
+              </div>
+            </section>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              {orders.map((order: any) => {
+                const statusInfo = {
+                  draft: { label: "Borrador", icon: ClipboardList, color: "text-slate-600 bg-slate-100 border-slate-200" },
+                  pending_purchase: { label: "Faltan Materiales", icon: ShoppingCart, color: "text-amber-700 bg-amber-50 border-amber-200" },
+                  ready: { label: "Listo para Armar", icon: Hammer, color: "text-blue-700 bg-blue-50 border-blue-200" },
+                  completed: { label: "Completado", icon: CheckCircle, color: "text-emerald-700 bg-emerald-50 border-emerald-200" }
+                }[order.status as keyof typeof statusInfo] || { label: order.status, icon: Factory, color: "bg-muted" };
+                const StatusIcon = statusInfo.icon;
+                return (
+                  <Card key={order.id} className={cn("glass-card hover:shadow-lg transition-all cursor-pointer border-l-4 group", order.status === 'completed' ? 'border-l-emerald-500 opacity-70' : 'border-l-primary')} onClick={() => setOrderToView(order)}>
+                    <CardHeader className="pb-3">
+                      <div className="flex justify-between items-start">
+                        <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5", statusInfo.color)}>
+                          <StatusIcon className="h-2.5 w-2.5 mr-1" /> {statusInfo.label}
+                        </Badge>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={(e) => { e.stopPropagation(); setOrderToDelete(order); }}><Trash2 className="h-4 w-4" /></Button>
+                        </div>
+                      </div>
+                      <CardTitle className="text-lg mt-2 font-bold leading-tight">{order.productName}</CardTitle>
+                      <CardDescription className="text-[10px] font-bold uppercase tracking-tighter">Creada el {new Date(order.createdAt).toLocaleDateString('es-AR')}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4"><div className="bg-white/50 border rounded-lg p-3 flex items-center justify-between shadow-inner"><span className="text-[10px] font-black text-muted-foreground uppercase">Unidades a Fabricar</span><span className="text-2xl font-black text-primary">{order.quantity}</span></div></CardContent>
+                    <CardFooter className="pt-0 border-t bg-muted/5 flex justify-between py-3"><Button variant="ghost" size="sm" className="h-8 text-[10px] font-bold uppercase p-0 px-2">VER DETALLE <ChevronRight className="h-3 w-3 ml-1" /></Button>{order.status === 'ready' && <Badge className="bg-blue-600 animate-pulse text-[8px] font-black">PRODUCCIÓN HABILITADA</Badge>}</CardFooter>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   const GroupedPurchaseList = () => {
     if (!purchaseCalculations) return null;
@@ -1383,6 +1434,7 @@ export default function CatalogPage() {
                                   <Badge variant="outline" className="text-[9px] font-bold bg-white text-muted-foreground border-muted-foreground/20">{catName}</Badge>
                                 </div>
                                 <div className="flex items-center gap-1">
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 group-hover:text-primary transition-colors" onClick={() => { setSelectedProductForHistory(item); setIsPurchaseHistoryOpen(true); }} title="Ver Historial de Compras"><History className="h-4 w-4" /></Button>
                                   <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-primary opacity-40 group-hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); handleExportBOM(item); }} title="Ver Ficha / Exportar"><Printer className="h-4 w-4" /></Button>
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
@@ -1460,6 +1512,72 @@ export default function CatalogPage() {
           </Tabs>
         </SidebarInset>
       </div>
+
+      <Dialog open={isPurchaseHistoryOpen} onOpenChange={setIsPurchaseHistoryOpen}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <History className="h-5 w-5 text-primary" />
+              <DialogTitle className="text-xl font-black">Historial de Compras</DialogTitle>
+            </div>
+            <DialogDescription className="font-bold text-slate-800">
+              {selectedProductForHistory?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {!allPurchases ? (
+              <div className="flex justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+            ) : (
+              <div className="border rounded-xl bg-white overflow-hidden shadow-sm">
+                <Table>
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="text-[10px] font-black uppercase">Fecha</TableHead>
+                      <TableHead className="text-[10px] font-black uppercase">Proveedor</TableHead>
+                      <TableHead className="text-center text-[10px] font-black uppercase w-20">Cant.</TableHead>
+                      <TableHead className="text-right text-[10px] font-black uppercase">P. Unitario</TableHead>
+                      <TableHead className="text-center text-[10px] font-black uppercase w-20">Dólar</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allPurchases
+                      .filter(p => p.productId === selectedProductForHistory?.id)
+                      .map((p: any) => (
+                        <TableRow key={p.id} className="h-12 hover:bg-muted/5">
+                          <TableCell className="text-xs font-medium">
+                            {new Date(p.date).toLocaleDateString('es-AR')}
+                          </TableCell>
+                          <TableCell className="text-xs font-bold text-slate-700">{p.supplierName}</TableCell>
+                          <TableCell className="text-center font-black text-xs">{p.quantity}</TableCell>
+                          <TableCell className="text-right font-black text-xs">
+                            <span className={p.currency === 'USD' ? 'text-emerald-700' : 'text-blue-700'}>
+                              {p.currency === 'USD' ? 'u$s' : '$'} {Number(p.price).toLocaleString('es-AR')}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="outline" className="text-[8px] font-black uppercase bg-slate-50">
+                              {p.rateType} ${p.exchangeRate}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    {allPurchases.filter(p => p.productId === selectedProductForHistory?.id).length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-10 text-muted-foreground italic text-xs">
+                          No se registran compras para este artículo.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setIsPurchaseHistoryOpen(false)} className="font-bold">Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isAuditOpen} onOpenChange={setIsAuditOpen}>
         <DialogContent className="max-w-6xl h-[95vh] flex flex-col p-0 w-[95vw]">

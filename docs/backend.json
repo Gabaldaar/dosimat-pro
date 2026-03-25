@@ -93,6 +93,24 @@
         "supplierStatuses": { "type": "object", "description": "Statuses of the purchase orders for each supplier." }
       }
     },
+    "Purchase": {
+      "title": "Purchase",
+      "type": "object",
+      "description": "Historical record of an individual item purchase.",
+      "properties": {
+        "id": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "supplierName": { "type": "string" },
+        "quantity": { "type": "number" },
+        "price": { "type": "number", "description": "Unit price paid." },
+        "currency": { "type": "string", "enum": ["ARS", "USD"] },
+        "date": { "type": "string", "format": "date-time" },
+        "orderId": { "type": "string" },
+        "exchangeRate": { "type": "number" },
+        "rateType": { "type": "string", "enum": ["official", "blue"] }
+      }
+    },
     "Supplier": {
       "title": "Supplier",
       "type": "object",
@@ -129,6 +147,10 @@
       {
         "path": "/production_orders/{orderId}",
         "definition": { "entityName": "ProductionOrder", "description": "Production tracking." }
+      },
+      {
+        "path": "/purchases/{purchaseId}",
+        "definition": { "entityName": "Purchase", "description": "Purchase history records." }
       },
       {
         "path": "/suppliers/{supplierId}",
