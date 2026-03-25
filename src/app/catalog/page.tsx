@@ -197,7 +197,9 @@ export default function CatalogPage() {
   const [isSupplierManagerOpen, setIsSupplierManagerOpen] = useState(false)
   const [isAuditOpen, setIsAuditOpen] = useState(false)
   const [isPurchaseHistoryOpen, setIsPurchaseHistoryOpen] = useState(false)
+  const [isSupplierHistoryOpen, setIsSupplierHistoryOpen] = useState(false)
   const [selectedProductForHistory, setSelectedProductForHistory] = useState<any | null>(null)
+  const [selectedSupplierForHistory, setSelectedSupplierForHistory] = useState<string | null>(null)
   
   const [auditSearch, setAuditSearch] = useState("")
   const [auditCategoryFilter, setAuditCategoryFilter] = useState("all")
@@ -252,7 +254,7 @@ export default function CatalogPage() {
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        const anyOpen = isDialogOpen || !!itemToDelete || isAssemblyOpen || isCategoryManagerOpen || isSupplierManagerOpen || !!orderToView || !!orderToDelete || isAuditOpen || isExitAlertOpen || !!orderToFinalize || isPurchaseHistoryOpen;
+        const anyOpen = isDialogOpen || !!itemToDelete || isAssemblyOpen || isCategoryManagerOpen || isSupplierManagerOpen || !!orderToView || !!orderToDelete || isAuditOpen || isExitAlertOpen || !!orderToFinalize || isPurchaseHistoryOpen || isSupplierHistoryOpen;
         if (!anyOpen) {
           document.body.style.pointerEvents = 'auto';
         }
@@ -260,7 +262,7 @@ export default function CatalogPage() {
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isDialogOpen, itemToDelete, isAssemblyOpen, isCategoryManagerOpen, isSupplierManagerOpen, orderToView, orderToDelete, isAuditOpen, isExitAlertOpen, orderToFinalize, isPurchaseHistoryOpen]);
+  }, [isDialogOpen, itemToDelete, isAssemblyOpen, isCategoryManagerOpen, isSupplierManagerOpen, orderToView, orderToDelete, isAuditOpen, isExitAlertOpen, orderToFinalize, isPurchaseHistoryOpen, isSupplierHistoryOpen]);
 
   const calculateCost = useCallback((itemData: any, allItems: any[], currentExchangeRate: number): { ars: number, usd: number } => {
     if (!itemData.isCompuesto) {
@@ -1058,7 +1060,12 @@ export default function CatalogPage() {
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 {Object.entries(supplierPurchasesCount).sort((a,b) => b[1] - a[1]).slice(0, 12).map(([sup, count]) => (
-                  <Card key={sup} className="p-3 bg-white border-primary/10 flex flex-col items-center justify-center text-center group hover:border-primary/30 transition-all">
+                  <Card 
+                    key={sup} 
+                    className="p-3 bg-white border-primary/10 flex flex-col items-center justify-center text-center group hover:border-primary/30 transition-all cursor-pointer relative"
+                    onClick={() => { setSelectedSupplierForHistory(sup); setIsSupplierHistoryOpen(true); }}
+                  >
+                    <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"><Eye className="h-3 w-3 text-primary" /></div>
                     <p className="text-[10px] font-black uppercase text-slate-400 group-hover:text-primary transition-colors">{sup}</p>
                     <p className="text-2xl font-black text-slate-800">{count}</p>
                     <p className="text-[8px] font-bold text-muted-foreground uppercase">OPERACIONES</p>
@@ -1587,6 +1594,72 @@ export default function CatalogPage() {
           </div>
           <DialogFooter>
             <Button onClick={() => setIsPurchaseHistoryOpen(false)} className="font-bold">Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isSupplierHistoryOpen} onOpenChange={setIsSupplierHistoryOpen}>
+        <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <Truck className="h-5 w-5 text-primary" />
+              <DialogTitle className="text-xl font-black">Historial de Suministros: {selectedSupplierForHistory}</DialogTitle>
+            </div>
+            <DialogDescription className="text-xs">
+              Listado completo de productos adquiridos a este proveedor.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {!allPurchases ? (
+              <div className="flex justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+            ) : (
+              <div className="border rounded-xl bg-white overflow-hidden shadow-sm">
+                <Table>
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="text-[10px] font-black uppercase">Fecha</TableHead>
+                      <TableHead className="text-[10px] font-black uppercase">Producto</TableHead>
+                      <TableHead className="text-center text-[10px] font-black uppercase w-20">Cant.</TableHead>
+                      <TableHead className="text-right text-[10px] font-black uppercase">P. Unitario</TableHead>
+                      <TableHead className="text-right text-[10px] font-black uppercase">Total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allPurchases
+                      .filter(p => p.supplierName === selectedSupplierForHistory)
+                      .map((p: any) => (
+                        <TableRow key={p.id} className="h-12 hover:bg-muted/5">
+                          <TableCell className="text-xs font-medium">
+                            {new Date(p.date).toLocaleDateString('es-AR')}
+                          </TableCell>
+                          <TableCell className="text-xs font-bold text-slate-700">{p.productName}</TableCell>
+                          <TableCell className="text-center font-black text-xs">{p.quantity}</TableCell>
+                          <TableCell className="text-right font-black text-xs">
+                            <span className={p.currency === 'USD' ? 'text-emerald-700' : 'text-blue-700'}>
+                              {p.currency === 'USD' ? 'u$s' : '$'} {Number(p.price).toLocaleString('es-AR')}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right font-black text-xs">
+                            <span className={p.currency === 'USD' ? 'text-emerald-700' : 'text-blue-700'}>
+                              {p.currency === 'USD' ? 'u$s' : '$'} {(Number(p.price) * Number(p.quantity)).toLocaleString('es-AR')}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    {allPurchases.filter(p => p.supplierName === selectedSupplierForHistory).length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-10 text-muted-foreground italic text-xs">
+                          No se registran compras para este proveedor.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setIsSupplierHistoryOpen(false)} className="font-bold">Cerrar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
