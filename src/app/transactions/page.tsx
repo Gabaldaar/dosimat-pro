@@ -52,7 +52,9 @@ import {
   ArrowRight,
   Package,
   Banknote,
-  Landmark
+  Landmark,
+  Calculator,
+  TrendingUp
 } from "lucide-react"
 import { useToast } from "../../hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -155,7 +157,6 @@ function TransactionsContent() {
   const { data: expenseCategories } = useCollection(expenseCatsQuery)
   const { data: productCategories } = useCollection(productCatsQuery)
 
-  // Observador de pointer-events
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -175,7 +176,11 @@ function TransactionsContent() {
 
   const sortedProductCategories = useMemo(() => {
     if (!productCategories) return []
-    return [...productCategories].sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""));
+    return [...productCategories].sort((a: any, b: any) => {
+      if (a.isFavorite && !b.isFavorite) return -1;
+      if (!a.isFavorite && b.isFavorite) return 1;
+      return (a.name || "").localeCompare(b.name || "");
+    });
   }, [productCategories]);
 
   const filteredCatalogItems = useMemo(() => {
@@ -390,6 +395,14 @@ function TransactionsContent() {
     }).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
   }, [transactions, filterCustomer, filterAccount, filterStartDate, filterEndDate, filterOpType, filterCategory, filterExpenseCategory])
 
+  const filteredTotals = useMemo(() => {
+    return filteredTransactions.reduce((acc, tx) => {
+      if (tx.currency === 'ARS') acc.ars += Number(tx.amount || 0);
+      if (tx.currency === 'USD') acc.usd += Number(tx.amount || 0);
+      return acc;
+    }, { ars: 0, usd: 0 })
+  }, [filteredTransactions]);
+
   const handleOpenWsDialog = (tx: any) => {
     setSelectedTxForWs(tx); setSelectedWsTemplateId(""); setDynamicValues({}); setDynamicKeys([]); setIsWsDialogOpen(true);
   }
@@ -510,10 +523,97 @@ function TransactionsContent() {
                 ) : (
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
-                      <Select onValueChange={setItemFilterCategory}><SelectTrigger><SelectValue placeholder="Categoría..." /></SelectTrigger><SelectContent><SelectItem value="all">TODAS</SelectItem>{sortedProductCategories.map(c => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}</SelectContent></Select>
-                      <Select onValueChange={handleAddItem}><SelectTrigger><SelectValue placeholder="Añadir producto..." /></SelectTrigger><SelectContent>{filteredCatalogItems.map(i => (<SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>))}</SelectContent></Select>
+                      <Select value={itemFilterCategory} onValueChange={setItemFilterCategory}>
+                        <SelectTrigger><SelectValue placeholder="Categoría..." /></SelectTrigger>
+                        <SelectContent className="max-h-60">
+                          <SelectItem value="all">TODAS</SelectItem>
+                          {sortedProductCategories.map(c => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.name} {c.isFavorite && "⭐"}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select onValueChange={handleAddItem}>
+                        <SelectTrigger><SelectValue placeholder="Añadir producto..." /></SelectTrigger>
+                        <SelectContent className="max-h-60">
+                          {filteredCatalogItems.map(i => (
+                            <SelectItem key={i.id} value={i.id}>
+                              {i.name} (${i.priceARS} / u$s {i.priceUSD})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <div className="border rounded-xl overflow-hidden bg-white/50"><Table><TableHeader className="bg-muted/30"><TableRow><TableHead>Ítem</TableHead><TableHead className="w-20 text-center">Cant.</TableHead><TableHead className="text-right">Subtotal</TableHead><TableHead className="w-12"></TableHead></TableRow></TableHeader><TableBody>{selectedItems.map((item, i) => (<TableRow key={i}><TableCell className="font-bold text-xs">{item.name}</TableCell><TableCell><Input type="number" value={item.qty} className="h-8 text-center" onChange={(e) => { const n = [...selectedItems]; n[i].qty = Number(e.target.value); setSelectedItems(n); }} /></TableCell><TableCell className="text-right font-black">{(item.price * item.qty).toLocaleString()}</TableCell><TableCell><Button variant="ghost" size="icon" onClick={() => setSelectedItems(selectedItems.filter((_, idx) => idx !== i))}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell></TableRow>))}</TableBody></Table></div>
+                    <div className="border rounded-xl overflow-hidden bg-white/50">
+                      <Table>
+                        <TableHeader className="bg-muted/30">
+                          <TableRow>
+                            <TableHead>Ítem</TableHead>
+                            <TableHead className="w-24 text-center">Cant.</TableHead>
+                            <TableHead className="w-32 text-center">Precio Unit.</TableHead>
+                            <TableHead className="w-20 text-center">Desc (%)</TableHead>
+                            <TableHead className="w-24 text-center">Moneda</TableHead>
+                            <TableHead className="text-right">Subtotal</TableHead>
+                            <TableHead className="w-12"></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {selectedItems.map((item, i) => {
+                            const subtotal = (item.price * item.qty) * (1 - (item.discount || 0) / 100);
+                            return (
+                              <TableRow key={i}>
+                                <TableCell className="font-bold text-xs">{item.name}</TableCell>
+                                <TableCell>
+                                  <Input 
+                                    type="number" 
+                                    value={item.qty} 
+                                    className="h-8 text-center" 
+                                    onChange={(e) => { const n = [...selectedItems]; n[i].qty = Number(e.target.value); setSelectedItems(n); }} 
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Input 
+                                    type="number" 
+                                    value={item.price} 
+                                    className="h-8 text-center" 
+                                    onChange={(e) => { const n = [...selectedItems]; n[i].price = Number(e.target.value); setSelectedItems(n); }} 
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Input 
+                                    type="number" 
+                                    value={item.discount} 
+                                    className="h-8 text-center" 
+                                    onChange={(e) => { const n = [...selectedItems]; n[i].discount = Number(e.target.value); setSelectedItems(n); }} 
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Select 
+                                    value={item.currency} 
+                                    onValueChange={(v) => { const n = [...selectedItems]; n[i].currency = v; setSelectedItems(n); }}
+                                  >
+                                    <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="ARS">ARS</SelectItem>
+                                      <SelectItem value="USD">USD</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </TableCell>
+                                <TableCell className="text-right font-black">
+                                  {item.currency === 'USD' ? 'u$s' : '$'} {subtotal.toLocaleString()}
+                                </TableCell>
+                                <TableCell>
+                                  <Button variant="ghost" size="icon" onClick={() => setSelectedItems(selectedItems.filter((_, idx) => idx !== i))}>
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
                 )}
                 <div className="space-y-2"><Label className="font-bold">Notas</Label><Input value={txDescription} onChange={(e) => setTxDescription(e.target.value)} className="bg-white h-11" /></div>
@@ -540,10 +640,61 @@ function TransactionsContent() {
           </div>
         ) : (
           <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card className="bg-primary/5 border-l-4 border-l-primary">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-primary/60 tracking-widest">Flujo Neto Filtrado ARS</p>
+                    <h3 className={cn("text-2xl font-black mt-1", filteredTotals.ars < 0 ? "text-rose-600" : "text-emerald-600")}>
+                      ${filteredTotals.ars.toLocaleString('es-AR')}
+                    </h3>
+                  </div>
+                  <Calculator className="h-8 w-8 text-primary/20" />
+                </CardContent>
+              </Card>
+              <Card className="bg-emerald-50 border-l-4 border-l-emerald-500">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-emerald-700/60 tracking-widest">Flujo Neto Filtrado USD</p>
+                    <h3 className={cn("text-2xl font-black mt-1", filteredTotals.usd < 0 ? "text-rose-600" : "text-emerald-600")}>
+                      u$s {filteredTotals.usd.toLocaleString('es-AR')}
+                    </h3>
+                  </div>
+                  <TrendingUp className="h-8 w-8 text-emerald-500/20" />
+                </CardContent>
+              </Card>
+            </div>
+
             <Card className="glass-card p-4 flex flex-wrap gap-4 items-end">
-                 <div className="space-y-1"><Label className="text-xs">Cliente</Label><Select value={filterCustomer} onValueChange={setFilterCustomer}><SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem>{sortedCustomers.map(c => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}</SelectContent></Select></div>
-                 <div className="space-y-1"><Label className="text-xs">Caja</Label><Select value={filterAccount} onValueChange={setFilterAccount}><SelectTrigger className="w-[160px] h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{accounts?.map(a => (<SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>))}</SelectContent></Select></div>
-                 <Button variant="ghost" size="icon" onClick={() => { setFilterCustomer("all"); setFilterAccount("all"); }}><FilterX className="h-4 w-4" /></Button>
+                 <div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Cliente</Label>
+                   <Select value={filterCustomer} onValueChange={setFilterCustomer}>
+                     <SelectTrigger className="w-[180px] h-10"><SelectValue /></SelectTrigger>
+                     <SelectContent><SelectItem value="all">Todos</SelectItem>{sortedCustomers.map(c => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}</SelectContent>
+                   </Select>
+                 </div>
+                 <div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Caja</Label>
+                   <Select value={filterAccount} onValueChange={setFilterAccount}>
+                     <SelectTrigger className="w-[160px] h-10"><SelectValue /></SelectTrigger>
+                     <SelectContent><SelectItem value="all">Todas</SelectItem>{accounts?.map(a => (<SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>))}</SelectContent>
+                   </Select>
+                 </div>
+                 <div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Desde</Label>
+                   <Input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="h-10 w-[140px]" />
+                 </div>
+                 <div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Hasta</Label>
+                   <Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="h-10 w-[140px]" />
+                 </div>
+                 <div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Flujo</Label>
+                   <Select value={filterOpType} onValueChange={setFilterOpType}>
+                     <SelectTrigger className="w-[140px] h-10"><SelectValue /></SelectTrigger>
+                     <SelectContent>
+                       <SelectItem value="all">Todos</SelectItem>
+                       <SelectItem value="income" className="text-emerald-600 font-bold">INGRESOS</SelectItem>
+                       <SelectItem value="expense" className="text-rose-600 font-bold">EGRESOS</SelectItem>
+                     </SelectContent>
+                   </Select>
+                 </div>
+                 <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => { setFilterCustomer("all"); setFilterAccount("all"); setFilterStartDate(""); setFilterEndDate(""); setFilterOpType("all"); }}><FilterX className="h-4 w-4" /></Button>
             </Card>
             <Card className="glass-card overflow-hidden">
               <Table>
@@ -552,8 +703,10 @@ function TransactionsContent() {
                     <TableHead>Fecha</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead>Tipo</TableHead>
+                    <TableHead>Caja</TableHead>
                     <TableHead className="text-right">Monto</TableHead>
                     <TableHead className="text-right">Abonado</TableHead>
+                    <TableHead className="text-right">Pendiente</TableHead>
                     <TableHead className="text-right">Saldo Caja Post</TableHead>
                     <TableHead className="w-12"></TableHead>
                   </TableRow>
@@ -561,6 +714,7 @@ function TransactionsContent() {
                 <TableBody>
                   {filteredTransactions.map((tx: any) => {
                     const cust = customers?.find(c => c.id === tx.clientId);
+                    const acc = accounts?.find(a => a.id === tx.financialAccountId);
                     const info = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
                     const symbol = tx.currency === 'USD' ? 'u$s' : '$';
                     return (
@@ -568,8 +722,10 @@ function TransactionsContent() {
                         <TableCell className="text-xs font-medium">{formatLocalDate(tx.date)}</TableCell>
                         <TableCell><span className="font-bold">{cust ? `${cust.apellido}, ${cust.nombre}` : 'Global'}</span></TableCell>
                         <TableCell><Badge variant="outline" className={cn("text-[9px] gap-1", info.color)}><info.icon className="h-3 w-3" />{info.label}</Badge></TableCell>
+                        <TableCell><span className="text-[10px] font-bold text-muted-foreground uppercase">{acc?.name || "---"}</span></TableCell>
                         <TableCell className="text-right font-bold">{symbol} {Math.abs(tx.amount || 0).toLocaleString()}</TableCell>
                         <TableCell className="text-right text-xs text-emerald-600 font-bold">{symbol} {(tx.paidAmount || 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right text-xs text-rose-600 font-bold">{symbol} {Math.abs(tx.pendingAmount || 0).toLocaleString()}</TableCell>
                         <TableCell className="text-right text-xs font-mono text-muted-foreground">{tx.accountBalanceAfter !== null ? `${symbol} ${tx.accountBalanceAfter.toLocaleString()}` : "---"}</TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>

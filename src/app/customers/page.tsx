@@ -132,7 +132,6 @@ function CustomersContent() {
   const [editingCustomer, setEditingCustomer] = useState<any>(null)
   const [isPrintingStatement, setIsPrintingStatement] = useState(false)
 
-  // Observador para desbloqueo de puntero
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -215,6 +214,14 @@ function CustomersContent() {
       })
   }, [customers, searchTerm, filterBalance, filterComodato, filterReposicion, filterZone])
 
+  const filteredTotals = useMemo(() => {
+    return filteredCustomers.reduce((acc, curr) => {
+      acc.ars += Number(curr.saldoActual || 0)
+      acc.usd += Number(curr.saldoUSD || 0)
+      return acc
+    }, { ars: 0, usd: 0 })
+  }, [filteredCustomers])
+
   const pendingOperations = useMemo(() => {
     if (!selectedCustomerForStatement || !transactions) return [];
     return transactions.filter(tx => 
@@ -271,7 +278,6 @@ function CustomersContent() {
     if (!customerToDelete) return
     deleteDocumentNonBlocking(doc(db, 'clients', customerToDelete.id))
     setCustomerToDelete(null)
-    // Force pointer events restore
     setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100)
     toast({ title: "Cliente eliminado" })
   }
@@ -342,6 +348,31 @@ function CustomersContent() {
             </div>
           </header>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card className="bg-primary/5 border-l-4 border-l-primary">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase text-primary/60 tracking-widest">Saldo Total Filtrado ARS</p>
+                  <h3 className={cn("text-2xl font-black mt-1", filteredTotals.ars < 0 ? "text-rose-600" : "text-emerald-600")}>
+                    ${filteredTotals.ars.toLocaleString('es-AR')}
+                  </h3>
+                </div>
+                <Calculator className="h-8 w-8 text-primary/20" />
+              </CardContent>
+            </Card>
+            <Card className="bg-emerald-50 border-l-4 border-l-emerald-500">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase text-emerald-700/60 tracking-widest">Saldo Total Filtrado USD</p>
+                  <h3 className={cn("text-2xl font-black mt-1", filteredTotals.usd < 0 ? "text-rose-600" : "text-emerald-600")}>
+                    u$s {filteredTotals.usd.toLocaleString('es-AR')}
+                  </h3>
+                </div>
+                <TrendingUp className="h-8 w-8 text-emerald-500/20" />
+              </CardContent>
+            </Card>
+          </div>
+
           <section className="space-y-4">
             <div className="flex flex-col md:flex-row gap-4">
               <div className="relative flex-1">
@@ -353,39 +384,51 @@ function CustomersContent() {
                   onChange={(e) => setSearchTerm(e.target.value)} 
                 />
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Select value={filterBalance} onValueChange={setFilterBalance}>
-                  <SelectTrigger className="w-[140px] bg-white/50 font-bold"><SelectValue placeholder="Saldo" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">TODOS LOS SALDOS</SelectItem>
-                    <SelectItem value="debt" className="text-rose-600 font-bold">SÓLO DEUDA</SelectItem>
-                    <SelectItem value="credit" className="text-emerald-600 font-bold">SÓLO A FAVOR</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={filterComodato} onValueChange={setFilterComodato}>
-                  <SelectTrigger className="w-[140px] bg-white/50"><SelectValue placeholder="Comodato" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">TODOS LOS EQUIPOS</SelectItem>
-                    <SelectItem value="yes">EN COMODATO</SelectItem>
-                    <SelectItem value="no">SIN COMODATO</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={filterReposicion} onValueChange={setFilterReposicion}>
-                  <SelectTrigger className="w-[140px] bg-white/50"><SelectValue placeholder="Tipo Cliente" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">TODOS LOS TIPOS</SelectItem>
-                    <SelectItem value="yes">REPOSICIÓN</SelectItem>
-                    <SelectItem value="no">OCASIONAL</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={filterZone} onValueChange={setFilterZone}>
-                  <SelectTrigger className="w-[140px] bg-white/50"><SelectValue placeholder="Zona" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">TODAS LAS ZONAS</SelectItem>
-                    {zones?.map((z: any) => (<SelectItem key={z.id} value={z.id}>{z.name}</SelectItem>))}
-                  </SelectContent>
-                </Select>
-                <Button variant="outline" size="icon" onClick={() => { setSearchTerm(""); setFilterBalance("all"); setFilterComodato("all"); setFilterReposicion("all"); setFilterZone("all"); }}><FilterX className="h-4 w-4" /></Button>
+              <div className="flex flex-wrap gap-2 items-end">
+                <div className="flex flex-col gap-1">
+                  <Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Filtro Saldo</Label>
+                  <Select value={filterBalance} onValueChange={setFilterBalance}>
+                    <SelectTrigger className="w-[140px] bg-white/50 h-10"><SelectValue placeholder="Saldo" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">TODOS LOS SALDOS</SelectItem>
+                      <SelectItem value="debt" className="text-rose-600 font-bold">SÓLO DEUDA</SelectItem>
+                      <SelectItem value="credit" className="text-emerald-600 font-bold">SÓLO A FAVOR</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Comodato</Label>
+                  <Select value={filterComodato} onValueChange={setFilterComodato}>
+                    <SelectTrigger className="w-[140px] bg-white/50 h-10"><SelectValue placeholder="Comodato" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">TODOS LOS EQUIPOS</SelectItem>
+                      <SelectItem value="yes">EN COMODATO</SelectItem>
+                      <SelectItem value="no">SIN COMODATO</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Tipo Cliente</Label>
+                  <Select value={filterReposicion} onValueChange={setFilterReposicion}>
+                    <SelectTrigger className="w-[140px] bg-white/50 h-10"><SelectValue placeholder="Tipo Cliente" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">TODOS LOS TIPOS</SelectItem>
+                      <SelectItem value="yes">REPOSICIÓN</SelectItem>
+                      <SelectItem value="no">OCASIONAL</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Zona</Label>
+                  <Select value={filterZone} onValueChange={setFilterZone}>
+                    <SelectTrigger className="w-[140px] bg-white/50 h-10"><SelectValue placeholder="Zona" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">TODAS LAS ZONAS</SelectItem>
+                      {zones?.map((z: any) => (<SelectItem key={z.id} value={z.id}>{z.name}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => { setSearchTerm(""); setFilterBalance("all"); setFilterComodato("all"); setFilterReposicion("all"); setFilterZone("all"); }}><FilterX className="h-4 w-4" /></Button>
               </div>
             </div>
           </section>
