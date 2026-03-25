@@ -957,7 +957,7 @@ export default function CatalogPage() {
     const usd = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * (manualPurchaseCurrencies[i.id] === 'USD' ? manualPurchasePrices[i.id] : 0)), 0);
     text += `\n*INVERSIÓN ESTIMADA:*\n`;
     if (ars > 0) text += `ARS: $${ars.toLocaleString('es-AR')}\n`;
-    if (usd > 0) text += `USD: u$s {usd.toLocaleString('es-AR')}`;
+    if (usd > 0) text += `USD: u$s ${usd.toLocaleString('es-AR')}`;
     navigator.clipboard.writeText(text);
     toast({ title: "Lista de compras copiada", description: `Lista filtrada para ${supplierFilter}.` });
   }
@@ -1192,6 +1192,10 @@ export default function CatalogPage() {
                         const originalCost = f.costCurrency === 'USD' ? f.costUSD : f.costARS;
                         const currentCurrency = manualPurchaseCurrencies[f.id] || (f.costCurrency as 'ARS' | 'USD' || 'ARS');
                         
+                        const lastPurchase = allPurchases?.find(p => p.productId === f.id);
+                        const refPrice = lastPurchase ? lastPurchase.price : originalCost;
+                        const refCurrency = lastPurchase ? lastPurchase.currency : f.costCurrency;
+
                         return (
                           <TableRow key={f.id} className="hover:bg-muted/5 h-10">
                             <TableCell className="py-1">
@@ -1208,7 +1212,12 @@ export default function CatalogPage() {
                               />
                             </TableCell>
                             <TableCell className="text-center py-1">
-                              <span className="text-[9px] font-bold text-slate-400">{f.costCurrency === 'USD' ? 'u$s' : '$'} {originalCost.toLocaleString('es-AR')}</span>
+                              <div className="flex flex-col items-center">
+                                <span className="text-[9px] font-bold text-slate-400">
+                                  {refCurrency === 'USD' ? 'u$s' : '$'} {refPrice.toLocaleString('es-AR')}
+                                </span>
+                                {lastPurchase && <span className="text-[7px] text-slate-300 font-bold uppercase">Últ. Compra</span>}
+                              </div>
                             </TableCell>
                             <TableCell className="py-1">
                               <div className="flex items-center gap-1.5">
@@ -1216,7 +1225,7 @@ export default function CatalogPage() {
                                   <input 
                                     type="number" 
                                     disabled={orderToView?.status === 'completed' || isOrdered} 
-                                    value={manualPurchasePrices[f.id] ?? originalCost} 
+                                    value={manualPurchasePrices[f.id] ?? refPrice} 
                                     onChange={(e) => setManualPurchasePrices(prev => ({ ...prev, [f.id]: Number(e.target.value) }))} 
                                     className={cn(
                                       "w-full text-center font-black text-xs h-7 border rounded transition-all focus:outline-none focus:ring-2",
@@ -1241,7 +1250,7 @@ export default function CatalogPage() {
                               <span className={cn("font-black text-[9px] px-1.5 py-0.5 rounded", f.isInsufficient ? "bg-rose-600 text-white" : f.isCritical ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700")}>{f.futureStock}</span>
                             </TableCell>
                             <TableCell className="text-right py-1">
-                              <p className="text-[10px] font-bold">{currentCurrency === 'USD' ? 'u$s' : '$'} {( (manualPurchaseQtys[f.id] ?? f.suggestedToBuy) * (manualPurchasePrices[f.id] ?? originalCost)).toLocaleString('es-AR')}</p>
+                              <p className="text-[10px] font-bold">{currentCurrency === 'USD' ? 'u$s' : '$'} {( (manualPurchaseQtys[f.id] ?? f.suggestedToBuy) * (manualPurchasePrices[f.id] ?? refPrice)).toLocaleString('es-AR')}</p>
                             </TableCell>
                           </TableRow>
                         );
@@ -1260,6 +1269,9 @@ export default function CatalogPage() {
                     const originalCost = f.costCurrency === 'USD' ? f.costUSD : f.costARS;
                     const currentCurrency = manualPurchaseCurrencies[f.id] || (f.costCurrency as 'ARS' | 'USD' || 'ARS');
                     
+                    const lastPurchase = allPurchases?.find(p => p.productId === f.id);
+                    const refPrice = lastPurchase ? lastPurchase.price : originalCost;
+
                     return (
                       <Card key={f.id} className="p-2.5 bg-white border shadow-sm space-y-2.5">
                         <div className="flex justify-between items-start">
@@ -1283,7 +1295,7 @@ export default function CatalogPage() {
                               <input 
                                 type="number" 
                                 disabled={orderToView?.status === 'completed' || isOrdered} 
-                                value={manualPurchasePrices[f.id] ?? originalCost} 
+                                value={manualPurchasePrices[f.id] ?? refPrice} 
                                 onChange={(e) => setManualPurchasePrices(prev => ({ ...prev, [f.id]: Number(e.target.value) }))} 
                                 className={cn(
                                   "w-full text-center font-black text-xs border rounded h-8 transition-all focus:outline-none focus:ring-2",
@@ -1304,8 +1316,8 @@ export default function CatalogPage() {
                           </div>
                         </div>
                         <div className="flex justify-between items-center text-[8px] italic text-slate-400 px-1">
-                          <span>Precio Ref: {f.costCurrency === 'USD' ? 'u$s' : '$'} {originalCost.toLocaleString('es-AR')}</span>
-                          <span className="not-italic font-black text-slate-600">Sub: {currentCurrency === 'USD' ? 'u$s' : '$'} {( (manualPurchaseQtys[f.id] ?? f.suggestedToBuy) * (manualPurchasePrices[f.id] ?? originalCost)).toLocaleString('es-AR')}</span>
+                          <span>Ref: {currentCurrency === 'USD' ? 'u$s' : '$'} {refPrice.toLocaleString('es-AR')}</span>
+                          <span className="not-italic font-black text-slate-600">Sub: {currentCurrency === 'USD' ? 'u$s' : '$'} {( (manualPurchaseQtys[f.id] ?? f.suggestedToBuy) * (manualPurchasePrices[f.id] ?? refPrice)).toLocaleString('es-AR')}</span>
                         </div>
                       </Card>
                     );
