@@ -29,7 +29,9 @@ import {
   Receipt,
   Users,
   Send,
-  Loader2
+  Loader2,
+  Printer,
+  Edit
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import {
@@ -206,6 +208,7 @@ function CustomersContent() {
     if (!customerToDelete) return
     deleteDocumentNonBlocking(doc(db, 'clients', customerToDelete.id))
     setCustomerToDelete(null)
+    setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100)
     toast({ title: "Cliente eliminado" })
   }
 
