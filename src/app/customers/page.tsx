@@ -212,6 +212,15 @@ function CustomersContent() {
     toast({ title: "Cliente eliminado" })
   }
 
+  const formatClientData = (c: any) => {
+    return `*${c.apellido}, ${c.nombre}*
+Celular: ${c.telefono || '---'} 
+Dir: ${c.direccion || ''}${c.localidad ? ' - ' + c.localidad : ''}
+Saldo ARS: $${Number(c.saldoActual || 0).toLocaleString('es-AR')}
+Saldo USD: u$s ${Number(c.saldoUSD || 0).toLocaleString('es-AR')}
+email: ${c.mail || '---'}`;
+  }
+
   const handleCopyStatement = () => {
     if (!selectedCustomerForStatement || pendingOperations.length === 0) return;
     const now = new Date().toLocaleDateString('es-AR');
@@ -229,10 +238,8 @@ function CustomersContent() {
   }
 
   const handleCopyAll = () => {
-    let text = `LISTADO DE CLIENTES - DOSIMAT PRO\n\n`;
-    filteredCustomers.forEach(c => {
-      text += `${c.apellido}, ${c.nombre} | Saldo: $${Number(c.saldoActual).toLocaleString()} / u$s ${Number(c.saldoUSD).toLocaleString()} | Tel: ${c.telefono}\n`;
-    });
+    const text = `LISTADO DE CLIENTES - DOSIMAT PRO\n\n` + 
+      filteredCustomers.map(c => formatClientData(c)).join('\n\n---\n\n');
     navigator.clipboard.writeText(text);
     toast({ title: "Listado copiado" });
   }
@@ -279,41 +286,56 @@ function CustomersContent() {
           </header>
 
           <section className="space-y-4">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="relative flex-1">
+            <div className="flex flex-col gap-4">
+              <div className="relative">
                 <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
                 <input placeholder="Buscar por nombre, apellido o CUIT/DNI..." className="w-full pl-10 h-11 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
               </div>
-              <div className="flex flex-wrap gap-2 items-end">
-                <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Filtro Saldo</Label>
+              <div className="flex flex-wrap gap-3 items-end">
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Saldo</Label>
                   <Select value={filterBalance} onValueChange={setFilterBalance}>
-                    <SelectTrigger className="w-[140px] h-10"><SelectValue placeholder="Saldo" /></SelectTrigger>
+                    <SelectTrigger className="w-[140px] h-9 text-xs"><SelectValue placeholder="Saldo" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">TODOS</SelectItem>
-                      <SelectItem value="debt" className="text-rose-600">SÓLO DEUDA</SelectItem>
-                      <SelectItem value="credit" className="text-emerald-600">SÓLO A FAVOR</SelectItem>
+                      <SelectItem value="all" className="text-xs">Todos</SelectItem>
+                      <SelectItem value="debt" className="text-rose-600 text-xs font-bold">Sólo Deuda</SelectItem>
+                      <SelectItem value="credit" className="text-emerald-600 text-xs font-bold">Sólo a Favor</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Comodato</Label>
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Comodato</Label>
                   <Select value={filterComodato} onValueChange={setFilterComodato}>
-                    <SelectTrigger className="w-[120px] h-10"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">TODOS</SelectItem><SelectItem value="yes">SÍ</SelectItem><SelectItem value="no">NO</SelectItem></SelectContent>
+                    <SelectTrigger className="w-[110px] h-9 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs">Todos</SelectItem>
+                      <SelectItem value="yes" className="text-xs">Sí</SelectItem>
+                      <SelectItem value="no" className="text-xs">No</SelectItem>
+                    </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Reposición</Label>
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Reposición</Label>
                   <Select value={filterReposicion} onValueChange={setFilterReposicion}>
-                    <SelectTrigger className="w-[120px] h-10"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">TODOS</SelectItem><SelectItem value="yes">SÍ</SelectItem><SelectItem value="no">NO</SelectItem></SelectContent>
+                    <SelectTrigger className="w-[110px] h-9 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs">Todos</SelectItem>
+                      <SelectItem value="yes" className="text-xs">Sí</SelectItem>
+                      <SelectItem value="no" className="text-xs">No</SelectItem>
+                    </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Zona</Label>
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Zona</Label>
                   <Select value={filterZone} onValueChange={setFilterZone}>
-                    <SelectTrigger className="w-[140px] h-10"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">TODAS</SelectItem>{zones?.map((z: any) => (<SelectItem key={z.id} value={z.id}>{z.name}</SelectItem>))}</SelectContent>
+                    <SelectTrigger className="w-[140px] h-9 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs">Todas</SelectItem>
+                      {zones?.map((z: any) => (<SelectItem key={z.id} value={z.id} className="text-xs">{z.name}</SelectItem>))}
+                    </SelectContent>
                   </Select>
                 </div>
-                <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => { setSearchTerm(""); setFilterBalance("all"); setFilterComodato("all"); setFilterReposicion("all"); setFilterZone("all"); }}><FilterX className="h-4 w-4" /></Button>
+                <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => { setSearchTerm(""); setFilterBalance("all"); setFilterComodato("all"); setFilterReposicion("all"); setFilterZone("all"); }}><FilterX className="h-4 w-4" /></Button>
               </div>
             </div>
           </section>
@@ -350,18 +372,18 @@ function CustomersContent() {
                         <span className="truncate">{customer.direccion}, {customer.localidad}</span>
                       </div>
                       <div className="flex flex-wrap gap-1.5">
+                        <Button variant="default" size="sm" className="h-8 gap-1.5 font-bold px-4" asChild><Link href={`/transactions?clientId=${customer.id}&mode=new`}><PlusCircle className="h-3.5 w-3.5" /> OPERAR</Link></Button>
                         {hasDebt && (
-                          <Button variant="outline" size="sm" className="h-8 gap-1.5 font-bold text-rose-600 border-rose-200 bg-rose-50 hover:bg-rose-100" onClick={() => { setSelectedCustomerForStatement(customer); setIsStatementOpen(true); }}><Receipt className="h-3.5 w-3.5" /> RESUMEN</Button>
+                          <Button variant="outline" size="icon" className="h-8 w-8 text-rose-600 border-rose-200 bg-rose-50 hover:bg-rose-100" onClick={() => { setSelectedCustomerForStatement(customer); setIsStatementOpen(true); }} title="Estado de Cuenta"><Receipt className="h-3.5 w-3.5" /></Button>
                         )}
-                        <Button variant="default" size="sm" className="h-8 gap-1.5 font-bold" asChild><Link href={`/transactions?clientId=${customer.id}&mode=new`}><PlusCircle className="h-3.5 w-3.5" /> OPERAR</Link></Button>
-                        <Button variant="outline" size="sm" className="h-8 gap-1.5 font-bold" onClick={() => window.open(`https://google.com/maps/search/?api=1&query=${encodeURIComponent(customer.direccion + ", " + customer.localidad)}`, '_blank')}><MapPinned className="h-3.5 w-3.5" /> MAPA</Button>
-                        <Button variant="outline" size="sm" className="h-8 gap-1.5 font-bold text-emerald-700 border-emerald-200 bg-emerald-50" onClick={() => window.open(`https://wa.me/${customer.telefono?.replace(/\D/g, '')}`, '_blank')}><PhoneCall className="h-3.5 w-3.5" /> WS</Button>
-                        <Button variant="outline" size="sm" className="h-8 gap-1.5 font-bold text-blue-700 border-blue-200 bg-blue-50" asChild><Link href={`/transactions?clientId=${customer.id}`}><History className="h-3.5 w-3.5" /> HISTORIAL</Link></Button>
-                        <Button variant="outline" size="sm" className="h-8 gap-1.5 font-bold" onClick={() => handleOpenDialog(customer)}><Edit className="h-3.5 w-3.5" /></Button>
-                        <Button variant="outline" size="sm" className="h-8 gap-1.5 font-bold" onClick={() => { if(customer.mail) window.open(`mailto:${customer.mail}`, '_blank'); }}><Mail className="h-3.5 w-3.5" /></Button>
-                        <Button variant="outline" size="sm" className="h-8 gap-1.5 font-bold" onClick={() => { navigator.clipboard.writeText(`${customer.apellido}, ${customer.nombre}\nTel: ${customer.telefono}\nDir: ${customer.direccion}`); toast({ title: "Copiado" }); }}><Copy className="h-3.5 w-3.5" /></Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => window.open(`https://google.com/maps/search/?api=1&query=${encodeURIComponent(customer.direccion + ", " + customer.localidad)}`, '_blank')} title="Ver Mapa"><MapPinned className="h-3.5 w-3.5" /></Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8 text-emerald-700 border-emerald-200 bg-emerald-50" onClick={() => window.open(`https://wa.me/${customer.telefono?.replace(/\D/g, '')}`, '_blank')} title="WhatsApp Directo"><PhoneCall className="h-3.5 w-3.5" /></Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8 text-blue-700 border-blue-200 bg-blue-50" asChild title="Ver Historial"><Link href={`/transactions?clientId=${customer.id}`}><History className="h-3.5 w-3.5" /></Link></Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenDialog(customer)} title="Editar"><Edit className="h-3.5 w-3.5" /></Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => { if(customer.mail) window.open(`mailto:${customer.mail}`, '_blank'); }} title="Enviar Mail"><Mail className="h-3.5 w-3.5" /></Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => { navigator.clipboard.writeText(formatClientData(customer)); toast({ title: "Copiado", description: "Datos estructurados listos para enviar." }); }} title="Copiar Datos"><Copy className="h-3.5 w-3.5" /></Button>
                         {isAdmin && (
-                          <Button variant="outline" size="sm" className="h-8 gap-1.5 font-bold text-rose-600 border-rose-200 hover:bg-rose-50" onClick={() => setCustomerToDelete(customer)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                          <Button variant="outline" size="icon" className="h-8 w-8 text-rose-600 border-rose-200 hover:bg-rose-50" onClick={() => setCustomerToDelete(customer)} title="Eliminar"><Trash2 className="h-3.5 w-3.5" /></Button>
                         )}
                       </div>
                     </CardContent>

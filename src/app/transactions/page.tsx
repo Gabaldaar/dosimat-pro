@@ -107,6 +107,7 @@ function TransactionsContent() {
   const [filterStartDate, setFilterStartDate] = useState("")
   const [filterEndDate, setFilterEndDate] = useState("")
   const [filterOpType, setFilterOpType] = useState("all") 
+  const [filterFlow, setFilterFlow] = useState("all")
   const [itemFilterCategory, setItemFilterCategory] = useState("all")
 
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
@@ -233,9 +234,15 @@ function TransactionsContent() {
       const txDateStr = tx.date.split('T')[0];
       const matchStart = !filterStartDate || txDateStr >= filterStartDate;
       const matchEnd = !filterEndDate || txDateStr <= filterEndDate;
-      return matchCustomer && matchAccount && matchStart && matchEnd
+      const matchType = filterOpType === "all" || tx.type === filterOpType;
+      
+      let matchFlow = true;
+      if (filterFlow === 'income') matchFlow = tx.amount > 0 || tx.type === 'cobro';
+      if (filterFlow === 'expense') matchFlow = tx.amount < 0 && tx.type !== 'cobro';
+
+      return matchCustomer && matchAccount && matchStart && matchEnd && matchType && matchFlow;
     })
-  }, [transactions, filterCustomer, filterAccount, filterStartDate, filterEndDate])
+  }, [transactions, filterCustomer, filterAccount, filterStartDate, filterEndDate, filterOpType, filterFlow])
 
   const filteredTotals = useMemo(() => {
     return filteredTransactions.reduce((acc, tx) => {
@@ -394,10 +401,10 @@ function TransactionsContent() {
                         <TableHeader className="bg-muted/30">
                           <TableRow>
                             <TableHead>Ítem</TableHead>
-                            <TableHead className="w-20 text-center">Cant.</TableHead>
+                            <TableHead className="w-24 text-center">Cant.</TableHead>
                             <TableHead className="w-32 text-center">Precio Unit.</TableHead>
-                            <TableHead className="w-20 text-center">Desc %</TableHead>
-                            <TableHead className="w-28 text-center">Moneda</TableHead>
+                            <TableHead className="w-24 text-center">Desc %</TableHead>
+                            <TableHead className="w-32 text-center">Moneda</TableHead>
                             <TableHead className="text-right">Subtotal</TableHead>
                             <TableHead className="w-10"></TableHead>
                           </TableRow>
@@ -469,9 +476,30 @@ function TransactionsContent() {
             <Card className="glass-card p-4 flex flex-wrap gap-4 items-end">
                  <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Cliente</Label><Select value={filterCustomer} onValueChange={setFilterCustomer}><SelectTrigger className="w-[180px] h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem>{customers?.map(c => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}</SelectContent></Select></div>
                  <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Caja</Label><Select value={filterAccount} onValueChange={setFilterAccount}><SelectTrigger className="w-[160px] h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{accounts?.map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent></Select></div>
+                 <div className="space-y-1">
+                   <Label className="text-[10px] uppercase font-bold text-muted-foreground">Flujo</Label>
+                   <Select value={filterFlow} onValueChange={setFilterFlow}>
+                     <SelectTrigger className="w-[120px] h-10"><SelectValue /></SelectTrigger>
+                     <SelectContent>
+                       <SelectItem value="all">Todos</SelectItem>
+                       <SelectItem value="income" className="text-emerald-600">Ingresos</SelectItem>
+                       <SelectItem value="expense" className="text-rose-600">Egresos</SelectItem>
+                     </SelectContent>
+                   </Select>
+                 </div>
+                 <div className="space-y-1">
+                   <Label className="text-[10px] uppercase font-bold text-muted-foreground">Operación</Label>
+                   <Select value={filterOpType} onValueChange={setFilterOpType}>
+                     <SelectTrigger className="w-[140px] h-10"><SelectValue /></SelectTrigger>
+                     <SelectContent>
+                       <SelectItem value="all">Todas</SelectItem>
+                       {Object.keys(txTypeMap).map(k => <SelectItem key={k} value={k}>{txTypeMap[k].label}</SelectItem>)}
+                     </SelectContent>
+                   </Select>
+                 </div>
                  <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Desde</Label><Input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="h-10 w-[140px]" /></div>
                  <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Hasta</Label><Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="h-10 w-[140px]" /></div>
-                 <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => { setFilterCustomer("all"); setFilterAccount("all"); setFilterStartDate(""); setFilterEndDate(""); }}><FilterX className="h-4 w-4" /></Button>
+                 <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => { setFilterCustomer("all"); setFilterAccount("all"); setFilterStartDate(""); setFilterEndDate(""); setFilterOpType("all"); setFilterFlow("all"); }}><FilterX className="h-4 w-4" /></Button>
             </Card>
             <Card className="glass-card overflow-hidden">
               <Table>
