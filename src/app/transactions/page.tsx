@@ -139,18 +139,6 @@ function TransactionsContent() {
   const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({})
   const [dynamicKeys, setDynamicKeys] = useState<string[]>([])
 
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      if (document.body.style.pointerEvents === 'none') {
-        if (!selectedTxDetails && !isEmailDialogOpen && !isWsDialogOpen && !txToDelete) {
-          document.body.style.pointerEvents = 'auto';
-        }
-      }
-    });
-    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
-    return () => observer.disconnect();
-  }, [selectedTxDetails, isEmailDialogOpen, isWsDialogOpen, txToDelete]);
-
   const [filterCustomer, setFilterCustomer] = useState("all")
   const [filterAccount, setFilterAccount] = useState("all")
   const [filterStartDate, setFilterStartDate] = useState("")
@@ -610,6 +598,68 @@ function TransactionsContent() {
   }, [filteredTransactions])
 
   const isManualForm = useMemo(() => ['cobro', 'adjustment', 'Adjustment', 'Expense'].includes(activeTab), [activeTab]);
+
+  const handleOpenWsDialog = (tx: any) => {
+    setSelectedTxForWs(tx)
+    setSelectedWsTemplateId("")
+    setDynamicValues({})
+    setDynamicKeys([])
+    setIsWsDialogOpen(true)
+  }
+
+  const handleSendWs = () => {
+    if (!selectedTxForWs || !selectedWsTemplateId) return
+    const template = wsTemplates?.find(t => t.id === selectedWsTemplateId)
+    const client = customers?.find(c => c.id === selectedTxForWs.clientId)
+    if (!template || !client) return
+
+    let message = template.body
+    
+    // Auto replace known markers
+    const symbol = selectedTxForWs.currency === 'USD' ? 'u$s' : '$';
+    const replacements: Record<string, string> = {
+      "{{Apellido}}": client.apellido || "",
+      "{{Nombre}}": client.nombre || "",
+      "{{Fecha}}": formatLocalDate(selectedTxForWs.date),
+      "{{Tipo_Operacion}}": txTypeMap[selectedTxForWs.type]?.label || selectedTxForWs.type,
+      "{{Total}}": `${symbol} ${Math.abs(selectedTxForWs.amount).toLocaleString('es-AR')}`,
+      "{{Pendiente_Operacion}}": `${symbol} ${Math.abs(selectedTxForWs.pendingAmount || 0).toLocaleString('es-AR')}`,
+      "{{Saldo_ARS}}": `$ ${Number(client.saldoActual || 0).toLocaleString('es-AR')}`,
+      "{{Saldo_USD}}": `u$s ${Number(client.saldoUSD || 0).toLocaleString('es-AR')}`,
+      "{{Descripción}}": selectedTxForWs.description || "Sin descripción"
+    }
+
+    Object.entries(replacements).forEach(([key, val]) => {
+      message = message.split(key).join(val)
+    })
+
+    // Dynamic input replace
+    Object.entries(dynamicValues).forEach(([key, val]) => {
+      message = message.split(`{{?${key}}}`).join(val)
+    })
+
+    const phone = client.telefono?.replace(/\D/g, '')
+    window.open(`https://wa.me/${phone || ''}?text=${encodeURIComponent(message)}`, '_blank')
+    setIsWsDialogOpen(false)
+  }
+
+  useEffect(() => {
+    if (selectedWsTemplateId) {
+      const template = wsTemplates?.find(t => t.id === selectedWsTemplateId)
+      if (template) {
+        const matches = template.body.match(/\{\{\?([^}]+)\}\}/g) || []
+        const keys = matches.map(m => m.replace(/\{\{\?|\}\}/g, ""))
+        setDynamicKeys(keys)
+        const initialVals: Record<string, string> = {}
+        keys.forEach(k => initialVals[k] = "")
+        setDynamicValues(initialVals)
+      }
+    }
+  }, [selectedWsTemplateId, wsTemplates])
+
+  const allDynamicFieldsFilled = useMemo(() => {
+    return dynamicKeys.every(k => dynamicValues[k] && dynamicValues[k].trim() !== "")
+  }, [dynamicKeys, dynamicValues])
 
   if (isUserLoading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
 
@@ -1159,7 +1209,7 @@ function TransactionsContent() {
                   </div>
                   <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl">
                     <p className="text-[9px] font-black text-rose-700 uppercase mb-1">Saldo Pendiente</p>
-                    <p className="text-xl font-black text-rose-800">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Math.abs(selectedTxDetails.pendingAmount || 0).toLocaleString('es-AR')}</p>
+                    <p className="text-xl font-black text-xl text-rose-800">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Math.abs(selectedTxDetails.pendingAmount || 0).toLocaleString('es-AR')}</p>
                   </div>
                 </div>
 
@@ -1269,8 +1319,70 @@ function TransactionsContent() {
         </Dialog>
 
         {/* Diálogos de Email/WS/Delete */}
-        <Dialog open={isWsDialogOpen} onOpenChange={setIsWsDialogOpen}><DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle className="flex items-center gap-2"><MessageSquare className="h-5 w-5 text-emerald-600" /> Notificación por WhatsApp</DialogTitle></DialogHeader><div className="space-y-4 py-4"><Label>Seleccionar Plantilla</Label><Select value={selectedWsTemplateId} onValueChange={setSelectedWsTemplateId}><SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger><SelectContent>{wsTemplates?.map((t: any) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}</SelectContent></Select></div><DialogFooter className="border-t pt-4"><Button variant="outline" onClick={() => setIsWsDialogOpen(false)}>Cerrar</Button><Button onClick={handleSendWs} disabled={!selectedWsTemplateId || !allDynamicFieldsFilled} className="bg-emerald-600 hover:bg-emerald-700"><Send className="mr-2 h-4 w-4" /> Abrir WhatsApp</Button></DialogFooter></DialogContent></Dialog>
-        <AlertDialog open={!!txToDelete} onOpenChange={(o) => { if(!o) setTxToDelete(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle><AlertDialogDescription>Se revertirán todos los saldos asociados, imputaciones y el dinero de la caja involucrada.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteTx} className="bg-destructive">Eliminar</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+        <Dialog open={isWsDialogOpen} onOpenChange={setIsWsDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5 text-emerald-600" /> Notificación por WhatsApp
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Seleccionar Plantilla</Label>
+                <Select value={selectedWsTemplateId} onValueChange={setSelectedWsTemplateId}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                  <SelectContent>
+                    {wsTemplates?.map((t: any) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {dynamicKeys.length > 0 && (
+                <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl space-y-4">
+                  <p className="text-[10px] font-black uppercase text-blue-700 tracking-widest flex items-center gap-2">
+                    <Sparkles className="h-3 w-3" /> Datos requeridos por la plantilla
+                  </p>
+                  <div className="grid grid-cols-1 gap-3">
+                    {dynamicKeys.map(key => (
+                      <div key={key} className="space-y-1">
+                        <Label className="text-xs font-bold text-slate-700">{key}</Label>
+                        <Input 
+                          value={dynamicValues[key] || ""} 
+                          onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})} 
+                          placeholder={`Completar ${key.toLowerCase()}...`}
+                          className="bg-white"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter className="border-t pt-4">
+              <Button variant="outline" onClick={() => setIsWsDialogOpen(false)}>Cerrar</Button>
+              <Button 
+                onClick={handleSendWs} 
+                disabled={!selectedWsTemplateId || !allDynamicFieldsFilled} 
+                className="bg-emerald-600 hover:bg-emerald-700 font-bold"
+              >
+                <Send className="mr-2 h-4 w-4" /> Abrir WhatsApp
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <AlertDialog open={!!txToDelete} onOpenChange={(o) => { if(!o) setTxToDelete(null); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle>
+              <AlertDialogDescription>Se revertirán todos los saldos asociados, imputaciones y el dinero de la caja involucrada.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeleteTx} className="bg-destructive">Eliminar</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </SidebarInset>
       <MobileNav />
     </div>
