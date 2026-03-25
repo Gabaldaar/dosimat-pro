@@ -91,7 +91,7 @@ const txTypeMap: Record<string, { label: string, icon: any, color: string, descr
   refill: { label: "Reposición", icon: Droplet, color: "text-cyan-600 bg-cyan-50", description: "Registro de servicio de reposición de cloro y químicos." },
   service: { label: "Técnico", icon: Wrench, color: "text-indigo-600 bg-indigo-50", description: "Servicios técnicos, reparaciones o visitas de mantenimiento." },
   cobro: { label: "Cobro", icon: Receipt, color: "text-emerald-600 bg-emerald-50", description: "Registro de pago recibido del cliente para cancelar deuda." },
-  adjustment: { label: "Ajuste", icon: Settings2, color: "text-slate-600 bg-slate-50", description: "Corrección manual de saldo (Ingresos o Egresos) en la cuenta del cliente." },
+  adjustment: { label: "Ajuste", icon: Settings2, color: "text-slate-600 bg-slate-50", description: "Corrección manual de saldo en la cuenta del cliente." },
   Adjustment: { label: "Ajuste", icon: RefreshCw, color: "text-slate-600 bg-slate-50", description: "Ajuste de saldo manual." },
   Expense: { label: "Gasto", icon: ArrowDownLeft, color: "text-rose-600 bg-rose-50", description: "Gasto manual registrado." },
 }
@@ -117,25 +117,16 @@ function TransactionsContent() {
   const preAcido = searchParams.get('acido')
   const preCash = searchParams.get('cash')
   const preNotes = searchParams.get('notes')
-  const preRouteId = searchParams.get('routeId')
 
   const [mainView, setMainView] = useState("history")
   const [activeTab, setActiveTab] = useState("refill")
-  
   const [editingTx, setEditingTx] = useState<any | null>(null)
   const [txToDelete, setTxToDelete] = useState<any | null>(null)
   const [selectedTxDetails, setSelectedTxDetails] = useState<any | null>(null)
 
-  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false)
-  const [selectedTxForEmail, setSelectedTxForEmail] = useState<any | null>(null)
-  const [selectedTemplateId, setSelectedTemplateId] = useState("")
-  const [processedEmail, setProcessedEmail] = useState({ subject: "", body: "" })
-
   const [isWsDialogOpen, setIsWsDialogOpen] = useState(false)
   const [selectedTxForWs, setSelectedTxForWs] = useState<any | null>(null)
   const [selectedWsTemplateId, setSelectedWsTemplateId] = useState("")
-  const [processedWs, setProcessedWs] = useState("")
-
   const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({})
   const [dynamicKeys, setDynamicKeys] = useState<string[]>([])
 
@@ -146,14 +137,12 @@ function TransactionsContent() {
   const [filterOpType, setFilterOpType] = useState("all") 
   const [filterCategory, setFilterCategory] = useState("all") 
   const [filterExpenseCategory, setFilterExpenseCategory] = useState("all")
-
   const [itemFilterCategory, setItemFilterCategory] = useState("all")
 
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
   const txQuery = useMemoFirebase(() => query(collection(db, 'transactions'), orderBy('date', 'desc')), [db])
-  const emailTemplatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
   const wsTemplatesQuery = useMemoFirebase(() => collection(db, 'whatsapp_templates'), [db])
   const expenseCatsQuery = useMemoFirebase(() => collection(db, 'expense_categories'), [db])
   const productCatsQuery = useMemoFirebase(() => collection(db, 'product_categories'), [db])
@@ -162,10 +151,22 @@ function TransactionsContent() {
   const { data: catalog } = useCollection(catalogQuery)
   const { data: accounts } = useCollection(accountsQuery)
   const { data: transactions, isLoading: loadingTx } = useCollection(txQuery)
-  const { data: emailTemplates } = useCollection(emailTemplatesQuery)
   const { data: wsTemplates } = useCollection(wsTemplatesQuery)
   const { data: expenseCategories } = useCollection(expenseCatsQuery)
   const { data: productCategories } = useCollection(productCatsQuery)
+
+  // Observador de pointer-events
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      if (document.body.style.pointerEvents === 'none') {
+        if (mainView !== 'register' && !txToDelete && !selectedTxDetails && !isWsDialogOpen) {
+          document.body.style.pointerEvents = 'auto';
+        }
+      }
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+    return () => observer.disconnect();
+  }, [mainView, txToDelete, selectedTxDetails, isWsDialogOpen]);
 
   const sortedCatalog = useMemo(() => {
     if (!catalog) return []
@@ -174,11 +175,7 @@ function TransactionsContent() {
 
   const sortedProductCategories = useMemo(() => {
     if (!productCategories) return []
-    return [...productCategories].sort((a: any, b: any) => {
-      if (a.isFavorite && !b.isFavorite) return -1;
-      if (!a.isFavorite && b.isFavorite) return 1;
-      return (a.name || "").localeCompare(b.name || "");
-    });
+    return [...productCategories].sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""));
   }, [productCategories]);
 
   const filteredCatalogItems = useMemo(() => {
@@ -201,7 +198,6 @@ function TransactionsContent() {
   const [destinationAccounts, setDestinationAccounts] = useState<Record<string, string>>({ ARS: "pending", USD: "pending" })
   const [paidAmounts, setPaidAmounts] = useState<Record<string, number>>({ ARS: 0, USD: 0 })
   const [operationDate, setOperationDate] = useState(new Date().toISOString().split('T')[0])
-  
   const [manualAmount, setManualAmount] = useState(0)
   const [manualCurrency, setManualCurrency] = useState("ARS")
   const [manualAccountId, setManualAccountId] = useState("pending")
@@ -209,35 +205,17 @@ function TransactionsContent() {
   const [selectedExpenseCategoryId, setSelectedExpenseCategoryId] = useState("")
   const [txDescription, setTxDescription] = useState("")
   const [cobroSource, setCobroSource] = useState("sale")
-
   const [allocations, setAllocations] = useState<Record<string, number>>({})
-
-  const pendingTxsForClient = useMemo(() => {
-    if (!selectedCustomerId || !transactions || activeTab !== 'cobro') return [];
-    return transactions.filter(tx => 
-      tx.clientId === selectedCustomerId && 
-      (tx.pendingAmount !== undefined && tx.pendingAmount !== null && Math.abs(tx.pendingAmount) > 0.01) &&
-      tx.currency === manualCurrency &&
-      ['sale', 'refill', 'service', 'adjustment'].includes(tx.type)
-    ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [selectedCustomerId, transactions, activeTab, manualCurrency]);
-
-  const allocatedTotal = useMemo(() => {
-    return Object.values(allocations).reduce((sum, val) => sum + val, 0);
-  }, [allocations]);
 
   useEffect(() => {
     if (clientIdParam && modeParam !== 'new') {
       setFilterCustomer(clientIdParam)
       setMainView("history")
     }
-
     if (modeParam === 'new' && catalog && catalog.length > 0) {
       setMainView("register")
       if (clientIdParam) setSelectedCustomerId(clientIdParam)
-      
       const itemsToLoad: any[] = []
-      
       const findProduct = (searchTerm: string) => {
         const normalizedSearch = searchTerm.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         return catalog.find(p => {
@@ -246,55 +224,27 @@ function TransactionsContent() {
           return normalizedName.includes(normalizedSearch);
         });
       };
-
       if (preCloro && Number(preCloro) > 0) {
         let cloroProd = findProduct("cloro") || findProduct("hipoclorito");
         if (cloroProd) {
           const defaultCurrency = (cloroProd.priceARS || 0) > 0 ? 'ARS' : 'USD';
           const defaultPrice = (cloroProd.priceARS || 0) > 0 ? cloroProd.priceARS : cloroProd.priceUSD;
-          itemsToLoad.push({ 
-            itemId: cloroProd.id, 
-            name: cloroProd.name, 
-            qty: Number(preCloro), 
-            price: defaultPrice || 0, 
-            currency: defaultCurrency, 
-            discount: 0 
-          });
+          itemsToLoad.push({ itemId: cloroProd.id, name: cloroProd.name, qty: Number(preCloro), price: defaultPrice || 0, currency: defaultCurrency, discount: 0 });
         }
       }
-
       if (preAcido && Number(preAcido) > 0) {
         const acidoProd = findProduct("acido");
         if (acidoProd) {
           const defaultCurrency = (acidoProd.priceARS || 0) > 0 ? 'ARS' : 'USD';
           const defaultPrice = (acidoProd.priceARS || 0) > 0 ? acidoProd.priceARS : acidoProd.priceUSD;
-          itemsToLoad.push({ 
-            itemId: acidoProd.id, 
-            name: acidoProd.name, 
-            qty: Number(preAcido), 
-            price: defaultPrice || 0, 
-            currency: defaultCurrency, 
-            discount: 0 
-          });
+          itemsToLoad.push({ itemId: acidoProd.id, name: acidoProd.name, qty: Number(preAcido), price: defaultPrice || 0, currency: defaultCurrency, discount: 0 });
         }
       }
-      
-      if (itemsToLoad.length > 0) {
-        setSelectedItems(itemsToLoad)
-        setActiveTab("refill")
-      }
-
-      if (preCash && Number(preCash) > 0) {
-        setPaidAmounts(prev => ({ ...prev, ARS: Number(preCash) }))
-      }
-      
+      if (itemsToLoad.length > 0) { setSelectedItems(itemsToLoad); setActiveTab("refill"); }
+      if (preCash && Number(preCash) > 0) setPaidAmounts(prev => ({ ...prev, ARS: Number(preCash) }))
       if (preNotes) setTxDescription(`Ruta Reposición. ${preNotes}`)
     }
-    
-    if (accountIdParam) {
-      setFilterAccount(accountIdParam)
-      setMainView("history")
-    }
+    if (accountIdParam) { setFilterAccount(accountIdParam); setMainView("history"); }
   }, [modeParam, catalog, clientIdParam, preCloro, preAcido, preCash, preNotes, accountIdParam])
 
   const cartTotals = useMemo(() => {
@@ -307,22 +257,24 @@ function TransactionsContent() {
     }, { ARS: 0, USD: 0 })
   }, [selectedItems])
 
+  const pendingTxsForClient = useMemo(() => {
+    if (!selectedCustomerId || !transactions || activeTab !== 'cobro') return [];
+    return transactions.filter(tx => 
+      tx.clientId === selectedCustomerId && 
+      (tx.pendingAmount !== undefined && tx.pendingAmount !== null && Math.abs(tx.pendingAmount) > 0.01) &&
+      tx.currency === manualCurrency &&
+      ['sale', 'refill', 'service', 'adjustment'].includes(tx.type)
+    ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [selectedCustomerId, transactions, activeTab, manualCurrency]);
+
+  const allocatedTotal = useMemo(() => Object.values(allocations).reduce((sum, val) => sum + val, 0), [allocations]);
+
   const handleAddItem = (itemId: string) => {
     const item = catalog?.find((i: any) => i.id === itemId)
     if (!item) return
     const defaultCurrency = (item.priceARS || 0) > 0 ? 'ARS' : 'USD'
     const defaultPrice = (item.priceARS || 0) > 0 ? item.priceARS : item.priceUSD
     setSelectedItems(prev => [...prev, { itemId: item.id, name: item.name, qty: 1, price: defaultPrice, currency: defaultCurrency, discount: 0 }])
-  }
-
-  const updateItem = (index: number, field: string, value: any) => {
-    const newItems = [...selectedItems]
-    newItems[index] = { ...newItems[index], [field]: field === 'currency' ? value : Number(value) }
-    setSelectedItems(newItems)
-  }
-
-  const removeItem = (index: number) => {
-    setSelectedItems(prev => prev.filter((_, i) => i !== index))
   }
 
   const isLatestForAccount = (tx: any) => {
@@ -334,101 +286,56 @@ function TransactionsContent() {
   };
 
   const handleEditTx = (tx: any) => {
-    if (!isAdmin) {
-      toast({ title: "Acceso denegado", variant: "destructive" })
-      return
-    }
-    if (!isLatestForAccount(tx)) {
-      toast({ 
-        title: "Operación bloqueada", 
-        description: "Solo se puede editar el último movimiento de esta caja.", 
-        variant: "destructive" 
-      })
-      return
-    }
-    setEditingTx(tx)
-    setSelectedCustomerId(tx.clientId)
-    setOperationDate(tx.date.split('T')[0])
-    setActiveTab(tx.type)
-    setTxDescription(tx.description || "")
-
+    if (!isAdmin) { toast({ title: "Acceso denegado", variant: "destructive" }); return; }
+    if (!isLatestForAccount(tx)) { toast({ title: "Operación bloqueada", description: "Solo se puede editar el último movimiento de esta caja.", variant: "destructive" }); return; }
+    setEditingTx(tx); setSelectedCustomerId(tx.clientId); setOperationDate(tx.date.split('T')[0]); setActiveTab(tx.type); setTxDescription(tx.description || "");
     if (tx.type === 'cobro' || tx.type === 'adjustment' || tx.type === 'Expense' || tx.type === 'Adjustment') {
-      setManualAmount(Math.abs(tx.amount))
-      setManualCurrency(tx.currency)
-      setManualAccountId(tx.financialAccountId || "pending")
-      if (tx.type === 'adjustment' || tx.type === 'Adjustment') setAdjustmentSign(tx.amount >= 0 ? "1" : "-1")
-      setSelectedExpenseCategoryId(tx.expenseCategoryId || "")
-      if (tx.type === 'cobro') setCobroSource(tx.relatedType || 'sale')
+      setManualAmount(Math.abs(tx.amount)); setManualCurrency(tx.currency); setManualAccountId(tx.financialAccountId || "pending");
+      if (tx.type === 'adjustment' || tx.type === 'Adjustment') setAdjustmentSign(tx.amount >= 0 ? "1" : "-1");
+      setSelectedExpenseCategoryId(tx.expenseCategoryId || "");
+      if (tx.type === 'cobro') setCobroSource(tx.relatedType || 'sale');
     } else {
-      setSelectedItems(tx.items || [])
-      setDestinationAccounts({ [tx.currency]: tx.financialAccountId || "pending" })
-      setPaidAmounts({ [tx.currency]: tx.paidAmount || 0 })
+      setSelectedItems(tx.items || []); setDestinationAccounts({ [tx.currency]: tx.financialAccountId || "pending" }); setPaidAmounts({ [tx.currency]: tx.paidAmount || 0 });
     }
-    setMainView("register")
+    setMainView("register");
   }
 
   const revertTxBalances = (tx: any) => {
     const balanceField = tx.currency === 'ARS' ? 'saldoActual' : 'saldoUSD'
-    
     if (tx.items) {
       tx.items.forEach((item: any) => {
         const catalogItem = catalog?.find(ci => ci.id === item.itemId);
-        if (catalogItem?.trackStock !== false) {
-          updateDocumentNonBlocking(doc(db, 'products_services', item.itemId), {
-            stock: increment(item.qty)
-          });
-        }
+        if (catalogItem?.trackStock !== false) updateDocumentNonBlocking(doc(db, 'products_services', item.itemId), { stock: increment(item.qty) });
       });
     }
-
     if (['cobro', 'adjustment', 'Expense', 'Adjustment'].includes(tx.type)) {
       const amount = Number(tx.amount) || 0
-      if (tx.financialAccountId) {
-        updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), { initialBalance: increment(-amount) })
-      }
-      if (tx.clientId) {
-        updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [balanceField]: increment(-amount) })
-      }
+      if (tx.financialAccountId) updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), { initialBalance: increment(-amount) });
+      if (tx.clientId) updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [balanceField]: increment(-amount) });
       if (tx.allocations) {
         tx.allocations.forEach((alloc: any) => {
-          updateDocumentNonBlocking(doc(db, 'transactions', alloc.txId), {
-            pendingAmount: increment(Math.abs(alloc.amount))
-          });
+          updateDocumentNonBlocking(doc(db, 'transactions', alloc.txId), { pendingAmount: increment(Math.abs(alloc.amount)) });
         });
       }
     } else {
-      const total = Number(tx.amount) || 0
-      const paid = Number(tx.paidAmount) || 0
-      const debt = total - paid
-      if (tx.financialAccountId && paid !== 0) {
-        updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), { initialBalance: increment(-paid) })
-      }
-      if (tx.clientId && debt !== 0) {
-        updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [balanceField]: increment(debt) })
-      }
+      const total = Number(tx.amount) || 0; const paid = Number(tx.paidAmount) || 0; const debt = total - paid;
+      if (tx.financialAccountId && paid !== 0) updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), { initialBalance: increment(-paid) });
+      if (tx.clientId && debt !== 0) updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [balanceField]: increment(debt) });
     }
   }
 
   const confirmDeleteTx = () => {
     if (!txToDelete?.id) return
-    if (!isLatestForAccount(txToDelete)) {
-      toast({ title: "Eliminación bloqueada", variant: "destructive" })
-      return
-    }
     revertTxBalances(txToDelete)
     deleteDocumentNonBlocking(doc(db, 'transactions', txToDelete.id))
     setTxToDelete(null)
+    setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100);
     toast({ title: "Operación eliminada" })
   }
 
   const handleSaveTransaction = () => {
     const client = selectedCustomerId ? customers?.find(c => c.id === selectedCustomerId) : null;
-
-    if (editingTx) {
-      revertTxBalances(editingTx)
-      deleteDocumentNonBlocking(doc(db, 'transactions', editingTx.id))
-    }
-
+    if (editingTx) { revertTxBalances(editingTx); deleteDocumentNonBlocking(doc(db, 'transactions', editingTx.id)); }
     const finalDateStr = new Date(operationDate + 'T12:00:00').toISOString();
 
     if (activeTab === 'cobro' || activeTab === 'adjustment' || activeTab === 'Expense' || activeTab === 'Adjustment') {
@@ -436,141 +343,39 @@ function TransactionsContent() {
       const txId = Math.random().toString(36).substring(2, 11)
       const multiplier = (activeTab === 'adjustment' || activeTab === 'Adjustment') ? Number(adjustmentSign) : (activeTab === 'Expense' ? -1 : 1)
       const finalAmount = Number(manualAmount) * multiplier
-
       let balanceAfter = null;
       if (manualAccountId !== "pending") {
         const acc = accounts?.find(a => a.id === manualAccountId)
         if (acc) balanceAfter = Number(acc.initialBalance || 0) + finalAmount;
       }
-
       const finalAllocations = activeTab === 'cobro' ? 
-        Object.entries(allocations)
-          .filter(([_, val]) => val > 0)
-          .map(([txId, val]) => ({ txId, amount: val, date: new Date().toISOString() }))
+        Object.entries(allocations).filter(([_, val]) => val > 0).map(([txId, val]) => ({ txId, amount: val, date: new Date().toISOString() }))
         : null;
 
-      const txData = {
-        id: txId,
-        date: finalDateStr,
-        clientId: selectedCustomerId || null,
-        type: activeTab,
-        amount: finalAmount,
-        currency: manualCurrency,
-        description: txDescription || `${txTypeMap[activeTab]?.label || activeTab} manual`,
-        financialAccountId: manualAccountId === "pending" ? null : manualAccountId,
-        paidAmount: (activeTab === 'cobro' || activeTab === 'Expense') ? finalAmount : 0,
-        expenseCategoryId: (activeTab === 'Expense') ? (selectedExpenseCategoryId || null) : null,
-        relatedType: activeTab === 'cobro' ? cobroSource : null,
-        accountBalanceAfter: balanceAfter,
-        allocations: finalAllocations,
-        pendingAmount: (activeTab === 'adjustment' && finalAmount < 0) ? finalAmount : 0
-      }
-
+      const txData = { id: txId, date: finalDateStr, clientId: selectedCustomerId || null, type: activeTab, amount: finalAmount, currency: manualCurrency, description: txDescription || `${txTypeMap[activeTab]?.label || activeTab} manual`, financialAccountId: manualAccountId === "pending" ? null : manualAccountId, paidAmount: (activeTab === 'cobro' || activeTab === 'Expense') ? finalAmount : 0, expenseCategoryId: (activeTab === 'Expense') ? (selectedExpenseCategoryId || null) : null, relatedType: activeTab === 'cobro' ? cobroSource : null, accountBalanceAfter: balanceAfter, allocations: finalAllocations, pendingAmount: (activeTab === 'adjustment' && finalAmount < 0) ? finalAmount : 0 }
       setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
-      
-      if (finalAllocations) {
-        finalAllocations.forEach(alloc => {
-          updateDocumentNonBlocking(doc(db, 'transactions', alloc.txId), {
-            pendingAmount: increment(alloc.amount)
-          });
-        });
-      }
-
-      if (manualAccountId !== "pending") {
-        updateDocumentNonBlocking(doc(db, 'financial_accounts', manualAccountId), { initialBalance: increment(finalAmount) })
-      }
-      
-      if (client) {
-        const balanceField = manualCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'
-        updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: increment(finalAmount) })
-      }
+      if (finalAllocations) finalAllocations.forEach(alloc => updateDocumentNonBlocking(doc(db, 'transactions', alloc.txId), { pendingAmount: increment(alloc.amount) }));
+      if (manualAccountId !== "pending") updateDocumentNonBlocking(doc(db, 'financial_accounts', manualAccountId), { initialBalance: increment(finalAmount) });
+      if (client) { const balanceField = manualCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'; updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: increment(finalAmount) }); }
     } else {
       if (selectedItems.length === 0) return
-
       ['ARS', 'USD'].forEach(curr => {
-        const total = cartTotals[curr as 'ARS' | 'USD']
-        if (total > 0) {
-          const txId = Math.random().toString(36).substring(2, 11)
-          const accId = destinationAccounts[curr]
-          const paid = Number(paidAmounts[curr] || 0)
-          const debt = total - paid
-          const isPending = !accId || accId === "pending"
-          
-          let balanceAfter = null;
-          if (!isPending && paid !== 0) {
-            const acc = accounts?.find(a => a.id === accId)
-            if (acc) balanceAfter = Number(acc.initialBalance || 0) + paid;
-          }
-
-          const currentItems = selectedItems.filter(item => item.currency === curr);
-
-          const txData = {
-            id: txId,
-            date: finalDateStr,
-            clientId: selectedCustomerId || null,
-            type: activeTab,
-            amount: -Number(total),
-            paidAmount: paid,
-            debtAmount: debt,
-            currency: curr,
-            description: txDescription || `Operación ${txTypeMap[activeTab]?.label.toUpperCase()}`,
-            financialAccountId: (isPending || paid === 0) ? null : accId,
-            items: currentItems,
-            accountBalanceAfter: balanceAfter,
-            pendingAmount: -debt
-          }
-
-          setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
-
-          currentItems.forEach(item => {
-            const catalogItem = catalog?.find(ci => ci.id === item.itemId);
-            if (catalogItem?.trackStock !== false) {
-              updateDocumentNonBlocking(doc(db, 'products_services', item.itemId), {
-                stock: increment(-item.qty)
-              });
-            }
-          });
-
-          if (!isPending && paid !== 0) {
-            updateDocumentNonBlocking(doc(db, 'financial_accounts', accId), { initialBalance: increment(paid) })
-          }
-          
-          if (client && debt !== 0) {
-            const balanceField = curr === 'ARS' ? 'saldoActual' : 'saldoUSD'
-            updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: increment(-debt) })
-          }
-        }
+        const total = cartTotals[curr as 'ARS' | 'USD']; if (total <= 0) return;
+        const txId = Math.random().toString(36).substring(2, 11); const accId = destinationAccounts[curr]; const paid = Number(paidAmounts[curr] || 0); const debt = total - paid; const isPending = !accId || accId === "pending";
+        let balanceAfter = null; if (!isPending && paid !== 0) { const acc = accounts?.find(a => a.id === accId); if (acc) balanceAfter = Number(acc.initialBalance || 0) + paid; }
+        const currentItems = selectedItems.filter(item => item.currency === curr);
+        const txData = { id: txId, date: finalDateStr, clientId: selectedCustomerId || null, type: activeTab, amount: -Number(total), paidAmount: paid, debtAmount: debt, currency: curr, description: txDescription || `Operación ${txTypeMap[activeTab]?.label.toUpperCase()}`, financialAccountId: (isPending || paid === 0) ? null : accId, items: currentItems, accountBalanceAfter: balanceAfter, pendingAmount: -debt }
+        setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
+        currentItems.forEach(item => { const ci = catalog?.find(c => c.id === item.itemId); if (ci?.trackStock !== false) updateDocumentNonBlocking(doc(db, 'products_services', item.itemId), { stock: increment(-item.qty) }); });
+        if (!isPending && paid !== 0) updateDocumentNonBlocking(doc(db, 'financial_accounts', accId), { initialBalance: increment(paid) });
+        if (client && debt !== 0) { const balanceField = curr === 'ARS' ? 'saldoActual' : 'saldoUSD'; updateDocumentNonBlocking(doc(db, 'clients', client.id), { [balanceField]: increment(-debt) }); }
       })
     }
-
-    toast({ title: "Operación registrada" })
-    resetRegisterForm()
-    setMainView("history")
+    toast({ title: "Operación registrada" }); resetRegisterForm(); setMainView("history");
   }
 
   const resetRegisterForm = () => {
-    setEditingTx(null)
-    setSelectedCustomerId("")
-    setSelectedItems([])
-    setTxDescription("")
-    setManualAmount(0)
-    setOperationDate(new Date().toISOString().split('T')[0])
-    setPaidAmounts({ ARS: 0, USD: 0 })
-    setDestinationAccounts({ ARS: "pending", USD: "pending" })
-    setSelectedExpenseCategoryId("")
-    setCobroSource("sale")
-    setItemFilterCategory("all")
-    setAllocations({})
-  }
-
-  const resetFilters = () => {
-    setFilterCustomer("all")
-    setFilterAccount("all")
-    setFilterStartDate("")
-    setFilterEndDate("")
-    setFilterOpType("all")
-    setFilterCategory("all")
-    setFilterExpenseCategory("all")
+    setEditingTx(null); setSelectedCustomerId(""); setSelectedItems([]); setTxDescription(""); setManualAmount(0); setOperationDate(new Date().toISOString().split('T')[0]); setPaidAmounts({ ARS: 0, USD: 0 }); setDestinationAccounts({ ARS: "pending", USD: "pending" }); setSelectedExpenseCategoryId(""); setCobroSource("sale"); setItemFilterCategory("all"); setAllocations({});
   }
 
   const filteredTransactions = useMemo(() => {
@@ -578,33 +383,15 @@ function TransactionsContent() {
     return transactions.filter((tx: any) => {
       const matchCustomer = filterCustomer === "all" || tx.clientId === filterCustomer
       const matchAccount = filterAccount === "all" || (filterAccount === "null" ? !tx.financialAccountId : tx.financialAccountId === filterAccount)
-      const txDateStr = tx.date.split('T')[0]
-      const matchStart = !filterStartDate || txDateStr >= filterStartDate
-      const matchEnd = !filterEndDate || txDateStr <= filterEndDate
-      let matchFlow = true
-      if (filterOpType === 'income') matchFlow = tx.amount > 0 || tx.type === 'cobro'
-      if (filterOpType === 'expense') matchFlow = tx.amount < 0 && tx.type !== 'cobro'
-      const matchCategory = filterCategory === "all" || tx.type === filterCategory
-      const matchExpenseCat = filterExpenseCategory === "all" || tx.expenseCategoryId === filterExpenseCategory
+      const txDateStr = tx.date.split('T')[0]; const matchStart = !filterStartDate || txDateStr >= filterStartDate; const matchEnd = !filterEndDate || txDateStr <= filterEndDate;
+      let matchFlow = true; if (filterOpType === 'income') matchFlow = tx.amount > 0 || tx.type === 'cobro'; if (filterOpType === 'expense') matchFlow = tx.amount < 0 && tx.type !== 'cobro';
+      const matchCategory = filterCategory === "all" || tx.type === filterCategory; const matchExpenseCat = filterExpenseCategory === "all" || tx.expenseCategoryId === filterExpenseCategory;
       return matchCustomer && matchAccount && matchStart && matchEnd && matchFlow && matchCategory && matchExpenseCat
     }).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
   }, [transactions, filterCustomer, filterAccount, filterStartDate, filterEndDate, filterOpType, filterCategory, filterExpenseCategory])
 
-  const filteredTotals = useMemo(() => {
-    return filteredTransactions.reduce((acc, tx) => {
-      acc[tx.currency as 'ARS' | 'USD'] = (acc[tx.currency as 'ARS' | 'USD'] || 0) + (tx.amount || 0)
-      return acc
-    }, { ARS: 0, USD: 0 })
-  }, [filteredTransactions])
-
-  const isManualForm = useMemo(() => ['cobro', 'adjustment', 'Adjustment', 'Expense'].includes(activeTab), [activeTab]);
-
   const handleOpenWsDialog = (tx: any) => {
-    setSelectedTxForWs(tx)
-    setSelectedWsTemplateId("")
-    setDynamicValues({})
-    setDynamicKeys([])
-    setIsWsDialogOpen(true)
+    setSelectedTxForWs(tx); setSelectedWsTemplateId(""); setDynamicValues({}); setDynamicKeys([]); setIsWsDialogOpen(true);
   }
 
   const handleSendWs = () => {
@@ -612,35 +399,12 @@ function TransactionsContent() {
     const template = wsTemplates?.find(t => t.id === selectedWsTemplateId)
     const client = customers?.find(c => c.id === selectedTxForWs.clientId)
     if (!template || !client) return
-
     let message = template.body
-    
-    // Auto replace known markers
     const symbol = selectedTxForWs.currency === 'USD' ? 'u$s' : '$';
-    const replacements: Record<string, string> = {
-      "{{Apellido}}": client.apellido || "",
-      "{{Nombre}}": client.nombre || "",
-      "{{Fecha}}": formatLocalDate(selectedTxForWs.date),
-      "{{Tipo_Operacion}}": txTypeMap[selectedTxForWs.type]?.label || selectedTxForWs.type,
-      "{{Total}}": `${symbol} ${Math.abs(selectedTxForWs.amount).toLocaleString('es-AR')}`,
-      "{{Pendiente_Operacion}}": `${symbol} ${Math.abs(selectedTxForWs.pendingAmount || 0).toLocaleString('es-AR')}`,
-      "{{Saldo_ARS}}": `$ ${Number(client.saldoActual || 0).toLocaleString('es-AR')}`,
-      "{{Saldo_USD}}": `u$s ${Number(client.saldoUSD || 0).toLocaleString('es-AR')}`,
-      "{{Descripción}}": selectedTxForWs.description || "Sin descripción"
-    }
-
-    Object.entries(replacements).forEach(([key, val]) => {
-      message = message.split(key).join(val)
-    })
-
-    // Dynamic input replace
-    Object.entries(dynamicValues).forEach(([key, val]) => {
-      message = message.split(`{{?${key}}}`).join(val)
-    })
-
-    const phone = client.telefono?.replace(/\D/g, '')
-    window.open(`https://wa.me/${phone || ''}?text=${encodeURIComponent(message)}`, '_blank')
-    setIsWsDialogOpen(false)
+    const replacements: Record<string, string> = { "{{Apellido}}": client.apellido || "", "{{Nombre}}": client.nombre || "", "{{Fecha}}": formatLocalDate(selectedTxForWs.date), "{{Tipo_Operacion}}": txTypeMap[selectedTxForWs.type]?.label || selectedTxForWs.type, "{{Total}}": `${symbol} ${Math.abs(selectedTxForWs.amount).toLocaleString('es-AR')}`, "{{Pendiente_Operacion}}": `${symbol} ${Math.abs(selectedTxForWs.pendingAmount || 0).toLocaleString('es-AR')}`, "{{Saldo_ARS}}": `$ ${Number(client.saldoActual || 0).toLocaleString('es-AR')}`, "{{Saldo_USD}}": `u$s ${Number(client.saldoUSD || 0).toLocaleString('es-AR')}`, "{{Descripción}}": selectedTxForWs.description || "Sin descripción" }
+    Object.entries(replacements).forEach(([key, val]) => { message = message.split(key).join(val) })
+    Object.entries(dynamicValues).forEach(([key, val]) => { message = message.split(`{{?${key}}}`).join(val) })
+    const phone = client.telefono?.replace(/\D/g, ''); window.open(`https://wa.me/${phone || ''}?text=${encodeURIComponent(message)}`, '_blank'); setIsWsDialogOpen(false);
   }
 
   useEffect(() => {
@@ -649,17 +413,12 @@ function TransactionsContent() {
       if (template) {
         const matches = template.body.match(/\{\{\?([^}]+)\}\}/g) || []
         const keys = matches.map(m => m.replace(/\{\{\?|\}\}/g, ""))
-        setDynamicKeys(keys)
-        const initialVals: Record<string, string> = {}
-        keys.forEach(k => initialVals[k] = "")
-        setDynamicValues(initialVals)
+        setDynamicKeys(keys); const initialVals: Record<string, string> = {}; keys.forEach(k => initialVals[k] = ""); setDynamicValues(initialVals);
       }
     }
   }, [selectedWsTemplateId, wsTemplates])
 
-  const allDynamicFieldsFilled = useMemo(() => {
-    return dynamicKeys.every(k => dynamicValues[k] && dynamicValues[k].trim() !== "")
-  }, [dynamicKeys, dynamicValues])
+  const allDynamicFieldsFilled = useMemo(() => dynamicKeys.every(k => dynamicValues[k] && dynamicValues[k].trim() !== ""), [dynamicKeys, dynamicValues])
 
   if (isUserLoading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
 
@@ -670,20 +429,12 @@ function TransactionsContent() {
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <SidebarTrigger className="flex" />
-            <div className="flex items-center gap-2 md:hidden pr-2 border-r">
-               <div className="bg-primary p-1.5 rounded-lg shadow-sm shadow-primary/20"><Droplets className="h-4 w-4 text-white" /></div>
-               <span className="font-headline font-black text-primary text-sm tracking-tight uppercase">DosimatPro</span>
-            </div>
             <h1 className="text-xl md:text-3xl font-bold text-primary font-headline">{editingTx ? "Editar" : "Operaciones"}</h1>
           </div>
           <Tabs value={mainView} onValueChange={(v) => { if(v === "register" && !editingTx) resetRegisterForm(); setMainView(v); }}>
             <TabsList className="bg-muted/40 h-10 p-1 rounded-xl shadow-inner border">
-              <TabsTrigger value="register" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary transition-all uppercase">
-                {editingTx ? "MODIFICANDO" : "NUEVA"}
-              </TabsTrigger>
-              <TabsTrigger value="history" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary transition-all uppercase">
-                HISTORIAL
-              </TabsTrigger>
+              <TabsTrigger value="register" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary uppercase">NUEVA</TabsTrigger>
+              <TabsTrigger value="history" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary uppercase">HISTORIAL</TabsTrigger>
             </TabsList>
           </Tabs>
         </header>
@@ -694,171 +445,62 @@ function TransactionsContent() {
               <CardHeader className="pb-4">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                    <div className="space-y-1">
-                     <CardTitle className="text-xl flex items-center gap-2">
-                       {activeTab === 'cobro' ? <Receipt className="h-5 w-5 text-emerald-600" /> : 
-                        (activeTab === 'adjustment' || activeTab === 'Adjustment') ? <Settings2 className="h-5 w-5 text-slate-600" /> :
-                        activeTab === 'sale' ? <ShoppingBag className="h-5 w-5 text-blue-600" /> :
-                        activeTab === 'refill' ? <Droplet className="h-5 w-5 text-cyan-600" /> :
-                        activeTab === 'Expense' ? <ArrowDownLeft className="h-5 w-5 text-rose-600" /> :
-                        <Wrench className="h-5 w-5 text-indigo-600" />}
-                       {txTypeMap[activeTab]?.label || activeTab}
-                     </CardTitle>
+                     <CardTitle className="text-xl flex items-center gap-2">Registrar {txTypeMap[activeTab]?.label}</CardTitle>
                      <p className="text-xs text-muted-foreground">{txTypeMap[activeTab]?.description}</p>
                    </div>
                     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
-                      <TabsList className="grid grid-cols-5 w-full h-auto p-1 bg-muted/50 border shadow-inner">
-                          {Object.entries(txTypeMap).filter(([k]) => !['Adjustment', 'Expense'].includes(k)).map(([key, info]) => {
-                            const Icon = info.icon
-                            return (
-                              <TabsTrigger key={key} value={key} className={`data-[state=active]:bg-primary data-[state=active]:text-white py-2 flex flex-col gap-1`}>
-                                <Icon className="h-4 w-4" />
-                                <span className="text-[9px] font-black tracking-tighter uppercase">{info.label}</span>
-                              </TabsTrigger>
-                            )
-                          })}
+                      <TabsList className="grid grid-cols-5 w-full h-auto p-1 bg-muted/50 border">
+                          {Object.entries(txTypeMap).filter(([k]) => !['Adjustment', 'Expense'].includes(k)).map(([key, info]) => (
+                            <TabsTrigger key={key} value={key} className="data-[state=active]:bg-primary data-[state=active]:text-white py-2 flex flex-col gap-1">
+                              <info.icon className="h-4 w-4" /><span className="text-[9px] font-black uppercase">{info.label}</span>
+                            </TabsTrigger>
+                          ))}
                       </TabsList>
                     </Tabs>
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-muted/20 rounded-xl">
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2 text-primary font-bold"><User className="h-4 w-4" /> Cliente</Label>
+                  <div className="space-y-2"><Label className="flex items-center gap-2 text-primary font-bold"><User className="h-4 w-4" /> Cliente</Label>
                     <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
                       <SelectTrigger className="bg-white"><SelectValue placeholder="Buscar cliente..." /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">SIN CLIENTE (OPERACIÓN GLOBAL)</SelectItem>
-                        {sortedCustomers.map((c: any) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.apellido}, {c.nombre} (Saldo: ${Number(c.saldoActual || 0).toLocaleString('es-AR')} / u$s {Number(c.saldoUSD || 0).toLocaleString('es-AR')})
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="none">GLOBAL / SIN CLIENTE</SelectItem>
+                        {sortedCustomers.map((c: any) => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre} (${Number(c.saldoActual || 0).toLocaleString()})</SelectItem>))}
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2 text-primary font-bold"><CalendarIcon className="h-4 w-4" /> Fecha</Label>
+                  <div className="space-y-2"><Label className="flex items-center gap-2 text-primary font-bold"><CalendarIcon className="h-4 w-4" /> Fecha</Label>
                     <Input type="date" value={operationDate} onChange={(e) => setOperationDate(e.target.value)} className="bg-white" />
                   </div>
                 </div>
-                
-                {isManualForm ? (
-                  <div className={cn("p-6 border rounded-xl space-y-4 bg-muted/5")}>
+                {['cobro', 'adjustment', 'Adjustment', 'Expense'].includes(activeTab) ? (
+                  <div className="p-6 border rounded-xl space-y-4 bg-muted/5">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      <div className="space-y-2">
-                        <Label>Monto</Label>
-                        <Input type="number" value={manualAmount} onChange={(e) => setManualAmount(Number(e.target.value))} className="bg-white font-bold" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Moneda</Label>
-                        <Select value={manualCurrency} onValueChange={setManualCurrency}>
-                          <SelectTrigger className={cn("bg-white border-2", manualCurrency === 'ARS' ? "border-primary/20" : "border-emerald-200")}><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="ARS" className="text-primary font-bold">PESOS ($)</SelectItem>
-                            <SelectItem value="USD" className="text-emerald-600 font-bold">DÓLARES (u$s)</SelectItem>
-                          </SelectContent>
+                      <div className="space-y-2"><Label>Monto</Label><Input type="number" value={manualAmount} onChange={(e) => setManualAmount(Number(e.target.value))} className="bg-white font-bold" /></div>
+                      <div className="space-y-2"><Label>Moneda</Label>
+                        <Select value={manualCurrency} onValueChange={setManualCurrency}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="ARS">PESOS ($)</SelectItem><SelectItem value="USD">DÓLARES (u$s)</SelectItem></SelectContent>
                         </Select>
                       </div>
-                      {(activeTab === 'adjustment' || activeTab === 'Adjustment') && (
-                        <div className="space-y-2">
-                          <Label>Tipo de Ajuste</Label>
-                          <Select value={adjustmentSign} onValueChange={(v: any) => setAdjustmentSign(v)}>
-                            <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                            <SelectContent><SelectItem value="1">A FAVOR (+)</SelectItem><SelectItem value="-1">A CARGO (-)</SelectItem></SelectContent>
-                          </Select>
-                        </div>
-                      )}
-                      {activeTab === 'Expense' && (
-                        <div className="space-y-2">
-                          <Label>Categoría de Gasto</Label>
-                          <Select value={selectedExpenseCategoryId} onValueChange={setSelectedExpenseCategoryId}>
-                            <SelectTrigger className="bg-white"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                            <SelectContent>{expenseCategories?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                          </Select>
-                        </div>
-                      )}
-                      {activeTab === 'cobro' && (
-                        <div className="space-y-2">
-                          <Label className="text-emerald-700 font-bold">Origen del Ingreso</Label>
-                          <Select value={cobroSource} onValueChange={setCobroSource}>
-                            <SelectTrigger className="bg-white border-emerald-200"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="sale">VENTA</SelectItem>
-                              <SelectItem value="refill">REPOSICIÓN</SelectItem>
-                              <SelectItem value="service">SERVICIO TÉCNICO</SelectItem>
-                              <SelectItem value="adjustment">AJUSTES / OTROS</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-                      <div className="space-y-2">
-                        <Label>Caja Destino / Origen</Label>
-                        <Select value={manualAccountId} onValueChange={setManualAccountId}>
-                          <SelectTrigger className="bg-white"><SelectValue placeholder="Caja..." /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="pending">A CUENTA</SelectItem>
-                            {accounts?.filter(a => a.currency === manualCurrency).map(a => (
-                              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                            ))}
-                          </SelectContent>
+                      <div className="space-y-2"><Label>Caja Destino</Label>
+                        <Select value={manualAccountId} onValueChange={setManualAccountId}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="pending">A CUENTA</SelectItem>{accounts?.filter(a => a.currency === manualCurrency).map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent>
                         </Select>
                       </div>
                     </div>
-
                     {activeTab === 'cobro' && pendingTxsForClient.length > 0 && (
-                      <div className="mt-6 space-y-3 animate-in fade-in zoom-in duration-300">
-                        <div className="flex justify-between items-center px-1">
-                          <Label className="font-black text-rose-600 flex items-center gap-2 uppercase text-xs tracking-widest">
-                            <Receipt className="h-4 w-4" /> Aplicar Cobro a Operaciones Pendientes
-                          </Label>
-                          <Badge variant="outline" className={cn("font-black", allocatedTotal > manualAmount ? "border-rose-500 text-rose-600 animate-pulse" : "border-emerald-500 text-emerald-600")}>
-                            IMPUTADO: {manualCurrency === 'USD' ? 'u$s' : '$'} {allocatedTotal.toLocaleString('es-AR')} / {manualAmount.toLocaleString('es-AR')}
-                          </Badge>
-                        </div>
-                        <div className="border rounded-xl bg-white overflow-hidden shadow-inner">
+                      <div className="pt-4 border-t space-y-3">
+                        <Label className="font-black text-rose-600 uppercase text-xs">Imputar a facturas pendientes</Label>
+                        <div className="border rounded-xl bg-white overflow-hidden">
                           <Table>
-                            <TableHeader className="bg-muted/30">
-                              <TableRow>
-                                <TableHead className="text-[10px] font-black uppercase">Fecha</TableHead>
-                                <TableHead className="text-[10px] font-black uppercase">Operación</TableHead>
-                                <TableHead className="text-right text-[10px] font-black uppercase">Saldo</TableHead>
-                                <TableHead className="text-center text-[10px] font-black uppercase w-32">Monto a Aplicar</TableHead>
-                              </TableRow>
-                            </TableHeader>
+                            <TableHeader className="bg-muted/30"><TableRow><TableHead>Fecha</TableHead><TableHead>Operación</TableHead><TableHead className="text-right">Saldo</TableHead><TableHead className="w-32">Monto Aplicar</TableHead></TableRow></TableHeader>
                             <TableBody>
-                              {pendingTxsForClient.map(tx => {
-                                const info = txTypeMap[tx.type] || { label: tx.type, color: "bg-muted" };
-                                return (
-                                  <TableRow key={tx.id}>
-                                    <TableCell className="text-xs font-medium">{formatLocalDate(tx.date)}</TableCell>
-                                    <TableCell>
-                                      <div className="flex flex-col">
-                                        <Badge variant="outline" className={cn("text-[9px] font-black uppercase w-fit h-4 px-1.5", info.color)}>{info.label}</Badge>
-                                        <span className="text-[8px] text-muted-foreground truncate max-w-[120px]">{tx.description}</span>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="text-right text-xs font-black text-rose-600">
-                                      {manualCurrency === 'USD' ? 'u$s' : '$'} {Math.abs(tx.pendingAmount).toLocaleString('es-AR')}
-                                    </TableCell>
-                                    <TableCell className="text-center p-1">
-                                      <div className="flex items-center gap-1.5 justify-center">
-                                        <Input 
-                                          type="number" 
-                                          className="h-8 text-center text-xs font-black border-emerald-200" 
-                                          value={allocations[tx.id] || ""} 
-                                          onChange={(e) => setAllocations({...allocations, [tx.id]: Number(e.target.value)})}
-                                          placeholder="0"
-                                        />
-                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-emerald-600 hover:bg-emerald-50" onClick={() => {
-                                          const remaining = Math.max(0, manualAmount - allocatedTotal + (allocations[tx.id] || 0));
-                                          const toApply = Math.min(remaining, Math.abs(tx.pendingAmount));
-                                          setAllocations({...allocations, [tx.id]: toApply});
-                                        }}><CheckCircle2 className="h-4 w-4" /></Button>
-                                      </div>
-                                    </TableCell>
-                                  </TableRow>
-                                );
-                              })}
+                              {pendingTxsForClient.map(tx => (
+                                <TableRow key={tx.id}><TableCell className="text-xs">{formatLocalDate(tx.date)}</TableCell><TableCell><Badge variant="outline" className="text-[9px] uppercase">{txTypeMap[tx.type]?.label}</Badge></TableCell><TableCell className="text-right text-xs font-black text-rose-600">{manualCurrency==='USD'?'u$s':'$'} {Math.abs(tx.pendingAmount).toLocaleString()}</TableCell>
+                                  <TableCell><Input type="number" className="h-8 text-center" value={allocations[tx.id] || ""} onChange={(e) => setAllocations({...allocations, [tx.id]: Number(e.target.value)})} /></TableCell>
+                                </TableRow>
+                              ))}
                             </TableBody>
                           </Table>
                         </div>
@@ -867,208 +509,41 @@ function TransactionsContent() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label className="text-[10px] font-bold uppercase text-muted-foreground">1. Filtrar por Categoría</Label>
-                          <Select value={itemFilterCategory} onValueChange={setItemFilterCategory}>
-                            <SelectTrigger className="h-11 bg-white/50"><SelectValue placeholder="Todas las categorías" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem>
-                              {sortedProductCategories?.map(c => (
-                                <SelectItem key={c.id} value={c.id} className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    {c.name}
-                                    {c.isFavorite && <Star className="h-3 w-3 fill-amber-400 text-amber-400 inline" />}
-                                  </div>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-[10px] font-bold uppercase text-muted-foreground">2. Agregar ítems</Label>
-                          <Select onValueChange={handleAddItem}>
-                            <SelectTrigger className="h-11"><SelectValue placeholder="Seleccionar producto..." /></SelectTrigger>
-                            <SelectContent>
-                              {filteredCatalogItems?.length === 0 ? (
-                                <SelectItem value="none" disabled>Sin productos</SelectItem>
-                              ) : (
-                                filteredCatalogItems?.map((i: any) => {
-                                  const priceStr = (i.priceARS || 0) > 0 ? `$${i.priceARS.toLocaleString('es-AR')}` : `u$s ${i.priceUSD.toLocaleString('es-AR')}`;
-                                  return <SelectItem key={i.id} value={i.id}>{i.name} ({priceStr})</SelectItem>;
-                                })
-                              )}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    <div className="border rounded-xl overflow-x-auto bg-white/50">
-                      <Table className="min-w-[800px]">
-                        <TableHeader className="bg-muted/30">
-                          <TableRow>
-                            <TableHead>Ítem</TableHead>
-                            <TableHead className="w-20 text-center">Cant.</TableHead>
-                            <TableHead className="w-28 text-center">Precio</TableHead>
-                            <TableHead className="w-24 text-center">Desc. (%)</TableHead>
-                            <TableHead className="w-20 text-center">Moneda</TableHead>
-                            <TableHead className="text-right">Subtotal</TableHead>
-                            <TableHead className="w-12"></TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {selectedItems.map((item, i) => {
-                            const sub = (item.price * item.qty) * (1 - (item.discount || 0) / 100);
-                            return (
-                              <TableRow key={i}>
-                                <TableCell>{item.name}</TableCell>
-                                <TableCell><Input type="number" value={item.qty} className="h-8 text-center" onChange={(e) => updateItem(i, 'qty', e.target.value)} /></TableCell>
-                                <TableCell><Input type="number" value={item.price} className="h-8 text-center" onChange={(e) => updateItem(i, 'price', e.target.value)} /></TableCell>
-                                <TableCell>
-                                  <div className="relative">
-                                    <Input type="number" value={item.discount || 0} className="h-8 text-center pr-5 border-rose-200 text-rose-600 font-bold" onChange={(e) => updateItem(i, 'discount', e.target.value)} />
-                                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-rose-400">%</span>
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <Tabs value={item.currency} onValueChange={(v) => updateItem(i, 'currency', v)} className="h-8 p-0.5 border rounded-lg bg-muted/20">
-                                    <TabsList className="grid grid-cols-2 h-7 p-0 gap-0">
-                                      <TabsTrigger value="ARS" className="h-6 text-[10px] font-black data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
-                                      <TabsTrigger value="USD" className="h-6 text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
-                                    </TabsList>
-                                  </Tabs>
-                                </TableCell>
-                                <TableCell className="text-right font-black">{item.currency === 'ARS' ? '$' : 'u$s'} {sub.toLocaleString('es-AR')}</TableCell>
-                                <TableCell><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeItem(i)}><Trash2 className="h-4 w-4" /></Button></TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
+                    <div className="grid grid-cols-2 gap-4">
+                      <Select onValueChange={setItemFilterCategory}><SelectTrigger><SelectValue placeholder="Categoría..." /></SelectTrigger><SelectContent><SelectItem value="all">TODAS</SelectItem>{sortedProductCategories.map(c => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}</SelectContent></Select>
+                      <Select onValueChange={handleAddItem}><SelectTrigger><SelectValue placeholder="Añadir producto..." /></SelectTrigger><SelectContent>{filteredCatalogItems.map(i => (<SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>))}</SelectContent></Select>
                     </div>
+                    <div className="border rounded-xl overflow-hidden bg-white/50"><Table><TableHeader className="bg-muted/30"><TableRow><TableHead>Ítem</TableHead><TableHead className="w-20 text-center">Cant.</TableHead><TableHead className="text-right">Subtotal</TableHead><TableHead className="w-12"></TableHead></TableRow></TableHeader><TableBody>{selectedItems.map((item, i) => (<TableRow key={i}><TableCell className="font-bold text-xs">{item.name}</TableCell><TableCell><Input type="number" value={item.qty} className="h-8 text-center" onChange={(e) => { const n = [...selectedItems]; n[i].qty = Number(e.target.value); setSelectedItems(n); }} /></TableCell><TableCell className="text-right font-black">{(item.price * item.qty).toLocaleString()}</TableCell><TableCell><Button variant="ghost" size="icon" onClick={() => setSelectedItems(selectedItems.filter((_, idx) => idx !== i))}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell></TableRow>))}</TableBody></Table></div>
                   </div>
                 )}
-                <div className="space-y-2">
-                  <Label className="font-bold">Descripción / Notas internas</Label>
-                  <Input placeholder="Ej: Pago de visita, Venta mostrador..." value={txDescription} onChange={(e) => setTxDescription(e.target.value)} className="bg-white h-11" />
-                </div>
+                <div className="space-y-2"><Label className="font-bold">Notas</Label><Input value={txDescription} onChange={(e) => setTxDescription(e.target.value)} className="bg-white h-11" /></div>
               </CardContent>
             </Card>
             <Card className="glass-card h-fit sticky top-8">
-              <CardHeader className="bg-primary/5 border-b"><CardTitle className="text-base flex items-center gap-2"><ClipboardCheck className="h-4 w-4" /> Resumen de Cierre</CardTitle></CardHeader>
+              <CardHeader className="bg-primary/5 border-b"><CardTitle className="text-base">Confirmar Registro</CardTitle></CardHeader>
               <CardContent className="space-y-6 pt-6">
-                {!isManualForm && (
+                {!['cobro', 'adjustment', 'Expense'].includes(activeTab) && (
                   <div className="space-y-4">
-                    {['ARS', 'USD'].map(curr => {
-                      const total = cartTotals[curr as 'ARS' | 'USD']
-                      if (total <= 0) return null
-                      const isUSD = curr === 'USD';
-                      return (
-                        <div key={curr} className={cn("p-4 rounded-xl border space-y-3", isUSD ? "bg-emerald-50/30 border-emerald-100" : "bg-primary/5 border-primary/10")}>
-                          <div className="flex justify-between items-center">
-                            <p className={cn("text-[10px] font-black uppercase tracking-widest", isUSD ? "text-emerald-700" : "text-primary")}>Total {curr}</p>
-                            <p className="text-xl font-black">{curr === 'ARS' ? '$' : 'u$s'} {total.toLocaleString('es-AR')}</p>
-                          </div>
-                          <div className="space-y-2">
-                            <Label className="text-[10px] font-bold uppercase">Monto a abonar hoy</Label>
-                            <Input type="number" value={paidAmounts[curr]} onChange={(e) => setPaidAmounts(prev => ({...prev, [curr]: Number(e.target.value)}))} className="h-9 font-bold bg-white" />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold uppercase">Destino del dinero</Label>
-                            <Select value={destinationAccounts[curr]} onValueChange={(v) => setDestinationAccounts(p => ({...p, [curr]: v}))}>
-                              <SelectTrigger className="h-9 bg-white"><SelectValue placeholder="Pendiente / A Cuenta" /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="pending">A CUENTA (Deuda)</SelectItem>
-                                {accounts?.filter((a: any) => a.currency === curr).map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          {paidAmounts[curr] < total && <div className="text-[10px] font-bold text-rose-600 bg-rose-50 p-2 rounded border border-rose-100">Pendiente: {curr === 'ARS' ? '$' : 'u$s'} {(total - paidAmounts[curr]).toLocaleString('es-AR')}</div>}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-                {activeTab === 'cobro' && (
-                  <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-100 space-y-2">
-                    <div className="flex justify-between text-xs font-bold text-emerald-800">
-                      <span>Total Cobro:</span>
-                      <span>{manualCurrency === 'USD' ? 'u$s' : '$'} {manualAmount.toLocaleString('es-AR')}</span>
-                    </div>
-                    <div className="flex justify-between text-xs font-bold text-blue-800">
-                      <span>Imputado:</span>
-                      <span>{manualCurrency === 'USD' ? 'u$s' : '$'} {allocatedTotal.toLocaleString('es-AR')}</span>
-                    </div>
-                    {manualAmount > allocatedTotal && (
-                      <div className="text-[10px] italic text-emerald-600 pt-1 border-t border-emerald-200">
-                        * El excedente de {manualCurrency === 'USD' ? 'u$s' : '$'} {(manualAmount - allocatedTotal).toLocaleString('es-AR')} quedará como saldo a favor global del cliente.
+                    {['ARS', 'USD'].map(curr => cartTotals[curr as 'ARS'|'USD'] > 0 && (
+                      <div key={curr} className="p-4 rounded-xl border bg-primary/5">
+                        <div className="flex justify-between mb-2"><span className="text-xs font-bold">Total {curr}:</span><span className="text-lg font-black">{curr==='USD'?'u$s':'$'} {cartTotals[curr as 'ARS'|'USD'].toLocaleString()}</span></div>
+                        <Label className="text-[10px] uppercase font-bold">Abonado hoy:</Label><Input type="number" value={paidAmounts[curr]} onChange={(e) => setPaidAmounts({...paidAmounts, [curr]: Number(e.target.value)})} className="h-9 mb-2" />
+                        <Label className="text-[10px] uppercase font-bold">Caja:</Label><Select value={destinationAccounts[curr]} onValueChange={(v) => setDestinationAccounts({...destinationAccounts, [curr]: v})}><SelectTrigger className="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">A CUENTA</SelectItem>{accounts?.filter(a => a.currency === curr).map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent></Select>
                       </div>
-                    )}
+                    ))}
                   </div>
                 )}
-                <div className="flex flex-col gap-3">
-                  <Button className="w-full h-14 font-black text-md shadow-xl" disabled={(!isManualForm && selectedItems.length === 0) || (isManualForm && manualAmount <= 0)} onClick={handleSaveTransaction}>{editingTx ? 'GUARDAR CAMBIOS' : 'REGISTRAR OPERACIÓN'}</Button>
-                  <Button variant="outline" className="w-full h-12 font-bold border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => { resetRegisterForm(); setMainView("history"); }}>CANCELAR</Button>
-                </div>
+                <Button className="w-full h-14 font-black shadow-xl" onClick={handleSaveTransaction}>{editingTx ? 'GUARDAR' : 'REGISTRAR'}</Button>
+                <Button variant="outline" className="w-full h-12" onClick={() => { resetRegisterForm(); setMainView("history"); }}>CANCELAR</Button>
               </CardContent>
             </Card>
           </div>
         ) : (
           <div className="space-y-6">
-            <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Card className="glass-card border-l-4 border-l-primary bg-primary/5">
-                <CardContent className="pt-6">
-                  <p className="text-[10px] font-bold text-primary uppercase">Total Filtrado ARS</p>
-                  <h3 className="text-2xl font-black">${filteredTotals.ARS.toLocaleString('es-AR')}</h3>
-                </CardContent>
-              </Card>
-              <Card className="glass-card border-l-4 border-l-emerald-500 bg-emerald-50/50">
-                <CardContent className="pt-6">
-                  <p className="text-[10px] font-bold text-emerald-700 uppercase">Total Filtrado USD</p>
-                  <h3 className="text-2xl font-black">u$s {filteredTotals.USD.toLocaleString('es-AR')}</h3>
-                </CardContent>
-              </Card>
-            </section>
             <Card className="glass-card p-4 flex flex-wrap gap-4 items-end">
-                 <div className="space-y-1">
-                   <Label className="text-xs">Cliente</Label>
-                   <Select value={filterCustomer} onValueChange={setFilterCustomer}>
-                     <SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger>
-                     <SelectContent>
-                       <SelectItem value="all">Todos</SelectItem>
-                       {sortedCustomers.map((c: any) => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}
-                     </SelectContent>
-                   </Select>
-                 </div>
-                 <div className="space-y-1">
-                   <Label className="text-xs">Caja / Destino</Label>
-                   <Select value={filterAccount} onValueChange={setFilterAccount}>
-                     <SelectTrigger className="w-[160px] h-9"><SelectValue /></SelectTrigger>
-                     <SelectContent>
-                       <SelectItem value="all">Todas las Cajas</SelectItem>
-                       <SelectItem value="null">A CUENTA (Deuda)</SelectItem>
-                       {accounts?.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>)}
-                     </SelectContent>
-                   </Select>
-                 </div>
-                 <div className="space-y-1">
-                   <Label className="text-xs">Operación</Label>
-                   <Select value={filterCategory} onValueChange={setFilterCategory}>
-                     <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
-                     <SelectContent>
-                       <SelectItem value="all">Cualquier Tipo</SelectItem>
-                       {Object.entries(txTypeMap).map(([k, v]) => (<SelectItem key={k} value={k}>{v.label}</SelectItem>))}
-                     </SelectContent>
-                   </Select>
-                 </div>
-                 <div className="space-y-1">
-                   <Label className="text-xs">Desde</Label>
-                   <Input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="w-[140px] h-9" />
-                 </div>
-                 <div className="space-y-1">
-                   <Label className="text-xs">Hasta</Label>
-                   <Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="w-[140px] h-9" />
-                 </div>
-                 <Button variant="ghost" size="icon" onClick={resetFilters} title="Limpiar Filtros"><FilterX className="h-4 w-4" /></Button>
+                 <div className="space-y-1"><Label className="text-xs">Cliente</Label><Select value={filterCustomer} onValueChange={setFilterCustomer}><SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem>{sortedCustomers.map(c => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}</SelectContent></Select></div>
+                 <div className="space-y-1"><Label className="text-xs">Caja</Label><Select value={filterAccount} onValueChange={setFilterAccount}><SelectTrigger className="w-[160px] h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{accounts?.map(a => (<SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>))}</SelectContent></Select></div>
+                 <Button variant="ghost" size="icon" onClick={() => { setFilterCustomer("all"); setFilterAccount("all"); }}><FilterX className="h-4 w-4" /></Button>
             </Card>
             <Card className="glass-card overflow-hidden">
               <Table>
@@ -1076,10 +551,10 @@ function TransactionsContent() {
                   <TableRow>
                     <TableHead>Fecha</TableHead>
                     <TableHead>Cliente</TableHead>
-                    <TableHead>Operación</TableHead>
-                    <TableHead className="text-right">Monto Total</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead className="text-right">Monto</TableHead>
                     <TableHead className="text-right">Abonado</TableHead>
-                    <TableHead className="text-right">Saldo Pend.</TableHead>
+                    <TableHead className="text-right">Saldo Caja Post</TableHead>
                     <TableHead className="w-12"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1088,46 +563,22 @@ function TransactionsContent() {
                     const cust = customers?.find(c => c.id === tx.clientId);
                     const info = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
                     const symbol = tx.currency === 'USD' ? 'u$s' : '$';
-                    const isLatest = isLatestForAccount(tx);
-                    const pendingAmt = tx.pendingAmount !== undefined ? Math.abs(tx.pendingAmount) : 0;
-                    
                     return (
-                      <TableRow key={tx.id} className="cursor-pointer hover:bg-primary/5 transition-colors group" onClick={() => setSelectedTxDetails(tx)}>
+                      <TableRow key={tx.id} className="cursor-pointer hover:bg-primary/5 transition-colors" onClick={() => setSelectedTxDetails(tx)}>
                         <TableCell className="text-xs font-medium">{formatLocalDate(tx.date)}</TableCell>
-                        <TableCell>
-                          <span className="font-bold">{cust ? `${cust.apellido}, ${cust.nombre}` : 'Global'}</span>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={cn("text-[10px] gap-1 w-fit", info.color)}><info.icon className="h-3 w-3" />{info.label}</Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-bold">
-                          {symbol} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}
-                        </TableCell>
-                        <TableCell className="text-right text-xs text-emerald-600 font-bold">
-                          {symbol} {(tx.paidAmount || 0).toLocaleString('es-AR')}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {pendingAmt > 0.01 ? (
-                            <Badge className="bg-rose-500 text-[10px] font-black">{symbol} {pendingAmt.toLocaleString('es-AR')}</Badge>
-                          ) : tx.type !== 'cobro' ? (
-                            <Badge variant="outline" className="text-emerald-600 border-emerald-200 text-[10px] bg-emerald-50">SALDADO</Badge>
-                          ) : "---"}
-                        </TableCell>
+                        <TableCell><span className="font-bold">{cust ? `${cust.apellido}, ${cust.nombre}` : 'Global'}</span></TableCell>
+                        <TableCell><Badge variant="outline" className={cn("text-[9px] gap-1", info.color)}><info.icon className="h-3 w-3" />{info.label}</Badge></TableCell>
+                        <TableCell className="text-right font-bold">{symbol} {Math.abs(tx.amount || 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right text-xs text-emerald-600 font-bold">{symbol} {(tx.paidAmount || 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right text-xs font-mono text-muted-foreground">{tx.accountBalanceAfter !== null ? `${symbol} ${tx.accountBalanceAfter.toLocaleString()}` : "---"}</TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                          <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => setSelectedTxDetails(tx)}><Info className="h-4 w-4 mr-2" /> Ver Detalle</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleOpenWsDialog(tx)}><MessageSquare className="h-4 w-4 mr-2 text-emerald-600" /> Reclamar / Notificar</DropdownMenuItem>
-                              {isAdmin && (
-                                <>
-                                  <DropdownMenuItem onClick={() => handleEditTx(tx)} disabled={!isLatest} className={!isLatest ? "opacity-50" : ""}>
-                                    {isLatest ? <Edit className="h-4 w-4 mr-2" /> : <Lock className="h-4 w-4 mr-2" />} Editar
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem className={cn("text-destructive", !isLatest && "opacity-50")} onClick={() => setTxToDelete(tx)} disabled={!isLatest}>
-                                    <Trash2 className="h-4 w-4 mr-2" /> Eliminar
-                                  </DropdownMenuItem>
-                                </>
+                              <DropdownMenuItem onClick={() => setSelectedTxDetails(tx)}><Info className="h-4 w-4 mr-2" /> Detalle</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleOpenWsDialog(tx)}><MessageSquare className="h-4 w-4 mr-2 text-emerald-600" /> Notificar</DropdownMenuItem>
+                              {isAdmin && isLatestForAccount(tx) && (
+                                <><DropdownMenuItem onClick={() => handleEditTx(tx)}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
+                                  <DropdownMenuItem className="text-destructive" onClick={() => setTxToDelete(tx)}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem></>
                               )}
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -1141,246 +592,81 @@ function TransactionsContent() {
           </div>
         )}
 
-        {/* Ficha de Detalle de Operación */}
-        <Dialog open={!!selectedTxDetails} onOpenChange={(o) => { if(!o) setSelectedTxDetails(null); }}>
+        <Dialog open={!!selectedTxDetails} onOpenChange={(o) => !o && setSelectedTxDetails(null)}>
           <DialogContent className="max-w-3xl max-h-[95vh] overflow-y-auto">
-            <DialogHeader>
-              <div className="flex justify-between items-start pr-8">
-                <div className="space-y-1">
-                  <DialogTitle className="text-2xl font-black font-headline text-primary">Ficha de Operación</DialogTitle>
-                  <DialogDescription className="font-bold flex items-center gap-2">
-                    <CalendarIcon className="h-3 w-3" /> {selectedTxDetails && formatLocalDate(selectedTxDetails.date)}
-                  </DialogDescription>
-                </div>
-                {selectedTxDetails && (
-                  <Badge variant="outline" className={cn("text-[10px] font-black uppercase tracking-widest px-3 py-1", txTypeMap[selectedTxDetails.type]?.color)}>
-                    {txTypeMap[selectedTxDetails.type]?.label}
-                  </Badge>
-                )}
-              </div>
-            </DialogHeader>
-            
+            <DialogHeader><DialogTitle className="text-2xl font-black text-primary">Detalle de Operación</DialogTitle></DialogHeader>
             {selectedTxDetails && (
               <div className="space-y-6 py-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <section className="space-y-3 p-4 bg-muted/20 rounded-2xl border">
-                    <h4 className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-2">
-                      <User className="h-3 w-3" /> Información del Cliente
-                    </h4>
-                    <div>
-                      <p className="text-sm font-bold">
-                        {(() => {
-                          const c = customers?.find(c => c.id === selectedTxDetails.clientId);
-                          return c ? `${c.apellido}, ${c.nombre}` : "Global / Sin Cliente";
-                        })()}
-                      </p>
-                      {selectedTxDetails.clientId && (
-                        <p className="text-[10px] text-muted-foreground mt-1">ID: {selectedTxDetails.clientId}</p>
-                      )}
-                    </div>
-                  </section>
-
-                  <section className="space-y-3 p-4 bg-muted/20 rounded-2xl border">
-                    <h4 className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-2">
-                      <Landmark className="h-3 w-3" /> Caja / Destino
-                    </h4>
-                    <div>
-                      <p className="text-sm font-bold">
-                        {(() => {
-                          const acc = accounts?.find(a => a.id === selectedTxDetails.financialAccountId);
-                          return acc ? `${acc.name} (${acc.currency})` : "A Cuenta / Pendiente";
-                        })()}
-                      </p>
-                      {selectedTxDetails.financialAccountId && (
-                        <p className="text-[10px] text-emerald-600 font-bold mt-1 uppercase">Movimiento confirmado en caja</p>
-                      )}
-                    </div>
-                  </section>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl">
-                    <p className="text-[9px] font-black text-blue-700 uppercase mb-1">Monto Operación</p>
-                    <p className="text-xl font-black text-blue-800">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Math.abs(selectedTxDetails.amount).toLocaleString('es-AR')}</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 bg-muted/20 rounded-2xl border">
+                    <Label className="text-[10px] uppercase font-black text-muted-foreground">Cliente</Label>
+                    <p className="font-bold">{customers?.find(c => c.id === selectedTxDetails.clientId)?.apellido || "Global"}</p>
                   </div>
-                  <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl">
-                    <p className="text-[9px] font-black text-emerald-700 uppercase mb-1">Total Abonado</p>
-                    <p className="text-xl font-black text-emerald-800">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {(selectedTxDetails.paidAmount || 0).toLocaleString('es-AR')}</p>
-                  </div>
-                  <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl">
-                    <p className="text-[9px] font-black text-rose-700 uppercase mb-1">Saldo Pendiente</p>
-                    <p className="text-xl font-black text-xl text-rose-800">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Math.abs(selectedTxDetails.pendingAmount || 0).toLocaleString('es-AR')}</p>
+                  <div className="p-4 bg-muted/20 rounded-2xl border">
+                    <Label className="text-[10px] uppercase font-black text-muted-foreground">Caja Destino</Label>
+                    <p className="font-bold">{accounts?.find(a => a.id === selectedTxDetails.financialAccountId)?.name || "A Cuenta"}</p>
                   </div>
                 </div>
-
-                {selectedTxDetails.items && selectedTxDetails.items.length > 0 && (
-                  <section className="space-y-2">
-                    <h4 className="text-xs font-black uppercase text-slate-800 flex items-center gap-2">
-                      <Package className="h-4 w-4" /> Detalle de Artículos
-                    </h4>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="p-4 bg-blue-50 border rounded-2xl text-center"><p className="text-[9px] font-black text-blue-700 uppercase">Total</p><p className="text-xl font-black">${Math.abs(selectedTxDetails.amount).toLocaleString()}</p></div>
+                  <div className="p-4 bg-emerald-50 border rounded-2xl text-center"><p className="text-[9px] font-black text-emerald-700 uppercase">Abonado</p><p className="text-xl font-black">${(selectedTxDetails.paidAmount || 0).toLocaleString()}</p></div>
+                  <div className="p-4 bg-rose-50 border rounded-2xl text-center"><p className="text-[9px] font-black text-rose-700 uppercase">Pendiente</p><p className="text-xl font-black">${Math.abs(selectedTxDetails.pendingAmount || 0).toLocaleString()}</p></div>
+                </div>
+                {selectedTxDetails.items?.length > 0 && (
+                  <div className="border rounded-xl bg-white"><Table><TableHeader className="bg-muted/30"><TableRow><TableHead>Descripción</TableHead><TableHead className="text-center">Cant.</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader>
+                    <TableBody>{selectedTxDetails.items.map((it:any, i:number)=>(<TableRow key={i}><TableCell className="text-xs font-bold">{it.name}</TableCell><TableCell className="text-center font-black">{it.qty}</TableCell><TableCell className="text-right font-bold">${(it.price * it.qty).toLocaleString()}</TableCell></TableRow>))}</TableBody></Table></div>
+                )}
+                {selectedTxDetails.allocations?.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-black uppercase text-emerald-700">Facturas canceladas con este cobro</h4>
                     <div className="border rounded-xl bg-white overflow-hidden shadow-sm">
                       <Table>
-                        <TableHeader className="bg-muted/30">
-                          <TableRow>
-                            <TableHead className="text-[10px] font-bold">Descripción</TableHead>
-                            <TableHead className="text-center text-[10px] font-bold w-16">Cant.</TableHead>
-                            <TableHead className="text-right text-[10px] font-bold">Precio</TableHead>
-                            <TableHead className="text-right text-[10px] font-bold">Total</TableHead>
-                          </TableRow>
-                        </TableHeader>
+                        <TableHeader className="bg-emerald-50"><TableRow><TableHead>Fecha Factura</TableHead><TableHead>Operación Original</TableHead><TableHead className="text-right">Monto Aplicado</TableHead></TableRow></TableHeader>
                         <TableBody>
-                          {selectedTxDetails.items.map((item: any, i: number) => {
-                            const subtotal = (item.price * item.qty) * (1 - (item.discount || 0) / 100);
+                          {selectedTxDetails.allocations.map((alloc: any, i: number) => {
+                            const original = transactions?.find(t => t.id === alloc.txId);
                             return (
                               <TableRow key={i}>
-                                <TableCell>
-                                  <p className="text-xs font-bold">{item.name}</p>
-                                  {item.discount > 0 && <p className="text-[9px] text-rose-600 font-bold">Bonificación: {item.discount}%</p>}
-                                </TableCell>
-                                <TableCell className="text-center text-xs font-black">{item.qty}</TableCell>
-                                <TableCell className="text-right text-xs font-medium">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'}{item.price.toLocaleString('es-AR')}</TableCell>
-                                <TableCell className="text-right text-xs font-black">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'}{subtotal.toLocaleString('es-AR')}</TableCell>
+                                <TableCell className="text-xs">{original ? formatLocalDate(original.date) : "---"}</TableCell>
+                                <TableCell className="text-xs font-bold">{original ? `${txTypeMap[original.type]?.label}: ${original.description}` : "---"}</TableCell>
+                                <TableCell className="text-right text-xs font-black text-emerald-700">${alloc.amount.toLocaleString()}</TableCell>
                               </TableRow>
                             );
                           })}
                         </TableBody>
                       </Table>
                     </div>
-                  </section>
+                  </div>
                 )}
-
-                {selectedTxDetails.allocations && selectedTxDetails.allocations.length > 0 && (
-                  <section className="space-y-2">
-                    <h4 className="text-xs font-black uppercase text-emerald-700 flex items-center gap-2">
-                      <LinkIcon className="h-4 w-4" /> Facturas Canceladas con este cobro
-                    </h4>
-                    <div className="border rounded-xl bg-white overflow-hidden shadow-sm">
-                      <Table>
-                        <TableHeader className="bg-emerald-50">
-                          <TableRow>
-                            <TableHead className="text-[10px] font-bold">Fecha Tx</TableHead>
-                            <TableHead className="text-[10px] font-bold">ID Operación</TableHead>
-                            <TableHead className="text-right text-[10px] font-bold">Monto Aplicado</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {selectedTxDetails.allocations.map((alloc: any, i: number) => (
-                            <TableRow key={i}>
-                              <TableCell className="text-xs">{formatLocalDate(alloc.date)}</TableCell>
-                              <TableCell className="text-xs font-mono">{alloc.txId.slice(0, 8)}...</TableCell>
-                              <TableCell className="text-right text-xs font-black text-emerald-600">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {alloc.amount.toLocaleString('es-AR')}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </section>
-                )}
-
-                {!['cobro', 'Expense'].includes(selectedTxDetails.type) && (
-                  <section className="space-y-2">
-                    <h4 className="text-xs font-black uppercase text-blue-700 flex items-center gap-2">
-                      <History className="h-4 w-4" /> Pagos recibidos para esta operación
-                    </h4>
-                    <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100 italic text-xs">
-                      {(() => {
-                        const relatedCobros = transactions?.filter(t => t.type === 'cobro' && t.allocations?.some((a: any) => a.txId === selectedTxDetails.id));
-                        if (relatedCobros && relatedCobros.length > 0) {
-                          return (
-                            <div className="space-y-2">
-                              {relatedCobros.map(t => {
-                                const alloc = t.allocations.find((a: any) => a.txId === selectedTxDetails.id);
-                                return (
-                                  <div key={t.id} className="flex justify-between items-center border-b border-blue-100 pb-1 last:border-0">
-                                    <span className="font-bold">{formatLocalDate(t.date)}:</span>
-                                    <span className="font-black text-emerald-700">+{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {alloc.amount.toLocaleString('es-AR')}</span>
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          )
-                        }
-                        return <p className="text-muted-foreground text-center py-2">No se registran cobros imputados a esta factura aún.</p>;
-                      })()}
-                    </div>
-                  </section>
-                )}
-
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase text-muted-foreground">Notas Internas</Label>
-                  <div className="p-4 bg-muted/20 rounded-xl border text-sm italic">{selectedTxDetails.description || "---"}</div>
-                </div>
+                <div className="p-4 bg-muted/20 rounded-xl border text-sm italic">{selectedTxDetails.description}</div>
               </div>
             )}
-            <DialogFooter className="mt-4 border-t pt-4">
-              <Button onClick={() => setSelectedTxDetails(null)} className="w-full font-bold h-12">Cerrar</Button>
-            </DialogFooter>
+            <DialogFooter><Button onClick={() => setSelectedTxDetails(null)} className="w-full font-bold h-12">Cerrar</Button></DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Diálogos de Email/WS/Delete */}
         <Dialog open={isWsDialogOpen} onOpenChange={setIsWsDialogOpen}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5 text-emerald-600" /> Notificación por WhatsApp
-              </DialogTitle>
-            </DialogHeader>
+            <DialogHeader><DialogTitle className="flex items-center gap-2"><MessageSquare className="h-5 w-5 text-emerald-600" /> Notificación WhatsApp</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Seleccionar Plantilla</Label>
-                <Select value={selectedWsTemplateId} onValueChange={setSelectedWsTemplateId}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                  <SelectContent>
-                    {wsTemplates?.map((t: any) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}
-                  </SelectContent>
-                </Select>
-              </div>
-
+              <Select value={selectedWsTemplateId} onValueChange={setSelectedWsTemplateId}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar Plantilla..." /></SelectTrigger>
+                <SelectContent>{wsTemplates?.map((t: any) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}</SelectContent>
+              </Select>
               {dynamicKeys.length > 0 && (
-                <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl space-y-4">
-                  <p className="text-[10px] font-black uppercase text-blue-700 tracking-widest flex items-center gap-2">
-                    <Sparkles className="h-3 w-3" /> Datos requeridos por la plantilla
-                  </p>
-                  <div className="grid grid-cols-1 gap-3">
-                    {dynamicKeys.map(key => (
-                      <div key={key} className="space-y-1">
-                        <Label className="text-xs font-bold text-slate-700">{key}</Label>
-                        <Input 
-                          value={dynamicValues[key] || ""} 
-                          onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})} 
-                          placeholder={`Completar ${key.toLowerCase()}...`}
-                          className="bg-white"
-                        />
-                      </div>
-                    ))}
-                  </div>
+                <div className="p-4 bg-blue-50 border rounded-xl space-y-3">
+                  {dynamicKeys.map(k => (<div key={k} className="space-y-1"><Label className="text-xs font-bold">{k}</Label><Input value={dynamicValues[k] || ""} onChange={(e) => setDynamicValues({...dynamicValues, [k]: e.target.value})} className="bg-white" /></div>))}
                 </div>
               )}
             </div>
-            <DialogFooter className="border-t pt-4">
-              <Button variant="outline" onClick={() => setIsWsDialogOpen(false)}>Cerrar</Button>
-              <Button 
-                onClick={handleSendWs} 
-                disabled={!selectedWsTemplateId || !allDynamicFieldsFilled} 
-                className="bg-emerald-600 hover:bg-emerald-700 font-bold"
-              >
-                <Send className="mr-2 h-4 w-4" /> Abrir WhatsApp
-              </Button>
-            </DialogFooter>
+            <DialogFooter><Button variant="outline" onClick={() => setIsWsDialogOpen(false)}>Cerrar</Button><Button onClick={handleSendWs} disabled={!selectedWsTemplateId || !allDynamicFieldsFilled} className="bg-emerald-600 hover:bg-emerald-700">Abrir WhatsApp</Button></DialogFooter>
           </DialogContent>
         </Dialog>
 
-        <AlertDialog open={!!txToDelete} onOpenChange={(o) => { if(!o) setTxToDelete(null); }}>
+        <AlertDialog open={!!txToDelete} onOpenChange={(o) => !o && setTxToDelete(null)}>
           <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle>
-              <AlertDialogDescription>Se revertirán todos los saldos asociados, imputaciones y el dinero de la caja involucrada.</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmDeleteTx} className="bg-destructive">Eliminar</AlertDialogAction>
-            </AlertDialogFooter>
+            <AlertDialogHeader><AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle><AlertDialogDescription>Se revertirán todos los saldos asociados y el dinero de la caja involucrada.</AlertDialogDescription></AlertDialogHeader>
+            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteTx} className="bg-destructive text-white">Eliminar</AlertDialogAction></AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       </SidebarInset>
@@ -1391,8 +677,6 @@ function TransactionsContent() {
 
 export default function TransactionsPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
-      <TransactionsContent />
-    </Suspense>
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}><TransactionsContent /></Suspense>
   )
 }

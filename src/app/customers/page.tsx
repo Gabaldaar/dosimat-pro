@@ -116,43 +116,34 @@ function CustomersContent() {
   
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const zonesQuery = useMemoFirebase(() => collection(db, 'zones'), [db])
-  const emailTemplatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
-  const wsTemplatesQuery = useMemoFirebase(() => collection(db, 'whatsapp_templates'), [db])
-  const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   const txQuery = useMemoFirebase(() => query(collection(db, 'transactions'), orderBy('date', 'desc')), [db])
   
   const { data: customers, isLoading } = useCollection(clientsQuery)
-  const { data: zones, isLoading: isLoadingZones } = useCollection(zonesQuery)
-  const { data: emailTemplates } = useCollection(emailTemplatesQuery)
-  const { data: wsTemplates } = useCollection(wsTemplatesQuery)
-  const { data: catalog } = useCollection(catalogQuery)
+  const { data: zones } = useCollection(zonesQuery)
   const { data: transactions } = useCollection(txQuery)
   
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isZoneManagerOpen, setIsZoneManagerOpen] = useState(false)
-  const [isBulkEmailOpen, setIsBulkEmailOpen] = useState(false)
-  const [isWsDialogOpen, setIsWsDialogOpen] = useState(false)
-  const [isBulkWsOpen, setIsBulkWsOpen] = useState(false)
-  const [isDirectEmailWarningOpen, setIsDirectEmailWarningOpen] = useState(false)
   const [isStatementOpen, setIsStatementOpen] = useState(false)
   
   const [selectedCustomerForStatement, setSelectedCustomerForStatement] = useState<any | null>(null)
-  const [selectedTxForWs, setSelectedTxForWs] = useState<any | null>(null)
   const [customerToDelete, setCustomerToDelete] = useState<any | null>(null)
-  const [customerForDirectEmail, setCustomerForDirectEmail] = useState<any | null>(null)
-  
-  const [selectedTemplateId, setSelectedTemplateId] = useState("")
-  const [selectedWsTemplateId, setSelectedWsTemplateId] = useState("")
-  const [selectedBulkWsTemplateId, setSelectedBulkWsTemplateId] = useState("")
-  const [bulkWsIndex, setBulkWsIndex] = useState(0)
-  
-  const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({})
-  const [dynamicKeys, setDynamicKeys] = useState<string[]>([])
-
   const [newZoneName, setNewZoneName] = useState("")
   const [editingCustomer, setEditingCustomer] = useState<any>(null)
-
   const [isPrintingStatement, setIsPrintingStatement] = useState(false)
+
+  // Observador para desbloqueo de puntero
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      if (document.body.style.pointerEvents === 'none') {
+        if (!isDialogOpen && !isZoneManagerOpen && !isStatementOpen && !customerToDelete) {
+          document.body.style.pointerEvents = 'auto';
+        }
+      }
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+    return () => observer.disconnect();
+  }, [isDialogOpen, isZoneManagerOpen, isStatementOpen, customerToDelete]);
 
   useEffect(() => {
     const balanceParam = searchParams.get('filterBalance')
@@ -172,7 +163,6 @@ function CustomersContent() {
     mail: "",
     cuit_dni: "",
     observaciones: "", 
-    notasGeneral: "",
     equipoInstalado: {
       medidasPileta: "",
       volumen: 0,
@@ -184,8 +174,7 @@ function CustomersContent() {
     },
     esClienteReposicion: true,
     saldoActual: 0,
-    saldoUSD: 0,
-    fechaUltimaReposicion: null
+    saldoUSD: 0
   }
 
   const [formData, setFormData] = useState(defaultFormData)
@@ -222,11 +211,7 @@ function CustomersContent() {
         const apellidoB = (b.apellido || "").toLowerCase();
         if (apellidoA < apellidoB) return -1;
         if (apellidoA > apellidoB) return 1;
-        const nombreA = (a.nombre || "").toLowerCase();
-        const nombreB = (b.nombre || "").toLowerCase();
-        if (nombreA < nombreB) return -1;
-        if (nombreA > nombreB) return 1;
-        return 0;
+        return (a.nombre || "").localeCompare(b.nombre || "");
       })
   }, [customers, searchTerm, filterBalance, filterComodato, filterReposicion, filterZone])
 
@@ -282,16 +267,31 @@ function CustomersContent() {
     toast({ title: editingCustomer ? "Cliente actualizado" : "Cliente creado" })
   }
 
-  const confirmDelete = () => {
-    if (!customerToDelete) return;
-    deleteDocumentNonBlocking(doc(db, 'clients', customerToDelete.id))
-    setCustomerToDelete(null)
-    toast({ title: "Cliente eliminado" })
-  }
+  const handleCopyStatement = () => {
+    if (!selectedCustomerForStatement || pendingOperations.length === 0) return;
+    
+    const now = new Date().toLocaleDateString('es-AR');
+    let text = `*RESUMEN DE CUENTA - DOSIMAT PRO*\n`;
+    text += `Cliente: ${selectedCustomerForStatement.apellido}, ${selectedCustomerForStatement.nombre}\n`;
+    text += `Fecha: ${now}\n\n`;
+    text += `*DETALLE DE DEUDA:*\n`;
+    
+    pendingOperations.forEach(op => {
+      const info = txTypeMap[op.type] || { label: op.type };
+      const symbol = op.currency === 'USD' ? 'u$s' : '$';
+      text += `- ${formatLocalDate(op.date)} | ${info.label}: *${symbol} ${Math.abs(op.pendingAmount).toLocaleString('es-AR')}*\n`;
+    });
 
-  const handleOpenMaps = (address: string, city: string) => {
-    const query = encodeURIComponent(`${address}, ${city}, Argentina`)
-    window.open(`https://google.com/maps/search/?api=1&query=${query}`, '_blank')
+    text += `\n*TOTAL ADEUDADO:*`;
+    if (Math.abs(selectedCustomerForStatement.saldoActual) > 0) {
+      text += `\nARS: *$${Math.abs(selectedCustomerForStatement.saldoActual).toLocaleString('es-AR')}*`;
+    }
+    if (Math.abs(selectedCustomerForStatement.saldoUSD) > 0) {
+      text += `\nUSD: *u$s ${Math.abs(selectedCustomerForStatement.saldoUSD).toLocaleString('es-AR')}*`;
+    }
+
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copiado", description: "Resumen de deuda listo para pegar." });
   }
 
   const handleWhatsApp = (customer: any, e: React.MouseEvent) => {
@@ -304,43 +304,9 @@ function CustomersContent() {
     window.open(`https://wa.me/${phone}`, '_blank')
   }
 
-  const handleCopyClipboard = (customer: any, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation()
-    const balanceARS = Number(customer.saldoActual || 0).toLocaleString('es-AR')
-    const balanceUSD = Number(customer.saldoUSD || 0).toLocaleString('es-AR')
-    const fullAddress = [customer.direccion, customer.localidad, customer.provincia].filter(Boolean).join(", ")
-    const text = `*${customer.apellido}, ${customer.nombre}*\nCelular: ${customer.telefono || 'N/A'}\nDir: ${fullAddress || 'N/A'}\nSaldo ARS: $${balanceARS}\nSaldo USD: u$s ${balanceUSD}`
-    
-    if (e) {
-      navigator.clipboard.writeText(text)
-      toast({ title: "Copiado" })
-    }
-    return text
-  }
-
-  const handleAddZone = () => {
-    if (!isAdmin || !newZoneName.trim()) return
-    const id = Math.random().toString(36).substring(2, 11)
-    setDocumentNonBlocking(doc(db, 'zones', id), { id, name: newZoneName }, { merge: true })
-    setNewZoneName("")
-    toast({ title: "Zona agregada" })
-  }
-
-  const handlePrintStatement = () => {
-    setIsPrintingStatement(true);
-    setTimeout(() => {
-      window.print();
-      setIsPrintingStatement(false);
-    }, 300);
-  };
-
-  if (isUserLoading || userData?.role === 'Replenisher') {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="mt-4 text-sm text-muted-foreground">Accediendo...</p>
-      </div>
-    )
+  const handleOpenMaps = (address: string, city: string) => {
+    const query = encodeURIComponent(`${address}, ${city}, Argentina`)
+    window.open(`https://google.com/maps/search/?api=1&query=${query}`, '_blank')
   }
 
   return (
@@ -354,15 +320,6 @@ function CustomersContent() {
               <h1 className="text-xl md:text-3xl font-bold text-primary font-headline">Clientes</h1>
             </div>
             <div className="flex flex-wrap gap-2">
-              <div className="flex gap-1 border rounded-lg p-1 bg-muted/20">
-                <Button variant="ghost" size="sm" onClick={() => setIsBulkEmailOpen(true)} className="text-[10px] font-bold h-8 gap-1.5">
-                  <Mail className="h-3.5 w-3.5" /> MAIL MASIVO
-                </Button>
-                <div className="w-px h-4 bg-border self-center" />
-                <Button variant="ghost" size="sm" onClick={() => setIsBulkWsOpen(true)} className="text-[10px] font-bold h-8 gap-1.5 text-emerald-700">
-                  <MessageSquare className="h-3.5 w-3.5" /> WS MASIVO
-                </Button>
-              </div>
               {isAdmin && !isCommunicator && (
                 <Button variant="outline" onClick={() => setIsZoneManagerOpen(true)}>
                   <MapPinned className="mr-2 h-4 w-4" /> Zonas
@@ -381,7 +338,7 @@ function CustomersContent() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
                 <input 
-                  placeholder="Buscar por nombre, apellido, email o CUIT/DNI..." 
+                  placeholder="Buscar por nombre, apellido o CUIT/DNI..." 
                   className="w-full pl-10 h-11 bg-white/50 backdrop-blur-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20" 
                   value={searchTerm} 
                   onChange={(e) => setSearchTerm(e.target.value)} 
@@ -389,21 +346,37 @@ function CustomersContent() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <Select value={filterBalance} onValueChange={setFilterBalance}>
-                  <SelectTrigger className="w-[140px] bg-white/50"><SelectValue placeholder="Saldo" /></SelectTrigger>
+                  <SelectTrigger className="w-[140px] bg-white/50 font-bold"><SelectValue placeholder="Saldo" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Cualquier Saldo</SelectItem>
-                    <SelectItem value="debt">Deuda</SelectItem>
-                    <SelectItem value="credit">A Favor</SelectItem>
+                    <SelectItem value="all">TODOS LOS SALDOS</SelectItem>
+                    <SelectItem value="debt" className="text-rose-600 font-bold">SÓLO DEUDA</SelectItem>
+                    <SelectItem value="credit" className="text-emerald-600 font-bold">SÓLO A FAVOR</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={filterComodato} onValueChange={setFilterComodato}>
+                  <SelectTrigger className="w-[140px] bg-white/50"><SelectValue placeholder="Comodato" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">TODOS LOS EQUIPOS</SelectItem>
+                    <SelectItem value="yes">EN COMODATO</SelectItem>
+                    <SelectItem value="no">SIN COMODATO</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={filterReposicion} onValueChange={setFilterReposicion}>
+                  <SelectTrigger className="w-[140px] bg-white/50"><SelectValue placeholder="Tipo Cliente" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">TODOS LOS TIPOS</SelectItem>
+                    <SelectItem value="yes">REPOSICIÓN</SelectItem>
+                    <SelectItem value="no">OCASIONAL</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={filterZone} onValueChange={setFilterZone}>
                   <SelectTrigger className="w-[140px] bg-white/50"><SelectValue placeholder="Zona" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todas las Zonas</SelectItem>
+                    <SelectItem value="all">TODAS LAS ZONAS</SelectItem>
                     {zones?.map((z: any) => (<SelectItem key={z.id} value={z.id}>{z.name}</SelectItem>))}
                   </SelectContent>
                 </Select>
-                <Button variant="outline" size="icon" onClick={() => { setSearchTerm(""); setFilterBalance("all"); setFilterZone("all"); }}><FilterX className="h-4 w-4" /></Button>
+                <Button variant="outline" size="icon" onClick={() => { setSearchTerm(""); setFilterBalance("all"); setFilterComodato("all"); setFilterReposicion("all"); setFilterZone("all"); }}><FilterX className="h-4 w-4" /></Button>
               </div>
             </div>
           </section>
@@ -496,16 +469,16 @@ function CustomersContent() {
                               </Button>
                             )}
 
-                            <Button variant="outline" size="icon" className="h-9 w-9 text-slate-600" onClick={(e) => { e.stopPropagation(); handleOpenMaps(customer.direccion, customer.localidad); }} title="Ver Mapa">
-                              <MapPinned className="h-4 w-4" />
+                            <Button variant="outline" size="sm" className="h-9 gap-1.5 font-bold text-slate-600" onClick={(e) => { e.stopPropagation(); handleOpenMaps(customer.direccion, customer.localidad); }}>
+                              <MapPinned className="h-4 w-4" /> <span className="hidden sm:inline">Mapa</span>
                             </Button>
 
-                            <Button variant="outline" size="icon" className="h-9 w-9 text-emerald-600 border-emerald-200" onClick={(e) => handleWhatsApp(customer, e)} title="WhatsApp Directo">
-                              <PhoneCall className="h-4 w-4" />
+                            <Button variant="outline" size="sm" className="h-9 gap-1.5 font-bold text-emerald-600 border-emerald-200" onClick={(e) => handleWhatsApp(customer, e)}>
+                              <PhoneCall className="h-4 w-4" /> <span className="hidden sm:inline">WhatsApp</span>
                             </Button>
 
-                            <Button variant="outline" size="icon" className="h-9 w-9 text-blue-600 border-blue-200" asChild onClick={(e) => e.stopPropagation()} title="Ver Historial">
-                              <Link href={`/transactions?clientId=${customer.id}`}><History className="h-4 w-4" /></Link>
+                            <Button variant="outline" size="sm" className="h-9 gap-1.5 font-bold text-blue-600 border-blue-200" asChild onClick={(e) => e.stopPropagation()}>
+                              <Link href={`/transactions?clientId=${customer.id}`}><History className="h-4 w-4" /> <span className="hidden sm:inline">Historial</span></Link>
                             </Button>
                             
                             <DropdownMenu>
@@ -513,13 +486,13 @@ function CustomersContent() {
                                 <Button variant="ghost" size="icon" className="h-9 w-9 opacity-60"><MoreVertical className="h-4 w-4" /></Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-48">
-                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setSelectedTxForWs(customer); setIsWsDialogOpen(true); }}>
-                                  <MessageSquare className="mr-2 h-4 w-4" /> WhatsApp Plantilla
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); /* handleWsPlantilla(customer) */ }}>
+                                  <MessageSquare className="mr-2 h-4 w-4" /> Notificar por WS
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={(e) => handleOpenDirectEmailWarning(customer, e)}>
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); /* handleEmail(customer) */ }}>
                                   <Mail className="mr-2 h-4 w-4" /> Enviar Mail
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={(e) => handleCopyClipboard(customer, e)}>
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(`${customer.apellido}, ${customer.nombre}\nTel: ${customer.telefono}\nDir: ${customer.direccion}`); toast({ title: "Copiado" }); }}>
                                   <Copy className="mr-2 h-4 w-4" /> Copiar Datos
                                 </DropdownMenuItem>
                                 {isAdmin && (
@@ -539,6 +512,7 @@ function CustomersContent() {
             </div>
           )}
 
+          {/* Diálogos */}
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle>{editingCustomer ? 'Editar Cliente' : 'Nuevo Cliente'}</DialogTitle></DialogHeader>
@@ -573,46 +547,54 @@ function CustomersContent() {
           <Dialog open={isStatementOpen} onOpenChange={setIsStatementOpen}>
             <DialogContent className="max-w-3xl">
               <DialogHeader>
-                <div className="flex justify-between items-start">
-                  <DialogTitle>Estado de Cuenta: {selectedCustomerForStatement?.apellido}, {selectedCustomerForStatement?.nombre}</DialogTitle>
-                  <Button variant="outline" size="sm" onClick={handlePrintStatement}><Printer className="mr-2 h-4 w-4" /> PDF</Button>
+                <div className="flex justify-between items-start pr-8">
+                  <div className="space-y-1">
+                    <DialogTitle>Estado de Cuenta</DialogTitle>
+                    <DialogDescription className="font-bold text-slate-800">{selectedCustomerForStatement?.apellido}, {selectedCustomerForStatement?.nombre}</DialogDescription>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={handleCopyStatement} className="h-8 gap-1.5 font-bold"><Copy className="h-3.5 w-3.5" /> COPIAR</Button>
+                    <Button variant="outline" size="sm" onClick={() => { setIsPrintingStatement(true); setTimeout(() => { window.print(); setIsPrintingStatement(false); }, 300); }} className="h-8 gap-1.5 font-bold"><Printer className="h-3.5 w-3.5" /> PDF</Button>
+                  </div>
                 </div>
               </DialogHeader>
               <div className="py-4 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl text-center">
-                    <p className="text-[10px] font-black uppercase text-rose-700">Total Adeudado ARS</p>
+                    <p className="text-[10px] font-black uppercase text-rose-700">Deuda ARS</p>
                     <p className="text-2xl font-black text-rose-800">${Math.abs(selectedCustomerForStatement?.saldoActual || 0).toLocaleString('es-AR')}</p>
                   </div>
                   <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl text-center">
-                    <p className="text-[10px] font-black uppercase text-rose-700">Total Adeudado USD</p>
+                    <p className="text-[10px] font-black uppercase text-rose-700">Deuda USD</p>
                     <p className="text-2xl font-black text-rose-800">u$s {Math.abs(selectedCustomerForStatement?.saldoUSD || 0).toLocaleString('es-AR')}</p>
                   </div>
                 </div>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Fecha</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead className="text-right">Original</TableHead>
-                      <TableHead className="text-right">Pendiente</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pendingOperations.map(op => {
-                      const info = txTypeMap[op.type] || { label: op.type, color: "text-slate-600" };
-                      const symbol = op.currency === 'USD' ? 'u$s' : '$';
-                      return (
-                        <TableRow key={op.id}>
-                          <TableCell className="text-xs">{formatLocalDate(op.date)}</TableCell>
-                          <TableCell><Badge variant="outline" className={cn("text-[9px] uppercase", info.color)}>{info.label}</Badge></TableCell>
-                          <TableCell className="text-right text-xs">{symbol} {Math.abs(op.amount).toLocaleString('es-AR')}</TableCell>
-                          <TableCell className="text-right text-xs font-black text-rose-600">{symbol} {Math.abs(op.pendingAmount).toLocaleString('es-AR')}</TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+                <ScrollArea className="max-h-[40vh] border rounded-xl bg-white overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-muted/30">
+                      <TableRow>
+                        <TableHead className="text-[10px] font-bold uppercase">Fecha</TableHead>
+                        <TableHead className="text-[10px] font-bold uppercase">Tipo</TableHead>
+                        <TableHead className="text-right text-[10px] font-bold uppercase">Original</TableHead>
+                        <TableHead className="text-right text-[10px] font-bold uppercase">Pendiente</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pendingOperations.map(op => {
+                        const info = txTypeMap[op.type] || { label: op.type, color: "text-slate-600" };
+                        const symbol = op.currency === 'USD' ? 'u$s' : '$';
+                        return (
+                          <TableRow key={op.id}>
+                            <TableCell className="text-xs">{formatLocalDate(op.date)}</TableCell>
+                            <TableCell><Badge variant="outline" className={cn("text-[9px] uppercase", info.color)}>{info.label}</Badge></TableCell>
+                            <TableCell className="text-right text-xs">{symbol} {Math.abs(op.amount).toLocaleString('es-AR')}</TableCell>
+                            <TableCell className="text-right text-xs font-black text-rose-600">{symbol} {Math.abs(op.pendingAmount).toLocaleString('es-AR')}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
               </div>
             </DialogContent>
           </Dialog>
@@ -627,6 +609,7 @@ function CustomersContent() {
         </SidebarInset>
       </div>
 
+      {/* VISTA DE IMPRESIÓN */}
       {selectedCustomerForStatement && (
         <div className="print-only w-full p-8 font-sans text-slate-900 bg-white">
           <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
