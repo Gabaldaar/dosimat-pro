@@ -267,6 +267,15 @@ function CustomersContent() {
     toast({ title: editingCustomer ? "Cliente actualizado" : "Cliente creado" })
   }
 
+  const confirmDelete = () => {
+    if (!customerToDelete) return
+    deleteDocumentNonBlocking(doc(db, 'clients', customerToDelete.id))
+    setCustomerToDelete(null)
+    // Force pointer events restore
+    setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100)
+    toast({ title: "Cliente eliminado" })
+  }
+
   const handleCopyStatement = () => {
     if (!selectedCustomerForStatement || pendingOperations.length === 0) return;
     
