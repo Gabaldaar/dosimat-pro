@@ -4,7 +4,7 @@
 import { useState, useMemo, useEffect, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
@@ -33,7 +33,9 @@ import {
   PlusCircle,
   Copy,
   Send,
-  ArrowRight
+  ArrowRight,
+  Mail,
+  AlertTriangle
 } from "lucide-react"
 import { useToast } from "../../hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -91,17 +93,20 @@ function TransactionsContent() {
   const isAdmin = userData?.role === 'Admin'
   const searchParams = useSearchParams()
   
+  // Tabs & Views
   const [mainView, setMainView] = useState("history")
   const [activeTab, setActiveTab] = useState("refill")
   const [editingTx, setEditingTx] = useState<any | null>(null)
   const [txToDelete, setTxToDelete] = useState<any | null>(null)
   const [selectedTxDetails, setSelectedTxDetails] = useState<any | null>(null)
 
+  // Notifications
   const [isWsDialogOpen, setIsWsDialogOpen] = useState(false)
   const [selectedTxForWs, setSelectedTxForWs] = useState<any | null>(null)
   const [selectedWsTemplateId, setSelectedWsTemplateId] = useState("")
   const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({})
 
+  // Filters
   const [filterCustomer, setFilterCustomer] = useState("all")
   const [filterAccount, setFilterAccount] = useState("all")
   const [filterStartDate, setFilterStartDate] = useState("")
@@ -110,6 +115,7 @@ function TransactionsContent() {
   const [filterFlow, setFilterFlow] = useState("all")
   const [itemFilterCategory, setItemFilterCategory] = useState("all")
 
+  // Queries
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
@@ -123,6 +129,19 @@ function TransactionsContent() {
   const { data: transactions } = useCollection(txQuery)
   const { data: wsTemplates } = useCollection(wsTemplatesQuery)
   const { data: productCategories } = useCollection(productCatsQuery)
+
+  // Initialization from URL
+  useEffect(() => {
+    const mode = searchParams.get('mode')
+    const clientId = searchParams.get('clientId')
+    const type = searchParams.get('type')
+    const accountId = searchParams.get('accountId')
+
+    if (mode === 'new') setMainView("register")
+    if (clientId) { setSelectedCustomerId(clientId); setFilterCustomer(clientId); }
+    if (type) setActiveTab(type)
+    if (accountId) setFilterAccount(accountId)
+  }, [searchParams])
 
   const sortedCatalog = useMemo(() => {
     if (!catalog) return []
@@ -144,6 +163,7 @@ function TransactionsContent() {
     return sortedCatalog.filter((item: any) => item.categoryId === itemFilterCategory)
   }, [sortedCatalog, itemFilterCategory])
 
+  // Register Form State
   const [selectedCustomerId, setSelectedCustomerId] = useState("")
   const [selectedItems, setSelectedItems] = useState<any[]>([])
   const [destinationAccounts, setDestinationAccounts] = useState<Record<string, string>>({ ARS: "pending", USD: "pending" })
@@ -154,6 +174,12 @@ function TransactionsContent() {
   const [manualAccountId, setManualAccountId] = useState("pending")
   const [adjustmentSign, setAdjustmentSign] = useState<"1" | "-1">("1")
   const [txDescription, setTxDescription] = useState("")
+  const [imputations, setImputations] = useState<Record<string, number>>({})
+
+  const customerPendingTxs = useMemo(() => {
+    if (!selectedCustomerId || !transactions || selectedCustomerId === "none") return []
+    return transactions.filter(tx => tx.clientId === selectedCustomerId && tx.pendingAmount !== 0 && tx.type !== 'cobro')
+  }, [selectedCustomerId, transactions])
 
   const cartTotals = useMemo(() => {
     return selectedItems.reduce((acc, item) => {
@@ -174,27 +200,46 @@ function TransactionsContent() {
   }
 
   const handleSaveTransaction = () => {
-    const client = selectedCustomerId ? customers?.find(c => c.id === selectedCustomerId) : null;
+    const client = selectedCustomerId && selectedCustomerId !== "none" ? customers?.find(c => c.id === selectedCustomerId) : null;
     const finalDateStr = new Date(operationDate + 'T12:00:00').toISOString();
 
     if (['cobro', 'adjustment', 'Expense'].includes(activeTab)) {
       const txId = Math.random().toString(36).substring(2, 11)
       const finalAmount = Number(manualAmount) * (activeTab === 'adjustment' ? Number(adjustmentSign) : activeTab === 'Expense' ? -1 : 1)
+      
       const txData = { 
         id: txId, 
         date: finalDateStr, 
-        clientId: selectedCustomerId || null, 
+        clientId: selectedCustomerId === "none" ? null : selectedCustomerId, 
         type: activeTab, 
         amount: finalAmount, 
         currency: manualCurrency, 
         description: txDescription || `${activeTab} manual`, 
         financialAccountId: manualAccountId === "pending" ? null : manualAccountId, 
         paidAmount: activeTab === 'cobro' ? finalAmount : 0, 
-        pendingAmount: (activeTab === 'adjustment' && finalAmount < 0) ? finalAmount : 0 
+        pendingAmount: (activeTab === 'adjustment' && finalAmount < 0) ? finalAmount : 0,
+        imputations: activeTab === 'cobro' ? imputations : null
       }
+
       setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
-      if (manualAccountId !== "pending") updateDocumentNonBlocking(doc(db, 'financial_accounts', manualAccountId), { initialBalance: increment(finalAmount) });
-      if (client) { const field = manualCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'; updateDocumentNonBlocking(doc(db, 'clients', client.id), { [field]: increment(finalAmount) }); }
+      
+      if (manualAccountId !== "pending") {
+        updateDocumentNonBlocking(doc(db, 'financial_accounts', manualAccountId), { initialBalance: increment(finalAmount) });
+      }
+      
+      if (client) {
+        const field = manualCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD';
+        updateDocumentNonBlocking(doc(db, 'clients', client.id), { [field]: increment(finalAmount) });
+      }
+
+      // Procesa imputaciones (matar deuda de facturas individuales)
+      if (activeTab === 'cobro') {
+        Object.entries(imputations).forEach(([targetTxId, amount]) => {
+          updateDocumentNonBlocking(doc(db, 'transactions', targetTxId), {
+            pendingAmount: increment(-amount)
+          });
+        });
+      }
     } else {
       ['ARS', 'USD'].forEach(curr => {
         const total = cartTotals[curr as 'ARS' | 'USD']; if (total <= 0) return;
@@ -203,7 +248,7 @@ function TransactionsContent() {
         const txData = { 
           id: txId, 
           date: finalDateStr, 
-          clientId: selectedCustomerId || null, 
+          clientId: selectedCustomerId === "none" ? null : selectedCustomerId, 
           type: activeTab, 
           amount: -Number(total), 
           paidAmount: paid, 
@@ -223,7 +268,7 @@ function TransactionsContent() {
   }
 
   const resetRegisterForm = () => {
-    setEditingTx(null); setSelectedCustomerId(""); setSelectedItems([]); setTxDescription(""); setManualAmount(0); setPaidAmounts({ ARS: 0, USD: 0 }); setDestinationAccounts({ ARS: "pending", USD: "pending" });
+    setEditingTx(null); setSelectedCustomerId(""); setSelectedItems([]); setTxDescription(""); setManualAmount(0); setPaidAmounts({ ARS: 0, USD: 0 }); setDestinationAccounts({ ARS: "pending", USD: "pending" }); setImputations({});
   }
 
   const filteredTransactions = useMemo(() => {
@@ -252,6 +297,13 @@ function TransactionsContent() {
     }, { ars: 0, usd: 0 })
   }, [filteredTransactions]);
 
+  const handleOpenWsDialog = (tx: any) => {
+    setSelectedTxForWs(tx);
+    setSelectedWsTemplateId("");
+    setDynamicValues({});
+    setIsWsDialogOpen(true);
+  }
+
   const dynamicKeys = useMemo(() => {
     if (!selectedWsTemplateId || !wsTemplates) return [];
     const template = wsTemplates.find(t => t.id === selectedWsTemplateId);
@@ -259,13 +311,6 @@ function TransactionsContent() {
     const matches = template.body.match(/\{\{\?([^}]+)\}\}/g) || [];
     return Array.from(new Set(matches.map(m => m.replace(/\{\{\?|\}\}/g, ''))));
   }, [selectedWsTemplateId, wsTemplates]);
-
-  const handleOpenWsDialog = (tx: any) => {
-    setSelectedTxForWs(tx);
-    setSelectedWsTemplateId("");
-    setDynamicValues({});
-    setIsWsDialogOpen(true);
-  }
 
   const handleSendWs = () => {
     if (!selectedTxForWs || !selectedWsTemplateId || !wsTemplates) return;
@@ -358,12 +403,74 @@ function TransactionsContent() {
                     <Input type="date" value={operationDate} onChange={(e) => setOperationDate(e.target.value)} className="bg-white" />
                   </div>
                 </div>
-                {['cobro', 'adjustment'].includes(activeTab) ? (
+                {activeTab === 'cobro' ? (
+                  <div className="space-y-6">
+                    <div className="p-6 border rounded-xl space-y-4 bg-muted/5">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-2"><Label>Monto a Cobrar</Label><Input type="number" value={manualAmount} onChange={(e) => setManualAmount(Number(e.target.value))} className="bg-white font-bold text-xl h-12" /></div>
+                        <div className="space-y-2"><Label>Moneda</Label>
+                          <Tabs value={manualCurrency} onValueChange={setManualCurrency} className="w-full">
+                            <TabsList className="grid grid-cols-2 h-12 p-1 border">
+                              <TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
+                              <TabsTrigger value="USD" className="text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
+                            </TabsList>
+                          </Tabs>
+                        </div>
+                        <div className="space-y-2"><Label>Caja Destino</Label>
+                          <Select value={manualAccountId} onValueChange={setManualAccountId}><SelectTrigger className="bg-white h-12"><SelectValue /></SelectTrigger>
+                            <SelectContent><SelectItem value="pending">A CUENTA</SelectItem>{accounts?.filter(a => a.currency === manualCurrency).map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                    {customerPendingTxs.length > 0 && (
+                      <div className="space-y-3">
+                        <Label className="text-xs font-black uppercase text-muted-foreground">Imputar a Facturas Pendientes ({manualCurrency})</Label>
+                        <div className="border rounded-xl overflow-hidden bg-white">
+                          <Table>
+                            <TableHeader className="bg-muted/30">
+                              <TableRow>
+                                <TableHead>Fecha Operación</TableHead>
+                                <TableHead>Tipo</TableHead>
+                                <TableHead className="text-right">Pendiente</TableHead>
+                                <TableHead className="w-40 text-right">Asignar Pago</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {customerPendingTxs.filter(tx => tx.currency === manualCurrency).map(tx => (
+                                <TableRow key={tx.id}>
+                                  <TableCell className="text-xs">{formatLocalDate(tx.date)}</TableCell>
+                                  <TableCell><Badge variant="outline" className="text-[9px] uppercase">{tx.type}</Badge></TableCell>
+                                  <TableCell className="text-right font-bold text-rose-600">{manualCurrency==='USD'?'u$s':'$'} {Math.abs(tx.pendingAmount).toLocaleString()}</TableCell>
+                                  <TableCell>
+                                    <Input 
+                                      type="number" 
+                                      className="h-8 text-right font-black border-emerald-200" 
+                                      value={imputations[tx.id] || ""} 
+                                      onChange={(e) => setImputations({...imputations, [tx.id]: Number(e.target.value)})}
+                                      placeholder="0"
+                                    />
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : activeTab === 'adjustment' ? (
                   <div className="p-6 border rounded-xl space-y-4 bg-muted/5">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="space-y-2"><Label>Signo</Label>
+                        <Select value={adjustmentSign} onValueChange={(v: any) => setAdjustmentSign(v)}>
+                          <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="1">Ingreso (+) / Reduce Deuda</SelectItem><SelectItem value="-1">Egreso (-) / Aumenta Deuda</SelectItem></SelectContent>
+                        </Select>
+                      </div>
                       <div className="space-y-2"><Label>Monto</Label><Input type="number" value={manualAmount} onChange={(e) => setManualAmount(Number(e.target.value))} className="bg-white font-bold" /></div>
                       <div className="space-y-2"><Label>Moneda</Label>
-                        <Tabs value={manualCurrency} onValueChange={setManualCurrency} className="w-full">
+                        <Tabs value={manualCurrency} onValueChange={setManualCurrency}>
                           <TabsList className="grid grid-cols-2 h-10 p-1 border">
                             <TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
                             <TabsTrigger value="USD" className="text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
@@ -475,28 +582,9 @@ function TransactionsContent() {
             </div>
             <Card className="glass-card p-4 flex flex-wrap gap-4 items-end">
                  <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Cliente</Label><Select value={filterCustomer} onValueChange={setFilterCustomer}><SelectTrigger className="w-[180px] h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem>{customers?.map(c => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}</SelectContent></Select></div>
-                 <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Caja</Label><Select value={filterAccount} onValueChange={setFilterAccount}><SelectTrigger className="w-[160px] h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{accounts?.map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent></Select></div>
-                 <div className="space-y-1">
-                   <Label className="text-[10px] uppercase font-bold text-muted-foreground">Flujo</Label>
-                   <Select value={filterFlow} onValueChange={setFilterFlow}>
-                     <SelectTrigger className="w-[120px] h-10"><SelectValue /></SelectTrigger>
-                     <SelectContent>
-                       <SelectItem value="all">Todos</SelectItem>
-                       <SelectItem value="income" className="text-emerald-600">Ingresos</SelectItem>
-                       <SelectItem value="expense" className="text-rose-600">Egresos</SelectItem>
-                     </SelectContent>
-                   </Select>
-                 </div>
-                 <div className="space-y-1">
-                   <Label className="text-[10px] uppercase font-bold text-muted-foreground">Operación</Label>
-                   <Select value={filterOpType} onValueChange={setFilterOpType}>
-                     <SelectTrigger className="w-[140px] h-10"><SelectValue /></SelectTrigger>
-                     <SelectContent>
-                       <SelectItem value="all">Todas</SelectItem>
-                       {Object.keys(txTypeMap).map(k => <SelectItem key={k} value={k}>{txTypeMap[k].label}</SelectItem>)}
-                     </SelectContent>
-                   </Select>
-                 </div>
+                 <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Caja</Label><Select value={filterAccount} onValueChange={setFilterAccount}><SelectTrigger className="w-[160px] h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem><SelectItem value="null">Sin Caja / A Cuenta</SelectItem>{accounts?.map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent></Select></div>
+                 <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Flujo</Label><Select value={filterFlow} onValueChange={setFilterFlow}><SelectTrigger className="w-[120px] h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem><SelectItem value="income" className="text-emerald-600">Ingresos</SelectItem><SelectItem value="expense" className="text-rose-600">Egresos</SelectItem></SelectContent></Select></div>
+                 <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Operación</Label><Select value={filterOpType} onValueChange={setFilterOpType}><SelectTrigger className="w-[140px] h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{Object.keys(txTypeMap).map(k => <SelectItem key={k} value={k}>{txTypeMap[k].label}</SelectItem>)}</SelectContent></Select></div>
                  <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Desde</Label><Input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="h-10 w-[140px]" /></div>
                  <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Hasta</Label><Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="h-10 w-[140px]" /></div>
                  <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => { setFilterCustomer("all"); setFilterAccount("all"); setFilterStartDate(""); setFilterEndDate(""); setFilterOpType("all"); setFilterFlow("all"); }}><FilterX className="h-4 w-4" /></Button>
@@ -511,7 +599,6 @@ function TransactionsContent() {
                     <TableHead>Caja</TableHead>
                     <TableHead className="text-right">Monto</TableHead>
                     <TableHead className="text-right">Pendiente</TableHead>
-                    <TableHead className="text-right">Saldo Caja Post</TableHead>
                     <TableHead className="w-12"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -529,8 +616,23 @@ function TransactionsContent() {
                         <TableCell><span className="text-[10px] font-bold text-muted-foreground uppercase">{acc?.name || "---"}</span></TableCell>
                         <TableCell className="text-right font-bold">{tx.currency==='USD'?'u$s':'$'} {Math.abs(tx.amount || 0).toLocaleString()}</TableCell>
                         <TableCell className="text-right text-xs text-rose-600 font-bold">{tx.currency==='USD'?'u$s':'$'} {Math.abs(tx.pendingAmount || 0).toLocaleString()}</TableCell>
-                        <TableCell className="text-right text-xs font-mono text-muted-foreground">{tx.accountBalanceAfter !== null ? `${tx.currency==='USD'?'u$s':'$'} ${tx.accountBalanceAfter.toLocaleString()}` : "---"}</TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()}><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onClick={() => setSelectedTxDetails(tx)}><Info className="h-4 w-4 mr-2" /> Detalle</DropdownMenuItem><DropdownMenuItem onClick={() => handleOpenWsDialog(tx)}><MessageSquare className="h-4 w-4 mr-2" /> Notificar</DropdownMenuItem></DropdownMenuContent></DropdownMenu></TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => setSelectedTxDetails(tx)}><Info className="h-4 w-4 mr-2" /> Ficha completa</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleOpenWsDialog(tx)}><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp (Plantilla)</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => { navigator.clipboard.writeText(`Operación: ${tx.description}\nMonto: ${tx.amount}\nFecha: ${tx.date}`); toast({title:"Copiado"}); }}><Copy className="h-4 w-4 mr-2" /> Copiar Detalle</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => { if(cust?.mail) window.open(`mailto:${cust.mail}?subject=Detalle Operación&body=${tx.description}`); }}><Mail className="h-4 w-4 mr-2" /> Enviar mail</DropdownMenuItem>
+                              {isAdmin && (
+                                <>
+                                  <DropdownMenuItem onClick={() => { setEditingTx(tx); resetRegisterForm(); setActiveTab(tx.type); setMainView("register"); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
+                                  <DropdownMenuItem className="text-destructive" onClick={() => setTxToDelete(tx)}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
                       </TableRow>
                     )
                   })}
@@ -540,67 +642,82 @@ function TransactionsContent() {
           </div>
         )}
 
+        {/* Full View Dialog */}
         <Dialog open={!!selectedTxDetails} onOpenChange={(o) => !o && setSelectedTxDetails(null)}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-3xl">
             <DialogHeader>
               <div className="flex justify-between items-start">
                 <div className="space-y-1">
                   <DialogTitle className="text-xl font-black uppercase flex items-center gap-2">
                     {selectedTxDetails && (
                       <>
-                        {(() => {
-                          const info = txTypeMap[selectedTxDetails.type] || { icon: Info };
-                          const Icon = info.icon;
-                          return <Icon className="h-5 w-5 text-primary" />;
-                        })()}
+                        {(() => { const Icon = txTypeMap[selectedTxDetails.type]?.icon || Info; return <Icon className="h-5 w-5 text-primary" /> })()}
                         {txTypeMap[selectedTxDetails.type]?.label || 'Detalle'}
                       </>
                     )}
                   </DialogTitle>
-                  <DialogDescription className="font-bold text-slate-800">
-                    {selectedTxDetails && formatLocalDate(selectedTxDetails.date)}
-                  </DialogDescription>
+                  <DialogDescription className="font-bold text-slate-800">{selectedTxDetails && formatLocalDate(selectedTxDetails.date)}</DialogDescription>
                 </div>
-                {selectedTxDetails && (
-                  <Badge variant="outline" className={cn("text-[10px] uppercase font-black", txTypeMap[selectedTxDetails.type]?.color)}>
-                    {selectedTxDetails.type}
-                  </Badge>
-                )}
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(`Detalle: ${selectedTxDetails?.description}\nTotal: ${selectedTxDetails?.amount}`); toast({title:"Detalle copiado"}); }} className="h-8 font-bold gap-2"><Copy className="h-3.5 w-3.5" /> COPIAR</Button>
+                  <Button variant="outline" size="sm" onClick={() => handleOpenWsDialog(selectedTxDetails)} className="h-8 font-bold gap-2 border-emerald-200 text-emerald-700 bg-emerald-50"><MessageSquare className="h-3.5 w-3.5" /> WHATSAPP</Button>
+                </div>
               </div>
             </DialogHeader>
             {selectedTxDetails && (
               <div className="py-4 space-y-6">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <div className="p-4 bg-muted/20 rounded-2xl border space-y-1">
-                    <p className="text-[10px] font-black uppercase text-muted-foreground">Monto Operación</p>
+                    <p className="text-[10px] font-black uppercase text-muted-foreground">Monto Total</p>
                     <p className="text-2xl font-black">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Math.abs(selectedTxDetails.amount).toLocaleString()}</p>
                   </div>
+                  <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl space-y-1">
+                    <p className="text-[10px] font-black uppercase text-emerald-700">Abonado</p>
+                    <p className="text-2xl font-black text-emerald-800">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Number(selectedTxDetails.paidAmount || 0).toLocaleString()}</p>
+                  </div>
                   <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl space-y-1">
-                    <p className="text-[10px] font-black uppercase text-rose-700">Saldo Pendiente</p>
+                    <p className="text-[10px] font-black uppercase text-rose-700">Pendiente</p>
                     <p className="text-2xl font-black text-rose-800">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Math.abs(selectedTxDetails.pendingAmount || 0).toLocaleString()}</p>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <p className="text-xs font-black uppercase text-muted-foreground flex items-center gap-2"><User className="h-3 w-3" /> Información del Cliente</p>
+                  <p className="text-xs font-black uppercase text-muted-foreground flex items-center gap-2"><User className="h-3 w-3" /> Información del Cliente y Caja</p>
                   <div className="p-3 border rounded-xl bg-white flex justify-between items-center">
                     <span className="font-bold">{customers?.find(c => c.id === selectedTxDetails.clientId)?.apellido || 'Global'}, {customers?.find(c => c.id === selectedTxDetails.clientId)?.nombre || ''}</span>
-                    <Badge variant="secondary">{selectedTxDetails.financialAccountId ? accounts?.find(a => a.id === selectedTxDetails.financialAccountId)?.name : 'Sin Caja'}</Badge>
+                    <Badge variant="secondary">{selectedTxDetails.financialAccountId ? accounts?.find(a => a.id === selectedTxDetails.financialAccountId)?.name : 'Sin Caja / A Cuenta'}</Badge>
                   </div>
                 </div>
+
+                {selectedTxDetails.imputations && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-black uppercase text-muted-foreground">Facturas Canceladas con este Pago</p>
+                    <div className="border rounded-xl bg-white overflow-hidden">
+                      <Table>
+                        <TableHeader className="bg-emerald-50"><TableRow><TableHead>Fecha Factura</TableHead><TableHead>Operación</TableHead><TableHead className="text-right">Monto Aplicado</TableHead></TableRow></TableHeader>
+                        <TableBody>
+                          {Object.entries(selectedTxDetails.imputations as Record<string, number>).map(([tid, amount]) => {
+                            const originalTx = transactions?.find(t => t.id === tid);
+                            return (
+                              <TableRow key={tid}>
+                                <TableCell className="text-xs">{originalTx ? formatLocalDate(originalTx.date) : "---"}</TableCell>
+                                <TableCell className="text-xs font-bold">{originalTx?.description || "Factura original"}</TableCell>
+                                <TableCell className="text-right font-black">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {amount.toLocaleString()}</TableCell>
+                              </TableRow>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
 
                 {selectedTxDetails.items && selectedTxDetails.items.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-xs font-black uppercase text-muted-foreground">Detalle de Productos</p>
                     <div className="border rounded-xl bg-white overflow-hidden">
                       <Table>
-                        <TableHeader className="bg-muted/10">
-                          <TableRow>
-                            <TableHead className="text-[10px] font-bold uppercase">Ítem</TableHead>
-                            <TableHead className="text-center text-[10px] font-bold uppercase">Cant.</TableHead>
-                            <TableHead className="text-right text-[10px] font-bold uppercase">Subtotal</TableHead>
-                          </TableRow>
-                        </TableHeader>
+                        <TableHeader className="bg-muted/10"><TableRow><TableHead>Ítem</TableHead><TableHead className="text-center">Cant.</TableHead><TableHead className="text-right">Subtotal</TableHead></TableRow></TableHeader>
                         <TableBody>
                           {selectedTxDetails.items.map((item: any, idx: number) => (
                             <TableRow key={idx}>
@@ -623,33 +740,29 @@ function TransactionsContent() {
                 )}
               </div>
             )}
-            <DialogFooter>
-              <Button onClick={() => setSelectedTxDetails(null)} className="w-full font-bold">Cerrar</Button>
-            </DialogFooter>
+            <DialogFooter><Button onClick={() => setSelectedTxDetails(null)} className="w-full font-bold">Cerrar</Button></DialogFooter>
           </DialogContent>
         </Dialog>
 
+        {/* Notification Dialog */}
         <Dialog open={isWsDialogOpen} onOpenChange={setIsWsDialogOpen}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5 text-emerald-600" /> Notificación por WhatsApp
-              </DialogTitle>
-            </DialogHeader>
+            <DialogHeader><DialogTitle className="flex items-center gap-2"><MessageSquare className="h-5 w-5 text-emerald-600" /> Notificación por WhatsApp</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
+              <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl space-y-2">
+                <p className="text-xs font-bold text-amber-800 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Verificar Remitente</p>
+                <p className="text-[11px] leading-relaxed text-amber-700">Al abrir tu aplicación de correo, asegurate de seleccionar la cuenta Remitente (De:) correspondiente a DOSIMAT antes de enviar este mensaje.</p>
+              </div>
               <div className="space-y-2">
                 <Label>Seleccionar Plantilla</Label>
                 <Select value={selectedWsTemplateId} onValueChange={setSelectedWsTemplateId}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                  <SelectContent>
-                    {wsTemplates?.map((t: any) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}
-                  </SelectContent>
+                  <SelectContent>{wsTemplates?.map((t: any) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}</SelectContent>
                 </Select>
               </div>
-
               {dynamicKeys.length > 0 && (
                 <div className="space-y-4 p-4 bg-muted/20 rounded-xl border border-dashed">
-                  <p className="text-[10px] font-black uppercase text-primary tracking-widest">Datos Requeridos por la Plantilla</p>
+                  <p className="text-[10px] font-black uppercase text-primary tracking-widest">Datos Requeridos</p>
                   <div className="grid grid-cols-1 gap-4">
                     {dynamicKeys.map(key => (
                       <div key={key} className="space-y-1">
@@ -663,16 +776,17 @@ function TransactionsContent() {
             </div>
             <DialogFooter className="border-t pt-4">
               <Button variant="outline" onClick={() => setIsWsDialogOpen(false)}>Cerrar</Button>
-              <Button 
-                onClick={handleSendWs} 
-                disabled={!selectedWsTemplateId || dynamicKeys.some(k => !dynamicValues[k])} 
-                className="bg-emerald-600 hover:bg-emerald-700 font-bold"
-              >
-                <Send className="mr-2 h-4 w-4" /> Abrir WhatsApp
-              </Button>
+              <Button onClick={handleSendWs} disabled={!selectedWsTemplateId || dynamicKeys.some(k => !dynamicValues[k])} className="bg-emerald-600 hover:bg-emerald-700 font-bold"><Send className="mr-2 h-4 w-4" /> Abrir WhatsApp</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <AlertDialog open={!!txToDelete} onOpenChange={(o) => !o && setTxToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader><AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle><AlertDialogDescription>Se revertirán todos los saldos asociados e imputaciones. Esta acción no se puede deshacer.</AlertDialogDescription></AlertDialogHeader>
+            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => { if(txToDelete) { deleteDocumentNonBlocking(doc(db, 'transactions', txToDelete.id)); setTxToDelete(null); toast({title:"Eliminado"}); } }} className="bg-destructive">Eliminar</AlertDialogAction></AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
       </SidebarInset>
       <MobileNav />

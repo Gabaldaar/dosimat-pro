@@ -31,7 +31,11 @@ import {
   Send,
   Loader2,
   Printer,
-  Edit
+  Edit,
+  Phone,
+  AlertTriangle,
+  Info,
+  ChevronRight
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import {
@@ -47,13 +51,15 @@ import {
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "../../hooks/use-toast"
-import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from "../../firebase"
+import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, useUser, updateDocumentNonBlocking } from "../../firebase"
 import { collection, doc, query, orderBy } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Textarea } from "@/components/ui/textarea"
 
 const txTypeMap: Record<string, { label: string, color: string }> = {
   sale: { label: "Venta", color: "text-blue-600 bg-blue-50" },
@@ -74,23 +80,26 @@ function CustomersContent() {
   const router = useRouter()
   const { user, userData, isUserLoading } = useUser()
   const isAdmin = userData?.role === 'Admin'
-  const isCommunicator = userData?.role === 'Communicator'
-  const isReplenisher = userData?.role === 'Replenisher'
-  const searchParams = useSearchParams()
-
+  
+  // Queries
+  const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
+  const zonesQuery = useMemoFirebase(() => collection(db, 'zones'), [db])
+  const txQuery = useMemoFirebase(() => query(collection(db, 'transactions'), orderBy('date', 'desc')), [db])
+  const emailTemplatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
+  const wsTemplatesQuery = useMemoFirebase(() => collection(db, 'whatsapp_templates'), [db])
+  
+  const { data: customers, isLoading } = useCollection(clientsQuery)
+  const { data: zones } = useCollection(zonesQuery)
+  const { data: transactions } = useCollection(txQuery)
+  const { data: emailTemplates } = useCollection(emailTemplatesQuery)
+  const { data: wsTemplates } = useCollection(wsTemplatesQuery)
+  
+  // States
   const [searchTerm, setSearchTerm] = useState("")
   const [filterBalance, setFilterBalance] = useState("all") 
   const [filterComodato, setFilterComodato] = useState("all")
   const [filterReposicion, setFilterReposicion] = useState("all")
   const [filterZone, setFilterZone] = useState("all")
-  
-  const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
-  const zonesQuery = useMemoFirebase(() => collection(db, 'zones'), [db])
-  const txQuery = useMemoFirebase(() => query(collection(db, 'transactions'), orderBy('date', 'desc')), [db])
-  
-  const { data: customers, isLoading } = useCollection(clientsQuery)
-  const { data: zones } = useCollection(zonesQuery)
-  const { data: transactions } = useCollection(txQuery)
   
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isStatementOpen, setIsStatementOpen] = useState(false)
@@ -98,13 +107,19 @@ function CustomersContent() {
   const [customerToDelete, setCustomerToDelete] = useState<any | null>(null)
   const [editingCustomer, setEditingCustomer] = useState<any>(null)
 
+  // Bulk Actions States
+  const [isBulkEmailOpen, setIsBulkEmailOpen] = useState(false)
+  const [isBulkWsOpen, setIsBulkWsOpen] = useState(false)
+  const [selectedTemplateId, setSelectedTemplateId] = useState("")
+  const [bulkStep, setBulkStep] = useState(0)
+
   const defaultFormData = {
     apellido: "",
     nombre: "",
     telefono: "",
     direccion: "",
     localidad: "",
-    provincia: "",
+    provincia: "Buenos Aires",
     pais: "Argentina",
     mail: "",
     cuit_dni: "",
@@ -120,7 +135,8 @@ function CustomersContent() {
     },
     esClienteReposicion: true,
     saldoActual: 0,
-    saldoUSD: 0
+    saldoUSD: 0,
+    zonaId: ""
   }
 
   const [formData, setFormData] = useState(defaultFormData)
@@ -179,7 +195,6 @@ function CustomersContent() {
   }, [selectedCustomerForStatement, transactions]);
 
   const handleOpenDialog = (customer?: any) => {
-    if (isCommunicator || isReplenisher) return;
     if (customer) {
       setEditingCustomer(customer)
       setFormData({ ...defaultFormData, ...customer, equipoInstalado: { ...defaultFormData.equipoInstalado, ...(customer.equipoInstalado || {}) } })
@@ -191,7 +206,6 @@ function CustomersContent() {
   }
 
   const handleSave = () => {
-    if (isCommunicator || isReplenisher) return;
     if (!formData.nombre || !formData.apellido) {
       toast({ title: "Error", description: "Nombre y Apellido son obligatorios", variant: "destructive" })
       return
@@ -208,17 +222,28 @@ function CustomersContent() {
     if (!customerToDelete) return
     deleteDocumentNonBlocking(doc(db, 'clients', customerToDelete.id))
     setCustomerToDelete(null)
-    setTimeout(() => { document.body.style.pointerEvents = 'auto' }, 100)
     toast({ title: "Cliente eliminado" })
   }
 
-  const formatClientData = (c: any) => {
+  const getClientDataText = (c: any) => {
     return `*${c.apellido}, ${c.nombre}*
 Celular: ${c.telefono || '---'} 
-Dir: ${c.direccion || ''}${c.localidad ? ' - ' + c.localidad : ''}
+Dir: ${c.direccion || ''}${c.localidad ? ' - ' + c.localidad : ''}${c.provincia ? ', ' + c.provincia : ''}
 Saldo ARS: $${Number(c.saldoActual || 0).toLocaleString('es-AR')}
 Saldo USD: u$s ${Number(c.saldoUSD || 0).toLocaleString('es-AR')}
 email: ${c.mail || '---'}`;
+  }
+
+  const handleCopyClientData = (c: any) => {
+    navigator.clipboard.writeText(getClientDataText(c));
+    toast({ title: "Copiado", description: "Ficha del cliente lista para enviar." });
+  }
+
+  const handleCopyAll = () => {
+    const text = `LISTADO DE CLIENTES - DOSIMAT PRO\n\n` + 
+      filteredCustomers.map(c => getClientDataText(c)).join('\n\n---\n\n');
+    navigator.clipboard.writeText(text);
+    toast({ title: "Listado copiado" });
   }
 
   const handleCopyStatement = () => {
@@ -237,11 +262,43 @@ email: ${c.mail || '---'}`;
     toast({ title: "Copiado", description: "Resumen de deuda listo para pegar." });
   }
 
-  const handleCopyAll = () => {
-    const text = `LISTADO DE CLIENTES - DOSIMAT PRO\n\n` + 
-      filteredCustomers.map(c => formatClientData(c)).join('\n\n---\n\n');
-    navigator.clipboard.writeText(text);
-    toast({ title: "Listado copiado" });
+  const handleBulkEmail = () => {
+    if (filteredCustomers.length === 0) return
+    setIsBulkEmailOpen(true)
+  }
+
+  const handleBulkWs = () => {
+    if (filteredCustomers.length === 0) return
+    setBulkStep(0)
+    setIsBulkWsOpen(true)
+  }
+
+  const handleSendBulkWsNext = () => {
+    if (bulkStep >= filteredCustomers.length) {
+      setIsBulkWsOpen(false)
+      return
+    }
+    const client = filteredCustomers[bulkStep]
+    const template = wsTemplates?.find(t => t.id === selectedTemplateId)
+    if (!template) return
+
+    let message = template.body
+    message = message.replace(/\{\{Nombre\}\}/g, client.nombre || "")
+    message = message.replace(/\{\{Apellido\}\}/g, client.apellido || "")
+    
+    const phone = client.telefono?.replace(/\D/g, "")
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank')
+    setBulkStep(prev => prev + 1)
+  }
+
+  const handleSendBulkEmail = () => {
+    const template = emailTemplates?.find(t => t.id === selectedTemplateId)
+    if (!template) return
+
+    const bcc = filteredCustomers.map(c => c.mail).filter(m => !!m).join(';')
+    const mailtoUrl = `mailto:?bcc=${bcc}&subject=${encodeURIComponent(template.subject)}&body=${encodeURIComponent(template.body)}`
+    window.open(mailtoUrl, '_blank')
+    setIsBulkEmailOpen(false)
   }
 
   return (
@@ -259,9 +316,9 @@ email: ${c.mail || '---'}`;
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={handleCopyAll} className="h-9 gap-2 font-bold"><Copy className="h-4 w-4" /> Copiar Todo</Button>
-                <Button variant="outline" size="sm" className="h-9 gap-2 font-bold"><Mail className="h-4 w-4" /> Mail Masivo</Button>
-                <Button variant="outline" size="sm" className="h-9 gap-2 font-bold border-emerald-200 text-emerald-700 bg-emerald-50"><MessageSquare className="h-4 w-4" /> WhatsApp Masivo</Button>
-                {!isCommunicator && !isReplenisher && (
+                <Button variant="outline" size="sm" onClick={handleBulkEmail} className="h-9 gap-2 font-bold"><Mail className="h-4 w-4" /> Mail Masivo</Button>
+                <Button variant="outline" size="sm" onClick={handleBulkWs} className="h-9 gap-2 font-bold border-emerald-200 text-emerald-700 bg-emerald-50"><MessageSquare className="h-4 w-4" /> WhatsApp Masivo</Button>
+                {!isUserLoading && isAdmin && (
                   <Button onClick={() => handleOpenDialog()} className="shadow-lg font-bold bg-primary h-9">
                     <Plus className="mr-2 h-5 w-5" /> Nuevo Cliente
                   </Button>
@@ -381,7 +438,8 @@ email: ${c.mail || '---'}`;
                         <Button variant="outline" size="icon" className="h-8 w-8 text-blue-700 border-blue-200 bg-blue-50" asChild title="Ver Historial"><Link href={`/transactions?clientId=${customer.id}`}><History className="h-3.5 w-3.5" /></Link></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenDialog(customer)} title="Editar"><Edit className="h-3.5 w-3.5" /></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => { if(customer.mail) window.open(`mailto:${customer.mail}`, '_blank'); }} title="Enviar Mail"><Mail className="h-3.5 w-3.5" /></Button>
-                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => { navigator.clipboard.writeText(formatClientData(customer)); toast({ title: "Copiado", description: "Datos estructurados listos para enviar." }); }} title="Copiar Datos"><Copy className="h-3.5 w-3.5" /></Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleCopyClientData(customer)} title="Copiar Datos"><Copy className="h-3.5 w-3.5" /></Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8" asChild title="Llamar"><a href={`tel:${customer.telefono}`}><Phone className="h-3.5 w-3.5" /></a></Button>
                         {isAdmin && (
                           <Button variant="outline" size="icon" className="h-8 w-8 text-rose-600 border-rose-200 hover:bg-rose-50" onClick={() => setCustomerToDelete(customer)} title="Eliminar"><Trash2 className="h-3.5 w-3.5" /></Button>
                         )}
@@ -393,22 +451,132 @@ email: ${c.mail || '---'}`;
             </div>
           )}
 
+          {/* New/Edit Customer Dialog with Tabs */}
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle>{editingCustomer ? 'Editar Cliente' : 'Nuevo Cliente'}</DialogTitle></DialogHeader>
-              <div className="grid grid-cols-2 gap-4 py-4">
-                <div className="space-y-2"><Label>Apellido</Label><Input value={formData.apellido} onChange={(e) => setFormData({...formData, apellido: e.target.value})} /></div>
-                <div className="space-y-2"><Label>Nombre</Label><Input value={formData.nombre} onChange={(e) => setFormData({...formData, nombre: e.target.value})} /></div>
-                <div className="space-y-2"><Label>CUIT / DNI</Label><Input value={formData.cuit_dni} onChange={(e) => setFormData({...formData, cuit_dni: e.target.value})} /></div>
-                <div className="space-y-2"><Label>Teléfono</Label><Input value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: e.target.value})} /></div>
-                <div className="col-span-2 space-y-2"><Label>Email</Label><Input value={formData.mail} onChange={(e) => setFormData({...formData, mail: e.target.value})} /></div>
-                <div className="col-span-2 space-y-2"><Label>Dirección</Label><Input value={formData.direccion} onChange={(e) => setFormData({...formData, direccion: e.target.value})} /></div>
-                <div className="space-y-2"><Label>Zona</Label><Select value={formData.zonaId} onValueChange={(v) => setFormData({...formData, zonaId: v})}><SelectTrigger><SelectValue placeholder="Zona..." /></SelectTrigger><SelectContent>{zones?.map((z: any) => (<SelectItem key={z.id} value={z.id}>{z.name}</SelectItem>))}</SelectContent></Select></div>
-                <div className="space-y-2"><Label>Localidad</Label><Input value={formData.localidad} onChange={(e) => setFormData({...formData, localidad: e.target.value})} /></div>
-                <div className="flex items-center gap-2 pt-4"><Switch checked={formData.esClienteReposicion} onCheckedChange={(v) => setFormData({...formData, esClienteReposicion: v})} /><Label>Cliente de Reposición</Label></div>
-                <div className="flex items-center gap-2 pt-4"><Switch checked={formData.equipoInstalado.enComodato} onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v}})} /><Label>Equipo en Comodato</Label></div>
-              </div>
+              <Tabs defaultValue="general" className="py-4">
+                <TabsList className="grid grid-cols-3 w-full mb-6">
+                  <TabsTrigger value="general" className="font-bold">General</TabsTrigger>
+                  <TabsTrigger value="location" className="font-bold">Ubicación</TabsTrigger>
+                  <TabsTrigger value="equipment" className="font-bold">Equipo</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="general" className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2"><Label>Apellido</Label><Input value={formData.apellido} onChange={(e) => setFormData({...formData, apellido: e.target.value})} /></div>
+                    <div className="space-y-2"><Label>Nombre</Label><Input value={formData.nombre} onChange={(e) => setFormData({...formData, nombre: e.target.value})} /></div>
+                    <div className="space-y-2"><Label>CUIT / DNI</Label><Input value={formData.cuit_dni} onChange={(e) => setFormData({...formData, cuit_dni: e.target.value})} /></div>
+                    <div className="space-y-2"><Label>Teléfono</Label><Input value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: e.target.value})} /></div>
+                    <div className="col-span-2 space-y-2"><Label>Email</Label><Input value={formData.mail} onChange={(e) => setFormData({...formData, mail: e.target.value})} /></div>
+                    <div className="flex items-center gap-2 pt-2"><Switch checked={formData.esClienteReposicion} onCheckedChange={(v) => setFormData({...formData, esClienteReposicion: v})} /><Label>Cliente de Reposición</Label></div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="location" className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2 space-y-2"><Label>Dirección</Label><Input value={formData.direccion} onChange={(e) => setFormData({...formData, direccion: e.target.value})} /></div>
+                    <div className="space-y-2"><Label>Localidad</Label><Input value={formData.localidad} onChange={(e) => setFormData({...formData, localidad: e.target.value})} /></div>
+                    <div className="space-y-2"><Label>Zona</Label><Select value={formData.zonaId} onValueChange={(v) => setFormData({...formData, zonaId: v})}><SelectTrigger><SelectValue placeholder="Zona..." /></SelectTrigger><SelectContent>{zones?.map((z: any) => (<SelectItem key={z.id} value={z.id}>{z.name}</SelectItem>))}</SelectContent></Select></div>
+                    <div className="space-y-2"><Label>Provincia</Label><Input value={formData.provincia} onChange={(e) => setFormData({...formData, provincia: e.target.value})} /></div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="equipment" className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2"><Label>Medidas Pileta</Label><Input value={formData.equipoInstalado.medidasPileta} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, medidasPileta: e.target.value}})} /></div>
+                    <div className="space-y-2"><Label>Volumen (Lts)</Label><Input type="number" value={formData.equipoInstalado.volumen} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, volumen: Number(e.target.value)}})} /></div>
+                    <div className="space-y-2"><Label>Modelo Equipo</Label><Input value={formData.equipoInstalado.modeloEquipo} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, modeloEquipo: e.target.value}})} /></div>
+                    <div className="flex items-center gap-2 pt-8"><Switch checked={formData.equipoInstalado.enComodato} onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v}})} /><Label>Equipo en Comodato</Label></div>
+                    <div className="col-span-2 space-y-2"><Label>Notas de Equipo</Label><Textarea value={formData.equipoInstalado.notas} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, notas: e.target.value}})} /></div>
+                  </div>
+                </TabsContent>
+              </Tabs>
               <DialogFooter><Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button><Button onClick={handleSave}>Guardar</Button></DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Bulk Email Dialog */}
+          <Dialog open={isBulkEmailOpen} onOpenChange={setIsBulkEmailOpen}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader><DialogTitle>Envío Masivo de Email</DialogTitle></DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl space-y-2">
+                  <p className="text-xs font-bold text-blue-800 flex items-center gap-2"><Info className="h-4 w-4" /> Nota del sistema</p>
+                  <p className="text-[11px] leading-relaxed text-blue-700">Nota: En los envíos masivos, los marcadores dinámicos (como el nombre o saldo) no se personalizarán para cada cliente. Sin embargo, los precios de productos y los datos que ingreses arriba sí se actualizarán automáticamente.</p>
+                </div>
+                
+                <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl space-y-2">
+                  <p className="text-xs font-bold text-amber-800 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Verificar Remitente</p>
+                  <p className="text-[11px] leading-relaxed text-amber-700">Al abrir tu aplicación de correo, asegurate de seleccionar la cuenta Remitente (De:) correspondiente a DOSIMAT antes de enviar este mensaje.</p>
+                </div>
+
+                <div className="space-y-2 pt-4">
+                  <Label>Seleccionar Plantilla</Label>
+                  <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                    <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                    <SelectContent>{emailTemplates?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+
+                {selectedTemplateId && emailTemplates && (
+                  <div className="p-4 border rounded-xl bg-muted/10 space-y-2">
+                    <p className="text-[10px] font-black uppercase text-muted-foreground">Vista Previa</p>
+                    <p className="text-sm font-bold">{emailTemplates.find(t => t.id === selectedTemplateId)?.subject}</p>
+                    <div className="text-xs italic text-muted-foreground line-clamp-4">{emailTemplates.find(t => t.id === selectedTemplateId)?.body}</div>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsBulkEmailOpen(false)}>Cerrar</Button>
+                <Button disabled={!selectedTemplateId} onClick={handleSendBulkEmail} className="bg-primary font-bold">Abrir Email App ({filteredCustomers.filter(c => c.mail).length} destinatarios)</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Bulk WhatsApp Dialog */}
+          <Dialog open={isBulkWsOpen} onOpenChange={setIsBulkWsOpen}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader><DialogTitle>WhatsApp Masivo (Secuencial)</DialogTitle></DialogHeader>
+              <div className="space-y-4 py-4">
+                {bulkStep === 0 ? (
+                  <>
+                    <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
+                      <p className="text-[11px] leading-relaxed text-blue-700">Este proceso abrirá una ventana de WhatsApp para cada cliente filtrado uno por uno. Podrás revisar el mensaje antes de enviar en cada paso.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Seleccionar Plantilla</Label>
+                      <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                        <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                        <SelectContent>{wsTemplates?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-6 text-center py-6">
+                    <Progress value={(bulkStep / filteredCustomers.length) * 100} className="h-2" />
+                    <div className="space-y-2">
+                      <h3 className="text-2xl font-black">Paso {bulkStep} de {filteredCustomers.length}</h3>
+                      <p className="text-muted-foreground">Cliente actual: <b>{filteredCustomers[bulkStep-1]?.apellido}, {filteredCustomers[bulkStep-1]?.nombre}</b></p>
+                    </div>
+                    <div className="p-4 bg-muted/20 rounded-xl text-left italic text-sm">
+                      "{wsTemplates?.find(t => t.id === selectedTemplateId)?.body.replace(/\{\{Nombre\}\}/g, filteredCustomers[bulkStep-1]?.nombre || "")}"
+                    </div>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                {bulkStep === 0 ? (
+                  <Button disabled={!selectedTemplateId} onClick={() => setBulkStep(1)} className="w-full bg-emerald-600 font-bold">Comenzar Secuencia</Button>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 w-full">
+                    <Button variant="outline" onClick={() => setIsBulkWsOpen(false)}>Cancelar</Button>
+                    <Button onClick={handleSendBulkWsNext} className="bg-emerald-600 font-bold">
+                      {bulkStep < filteredCustomers.length ? "Siguiente WhatsApp" : "Finalizar"}
+                    </Button>
+                  </div>
+                )}
+              </DialogFooter>
             </DialogContent>
           </Dialog>
 
@@ -457,7 +625,7 @@ email: ${c.mail || '---'}`;
         </SidebarInset>
       </div>
 
-      {/* VISTA DE IMPRESIÓN */}
+      {/* PRINT VIEW */}
       {selectedCustomerForStatement && (
         <div className="print-only w-full p-8 font-sans text-slate-900 bg-white">
           <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
