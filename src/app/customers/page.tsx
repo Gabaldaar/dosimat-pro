@@ -232,22 +232,6 @@ function CustomersContent() {
     toast({ title: "Cliente eliminado" })
   }
 
-  const getClientDataText = (c: any) => {
-    return `*${c.apellido}, ${c.nombre}*\nCelular: ${c.telefono || '---'}\nDir: ${c.direccion || ''}${c.localidad ? ' - ' + c.localidad : ''}${c.provincia ? ', ' + c.provincia : ''}\nSaldo ARS: $${Number(c.saldoActual || 0).toLocaleString('es-AR')}\nSaldo USD: u$s ${Number(c.saldoUSD || 0).toLocaleString('es-AR')}\nemail: ${c.mail || '---'}`;
-  }
-
-  const handleCopyClientData = (c: any) => {
-    navigator.clipboard.writeText(getClientDataText(c));
-    toast({ title: "Copiado", description: "Ficha del cliente lista para enviar." });
-  }
-
-  const handleCopyAll = () => {
-    const text = `LISTADO DE CLIENTES - DOSIMAT PRO\n\n` + 
-      filteredCustomers.map(c => getClientDataText(c)).join('\n\n---\n\n');
-    navigator.clipboard.writeText(text);
-    toast({ title: "Listado copiado" });
-  }
-
   const escapeRegExp = (string: string) => {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
@@ -342,6 +326,7 @@ function CustomersContent() {
     const allEmails = new Set<string>();
     filteredCustomers.forEach(c => {
       if (!c.mail) return;
+      // Descomponemos por ;, coma o espacio
       const parts = c.mail.split(/[;, ]+/);
       parts.forEach(p => {
         const cleaned = p.trim().toLowerCase();
@@ -364,22 +349,6 @@ function CustomersContent() {
     window.open(mailtoUrl, '_blank');
     setIsBulkEmailOpen(false);
   };
-
-  const handleCopyStatement = () => {
-    if (!selectedCustomerForStatement || pendingOperations.length === 0) return;
-    const now = new Date().toLocaleDateString('es-AR');
-    let text = `*RESUMEN DE CUENTA - DOSIMAT PRO*\nCliente: ${selectedCustomerForStatement.apellido}, ${selectedCustomerForStatement.nombre}\nFecha: ${now}\n\n*DETALLE DE DEUDA:*\n`;
-    pendingOperations.forEach(op => {
-      const info = txTypeMap[op.type] || { label: op.type };
-      const symbol = op.currency === 'USD' ? 'u$s' : '$';
-      text += `- ${formatLocalDate(op.date)} | ${info.label}: *${symbol} ${Math.abs(op.pendingAmount).toLocaleString('es-AR')}*\n`;
-    });
-    text += `\n*TOTAL ADEUDADO:*`;
-    if (Math.abs(selectedCustomerForStatement.saldoActual) > 0) text += `\nARS: *$${Math.abs(selectedCustomerForStatement.saldoActual).toLocaleString('es-AR')}*`;
-    if (Math.abs(selectedCustomerForStatement.saldoUSD) > 0) text += `\nUSD: *u$s ${Math.abs(selectedCustomerForStatement.saldoUSD).toLocaleString('es-AR')}*`;
-    navigator.clipboard.writeText(text);
-    toast({ title: "Copiado", description: "Resumen de deuda listo para pegar." });
-  }
 
   const activeTemplate = useMemo(() => {
     const all = [...(emailTemplates || []), ...(wsTemplates || [])];
@@ -413,7 +382,6 @@ function CustomersContent() {
                 </h1>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" onClick={handleCopyAll} className="h-9 gap-2 font-bold"><Copy className="h-4 w-4" /> Copiar Todo</Button>
                 <Button variant="outline" size="sm" onClick={() => { setBulkStep(0); setDynamicValues({}); setSelectedTemplateId(""); setIsBulkEmailOpen(true); }} className="h-9 gap-2 font-bold"><Mail className="h-4 w-4" /> Mail Masivo</Button>
                 <Button variant="outline" size="sm" onClick={() => { setBulkStep(0); setDynamicValues({}); setSelectedTemplateId(""); setIsBulkWsOpen(true); }} className="h-9 gap-2 font-bold border-emerald-200 text-emerald-700 bg-emerald-50"><MessageSquare className="h-4 w-4" /> WhatsApp Masivo</Button>
                 {isAdmin && (
@@ -537,8 +505,6 @@ function CustomersContent() {
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenDialog(customer)} title="Editar"><Edit className="h-3.5 w-3.5" /></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => { if(customer.mail) { setSelectedCommCustomer(customer); setDynamicValues({}); setSelectedTemplateId(""); setIsSingleEmailOpen(true); } else { toast({title:"Sin Mail", variant:"destructive"}); } }} title="Enviar Mail (Plantilla)"><Mail className="h-3.5 w-3.5" /></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8 text-emerald-600" onClick={() => { setSelectedCommCustomer(customer); setDynamicValues({}); setSelectedTemplateId(""); setIsSingleWsOpen(true); }} title="WhatsApp (Plantilla)"><MessageSquare className="h-3.5 w-3.5" /></Button>
-                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleCopyClientData(customer)} title="Copiar Datos"><Copy className="h-3.5 w-3.5" /></Button>
-                        <Button variant="outline" size="icon" className="h-8 w-8" asChild title="Llamar"><a href={`tel:${customer.telefono}`}><Phone className="h-3.5 w-3.5" /></a></Button>
                         {isAdmin && (
                           <Button variant="outline" size="icon" className="h-8 w-8 text-rose-600 border-rose-200 hover:bg-rose-50" onClick={() => setCustomerToDelete(customer)} title="Eliminar"><Trash2 className="h-3.5 w-3.5" /></Button>
                         )}
@@ -627,21 +593,12 @@ function CustomersContent() {
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle>{isBulkEmailOpen ? 'Email Masivo' : `Enviar Email a ${selectedCommCustomer?.nombre}`}</DialogTitle></DialogHeader>
               <div className="space-y-4 py-4">
-                <Card className="bg-blue-50 border-blue-100 p-4 space-y-2">
-                  <p className="text-xs font-bold text-blue-800 flex items-center gap-2"><Info className="h-4 w-4" /> Nota del sistema</p>
-                  <p className="text-[11px] leading-relaxed text-blue-700">
-                    {isBulkEmailOpen 
-                      ? "En los envíos masivos, los marcadores dinámicos (como el nombre o saldo) no se personalizarán para cada cliente. Sin embargo, los precios de productos y los datos que ingreses arriba sí se actualizarán automáticamente. Mails duplicados o inválidos serán ignorados."
-                      : "Los marcadores dinámicos se completarán automáticamente con los datos del cliente."}
-                  </p>
-                </Card>
-                
                 <Card className="bg-amber-50 border-amber-100 p-4 space-y-2">
                   <p className="text-xs font-bold text-amber-800 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Verificar Remitente</p>
                   <p className="text-[11px] leading-relaxed text-amber-700">Al abrir tu aplicación de correo, asegurate de seleccionar la cuenta Remitente (De:) correspondiente a DOSIMAT antes de enviar este mensaje.</p>
                 </Card>
 
-                <div className="space-y-2 pt-2">
+                <div className="space-y-2">
                   <Label>Seleccionar Plantilla</Label>
                   <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
                     <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
@@ -686,11 +643,6 @@ function CustomersContent() {
               <div className="space-y-4 py-4">
                 {bulkStep === 0 || isSingleWsOpen ? (
                   <>
-                    {isBulkWsOpen && (
-                      <div className="p-4 bg-blue-50 border-blue-100 rounded-xl">
-                        <p className="text-[11px] leading-relaxed text-blue-700">Este proceso abrirá una ventana de WhatsApp para cada cliente filtrado uno por uno. Podrás revisar el mensaje antes de enviar en cada paso.</p>
-                      </div>
-                    )}
                     <div className="space-y-2">
                       <Label>Seleccionar Plantilla</Label>
                       <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
@@ -750,81 +702,11 @@ function CustomersContent() {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={isStatementOpen} onOpenChange={setIsStatementOpen}>
-            <DialogContent className="max-w-3xl">
-              <DialogHeader>
-                <div className="flex justify-between items-start pr-8">
-                  <div className="space-y-1"><DialogTitle>Estado de Cuenta</DialogTitle><DialogDescription className="font-bold text-slate-800">{selectedCustomerForStatement?.apellido}, {selectedCustomerForStatement?.nombre}</DialogDescription></div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={handleCopyStatement} className="h-8 gap-1.5 font-bold"><Copy className="h-3.5 w-3.5" /> COPIAR</Button>
-                    <Button variant="outline" size="sm" onClick={() => window.print()} className="h-8 gap-1.5 font-bold"><Printer className="h-3.5 w-3.5" /> PDF</Button>
-                  </div>
-                </div>
-              </DialogHeader>
-              <div className="py-4 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl text-center"><p className="text-[10px] font-black uppercase text-rose-700">Deuda ARS</p><p className="text-2xl font-black text-rose-800">${Math.abs(selectedCustomerForStatement?.saldoActual || 0).toLocaleString('es-AR')}</p></div>
-                  <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl text-center"><p className="text-[10px] font-black uppercase text-rose-700">Deuda USD</p><p className="text-2xl font-black text-rose-800">u$s {Math.abs(selectedCustomerForStatement?.saldoUSD || 0).toLocaleString('es-AR')}</p></div>
-                </div>
-                <ScrollArea className="max-h-[40vh] border rounded-xl bg-white overflow-hidden shadow-inner">
-                  <Table>
-                    <TableHeader className="bg-muted/30"><TableRow><TableHead className="text-[10px] font-bold uppercase">Fecha</TableHead><TableHead className="text-[10px] font-bold uppercase">Tipo</TableHead><TableHead className="text-right text-[10px] font-bold uppercase">Original</TableHead><TableHead className="text-right text-[10px] font-bold uppercase">Pendiente</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {pendingOperations.map(op => {
-                        const info = txTypeMap[op.type] || { label: op.type, color: "text-slate-600" };
-                        const symbol = op.currency === 'USD' ? 'u$s' : '$';
-                        return (
-                          <TableRow key={op.id}>
-                            <TableCell className="text-xs">{formatLocalDate(op.date)}</TableCell>
-                            <TableCell><Badge variant="outline" className={cn("text-[9px] uppercase", info.color)}>{info.label}</Badge></TableCell>
-                            <TableCell className="text-right text-xs">{symbol} {Math.abs(op.amount).toLocaleString('es-AR')}</TableCell>
-                            <TableCell className="text-right text-xs font-black text-rose-600">{symbol} {Math.abs(op.pendingAmount).toLocaleString('es-AR')}</TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </ScrollArea>
-              </div>
-            </DialogContent>
-          </Dialog>
-
           <AlertDialog open={!!customerToDelete} onOpenChange={(o) => !o && setCustomerToDelete(null)}>
             <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle><AlertDialogDescription>Se borrará permanentemente a <b>{customerToDelete?.apellido}, {customerToDelete?.nombre}</b>.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={confirmDelete} className="bg-destructive">Eliminar</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
           </AlertDialog>
         </SidebarInset>
       </div>
-
-      {/* PRINT VIEW */}
-      {selectedCustomerForStatement && (
-        <div className="print-only w-full p-8 font-sans text-slate-900 bg-white">
-          <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
-            <div><h1 className="text-2xl font-black uppercase">Estado de Cuenta</h1><p className="text-sm font-bold">Cliente: {selectedCustomerForStatement.apellido}, {selectedCustomerForStatement.nombre}</p></div>
-            <div className="text-right"><p className="text-[10px] font-black uppercase text-slate-400">Dosimat Pro System</p><p className="text-xs font-bold">{new Date().toLocaleDateString('es-AR')}</p></div>
-          </div>
-          <div className="grid grid-cols-2 gap-6 mb-8">
-            <div className="p-4 border-2 border-slate-900 rounded-xl bg-slate-50"><h2 className="text-[10px] font-black uppercase mb-1">TOTAL ADEUDADO (ARS)</h2><p className="text-3xl font-black text-rose-700">${Math.abs(selectedCustomerForStatement.saldoActual || 0).toLocaleString('es-AR')}</p></div>
-            <div className="p-4 border-2 border-slate-900 rounded-xl bg-slate-50"><h2 className="text-[10px] font-black uppercase mb-1">TOTAL ADEUDADO (USD)</h2><p className="text-3xl font-black text-rose-700">u$s {Math.abs(selectedCustomerForStatement.saldoUSD || 0).toLocaleString('es-AR')}</p></div>
-          </div>
-          <Table className="border-2 border-slate-900">
-            <TableHeader className="bg-slate-900"><TableRow><TableHead className="text-white font-black uppercase">Fecha</TableHead><TableHead className="text-white font-black uppercase">Operación</TableHead><TableHead className="text-white font-black uppercase text-right">Monto Original</TableHead><TableHead className="text-white font-black uppercase text-right">Saldo Pendiente</TableHead></TableRow></TableHeader>
-            <TableBody>
-              {pendingOperations.map((op, idx) => {
-                const info = txTypeMap[op.type] || { label: op.type };
-                const symbol = op.currency === 'USD' ? 'u$s' : '$';
-                return (
-                  <TableRow key={idx} className="border-b border-slate-300">
-                    <td className="p-2 border border-slate-900">{formatLocalDate(op.date)}</td>
-                    <td className="p-2 border border-slate-900 uppercase font-bold">{info.label}</td>
-                    <td className="p-2 border border-slate-900 text-right">{symbol} {Math.abs(op.amount).toLocaleString('es-AR')}</td>
-                    <td className="p-2 border border-slate-900 text-right font-black text-rose-700">{symbol} {Math.abs(op.pendingAmount).toLocaleString('es-AR')}</td>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
-      )}
       <MobileNav />
     </div>
   )
