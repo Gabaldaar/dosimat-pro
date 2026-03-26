@@ -125,6 +125,20 @@ function TransactionsContent() {
   const [filterFlow, setFilterFlow] = useState("all")
   const [itemFilterCategory, setItemFilterCategory] = useState("all")
 
+  // Observador de seguridad para desbloquear el puntero
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      if (document.body.style.pointerEvents === 'none') {
+        const anyDialogOpen = !!selectedTxDetails || !!txToDelete || isWsDialogOpen || isMailDialogOpen;
+        if (!anyDialogOpen) {
+          document.body.style.pointerEvents = 'auto';
+        }
+      }
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+    return () => observer.disconnect();
+  }, [selectedTxDetails, txToDelete, isWsDialogOpen, isMailDialogOpen]);
+
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
@@ -209,7 +223,7 @@ function TransactionsContent() {
   }
 
   const handleStartEdit = (tx: any) => {
-    setSelectedTxDetails(null); // Asegurar que la ficha esté cerrada
+    setSelectedTxDetails(null); 
     setEditingTx(tx);
     setSelectedCustomerId(tx.clientId || "none");
     setOperationDate(tx.date.split('T')[0]);
@@ -489,7 +503,7 @@ function TransactionsContent() {
     setTimeout(() => {
       if (type === 'ws') setIsWsDialogOpen(true);
       else setIsEmailDialogOpen(true);
-    }, 100);
+    }, 150);
   }
 
   const handleSendComm = (type: 'ws' | 'mail') => {
@@ -829,7 +843,7 @@ function TransactionsContent() {
                                 {isAdmin && (
                                   <>
                                     <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleStartEdit(tx), 100); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
-                                    <DropdownMenuItem className="text-destructive" onSelect={(e) => { e.preventDefault(); setTimeout(() => setTxToDelete(tx), 100); }}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
+                                    <DropdownMenuItem className="text-destructive font-bold" onSelect={(e) => { e.preventDefault(); setTimeout(() => setTxToDelete(tx), 100); }}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
                                   </>
                                 )}
                               </DropdownMenuContent>
@@ -874,7 +888,10 @@ function TransactionsContent() {
                               <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'ws'); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp</DropdownMenuItem>
                               <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleCopyTxDetail(tx); }}><Copy className="h-4 w-4 mr-2" /> Copiar</DropdownMenuItem>
                               {isAdmin && (
-                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleStartEdit(tx), 100); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
+                                <>
+                                  <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleStartEdit(tx), 100); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
+                                  <DropdownMenuItem className="text-destructive font-bold" onSelect={(e) => { e.preventDefault(); setTimeout(() => setTxToDelete(tx), 100); }}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
+                                </>
                               )}
                             </DropdownMenuContent>
                           </DropdownMenu>

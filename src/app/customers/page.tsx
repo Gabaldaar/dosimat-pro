@@ -726,7 +726,7 @@ function CustomersContent() {
                       <div className="space-y-2">
                         <Label className="text-[10px] font-black uppercase text-muted-foreground">Vista Previa</Label>
                         <div className="p-4 border rounded-xl bg-white italic text-sm text-slate-700 shadow-inner whitespace-pre-wrap">
-                          {replaceMarkers(activeTemplate.body, selectedCommCustomer || filteredCustomers[0], dynamicValues)}
+                          {replaceMarkers(templateType === 'whatsapp' ? activeTemplate.body : "", selectedCommCustomer || filteredCustomers[0], dynamicValues)}
                         </div>
                       </div>
                     )}
