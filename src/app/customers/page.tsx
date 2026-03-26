@@ -374,7 +374,6 @@ email: ${c.mail || '---'}`;
     const template = emailTemplates?.find(t => t.id === selectedTemplateId);
     if (!template) return;
 
-    // Filter unique and valid emails
     const uniqueEmails = Array.from(new Set(
       filteredCustomers
         .map(c => c.mail?.trim().toLowerCase())
@@ -614,7 +613,7 @@ email: ${c.mail || '---'}`;
                     <div className="space-y-2"><Label>Medidas Pileta</Label><Input value={formData.equipoInstalado.medidasPileta} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, medidasPileta: e.target.value}})} /></div>
                     <div className="space-y-2"><Label>Volumen (Lts)</Label><Input type="number" value={formData.equipoInstalado.volumen} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, volumen: Number(e.target.value)}})} /></div>
                     <div className="space-y-2"><Label>Modelo Equipo</Label><Input value={formData.equipoInstalado.modeloEquipo} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, modeloEquipo: e.target.value}})} /></div>
-                    <div className="col-span-2 space-y-2"><Label>Notas de Equipo</Label><Textarea value={formData.equipoInstalado.notas} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, notas: e.target.value}})} /></div>
+                    <div className="col-span-2 space-y-2"><Label>Notas de Equipo</Label><Textarea value={formData.equipoInstalado.notes} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, notes: e.target.value}})} /></div>
                   </div>
                 </TabsContent>
               </Tabs>

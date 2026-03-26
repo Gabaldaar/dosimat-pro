@@ -6,7 +6,7 @@ import { useSearchParams, useRouter } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -217,6 +217,9 @@ function TransactionsContent() {
       const txId = Math.random().toString(36).substring(2, 11)
       const finalAmount = Number(manualAmount) * (activeTab === 'adjustment' ? Number(adjustmentSign) : activeTab === 'Expense' ? -1 : 1)
       
+      const acc = manualAccountId !== "pending" ? accounts?.find(a => a.id === manualAccountId) : null;
+      const accountBalanceAfter = (Number(acc?.initialBalance || 0)) + finalAmount;
+
       const txData = { 
         id: txId, 
         date: finalDateStr, 
@@ -229,11 +232,8 @@ function TransactionsContent() {
         paidAmount: activeTab === 'cobro' ? finalAmount : 0, 
         pendingAmount: (activeTab === 'adjustment' && finalAmount < 0) ? finalAmount : 0,
         imputations: activeTab === 'cobro' ? imputations : null,
-        accountBalanceAfter: 0 // Will be calculated by looking at current balance
+        accountBalanceAfter
       }
-
-      const acc = manualAccountId !== "pending" ? accounts?.find(a => a.id === manualAccountId) : null;
-      txData.accountBalanceAfter = (Number(acc?.initialBalance || 0)) + finalAmount;
 
       setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
       
@@ -260,6 +260,7 @@ function TransactionsContent() {
         const txId = Math.random().toString(36).substring(2, 11);
         
         const acc = destinationAccounts[curr] !== "pending" ? accounts?.find(a => a.id === destinationAccounts[curr]) : null;
+        const accountBalanceAfter = (Number(acc?.initialBalance || 0)) + paid;
         
         const txData = { 
           id: txId, 
@@ -274,7 +275,7 @@ function TransactionsContent() {
           financialAccountId: (destinationAccounts[curr]==="pending" || paid === 0) ? null : destinationAccounts[curr], 
           items: selectedItems.filter(i => i.currency === curr), 
           pendingAmount: -debt,
-          accountBalanceAfter: (Number(acc?.initialBalance || 0)) + paid
+          accountBalanceAfter
         }
         setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
         if (destinationAccounts[curr] !== "pending" && paid !== 0) updateDocumentNonBlocking(doc(db, 'financial_accounts', destinationAccounts[curr]), { initialBalance: increment(paid) });
