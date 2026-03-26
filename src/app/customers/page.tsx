@@ -71,6 +71,7 @@ const txTypeMap: Record<string, { label: string, color: string }> = {
   refill: { label: "Reposición", color: "text-cyan-600 bg-cyan-50" },
   service: { label: "Técnico", color: "text-indigo-600 bg-indigo-50" },
   adjustment: { label: "Ajuste", color: "text-slate-600 bg-slate-50" },
+  Reposición: { label: "Reposición", color: "text-cyan-600 bg-cyan-50" },
 }
 
 function CustomersContent() {
@@ -209,6 +210,11 @@ function CustomersContent() {
     setIsDialogOpen(true)
   }
 
+  const handleOpenStatement = (customer: any) => {
+    setSelectedCustomerForStatement(customer);
+    setIsStatementOpen(true);
+  }
+
   const handleSave = () => {
     if (!formData.nombre || !formData.apellido) {
       toast({ title: "Error", description: "Nombre y Apellido son obligatorios", variant: "destructive" })
@@ -323,7 +329,6 @@ function CustomersContent() {
     const allEmailsSet = new Set<string>();
     filteredCustomers.forEach(c => {
       if (!c.mail) return;
-      // Normalizar cada correo individualmente incluso si vienen en lista
       const parts = c.mail.split(/[;, ]+/);
       parts.forEach(p => {
         const cleaned = p.trim().toLowerCase();
@@ -468,7 +473,6 @@ function CustomersContent() {
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               {filteredCustomers.map((customer: any) => {
                 const zone = zones?.find(z => z.id === customer.zonaId);
-                const hasDebt = (customer.saldoActual || 0) < 0 || (customer.saldoUSD || 0) < 0;
                 return (
                   <Card key={customer.id} className="glass-card group relative overflow-hidden">
                     <div className={cn("absolute top-0 left-0 w-1.5 h-full", customer.equipoInstalado?.enComodato ? "bg-amber-500" : "bg-primary")} />
@@ -493,7 +497,7 @@ function CustomersContent() {
                       </div>
                       <div className="flex flex-wrap gap-1.5">
                         <Button variant="default" size="sm" className="h-8 gap-1.5 font-bold px-4" asChild><Link href={`/transactions?clientId=${customer.id}&mode=new`}><PlusCircle className="h-3.5 w-3.5" /> OPERAR</Link></Button>
-                        <Button variant="outline" size="icon" className="h-8 w-8 text-rose-600 border-rose-200 bg-rose-50 hover:bg-rose-100" onClick={() => { setSelectedCustomerForStatement(customer); setIsStatementOpen(true); }} title="Estado de Cuenta"><Receipt className="h-3.5 w-3.5" /></Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8 text-rose-600 border-rose-200 bg-rose-50 hover:bg-rose-100" onClick={() => handleOpenStatement(customer)} title="Estado de Cuenta"><Receipt className="h-3.5 w-3.5" /></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => window.open(`https://google.com/maps/search/?api=1&query=${encodeURIComponent(customer.direccion + ", " + customer.localidad)}`, '_blank')} title="Ver Mapa"><MapPinned className="h-3.5 w-3.5" /></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8 text-emerald-700 border-emerald-200 bg-emerald-50" onClick={() => window.open(`https://wa.me/${customer.telefono?.replace(/\D/g, '')}`, '_blank')} title="WhatsApp Directo"><PhoneCall className="h-3.5 w-3.5" /></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8 text-blue-700 border-blue-200 bg-blue-50" asChild title="Ver Historial"><Link href={`/transactions?clientId=${customer.id}`}><History className="h-3.5 w-3.5" /></Link></Button>
@@ -501,7 +505,7 @@ function CustomersContent() {
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => { if(customer.mail) { setSelectedCommCustomer(customer); setDynamicValues({}); setSelectedTemplateId(""); setIsSingleEmailOpen(true); } else { toast({title:"Sin Mail", variant:"destructive"}); } }} title="Enviar Mail (Plantilla)"><Mail className="h-3.5 w-3.5" /></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8 text-emerald-600" onClick={() => { setSelectedCommCustomer(customer); setDynamicValues({}); setSelectedTemplateId(""); setIsSingleWsOpen(true); }} title="WhatsApp (Plantilla)"><MessageSquare className="h-3.5 w-3.5" /></Button>
                         {isAdmin && (
-                          <Button variant="outline" size="icon" className="h-8 w-8 text-rose-600 border-rose-200 hover:bg-rose-50" onClick={() => setCustomerToDelete(customer)} title="Eliminar"><Trash2 className="h-3.5 w-3.5" /></Button>
+                          <Button variant="outline" size="icon" className="h-8 w-8 text-rose-600 border-rose-200 hover:bg-rose-100" onClick={() => setCustomerToDelete(customer)} title="Eliminar"><Trash2 className="h-3.5 w-3.5" /></Button>
                         )}
                       </div>
                     </CardContent>
@@ -577,7 +581,7 @@ function CustomersContent() {
                     <div className="space-y-2"><Label>Medidas Pileta</Label><Input value={formData.equipoInstalado.medidasPileta} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, medidasPileta: e.target.value}})} /></div>
                     <div className="space-y-2"><Label>Volumen (Lts)</Label><Input type="number" value={formData.equipoInstalado.volumen} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, volumen: Number(e.target.value)}})} /></div>
                     <div className="space-y-2"><Label>Modelo Equipo</Label><Input value={formData.equipoInstalado.modeloEquipo} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, modeloEquipo: e.target.value}})} /></div>
-                    <div className="col-span-2 space-y-2"><Label>Notas de Equipo</Label><Textarea value={formData.equipoInstalado.notas} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, notas: e.target.value}})} /></div>
+                    <div className="col-span-2 space-y-2"><Label>Notas de Equipo</Label><Textarea value={formData.equipoInstalado.notes} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, notes: e.target.value}})} /></div>
                   </div>
                 </TabsContent>
               </Tabs>

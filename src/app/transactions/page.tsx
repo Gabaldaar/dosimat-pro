@@ -36,7 +36,9 @@ import {
   AlertTriangle,
   CheckCircle2,
   Check,
-  MessageSquare
+  MessageSquare,
+  ChevronRight,
+  Wallet
 } from "lucide-react"
 import { useToast } from "../../hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -78,6 +80,7 @@ const txTypeMap: Record<string, { label: string, icon: any, color: string, descr
   adjustment: { label: "Ajuste", icon: Settings2, color: "text-slate-600 bg-slate-50", description: "Corrección manual de saldo." },
   Adjustment: { label: "Ajuste", icon: RefreshCw, color: "text-slate-600 bg-slate-50", description: "Ajuste manual." },
   Expense: { label: "Gasto", icon: ArrowDownLeft, color: "text-rose-600 bg-rose-50", description: "Gasto manual registrado." },
+  Reposición: { label: "Reposición", icon: Droplet, color: "text-cyan-600 bg-cyan-50", description: "Servicio de reposición de químicos." },
 }
 
 function getLocalDateString() {
@@ -209,7 +212,7 @@ function TransactionsContent() {
     setEditingTx(tx);
     setSelectedCustomerId(tx.clientId || "none");
     setOperationDate(tx.date.split('T')[0]);
-    setActiveTab(tx.type);
+    setActiveTab(tx.type === 'Reposición' ? 'refill' : tx.type);
     setTxDescription(tx.description || "");
     
     if (['cobro', 'adjustment', 'Expense'].includes(tx.type)) {
@@ -290,7 +293,7 @@ function TransactionsContent() {
           id: txId, 
           date: finalDateStr, 
           clientId: selectedCustomerId === "none" ? null : selectedCustomerId, 
-          type: activeTab, 
+          type: activeTab === 'refill' ? 'Reposición' : activeTab, 
           amount: -Number(total), 
           paidAmount: paid, 
           debtAmount: debt, 
@@ -482,8 +485,10 @@ function TransactionsContent() {
     setSelectedTxForComm(tx);
     setSelectedTemplateId("");
     setDynamicValues({});
-    if (type === 'ws') setIsWsDialogOpen(true);
-    else setIsEmailDialogOpen(true);
+    setTimeout(() => {
+      if (type === 'ws') setIsWsDialogOpen(true);
+      else setIsEmailDialogOpen(true);
+    }, 100);
   }
 
   const handleSendComm = (type: 'ws' | 'mail') => {
@@ -764,7 +769,6 @@ function TransactionsContent() {
                  <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => { setFilterCustomer("all"); setFilterAccount("all"); setFilterStartDate(""); setFilterEndDate(""); setFilterOpType("all"); setFilterFlow("all"); }}><FilterX className="h-4 w-4" /></Button>
             </Card>
 
-            {/* VISTA DESKTOP: TABLA */}
             <div className="hidden md:block">
               <Card className="glass-card overflow-hidden shadow-sm">
                 <Table>
@@ -817,14 +821,14 @@ function TransactionsContent() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => setSelectedTxDetails(tx), 150); }}><Info className="h-4 w-4 mr-2" /> Ficha completa</DropdownMenuItem>
-                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleOpenCommDialog(tx, 'ws'), 150); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp (Plantilla)</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => setSelectedTxDetails(tx), 100); }}><Info className="h-4 w-4 mr-2" /> Ficha completa</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'ws'); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp (Plantilla)</DropdownMenuItem>
                                 <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleCopyTxDetail(tx); }}><Copy className="h-4 w-4 mr-2" /> Copiar Detalle</DropdownMenuItem>
-                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleOpenCommDialog(tx, 'mail'), 150); }}><Mail className="h-4 w-4 mr-2" /> Enviar mail</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'mail'); }}><Mail className="h-4 w-4 mr-2" /> Enviar mail</DropdownMenuItem>
                                 {isAdmin && (
                                   <>
                                     <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleStartEdit(tx); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
-                                    <DropdownMenuItem className="text-destructive" onSelect={(e) => { e.preventDefault(); setTimeout(() => setTxToDelete(tx), 150); }}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
+                                    <DropdownMenuItem className="text-destructive" onSelect={(e) => { e.preventDefault(); setTimeout(() => setTxToDelete(tx), 100); }}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
                                   </>
                                 )}
                               </DropdownMenuContent>
@@ -838,7 +842,6 @@ function TransactionsContent() {
               </Card>
             </div>
 
-            {/* VISTA MÓVIL: TARJETAS */}
             <div className="md:hidden space-y-4">
               {filteredTransactions.map((tx: any) => {
                 const cust = customers?.find(c => c.id === tx.clientId);
@@ -865,8 +868,8 @@ function TransactionsContent() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => setSelectedTxDetails(tx), 150); }}><Info className="h-4 w-4 mr-2" /> Ver Ficha</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleOpenCommDialog(tx, 'ws'), 150); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => setSelectedTxDetails(tx), 100); }}><Info className="h-4 w-4 mr-2" /> Ver Ficha</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'ws'); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp</DropdownMenuItem>
                             <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleCopyTxDetail(tx); }}><Copy className="h-4 w-4 mr-2" /> Copiar</DropdownMenuItem>
                             {isAdmin && (
                               <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleStartEdit(tx); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
@@ -922,12 +925,11 @@ function TransactionsContent() {
           </div>
         )}
 
-        {/* Diálogos */}
         <Dialog open={!!selectedTxDetails} onOpenChange={(o) => !o && setSelectedTxDetails(null)}>
-          <DialogContent className="max-w-3xl">
-            <DialogHeader>
-              <div className="flex justify-between items-start">
-                <div className="space-y-1">
+          <DialogContent className="max-w-3xl max-h-[95vh] overflow-y-auto p-0 md:p-6">
+            <DialogHeader className="p-4 pb-2 border-b md:border-none">
+              <div className="flex justify-between items-start w-full">
+                <div className="space-y-1 pr-8">
                   <DialogTitle className="text-xl font-black uppercase flex items-center gap-2">
                     {selectedTxDetails && (
                       <>
@@ -938,15 +940,15 @@ function TransactionsContent() {
                   </DialogTitle>
                   <DialogDescription className="font-bold text-slate-800">{selectedTxDetails && formatLocalDate(selectedTxDetails.date)}</DialogDescription>
                 </div>
-                <div className="flex gap-2">
+                <div className="hidden md:flex gap-2">
                   <Button variant="outline" size="sm" onClick={() => handleCopyTxDetail(selectedTxDetails)} className="h-8 font-bold gap-2"><Copy className="h-3.5 w-3.5" /> COPIAR</Button>
                   <Button variant="outline" size="sm" onClick={() => handleOpenCommDialog(selectedTxDetails, 'ws')} className="h-8 font-bold gap-2 border-emerald-200 text-emerald-700 bg-emerald-50"><MessageSquare className="h-3.5 w-3.5" /> WHATSAPP</Button>
                 </div>
               </div>
             </DialogHeader>
             {selectedTxDetails && (
-              <div className="py-4 space-y-6">
-                <div className="grid grid-cols-3 gap-4">
+              <div className="px-4 py-6 md:py-4 space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="p-4 bg-muted/20 rounded-2xl border space-y-1">
                     <p className="text-[10px] font-black uppercase text-muted-foreground">Monto Total</p>
                     <p className="text-2xl font-black">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Math.abs(selectedTxDetails.amount).toLocaleString()}</p>
@@ -955,33 +957,49 @@ function TransactionsContent() {
                     <p className="text-[10px] font-black uppercase text-emerald-700">Abonado</p>
                     <p className="text-2xl font-black text-emerald-800">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Number(selectedTxDetails.paidAmount || 0).toLocaleString()}</p>
                   </div>
-                  <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl space-y-1">
-                    <p className="text-[10px] font-black uppercase text-rose-700">Pendiente</p>
-                    <p className="text-2xl font-black text-rose-800">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Math.abs(selectedTxDetails.pendingAmount || 0).toLocaleString()}</p>
+                  <div className={cn(
+                    "p-4 border rounded-2xl space-y-1",
+                    Math.abs(selectedTxDetails.pendingAmount || 0) < 0.01 
+                      ? "bg-slate-50 border-slate-200" 
+                      : selectedTxDetails.pendingAmount < 0 
+                        ? "bg-rose-50 border-rose-100" 
+                        : "bg-emerald-50 border-emerald-100"
+                  )}>
+                    <p className="text-[10px] font-black uppercase text-muted-foreground">Pendiente</p>
+                    <p className={cn(
+                      "text-2xl font-black",
+                      Math.abs(selectedTxDetails.pendingAmount || 0) < 0.01 
+                        ? "text-black" 
+                        : selectedTxDetails.pendingAmount < 0 
+                          ? "text-rose-800" 
+                          : "text-emerald-800"
+                    )}>{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Math.abs(selectedTxDetails.pendingAmount || 0).toLocaleString()}</p>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <p className="text-xs font-black uppercase text-muted-foreground flex items-center gap-2"><User className="h-3 w-3" /> Información del Cliente y Caja</p>
-                  <div className="p-3 border rounded-xl bg-white flex justify-between items-center shadow-sm">
-                    <span className="font-bold">{customers?.find(c => c.id === selectedTxDetails.clientId)?.apellido || 'Global'}, {customers?.find(c => c.id === selectedTxDetails.clientId)?.nombre || ''}</span>
-                    <Badge variant="secondary">{selectedTxDetails.financialAccountId ? accounts?.find(a => a.id === selectedTxDetails.financialAccountId)?.name : 'Sin Caja / A Cuenta'}</Badge>
+                  <p className="text-xs font-black uppercase text-muted-foreground flex items-center gap-2"><User className="h-3 w-3" /> Cliente y Caja</p>
+                  <div className="p-4 border rounded-xl bg-white flex flex-col md:flex-row md:justify-between md:items-center gap-2 shadow-sm">
+                    <span className="font-bold text-slate-800">{customers?.find(c => c.id === selectedTxDetails.clientId)?.apellido || 'Global'}, {customers?.find(c => c.id === selectedTxDetails.clientId)?.nombre || ''}</span>
+                    <Badge variant="secondary" className="w-fit">{selectedTxDetails.financialAccountId ? (accounts?.find(a => a.id === selectedTxDetails.financialAccountId)?.name || 'Caja') : 'A Cuenta / Sin Caja'}</Badge>
                   </div>
                 </div>
 
                 {selectedTxDetails.imputations && (
                   <div className="space-y-2">
-                    <p className="text-xs font-black uppercase text-muted-foreground">Facturas Canceladas con este Pago</p>
+                    <p className="text-xs font-black uppercase text-muted-foreground">Imputaciones Realizadas</p>
                     <div className="border rounded-xl bg-white overflow-hidden shadow-sm">
                       <Table>
-                        <TableHeader className="bg-emerald-50"><TableRow><TableHead>Fecha Factura</TableHead><TableHead>Operación</TableHead><TableHead className="text-right">Monto Aplicado</TableHead></TableRow></TableHeader>
+                        <TableHeader className="bg-emerald-50"><TableRow><TableHead className="text-[10px] font-black uppercase">Fecha Factura</TableHead><TableHead className="text-right text-[10px] font-black uppercase">Monto Aplicado</TableHead></TableRow></TableHeader>
                         <TableBody>
                           {Object.entries(selectedTxDetails.imputations as Record<string, number>).map(([tid, amount]) => {
                             const originalTx = transactions?.find(t => t.id === tid);
                             return (
                               <TableRow key={tid}>
-                                <TableCell className="text-xs">{originalTx ? formatLocalDate(originalTx.date) : "---"}</TableCell>
-                                <TableCell className="text-xs font-bold">{originalTx ? (txTypeMap[originalTx.type]?.label || originalTx.type) : "Factura original"}</TableCell>
+                                <TableCell className="text-xs">
+                                  <p className="font-bold">{originalTx ? formatLocalDate(originalTx.date) : "---"}</p>
+                                  <p className="text-[10px] text-muted-foreground uppercase">{originalTx ? (txTypeMap[originalTx.type]?.label || originalTx.type) : "Factura"}</p>
+                                </TableCell>
                                 <TableCell className="text-right font-black">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {amount.toLocaleString()}</TableCell>
                               </TableRow>
                             )
@@ -994,20 +1012,33 @@ function TransactionsContent() {
 
                 {selectedTxDetails.items && selectedTxDetails.items.length > 0 && (
                   <div className="space-y-2">
-                    <p className="text-xs font-black uppercase text-muted-foreground">Detalle de Productos</p>
+                    <p className="text-xs font-black uppercase text-muted-foreground flex items-center gap-2"><ShoppingBag className="h-3 w-3" /> Detalle de Productos</p>
                     <div className="border rounded-xl bg-white overflow-hidden shadow-sm">
-                      <Table>
-                        <TableHeader className="bg-muted/10"><TableRow><TableHead>Ítem</TableHead><TableHead className="text-center">Cant.</TableHead><TableHead className="text-right">Subtotal</TableHead></TableRow></TableHeader>
-                        <TableBody>
-                          {selectedTxDetails.items.map((item: any, idx: number) => (
-                            <TableRow key={idx}>
-                              <TableCell className="text-xs font-medium">{item.name}</TableCell>
-                              <TableCell className="text-center text-xs font-black">{item.qty}</TableCell>
-                              <TableCell className="text-right text-xs font-bold">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {(item.price * item.qty * (1 - (item.discount || 0)/100)).toLocaleString()}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                      <div className="hidden md:block">
+                        <Table>
+                          <TableHeader className="bg-muted/10"><TableRow><TableHead>Ítem</TableHead><TableHead className="text-center">Cant.</TableHead><TableHead className="text-right">Subtotal</TableHead></TableRow></TableHeader>
+                          <TableBody>
+                            {selectedTxDetails.items.map((item: any, idx: number) => (
+                              <TableRow key={idx}>
+                                <TableCell className="text-xs font-medium">{item.name}</TableCell>
+                                <TableCell className="text-center text-xs font-black">{item.qty}</TableCell>
+                                <TableCell className="text-right text-xs font-bold">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {(item.price * item.qty * (1 - (item.discount || 0)/100)).toLocaleString()}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      <div className="md:hidden divide-y">
+                        {selectedTxDetails.items.map((item: any, idx: number) => (
+                          <div key={idx} className="p-3 flex justify-between items-center bg-white">
+                            <div className="space-y-0.5">
+                              <p className="text-xs font-bold text-slate-800">{item.name}</p>
+                              <p className="text-[10px] text-muted-foreground">{item.qty} x {selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {item.price.toLocaleString()}</p>
+                            </div>
+                            <span className="text-xs font-black text-primary">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {(item.price * item.qty * (1 - (item.discount || 0)/100)).toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1015,12 +1046,19 @@ function TransactionsContent() {
                 {selectedTxDetails.description && (
                   <div className="space-y-1">
                     <p className="text-[10px] font-black uppercase text-muted-foreground">Notas</p>
-                    <div className="p-3 bg-white border border-dashed rounded-lg italic text-sm">{selectedTxDetails.description}</div>
+                    <div className="p-4 bg-muted/5 border border-dashed rounded-xl italic text-sm text-slate-700 leading-relaxed shadow-inner">"{selectedTxDetails.description}"</div>
                   </div>
                 )}
+
+                <div className="grid grid-cols-2 gap-2 md:hidden pt-4 border-t">
+                  <Button variant="outline" size="sm" onClick={() => handleCopyTxDetail(selectedTxDetails)} className="h-11 font-bold gap-2"><Copy className="h-4 w-4" /> COPIAR</Button>
+                  <Button variant="outline" size="sm" onClick={() => handleOpenCommDialog(selectedTxDetails, 'ws')} className="h-11 font-bold gap-2 border-emerald-200 text-emerald-700 bg-emerald-50"><MessageSquare className="h-4 w-4" /> WHATSAPP</Button>
+                </div>
               </div>
             )}
-            <DialogFooter><Button onClick={() => setSelectedTxDetails(null)} className="w-full font-bold">Cerrar</Button></DialogFooter>
+            <DialogFooter className="p-4 border-t bg-slate-50 md:bg-transparent">
+              <Button onClick={() => setSelectedTxDetails(null)} className="w-full font-bold h-12">Cerrar</Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
@@ -1066,7 +1104,7 @@ function TransactionsContent() {
             </div>
             <DialogFooter className="border-t pt-4">
               <Button variant="outline" onClick={() => { setIsWsDialogOpen(false); setIsEmailDialogOpen(false); }}>Cerrar</Button>
-              <Button onClick={() => handleSendComm(isWsDialogOpen ? 'ws' : 'mail')} disabled={!selectedTemplateId || dynamicKeys.some(k => !dynamicValues[k])} className={cn("font-bold", isWsDialogOpen ? "bg-emerald-600 hover:bg-emerald-700" : "bg-primary")}>
+              <Button onClick={() => handleSendComm(isWsDialogOpen ? 'ws' : 'mail')} disabled={!selectedTemplateId || dynamicKeys.some(k => !dynamicValues[k])} className={cn("font-bold h-12 md:h-10", isWsDialogOpen ? "bg-emerald-600 hover:bg-emerald-700" : "bg-primary")}>
                 {isWsDialogOpen ? <Send className="mr-2 h-4 w-4" /> : <Mail className="mr-2 h-4 w-4" />} Abrir {isWsDialogOpen ? 'WhatsApp' : 'Mail App'}
               </Button>
             </DialogFooter>
