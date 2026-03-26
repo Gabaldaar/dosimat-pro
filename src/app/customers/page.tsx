@@ -87,7 +87,7 @@ function CustomersContent() {
   const wsTemplatesQuery = useMemoFirebase(() => collection(db, 'whatsapp_templates'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   
-  const { data: customers, isLoading } = useCollection(clientsQuery)
+  const { data: customers, isLoading: loadingCustomers } = useCollection(clientsQuery)
   const { data: zones } = useCollection(zonesQuery)
   const { data: transactions } = useCollection(txQuery)
   const { data: emailTemplates } = useCollection(emailTemplatesQuery)
@@ -212,7 +212,7 @@ function CustomersContent() {
 
   const handleOpenStatement = (customer: any) => {
     setSelectedCustomerForStatement(customer);
-    setIsStatementOpen(true);
+    setTimeout(() => setIsStatementOpen(true), 50);
   }
 
   const handleSave = () => {
@@ -465,7 +465,7 @@ function CustomersContent() {
             </div>
           </section>
 
-          {isLoading ? (
+          {loadingCustomers ? (
             <div className="flex flex-col items-center justify-center h-64 gap-2"><RefreshCw className="h-8 w-8 animate-spin text-primary" /><p className="text-muted-foreground text-sm">Cargando...</p></div>
           ) : filteredCustomers.length === 0 ? (
             <Card className="p-12 text-center border-dashed border-2 bg-muted/5"><User className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" /><h3 className="text-lg font-semibold">Sin coincidencias</h3></Card>

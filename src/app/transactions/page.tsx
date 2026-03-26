@@ -209,6 +209,7 @@ function TransactionsContent() {
   }
 
   const handleStartEdit = (tx: any) => {
+    setSelectedTxDetails(null); // Asegurar que la ficha esté cerrada
     setEditingTx(tx);
     setSelectedCustomerId(tx.clientId || "none");
     setOperationDate(tx.date.split('T')[0]);
@@ -654,9 +655,9 @@ function TransactionsContent() {
                         <Select value={manualAccountId} onValueChange={setManualAccountId}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                           <SelectContent><SelectItem value="pending">A CUENTA</SelectItem>{accounts?.filter(a => a.currency === manualCurrency).map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent>
                         </Select>
-                      </div>
                     </div>
                   </div>
+                </div>
                 ) : (
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
@@ -822,12 +823,12 @@ function TransactionsContent() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => setSelectedTxDetails(tx), 100); }}><Info className="h-4 w-4 mr-2" /> Ficha completa</DropdownMenuItem>
-                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'ws'); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp (Plantilla)</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'ws'); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp</DropdownMenuItem>
                                 <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleCopyTxDetail(tx); }}><Copy className="h-4 w-4 mr-2" /> Copiar Detalle</DropdownMenuItem>
                                 <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'mail'); }}><Mail className="h-4 w-4 mr-2" /> Enviar mail</DropdownMenuItem>
                                 {isAdmin && (
                                   <>
-                                    <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleStartEdit(tx); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleStartEdit(tx), 100); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
                                     <DropdownMenuItem className="text-destructive" onSelect={(e) => { e.preventDefault(); setTimeout(() => setTxToDelete(tx), 100); }}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
                                   </>
                                 )}
@@ -861,21 +862,23 @@ function TransactionsContent() {
                             {cust ? `${cust.apellido}, ${cust.nombre}` : 'Global'}
                           </h4>
                         </div>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => setSelectedTxDetails(tx), 100); }}><Info className="h-4 w-4 mr-2" /> Ver Ficha</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'ws'); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleCopyTxDetail(tx); }}><Copy className="h-4 w-4 mr-2" /> Copiar</DropdownMenuItem>
-                            {isAdmin && (
-                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleStartEdit(tx); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => setSelectedTxDetails(tx), 100); }}><Info className="h-4 w-4 mr-2" /> Ver Ficha</DropdownMenuItem>
+                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'ws'); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp</DropdownMenuItem>
+                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleCopyTxDetail(tx); }}><Copy className="h-4 w-4 mr-2" /> Copiar</DropdownMenuItem>
+                              {isAdmin && (
+                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleStartEdit(tx), 100); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </div>
 
                       <div className="flex items-center gap-2">
