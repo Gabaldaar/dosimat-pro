@@ -249,7 +249,7 @@ function TransactionsContent() {
       if (activeTab === 'cobro') {
         Object.entries(imputations).forEach(([targetTxId, amount]) => {
           updateDocumentNonBlocking(doc(db, 'transactions', targetTxId), {
-            pendingAmount: increment(-amount)
+            pendingAmount: increment(-Number(amount))
           });
         });
       }
@@ -288,6 +288,47 @@ function TransactionsContent() {
   const resetRegisterForm = () => {
     setEditingTx(null); setSelectedCustomerId(""); setSelectedItems([]); setTxDescription(""); setManualAmount(0); setPaidAmounts({ ARS: 0, USD: 0 }); setDestinationAccounts({ ARS: "pending", USD: "pending" }); setImputations({});
   }
+
+  const handleDeleteTx = () => {
+    if (!txToDelete) return;
+    const tx = txToDelete;
+
+    // 1. Revertir Saldo de Cliente
+    if (tx.clientId) {
+      const field = tx.currency === 'USD' ? 'saldoUSD' : 'saldoActual';
+      // Restamos el monto para volver atrás. Si el monto fue positivo (cobro), restarlo aumenta la deuda.
+      // Si fue negativo (venta), restarlo restaura el saldo a favor o limpia deuda.
+      updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), {
+        [field]: increment(-Number(tx.amount || 0))
+      });
+    }
+
+    // 2. Revertir Saldo de Caja
+    if (tx.financialAccountId) {
+      // Si fue cobro (positivo), restamos el total cobrado de la caja.
+      // Si fue venta, restamos el paidAmount (lo que efectivamente entró a caja).
+      const amountToRevert = tx.type === 'cobro' ? -Number(tx.amount) : -Number(tx.paidAmount || 0);
+      updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), {
+        initialBalance: increment(amountToRevert)
+      });
+    }
+
+    // 3. Revertir Imputaciones (si es cobro)
+    if (tx.type === 'cobro' && tx.imputations) {
+      Object.entries(tx.imputations).forEach(([targetId, amount]) => {
+        // Al cobrar restamos del pendiente. Al borrar, sumamos de vuelta el monto pagado para que vuelva a figurar como deuda.
+        updateDocumentNonBlocking(doc(db, 'transactions', targetId), {
+          pendingAmount: increment(Number(amount))
+        });
+      });
+    }
+
+    // 4. Eliminar el documento
+    deleteDocumentNonBlocking(doc(db, 'transactions', tx.id));
+    
+    setTxToDelete(null);
+    toast({ title: "Operación eliminada y saldos revertidos" });
+  };
 
   const filteredTransactions = useMemo(() => {
     if (!transactions) return []
@@ -536,7 +577,7 @@ function TransactionsContent() {
                                 <TableRow key={tx.id}>
                                   <TableCell className="text-xs">{formatLocalDate(tx.date)}</TableCell>
                                   <TableCell><Badge variant="outline" className="text-[9px] uppercase">{tx.type}</Badge></TableCell>
-                                  <TableCell className="text-right font-bold text-rose-600">{manualCurrency==='USD'?'u$s':'$'} {Math.abs(tx.pendingAmount).toLocaleString()}</TableCell>
+                                  <TableCell className="text-right font-bold text-rose-600">{manualCurrency==='USD'?'u$s':'$'} {Math.abs(tx.pendingAmount || 0).toLocaleString()}</TableCell>
                                   <TableCell>
                                     <Input 
                                       type="number" 
@@ -893,8 +934,8 @@ function TransactionsContent() {
 
         <AlertDialog open={!!txToDelete} onOpenChange={(o) => { if(!o) setTxToDelete(null); }}>
           <AlertDialogContent>
-            <AlertDialogHeader><AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle><AlertDialogDescription>Se revertirán todos los saldos asociados e imputaciones. Esta acción no se puede deshacer.</AlertDialogDescription></AlertDialogHeader>
-            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => { if(txToDelete) { deleteDocumentNonBlocking(doc(db, 'transactions', txToDelete.id)); setTxToDelete(null); toast({title:"Eliminado"}); } }} className="bg-destructive">Eliminar</AlertDialogAction></AlertDialogFooter>
+            <AlertDialogHeader><AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle><AlertDialogDescription>Se revertirán todos los saldos asociados e imputaciones en clientes y cajas. Esta acción no se puede deshacer.</AlertDialogDescription></AlertDialogHeader>
+            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDeleteTx} className="bg-destructive">Eliminar y Revertir</AlertDialogAction></AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
 

@@ -374,6 +374,7 @@ email: ${c.mail || '---'}`;
     const template = emailTemplates?.find(t => t.id === selectedTemplateId);
     if (!template) return;
 
+    // Normalizar correos: sin espacios, minúsculas, y deduplicar con Set
     const uniqueEmails = Array.from(new Set(
       filteredCustomers
         .map(c => c.mail?.trim().toLowerCase())
