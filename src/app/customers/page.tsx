@@ -7,6 +7,7 @@ import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Badge as BadgeUI } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { 
   Search, 
@@ -33,7 +34,8 @@ import {
   Plus,
   CheckCircle2,
   Droplets,
-  Copy
+  Copy,
+  Printer
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import {
@@ -202,6 +204,19 @@ function CustomersContent() {
     ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [selectedCustomerForStatement, transactions]);
 
+  const activeFilters = useMemo(() => {
+    const list: { label: string, value: string }[] = [];
+    if (searchTerm) list.push({ label: 'Búsqueda', value: searchTerm });
+    if (filterBalance !== 'all') list.push({ label: 'Saldo', value: filterBalance === 'debt' ? 'Sólo Deuda' : 'Sólo a Favor' });
+    if (filterComodato !== 'all') list.push({ label: 'Comodato', value: filterComodato === 'yes' ? 'Sí' : 'No' });
+    if (filterReposicion !== 'all') list.push({ label: 'Reposición', value: filterReposicion === 'yes' ? 'Sí' : 'No' });
+    if (filterZone !== 'all') {
+      const z = zones?.find(zone => zone.id === filterZone);
+      list.push({ label: 'Zona', value: z ? z.name : filterZone });
+    }
+    return list;
+  }, [searchTerm, filterBalance, filterComodato, filterReposicion, filterZone, zones]);
+
   const handleOpenDialog = (customer?: any) => {
     if (customer) {
       setEditingCustomer(customer)
@@ -272,7 +287,6 @@ function CustomersContent() {
   }
 
   const handleBulkEmail = () => {
-    // Deduplicación inteligente: separa listas de mails y asegura que cada uno sea único
     const uniqueEmails = new Set<string>();
     filteredCustomers.forEach(c => {
       if (!c.mail) return;
@@ -387,9 +401,14 @@ function CustomersContent() {
     const content = activeTemplate.body + (activeTemplate.subject || "");
     const matches = content.match(/\{\{\?([^}]+)\}\}/g);
     if (!matches) return [];
-    // Deduplicación para evitar error de claves duplicadas en React
     return Array.from(new Set(matches.map(m => m.replace(/\{\{\?|\}\}/g, ''))));
   }, [activeTemplate]);
+
+  const handlePrintPDF = () => {
+    if (typeof window !== 'undefined') {
+      window.print();
+    }
+  };
 
   if (isUserLoading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
 
@@ -440,7 +459,10 @@ function CustomersContent() {
                 <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Comodato</Label><Select value={filterComodato} onValueChange={setFilterComodato}><SelectTrigger className="w-[110px] h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem><SelectItem value="yes">Sí</SelectItem><SelectItem value="no">No</SelectItem></SelectContent></Select></div>
                 <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Reposición</Label><Select value={filterReposicion} onValueChange={setFilterReposicion}><SelectTrigger className="w-[110px] h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem><SelectItem value="yes">Sí</SelectItem><SelectItem value="no">No</SelectItem></SelectContent></Select></div>
                 <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Zona</Label><Select value={filterZone} onValueChange={setFilterZone}><SelectTrigger className="w-[140px] h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{zones?.map((z: any) => (<SelectItem key={z.id} value={z.id} className="text-xs">{z.name}</SelectItem>))}</SelectContent></Select></div>
-                <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => { setSearchTerm(""); setFilterBalance("all"); setFilterComodato("all"); setFilterReposicion("all"); setFilterZone("all"); }}><FilterX className="h-4 w-4" /></Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => { setSearchTerm(""); setFilterBalance("all"); setFilterComodato("all"); setFilterReposicion("all"); setFilterZone("all"); }}><FilterX className="h-4 w-4" /></Button>
+                  <Button variant="outline" size="icon" className="h-9 w-9 border-emerald-200 text-emerald-700 bg-emerald-50" onClick={handlePrintPDF} title="Generar reporte PDF de clientes"><Printer className="h-4 w-4" /></Button>
+                </div>
               </div>
             </div>
           </section>
@@ -581,7 +603,7 @@ function CustomersContent() {
                         {pendingOperations.length === 0 ? (<TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground italic">Sin deudas pendientes.</TableCell></TableRow>) : pendingOperations.map(tx => (
                           <TableRow key={tx.id} className="hover:bg-muted/5 transition-colors">
                             <TableCell className="text-xs font-medium">{formatLocalDate(tx.date)}</TableCell>
-                            <TableCell><Badge variant="outline" className={cn("text-[9px] uppercase font-bold", txTypeMap[tx.type]?.color || "bg-slate-50")}>{txTypeMap[tx.type]?.label || tx.type}</Badge></TableCell>
+                            <TableCell><BadgeUI variant="outline" className={cn("text-[9px] uppercase font-bold", txTypeMap[tx.type]?.color || "bg-slate-50")}>{txTypeMap[tx.type]?.label || tx.type}</BadgeUI></TableCell>
                             <TableCell className="text-right font-medium text-xs">{tx.currency==='USD'?'u$s':'$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}</TableCell>
                             <TableCell className="text-right font-black text-rose-600">{tx.currency==='USD'?'u$s':'$'} {Math.abs(tx.pendingAmount || 0).toLocaleString('es-AR')}</TableCell>
                           </TableRow>
@@ -632,6 +654,89 @@ function CustomersContent() {
           <AlertDialog open={!!customerToDelete} onOpenChange={(o) => !o && setCustomerToDelete(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle><AlertDialogDescription>Se borrará permanentemente a <b>{customerToDelete?.apellido}, {customerToDelete?.nombre}</b>.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={confirmDelete} className="bg-destructive">Eliminar</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
         </SidebarInset>
       </div>
+
+      {/* VISTA DE IMPRESIÓN (PDF) */}
+      <div className="print-only w-full p-8 bg-white text-slate-900 font-sans">
+        <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
+          <div>
+            <h1 className="text-2xl font-black uppercase tracking-tight">Reporte de Clientes</h1>
+            <p className="text-sm font-bold text-slate-600">Dosimat Pro System</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs font-black uppercase text-slate-400">Fecha de emisión</p>
+            <p className="text-sm font-bold">{new Date().toLocaleDateString('es-AR')} {new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</p>
+          </div>
+        </div>
+
+        {activeFilters.length > 0 && (
+          <div className="mb-6 p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl">
+            <h2 className="text-[10px] font-black uppercase text-slate-500 mb-2 tracking-widest">Filtros Aplicados</h2>
+            <div className="flex flex-wrap gap-x-6 gap-y-2">
+              {activeFilters.map((f, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">{f.label}:</span>
+                  <span className="text-xs font-black text-slate-800">{f.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-4 mb-8">
+          <div className="p-4 border-2 border-slate-900 rounded-2xl bg-slate-50">
+            <p className="text-[10px] font-black uppercase text-slate-500 mb-1">Total Saldo ARS (Filtrado)</p>
+            <p className={cn("text-2xl font-black", filteredTotals.ars < 0 ? "text-rose-700" : "text-emerald-700")}>
+              ${filteredTotals.ars.toLocaleString('es-AR')}
+            </p>
+          </div>
+          <div className="p-4 border-2 border-slate-900 rounded-2xl bg-slate-50">
+            <p className="text-[10px] font-black uppercase text-slate-500 mb-1">Total Saldo USD (Filtrado)</p>
+            <p className={cn("text-2xl font-black", filteredTotals.usd < 0 ? "text-rose-700" : "text-emerald-700")}>
+              u$s {filteredTotals.usd.toLocaleString('es-AR')}
+            </p>
+          </div>
+        </div>
+
+        <table className="w-full border-collapse border-2 border-slate-900 text-[10px]">
+          <thead>
+            <tr className="bg-slate-900 text-white">
+              <th className="border border-slate-900 p-2 text-left uppercase font-black">Apellido y Nombre</th>
+              <th className="border border-slate-900 p-2 text-left uppercase font-black">Dirección / Localidad</th>
+              <th className="border border-slate-900 p-2 text-left uppercase font-black">Zona</th>
+              <th className="border border-slate-900 p-2 text-center uppercase font-black">Repo</th>
+              <th className="border border-slate-900 p-2 text-center uppercase font-black">Comod.</th>
+              <th className="border border-slate-900 p-2 text-right uppercase font-black">Saldo ARS</th>
+              <th className="border border-slate-900 p-2 text-right uppercase font-black">Saldo USD</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredCustomers.map((c: any) => {
+              const zone = zones?.find(z => z.id === c.zonaId);
+              return (
+                <tr key={c.id} className="border-b border-slate-300">
+                  <td className="border border-slate-900 p-2 font-black">{c.apellido}, {c.nombre}</td>
+                  <td className="border border-slate-900 p-2 uppercase font-medium">{c.direccion}, {c.localidad}</td>
+                  <td className="border border-slate-900 p-2 uppercase font-bold">{zone?.name || 'S/D'}</td>
+                  <td className="border border-slate-900 p-2 text-center font-bold">{c.esClienteReposicion ? 'SÍ' : 'NO'}</td>
+                  <td className="border border-slate-900 p-2 text-center font-bold">{c.equipoInstalado?.enComodato ? 'SÍ' : 'NO'}</td>
+                  <td className={cn("border border-slate-900 p-2 text-right font-black", c.saldoActual < 0 ? "text-rose-700" : "text-emerald-700")}>
+                    ${Number(c.saldoActual || 0).toLocaleString('es-AR')}
+                  </td>
+                  <td className={cn("border border-slate-900 p-2 text-right font-black", c.saldoUSD < 0 ? "text-rose-700" : "text-emerald-700")}>
+                    u$s {Number(c.saldoUSD || 0).toLocaleString('es-AR')}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+
+        <div className="mt-12 pt-6 border-t border-dashed border-slate-300 flex justify-between items-end italic text-[9px] text-slate-400">
+          <p>Este reporte refleja la situación de cartera de clientes según los criterios aplicados.</p>
+          <p>Página 1 de 1</p>
+        </div>
+      </div>
+
       <MobileNav />
     </div>
   )
