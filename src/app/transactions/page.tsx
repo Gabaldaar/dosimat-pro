@@ -126,6 +126,7 @@ function TransactionsContent() {
   const [filterFlow, setFilterFlow] = useState("all")
   const [itemFilterCategory, setItemFilterCategory] = useState("all")
 
+  // Desbloqueador global de puntero (Evita congelamientos de Radix UI)
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -166,6 +167,16 @@ function TransactionsContent() {
     if (type) setActiveTab(type)
     if (accountId) setFilterAccount(accountId)
   }, [searchParams])
+
+  const sortedCustomers = useMemo(() => {
+    if (!customers) return [];
+    return [...customers].sort((a, b) => {
+      const apA = (a.apellido || "").toLowerCase();
+      const apB = (b.apellido || "").toLowerCase();
+      if (apA !== apB) return apA.localeCompare(apB);
+      return (a.nombre || "").toLowerCase().localeCompare((b.nombre || "").toLowerCase());
+    });
+  }, [customers]);
 
   const sortedCatalog = useMemo(() => {
     if (!catalog) return []
@@ -487,6 +498,7 @@ function TransactionsContent() {
     const content = activeTemplate.body + (activeTemplate.subject || "");
     const matches = content.match(/\{\{\?([^}]+)\}\}/g);
     if (!matches) return [];
+    // Deduplicate keys
     return Array.from(new Set(matches.map(m => m.replace(/\{\{\?|\}\}/g, ''))));
   }, [activeTemplate]);
 
@@ -618,7 +630,7 @@ function TransactionsContent() {
                         <SelectTrigger className="bg-white"><SelectValue placeholder="Buscar cliente..." /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">GLOBAL / SIN CLIENTE</SelectItem>
-                          {customers?.map((c: any) => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre} (${Number(c.saldoActual || 0).toLocaleString()})</SelectItem>))}
+                          {sortedCustomers.map((c: any) => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre} (${Number(c.saldoActual || 0).toLocaleString()})</SelectItem>))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -821,7 +833,7 @@ function TransactionsContent() {
                 <Card className="bg-emerald-50 border-l-4 border-l-emerald-500 shadow-sm"><CardContent className="p-4 flex items-center justify-between"><div><p className="text-[10px] font-black uppercase text-emerald-700/60 tracking-widest">Flujo Neto USD</p><h3 className={cn("text-2xl font-black mt-1", filteredTotals.usd < 0 ? "text-rose-600" : "text-emerald-600")}>u$s {filteredTotals.usd.toLocaleString()}</h3></div><TrendingUp className="h-8 w-8 text-emerald-500/20" /></CardContent></Card>
               </div>
               <Card className="glass-card p-4 flex flex-wrap gap-4 items-end border-dashed border-primary/20">
-                   <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Cliente</Label><Select value={filterCustomer} onValueChange={setFilterCustomer}><SelectTrigger className="w-[180px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos los clientes</SelectItem>{customers?.map(c => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}</SelectContent></Select></div>
+                   <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Cliente</Label><Select value={filterCustomer} onValueChange={setFilterCustomer}><SelectTrigger className="w-[180px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos los clientes</SelectItem>{sortedCustomers.map(c => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}</SelectContent></Select></div>
                    <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Caja</Label><Select value={filterAccount} onValueChange={setFilterAccount}><SelectTrigger className="w-[160px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas las cajas</SelectItem><SelectItem value="null">Sin Caja / A Cuenta</SelectItem>{accounts?.map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent></Select></div>
                    <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Flujo</Label><Select value={filterFlow} onValueChange={setFilterFlow}><SelectTrigger className="w-[120px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos los flujos</SelectItem><SelectItem value="income" className="text-emerald-600 font-bold">Ingresos</SelectItem><SelectItem value="expense" className="text-rose-600 font-bold">Egresos</SelectItem></SelectContent></Select></div>
                    <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Operación</Label><Select value={filterOpType} onValueChange={setFilterOpType}><SelectTrigger className="w-[140px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>
