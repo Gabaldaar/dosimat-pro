@@ -503,8 +503,6 @@ function TransactionsContent() {
     }
   }
 
-  if (isUserLoading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-
   return (
     <div className="flex min-h-screen bg-background w-full">
       <Sidebar />
@@ -799,19 +797,19 @@ function TransactionsContent() {
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="opacity-40 group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
+                              <Button variant="ghost" size="icon" className="opacity-40 group-hover:opacity-100">
                                 <MoreVertical className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setSelectedTxDetails(tx); }}><Info className="h-4 w-4 mr-2" /> Ficha completa</DropdownMenuItem>
-                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'ws'); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp (Plantilla)</DropdownMenuItem>
+                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => setSelectedTxDetails(tx), 100); }}><Info className="h-4 w-4 mr-2" /> Ficha completa</DropdownMenuItem>
+                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleOpenCommDialog(tx, 'ws'), 100); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp (Plantilla)</DropdownMenuItem>
                               <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleCopyTxDetail(tx); }}><Copy className="h-4 w-4 mr-2" /> Copiar Detalle</DropdownMenuItem>
-                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'mail'); }}><Mail className="h-4 w-4 mr-2" /> Enviar mail</DropdownMenuItem>
+                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleOpenCommDialog(tx, 'mail'), 100); }}><Mail className="h-4 w-4 mr-2" /> Enviar mail</DropdownMenuItem>
                               {isAdmin && (
                                 <>
-                                  <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleStartEdit(tx); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
-                                  <DropdownMenuItem className="text-destructive" onSelect={(e) => { e.preventDefault(); setTxToDelete(tx); }}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
+                                  <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleStartEdit(tx), 100); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
+                                  <DropdownMenuItem className="text-destructive" onSelect={(e) => { e.preventDefault(); setTimeout(() => setTxToDelete(tx), 100); }}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
                                 </>
                               )}
                             </DropdownMenuContent>

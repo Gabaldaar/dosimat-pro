@@ -193,7 +193,7 @@ function CustomersContent() {
     return transactions.filter(tx => 
       tx.clientId === selectedCustomerForStatement.id && 
       (tx.pendingAmount !== undefined && tx.pendingAmount !== null && Math.abs(tx.pendingAmount) > 0.01) &&
-      ['sale', 'refill', 'service', 'adjustment'].includes(tx.type)
+      ['sale', 'refill', 'service', 'adjustment', 'Reposición'].includes(tx.type)
     ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [selectedCustomerForStatement, transactions]);
 
@@ -248,22 +248,6 @@ function CustomersContent() {
     toast({ title: "Listado copiado" });
   }
 
-  const handleCopyStatement = () => {
-    if (!selectedCustomerForStatement || pendingOperations.length === 0) return;
-    const now = new Date().toLocaleDateString('es-AR');
-    let text = `*RESUMEN DE CUENTA - DOSIMAT PRO*\nCliente: ${selectedCustomerForStatement.apellido}, ${selectedCustomerForStatement.nombre}\nFecha: ${now}\n\n*DETALLE DE DEUDA:*\n`;
-    pendingOperations.forEach(op => {
-      const info = txTypeMap[op.type] || { label: op.type };
-      const symbol = op.currency === 'USD' ? 'u$s' : '$';
-      text += `- ${formatLocalDate(op.date)} | ${info.label}: *${symbol} ${Math.abs(op.pendingAmount).toLocaleString('es-AR')}*\n`;
-    });
-    text += `\n*TOTAL ADEUDADO:*`;
-    if (Math.abs(selectedCustomerForStatement.saldoActual) > 0) text += `\nARS: *$${Math.abs(selectedCustomerForStatement.saldoActual).toLocaleString('es-AR')}*`;
-    if (Math.abs(selectedCustomerForStatement.saldoUSD) > 0) text += `\nUSD: *u$s ${Math.abs(selectedCustomerForStatement.saldoUSD).toLocaleString('es-AR')}*`;
-    navigator.clipboard.writeText(text);
-    toast({ title: "Copiado", description: "Resumen de deuda listo para pegar." });
-  }
-
   const escapeRegExp = (string: string) => {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
@@ -307,7 +291,7 @@ function CustomersContent() {
     const template = emailTemplates?.find(t => t.id === selectedTemplateId);
     if (!template || !selectedCommCustomer) return;
     const body = replaceMarkers(template.body, selectedCommCustomer, dynamicValues);
-    const subject = replaceMarkers(template.subject, selectedCommCustomer, dynamicValues);
+    const subject = replaceMarkers(template.subject || "", selectedCommCustomer, dynamicValues);
     const mailtoUrl = `mailto:${selectedCommCustomer.mail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body).replace(/%0A/g, '%0D%0A')}`;
     window.open(mailtoUrl, '_blank');
     setIsSingleEmailOpen(false);
@@ -358,7 +342,6 @@ function CustomersContent() {
     const allEmails = new Set<string>();
     filteredCustomers.forEach(c => {
       if (!c.mail) return;
-      // Descomponer listas de correos separadas por punto y coma, coma o espacio
       const parts = c.mail.split(/[;, ]+/);
       parts.forEach(p => {
         const cleaned = p.trim().toLowerCase();
@@ -376,11 +359,27 @@ function CustomersContent() {
 
     const bcc = uniqueEmails.join(';');
     const body = replaceMarkers(template.body, null, dynamicValues);
-    const subject = replaceMarkers(template.subject, null, dynamicValues);
+    const subject = replaceMarkers(template.subject || "", null, dynamicValues);
     const mailtoUrl = `mailto:?bcc=${bcc}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body).replace(/%0A/g, '%0D%0A')}`;
     window.open(mailtoUrl, '_blank');
     setIsBulkEmailOpen(false);
   };
+
+  const handleCopyStatement = () => {
+    if (!selectedCustomerForStatement || pendingOperations.length === 0) return;
+    const now = new Date().toLocaleDateString('es-AR');
+    let text = `*RESUMEN DE CUENTA - DOSIMAT PRO*\nCliente: ${selectedCustomerForStatement.apellido}, ${selectedCustomerForStatement.nombre}\nFecha: ${now}\n\n*DETALLE DE DEUDA:*\n`;
+    pendingOperations.forEach(op => {
+      const info = txTypeMap[op.type] || { label: op.type };
+      const symbol = op.currency === 'USD' ? 'u$s' : '$';
+      text += `- ${formatLocalDate(op.date)} | ${info.label}: *${symbol} ${Math.abs(op.pendingAmount).toLocaleString('es-AR')}*\n`;
+    });
+    text += `\n*TOTAL ADEUDADO:*`;
+    if (Math.abs(selectedCustomerForStatement.saldoActual) > 0) text += `\nARS: *$${Math.abs(selectedCustomerForStatement.saldoActual).toLocaleString('es-AR')}*`;
+    if (Math.abs(selectedCustomerForStatement.saldoUSD) > 0) text += `\nUSD: *u$s ${Math.abs(selectedCustomerForStatement.saldoUSD).toLocaleString('es-AR')}*`;
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copiado", description: "Resumen de deuda listo para pegar." });
+  }
 
   const activeTemplate = useMemo(() => {
     const all = [...(emailTemplates || []), ...(wsTemplates || [])];
@@ -390,6 +389,15 @@ function CustomersContent() {
   const dynamicKeys = useMemo(() => {
     return activeTemplate ? getDynamicKeys(activeTemplate.body + (activeTemplate.subject || "")) : [];
   }, [activeTemplate]);
+
+  if (isUserLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="mt-4 text-sm text-muted-foreground font-medium">Cargando clientes...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen bg-background w-full">
@@ -408,7 +416,7 @@ function CustomersContent() {
                 <Button variant="outline" size="sm" onClick={handleCopyAll} className="h-9 gap-2 font-bold"><Copy className="h-4 w-4" /> Copiar Todo</Button>
                 <Button variant="outline" size="sm" onClick={() => { setBulkStep(0); setDynamicValues({}); setSelectedTemplateId(""); setIsBulkEmailOpen(true); }} className="h-9 gap-2 font-bold"><Mail className="h-4 w-4" /> Mail Masivo</Button>
                 <Button variant="outline" size="sm" onClick={() => { setBulkStep(0); setDynamicValues({}); setSelectedTemplateId(""); setIsBulkWsOpen(true); }} className="h-9 gap-2 font-bold border-emerald-200 text-emerald-700 bg-emerald-50"><MessageSquare className="h-4 w-4" /> WhatsApp Masivo</Button>
-                {!isUserLoading && isAdmin && (
+                {isAdmin && (
                   <Button onClick={() => handleOpenDialog()} className="shadow-lg font-bold bg-primary h-9">
                     <Plus className="mr-2 h-5 w-5" /> Nuevo Cliente
                   </Button>
