@@ -126,7 +126,6 @@ function TransactionsContent() {
   const [filterFlow, setFilterFlow] = useState("all")
   const [itemFilterCategory, setItemFilterCategory] = useState("all")
 
-  // Observador de pointer-events para forzar desbloqueo del mouse ante bugs de Radix UI
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -254,10 +253,17 @@ function TransactionsContent() {
       const tx = editingTx;
       if (tx.clientId) {
         const field = tx.currency === 'USD' ? 'saldoUSD' : 'saldoActual';
-        updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [field]: increment(-Number(tx.amount || 0)) });
+        // REVERSIÓN DE SALDO CLIENTE:
+        // Si es cobro/ajuste, revertimos el 'amount' (que fue positivo o negativo directo)
+        // Si es venta/repo, lo que afectó al saldo fue el 'debtAmount' (que se restó del saldo)
+        const amountToRevert = ['cobro', 'adjustment', 'Expense'].includes(tx.type) 
+          ? -Number(tx.amount || 0) 
+          : Number(tx.debtAmount || 0);
+        
+        updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [field]: increment(amountToRevert) });
       }
       if (tx.financialAccountId) {
-        const amountToRevert = tx.type === 'cobro' ? -Number(tx.amount) : -Number(tx.paidAmount || 0);
+        const amountToRevert = ['cobro', 'adjustment', 'Expense'].includes(tx.type) ? -Number(tx.amount) : -Number(tx.paidAmount || 0);
         updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), { initialBalance: increment(amountToRevert) });
       }
       if (tx.type === 'cobro' && tx.imputations) {
@@ -360,11 +366,18 @@ function TransactionsContent() {
 
     if (tx.clientId) {
       const field = tx.currency === 'USD' ? 'saldoUSD' : 'saldoActual';
-      updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [field]: increment(-Number(tx.amount || 0)) });
+      // REVERSIÓN DE SALDO AL ELIMINAR:
+      // Si es cobro/ajuste, quitamos el efecto del 'amount'
+      // Si es venta/repo, devolvemos el 'debtAmount' al saldo (porque se había restado)
+      const amountToRevert = ['cobro', 'adjustment', 'Expense'].includes(tx.type) 
+        ? -Number(tx.amount || 0) 
+        : Number(tx.debtAmount || 0);
+      
+      updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [field]: increment(amountToRevert) });
     }
 
     if (tx.financialAccountId) {
-      const amountToRevert = tx.type === 'cobro' ? -Number(tx.amount) : -Number(tx.paidAmount || 0);
+      const amountToRevert = ['cobro', 'adjustment', 'Expense'].includes(tx.type) ? -Number(tx.amount) : -Number(tx.paidAmount || 0);
       updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), { initialBalance: increment(amountToRevert) });
     }
 
@@ -474,8 +487,7 @@ function TransactionsContent() {
     const content = activeTemplate.body + (activeTemplate.subject || "");
     const matches = content.match(/\{\{\?([^}]+)\}\}/g);
     if (!matches) return [];
-    const uniqueKeys = Array.from(new Set(matches.map(m => m.replace(/\{\{\?|\}\}/g, ''))));
-    return uniqueKeys;
+    return Array.from(new Set(matches.map(m => m.replace(/\{\{\?|\}\}/g, ''))));
   }, [activeTemplate]);
 
   const replaceMarkers = (text: string, tx: any, dynamicVals?: Record<string, string>) => {
