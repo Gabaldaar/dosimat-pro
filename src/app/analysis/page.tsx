@@ -41,7 +41,9 @@ import {
   Coins,
   Info,
   HandCoins,
-  AlertCircle
+  AlertCircle,
+  Clock,
+  Award
 } from "lucide-react"
 import { useFirestore, useCollection, useMemoFirebase, useUser } from "../../firebase"
 import { collection, query, orderBy } from "firebase/firestore"
@@ -82,11 +84,13 @@ export default function AnalysisPage() {
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const expenseCatsQuery = useMemoFirebase(() => collection(db, 'expense_categories'), [db])
   const zonesQuery = useMemoFirebase(() => collection(db, 'zones'), [db])
+  const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
 
   const { data: transactions, isLoading: loadingTx } = useCollection(txQuery)
   const { data: clients } = useCollection(clientsQuery)
   const { data: expenseCategories } = useCollection(expenseCatsQuery)
   const { data: zones } = useCollection(zonesQuery)
+  const { data: catalog } = useCollection(catalogQuery)
 
   // Filters State
   const [startDate, setStartDate] = useState("")
@@ -163,6 +167,53 @@ export default function AnalysisPage() {
       USD: { income: 0, expense: 0 } 
     })
   }, [filteredTxsForSummary])
+
+  // Month-over-Month Comparison
+  const momComparison = useMemo(() => {
+    if (!transactions) return { ARS: { income: 0, expense: 0 }, USD: { income: 0, expense: 0 } }
+    
+    const now = new Date()
+    const currentMonth = now.getMonth()
+    const currentYear = now.getFullYear()
+    
+    const prevMonthDate = new Date(currentYear, currentMonth - 1, 1)
+    const prevMonth = prevMonthDate.getMonth()
+    const prevYear = prevMonthDate.getFullYear()
+
+    const lastMonthData = transactions.reduce((acc, tx) => {
+      const txDate = new Date(tx.date)
+      if (txDate.getMonth() === prevMonth && txDate.getFullYear() === prevYear) {
+        const curr = tx.currency === 'USD' ? 'USD' : 'ARS'
+        if (tx.type === 'cobro') acc[curr].income += Math.abs(tx.amount)
+        else if (['sale', 'refill', 'service', 'Reposición'].includes(tx.type)) acc[curr].income += Number(tx.paidAmount || 0)
+        else if ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount > 0) acc[curr].income += tx.amount
+        
+        if (tx.type === 'Expense' || ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount < 0)) {
+          acc[curr].expense += Math.abs(tx.amount)
+        }
+      }
+      return acc
+    }, { 
+      ARS: { income: 0, expense: 0 }, 
+      USD: { income: 0, expense: 0 } 
+    })
+
+    const calculateChange = (current: number, previous: number) => {
+      if (previous === 0) return current > 0 ? 100 : 0
+      return ((current - previous) / previous) * 100
+    }
+
+    return {
+      ARS: {
+        income: calculateChange(summary.ARS.income, lastMonthData.ARS.income),
+        expense: calculateChange(summary.ARS.expense, lastMonthData.ARS.expense)
+      },
+      USD: {
+        income: calculateChange(summary.USD.income, lastMonthData.USD.income),
+        expense: calculateChange(summary.USD.expense, lastMonthData.USD.expense)
+      }
+    }
+  }, [transactions, summary])
 
   const totalDebt = useMemo(() => {
     if (!clients) return { ARS: 0, USD: 0 };
@@ -245,6 +296,69 @@ export default function AnalysisPage() {
     return Object.entries(counts).map(([name, value]) => ({ name, value }))
   }, [filteredTxsByCurrency, transactions])
 
+  // Ranking de Productos por Recaudación Real
+  const productRanking = useMemo(() => {
+    if (!transactions) return []
+    const ranking: Record<string, number> = {}
+
+    filteredTxsByCurrency.forEach(tx => {
+      // Si es una venta/reposición con items, sumamos el pagado proporcionalmente
+      if (['sale', 'refill', 'service', 'Reposición'].includes(tx.type) && tx.items) {
+        const totalTx = Math.abs(tx.amount)
+        const paidRatio = (tx.paidAmount || 0) / (totalTx || 1)
+        
+        tx.items.forEach((item: any) => {
+          const itemSubtotal = item.price * item.qty * (1 - (item.discount || 0) / 100)
+          ranking[item.name] = (ranking[item.name] || 0) + (itemSubtotal * paidRatio)
+        })
+      }
+      
+      // Si es un cobro, rastreamos imputaciones para ver qué productos se están pagando realmente
+      if (tx.type === 'cobro' && tx.imputations) {
+        Object.entries(tx.imputations).forEach(([targetId, imputedAmount]) => {
+          const targetTx = transactions.find(t => t.id === targetId)
+          if (targetTx && targetTx.items) {
+            const totalTarget = Math.abs(targetTx.amount)
+            const itemRatio = Number(imputedAmount) / (totalTarget || 1)
+            
+            targetTx.items.forEach((item: any) => {
+              const itemSubtotal = item.price * item.qty * (1 - (item.discount || 0) / 100)
+              ranking[item.name] = (ranking[item.name] || 0) + (itemSubtotal * itemRatio)
+            })
+          }
+        })
+      }
+    })
+
+    return Object.entries(ranking)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5)
+  }, [filteredTxsByCurrency, transactions])
+
+  // Eficiencia de Cobro (Días promedio entre factura y cobro)
+  const collectionEfficiency = useMemo(() => {
+    if (!transactions) return 0
+    let totalDays = 0
+    let count = 0
+
+    transactions.forEach(tx => {
+      if (tx.type === 'cobro' && tx.imputations) {
+        Object.entries(tx.imputations).forEach(([targetId]) => {
+          const targetTx = transactions.find(t => t.id === targetId)
+          if (targetTx) {
+            const diffTime = Math.abs(new Date(tx.date).getTime() - new Date(targetTx.date).getTime())
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+            totalDays += diffDays
+            count++
+          }
+        })
+      }
+    })
+
+    return count > 0 ? Math.round(totalDays / count) : 0
+  }, [transactions])
+
   const expensePieData = useMemo(() => {
     const counts: Record<string, number> = {}
     filteredTxsByCurrency.forEach(tx => {
@@ -301,6 +415,7 @@ export default function AnalysisPage() {
   const currencySymbol = analysisCurrency === 'ARS' ? '$' : 'u$s';
   const otherCurrency = analysisCurrency === 'ARS' ? 'USD' : 'ARS';
   const otherSymbol = otherCurrency === 'ARS' ? '$' : 'u$s';
+  const currentMoM = momComparison[analysisCurrency as 'ARS' | 'USD'];
 
   return (
     <div className="flex min-h-screen bg-background w-full">
@@ -383,7 +498,15 @@ export default function AnalysisPage() {
           <Card className="glass-card bg-emerald-50/30 border-l-4 border-l-emerald-500 relative overflow-hidden">
             <div className="absolute top-2 right-2 opacity-10"><TrendingUp className="h-12 w-12 text-emerald-600" /></div>
             <CardContent className="pt-6">
-              <p className="text-[10px] font-black uppercase text-emerald-700 tracking-widest mb-4">Ingresos Reales (Caja)</p>
+              <div className="flex justify-between items-start mb-4">
+                <p className="text-[10px] font-black uppercase text-emerald-700 tracking-widest">Ingresos Reales (Caja)</p>
+                <Badge variant="outline" className={cn(
+                  "text-[9px] font-black",
+                  currentMoM.income >= 0 ? "border-emerald-500 text-emerald-700 bg-emerald-50" : "border-rose-500 text-rose-700 bg-rose-50"
+                )}>
+                  {currentMoM.income >= 0 ? '+' : ''}{currentMoM.income.toFixed(1)}% vs mes ant.
+                </Badge>
+              </div>
               <div className="space-y-1">
                 <h3 className="text-3xl font-black text-emerald-800">
                   {currencySymbol} {summary[analysisCurrency as 'ARS' | 'USD'].income.toLocaleString('es-AR')}
@@ -398,7 +521,15 @@ export default function AnalysisPage() {
           <Card className="glass-card bg-rose-50/30 border-l-4 border-l-rose-500 relative overflow-hidden">
             <div className="absolute top-2 right-2 opacity-10"><TrendingDown className="h-12 w-12 text-rose-600" /></div>
             <CardContent className="pt-6">
-              <p className="text-[10px] font-black uppercase text-rose-700 tracking-widest mb-4">Gastos Reales</p>
+              <div className="flex justify-between items-start mb-4">
+                <p className="text-[10px] font-black uppercase text-rose-700 tracking-widest">Gastos Reales</p>
+                <Badge variant="outline" className={cn(
+                  "text-[9px] font-black",
+                  currentMoM.expense <= 0 ? "border-emerald-500 text-emerald-700 bg-emerald-50" : "border-rose-500 text-rose-700 bg-rose-50"
+                )}>
+                  {currentMoM.expense >= 0 ? '+' : ''}{currentMoM.expense.toFixed(1)}% vs mes ant.
+                </Badge>
+              </div>
               <div className="space-y-1">
                 <h3 className="text-3xl font-black text-rose-800">
                   {currencySymbol} {summary[analysisCurrency as 'ARS' | 'USD'].expense.toLocaleString('es-AR')}
@@ -562,7 +693,33 @@ export default function AnalysisPage() {
         </div>
 
         {/* Extra Insights Section */}
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-8">
+           <Card className="glass-card">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Award className="h-5 w-5 text-amber-500" /> Top Productos (Cobro Real)
+                </CardTitle>
+                <CardDescription>Los 5 productos que más dinero ingresaron en {analysisCurrency}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[250px] w-full">
+                  {productRanking.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={productRanking} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.3} />
+                        <XAxis type="number" hide />
+                        <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={100} fontSize={10} />
+                        <RechartsTooltip formatter={(v: any) => `${currencySymbol} ${v.toLocaleString('es-AR')}`} />
+                        <Bar dataKey="value" fill="#f59e0b" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <p className="text-center italic text-muted-foreground py-10">Sin datos de productos.</p>
+                  )}
+                </div>
+              </CardContent>
+           </Card>
+
            <Card className="glass-card">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -590,26 +747,34 @@ export default function AnalysisPage() {
            <Card className="glass-card bg-primary text-primary-foreground border-none overflow-hidden relative group">
               <Target className="absolute -right-4 -bottom-4 h-32 w-32 opacity-10 group-hover:scale-110 transition-transform" />
               <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2">Interpretación de Datos</CardTitle>
+                <CardTitle className="text-white flex items-center gap-2">Inteligencia Financiera</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div>
-                   <p className="text-[10px] font-black uppercase opacity-70 tracking-widest">Ticket Promedio en {analysisCurrency}</p>
-                   <h3 className="text-4xl font-black mt-1">
-                     {currencySymbol} {filteredTxsByCurrency.length > 0 ? (summary[analysisCurrency as 'ARS'|'USD'].income / (filteredTxsByCurrency.filter(t => t.amount > 0).length || 1)).toLocaleString('es-AR') : '0'}
-                   </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white/10 p-3 rounded-2xl">
+                    <p className="text-[10px] font-black uppercase opacity-70 tracking-widest">Ticket Promedio</p>
+                    <h3 className="text-xl font-black mt-1">
+                      {currencySymbol} {filteredTxsByCurrency.length > 0 ? (summary[analysisCurrency as 'ARS'|'USD'].income / (filteredTxsByCurrency.filter(t => t.amount > 0).length || 1)).toLocaleString('es-AR') : '0'}
+                    </h3>
+                  </div>
+                  <div className="bg-white/10 p-3 rounded-2xl">
+                    <p className="text-[10px] font-black uppercase opacity-70 tracking-widest">Eficiencia Cobro</p>
+                    <h3 className="text-xl font-black mt-1 flex items-center gap-1">
+                      <Clock className="h-4 w-4" /> {collectionEfficiency} días
+                    </h3>
+                  </div>
                 </div>
                 <div className="pt-4 border-t border-white/10 space-y-3">
                    <div className="flex gap-3">
                      <div className="bg-white/20 p-2 rounded-lg h-fit"><AlertCircle className="h-4 w-4" /></div>
                      <p className="text-xs leading-relaxed">
-                       <b>Trazabilidad Total:</b> Los cobros ahora se desglosan según las facturas que cancelaron. Esto evita que todo aparezca como "Venta" y muestra la realidad de tus cobros de Reposiciones y Servicios.
+                       <b>Eficiencia de Cobro:</b> Representa el tiempo promedio que transcurre desde que emites una factura hasta que el dinero ingresa efectivamente a tu caja.
                      </p>
                    </div>
                    <div className="flex gap-3">
-                     <div className="bg-white/20 p-2 rounded-lg h-fit"><Wallet className="h-4 w-4" /></div>
+                     <div className="bg-white/20 p-2 rounded-lg h-fit"><Award className="h-4 w-4" /></div>
                      <p className="text-xs leading-relaxed">
-                       <b>Criterio de Caja:</b> Este panel solo contabiliza el dinero que realmente ingresó o egresó de tus cajas. Las deudas pendientes no se reflejan en los ingresos, sino en el nuevo bloque de "Dinero en la Calle".
+                       <b>Top Productos:</b> Este ranking ignora la facturación teórica y solo muestra productos por los cuales ya has recibido el pago.
                      </p>
                    </div>
                 </div>
