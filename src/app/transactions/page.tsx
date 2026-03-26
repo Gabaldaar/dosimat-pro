@@ -261,7 +261,8 @@ function TransactionsContent() {
       }
       if (tx.type === 'cobro' && tx.imputations) {
         Object.entries(tx.imputations).forEach(([targetId, amount]) => {
-          updateDocumentNonBlocking(doc(db, 'transactions', targetId), { pendingAmount: increment(Number(amount)) });
+          // Si estamos revertiendo un cobro que sumó al pendiente, ahora lo restamos
+          updateDocumentNonBlocking(doc(db, 'transactions', targetId), { pendingAmount: increment(-Number(amount)) });
         });
       }
     }
@@ -294,16 +295,30 @@ function TransactionsContent() {
       setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
       if (manualAccountId !== "pending") updateDocumentNonBlocking(doc(db, 'financial_accounts', manualAccountId), { initialBalance: increment(finalAmount) });
       if (client) { const field = manualCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'; updateDocumentNonBlocking(doc(db, 'clients', client.id), { [field]: increment(finalAmount) }); }
-      if (activeTab === 'cobro') { Object.entries(imputations).forEach(([targetTxId, amount]) => { updateDocumentNonBlocking(doc(db, 'transactions', targetTxId), { pendingAmount: increment(-Number(amount)) }); }); }
+      if (activeTab === 'cobro') { 
+        Object.entries(imputations).forEach(([targetTxId, amount]) => { 
+          // EL COBRO SUMA AL PENDIENTE (que es negativo) PARA ACERCARLO A CERO
+          updateDocumentNonBlocking(doc(db, 'transactions', targetTxId), { pendingAmount: increment(Number(amount)) }); 
+        }); 
+      }
     } else {
       ['ARS', 'USD'].forEach(curr => {
         const total = cartTotals[curr as 'ARS' | 'USD']; if (total <= 0) return;
-        const paid = Number(paidAmounts[curr] || 0); const debt = total - paid;
+        const paid = Number(paidAmounts[curr] || 0); 
+        const debt = total - paid;
         const txId = editingTx?.id || Math.random().toString(36).substring(2, 11);
         
         const acc = destinationAccounts[curr] !== "pending" ? accounts?.find(a => a.id === destinationAccounts[curr]) : null;
         const accountBalanceAfter = (Number(acc?.initialBalance || 0)) + paid;
         
+        // LOGICA DELTA PARA PENDIENTE SI ES EDICIÓN
+        let finalPending = -debt;
+        if (editingTx && editingTx.id === txId) {
+          const oldDebt = Math.abs(editingTx.amount) - (editingTx.paidAmount || 0);
+          const deltaDebt = debt - oldDebt;
+          finalPending = (editingTx.pendingAmount || 0) - deltaDebt;
+        }
+
         const txData = { 
           id: txId, 
           date: finalDateStr, 
@@ -316,7 +331,7 @@ function TransactionsContent() {
           description: txDescription || `Operación ${txTypeMap[activeTab].label}`, 
           financialAccountId: (destinationAccounts[curr]==="pending" || paid === 0) ? null : destinationAccounts[curr], 
           items: selectedItems.filter(i => i.currency === curr), 
-          pendingAmount: -debt,
+          pendingAmount: finalPending,
           accountBalanceAfter
         }
         setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
@@ -357,7 +372,8 @@ function TransactionsContent() {
 
     if (tx.type === 'cobro' && tx.imputations) {
       Object.entries(tx.imputations).forEach(([targetId, amount]) => {
-        updateDocumentNonBlocking(doc(db, 'transactions', targetId), { pendingAmount: increment(Number(amount)) });
+        // Al borrar el cobro, restamos lo que se había sumado al pendiente
+        updateDocumentNonBlocking(doc(db, 'transactions', targetId), { pendingAmount: increment(-Number(amount)) });
       });
     }
 
@@ -392,66 +408,6 @@ function TransactionsContent() {
     }, { ars: 0, usd: 0 })
   }, [filteredTransactions]);
 
-  const escapeRegExp = (string: string) => {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
-  const replaceMarkers = (text: string, tx: any, dynamicVals?: Record<string, string>) => {
-    let result = text;
-    const client = customers?.find(c => c.id === tx.clientId);
-    const symbol = tx.currency === 'USD' ? 'u$s' : '$';
-    
-    if (client) {
-      result = result.replace(/\{\{Nombre\}\}/g, client.nombre || "");
-      result = result.replace(/\{\{Apellido\}\}/g, client.apellido || "");
-      result = result.replace(/\{\{Saldo_ARS\}\}/g, `$ ${Number(client.saldoActual || 0).toLocaleString('es-AR')}`);
-      result = result.replace(/\{\{Saldo_USD\}\}/g, `u$s ${Number(client.saldoUSD || 0).toLocaleString('es-AR')}`);
-      result = result.replace(/\{\{Saldo_Cuenta\}\}/g, tx.currency === 'USD' ? `u$s ${Number(client.saldoUSD || 0).toLocaleString('es-AR')}` : `$ ${Number(client.saldoActual || 0).toLocaleString('es-AR')}`);
-    }
-
-    const account = accounts?.find(a => a.id === tx.financialAccountId);
-    result = result.replace(/\{\{Caja_Destino\}\}/g, account?.name || "A cuenta");
-    result = result.replace(/\{\{Metodo_Pago\}\}/g, account ? (account.type === 'Bank' ? 'Transferencia/Banco' : 'Efectivo') : "A cuenta");
-
-    result = result.replace(/\{\{Fecha\}\}/g, formatLocalDate(tx.date));
-    result = result.replace(/\{\{Tipo_Operacion\}\}/g, txTypeMap[tx.type]?.label || tx.type);
-    result = result.replace(/\{\{Total\}\}/g, `${symbol} ${Math.abs(tx.amount || 0).toLocaleString('es-AR')}`);
-    result = result.replace(/\{\{Pendiente_Operacion\}\}/g, `${symbol} ${Math.abs(tx.pendingAmount || 0).toLocaleString('es-AR')}`);
-    result = result.replace(/\{\{Moneda\}\}/g, tx.currency);
-    result = result.replace(/\{\{Monto_Abonado\}\}/g, `${symbol} ${Number(tx.paidAmount || 0).toLocaleString('es-AR')}`);
-    result = result.replace(/\{\{Descripción\}\}/g, tx.description || "");
-
-    let detailItemsText = "";
-    if (tx.items && tx.items.length > 0) {
-      tx.items.forEach((i: any) => {
-        const iSymbol = i.currency === 'USD' ? 'u$s' : '$';
-        const sub = i.price * i.qty * (1 - (i.discount || 0)/100);
-        detailItemsText += `- ${i.qty} x ${i.name} (${iSymbol} ${i.price.toLocaleString('es-AR')}) = ${iSymbol} ${sub.toLocaleString('es-AR')}\n`;
-      });
-    } else if (tx.type === 'cobro' && tx.imputations) {
-      detailItemsText = "Imputación de cobro a facturas pendientes.";
-    }
-    result = result.replace(/\{\{Detalle_Items\}\}/g, detailItemsText);
-
-    if (catalog) {
-      catalog.forEach(item => {
-        const escapedName = escapeRegExp(item.name);
-        const regexARS = new RegExp(`\\{\\{PrecioARS_${escapedName}\\}\\}`, 'g');
-        const regexUSD = new RegExp(`\\{\\{PrecioUSD_${escapedName}\\}\\}`, 'g');
-        result = result.replace(regexARS, `$ ${Number(item.priceARS || 0).toLocaleString('es-AR')}`);
-        result = result.replace(regexUSD, `u$s ${Number(item.priceUSD || 0).toLocaleString('es-AR')}`);
-      });
-    }
-
-    if (dynamicVals) {
-      Object.entries(dynamicVals).forEach(([key, val]) => {
-        const regex = new RegExp(`\\{\\{\\?${escapeRegExp(key)}\\}\\}`, 'g');
-        result = result.replace(regex, val);
-      });
-    }
-    return result;
-  };
-
   const handleCopyTxDetail = (tx: any) => {
     const client = customers?.find(c => c.id === tx.clientId);
     const dateStr = formatLocalDate(tx.date);
@@ -482,20 +438,6 @@ function TransactionsContent() {
     toast({ title: "Detalle copiado" });
   };
 
-  const getDynamicKeys = (body: string) => {
-    const matches = body.match(/\{\{\?([^}]+)\}\}/g) || [];
-    return Array.from(new Set(matches.map(m => m.replace(/\{\{\?|\}\}/g, ''))));
-  };
-
-  const activeTemplate = useMemo(() => {
-    const all = [...(emailTemplates || []), ...(wsTemplates || [])];
-    return all.find(t => t.id === selectedTemplateId);
-  }, [selectedTemplateId, emailTemplates, wsTemplates]);
-
-  const dynamicKeys = useMemo(() => {
-    return activeTemplate ? getDynamicKeys(activeTemplate.body + (activeTemplate.subject || "")) : [];
-  }, [activeTemplate]);
-
   const handleOpenCommDialog = (tx: any, type: 'ws' | 'mail') => {
     setSelectedTxForComm(tx);
     setSelectedTemplateId("");
@@ -522,6 +464,48 @@ function TransactionsContent() {
       setIsEmailDialogOpen(false);
     }
   }
+
+  const activeTemplate = useMemo(() => {
+    const all = [...(emailTemplates || []), ...(wsTemplates || [])];
+    return all.find(t => t.id === selectedTemplateId);
+  }, [selectedTemplateId, emailTemplates, wsTemplates]);
+
+  const dynamicKeys = useMemo(() => {
+    return activeTemplate ? (activeTemplate.body + (activeTemplate.subject || "")).match(/\{\{\?([^}]+)\}\}/g)?.map(m => m.replace(/\{\{\?|\}\}/g, '')) || [] : [];
+  }, [activeTemplate]);
+
+  const replaceMarkers = (text: string, tx: any, dynamicVals?: Record<string, string>) => {
+    let result = text;
+    const client = customers?.find(c => c.id === tx.clientId);
+    const symbol = tx.currency === 'USD' ? 'u$s' : '$';
+    
+    if (client) {
+      result = result.replace(/\{\{Nombre\}\}/g, client.nombre || "");
+      result = result.replace(/\{\{Apellido\}\}/g, client.apellido || "");
+      result = result.replace(/\{\{Saldo_ARS\}\}/g, `$ ${Number(client.saldoActual || 0).toLocaleString('es-AR')}`);
+      result = result.replace(/\{\{Saldo_USD\}\}/g, `u$s ${Number(client.saldoUSD || 0).toLocaleString('es-AR')}`);
+      result = result.replace(/\{\{Saldo_Cuenta\}\}/g, tx.currency === 'USD' ? `u$s ${Number(client.saldoUSD || 0).toLocaleString('es-AR')}` : `$ ${Number(client.saldoActual || 0).toLocaleString('es-AR')}`);
+    }
+
+    const account = accounts?.find(a => a.id === tx.financialAccountId);
+    result = result.replace(/\{\{Caja_Destino\}\}/g, account?.name || "A cuenta");
+    result = result.replace(/\{\{Metodo_Pago\}\}/g, account ? (account.type === 'Bank' ? 'Transferencia/Banco' : 'Efectivo') : "A cuenta");
+
+    result = result.replace(/\{\{Fecha\}\}/g, formatLocalDate(tx.date));
+    result = result.replace(/\{\{Tipo_Operacion\}\}/g, txTypeMap[tx.type]?.label || tx.type);
+    result = result.replace(/\{\{Total\}\}/g, `${symbol} ${Math.abs(tx.amount || 0).toLocaleString('es-AR')}`);
+    result = result.replace(/\{\{Pendiente_Operacion\}\}/g, `${symbol} ${Math.abs(tx.pendingAmount || 0).toLocaleString('es-AR')}`);
+    result = result.replace(/\{\{Moneda\}\}/g, tx.currency);
+    result = result.replace(/\{\{Monto_Abonado\}\}/g, `${symbol} ${Number(tx.paidAmount || 0).toLocaleString('es-AR')}`);
+    result = result.replace(/\{\{Descripción\}\}/g, tx.description || "");
+
+    if (dynamicVals) {
+      Object.entries(dynamicVals).forEach(([key, val]) => {
+        result = result.replace(new RegExp(`\\{\\{\\?${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\}\\}`, 'g'), val);
+      });
+    }
+    return result;
+  };
 
   return (
     <div className="flex min-h-screen bg-background w-full">

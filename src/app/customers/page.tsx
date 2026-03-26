@@ -115,6 +115,18 @@ function CustomersContent() {
   const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({})
   const [bulkStep, setBulkStep] = useState(0)
 
+  // Pointer events safety observer
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      if (document.body.style.pointerEvents === 'none') {
+        const anyOpen = isDialogOpen || isStatementOpen || !!customerToDelete || isBulkEmailOpen || isBulkWsOpen || isSingleCommOpen || isSingleWsOpen;
+        if (!anyOpen) document.body.style.pointerEvents = 'auto';
+      }
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+    return () => observer.disconnect();
+  }, [isDialogOpen, isStatementOpen, customerToDelete, isBulkEmailOpen, isBulkWsOpen, isSingleCommOpen, isSingleWsOpen]);
+
   const defaultFormData = {
     apellido: "",
     nombre: "",
@@ -169,13 +181,7 @@ function CustomersContent() {
 
         return true
       })
-      .sort((a: any, b: any) => {
-        const apellidoA = (a.apellido || "").toLowerCase();
-        const apellidoB = (b.apellido || "").toLowerCase();
-        if (apellidoA < apellidoB) return -1;
-        if (apellidoA > apellidoB) return 1;
-        return (a.nombre || "").localeCompare(b.nombre || "");
-      })
+      .sort((a: any, b: any) => (a.apellido || "").localeCompare(b.apellido || ""))
   }, [customers, searchTerm, filterBalance, filterComodato, filterReposicion, filterZone])
 
   const filteredTotals = useMemo(() => {
@@ -235,10 +241,6 @@ function CustomersContent() {
     toast({ title: "Cliente eliminado" })
   }
 
-  const escapeRegExp = (string: string) => {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
   const replaceMarkers = (text: string, client?: any, dynamicVals?: Record<string, string>) => {
     let result = text;
     if (client) {
@@ -252,26 +254,17 @@ function CustomersContent() {
     
     if (catalog) {
       catalog.forEach(item => {
-        const escapedName = escapeRegExp(item.name);
-        const regexARS = new RegExp(`\\{\\{PrecioARS_${escapedName}\\}\\}`, 'g');
-        const regexUSD = new RegExp(`\\{\\{PrecioUSD_${escapedName}\\}\\}`, 'g');
-        result = result.replace(regexARS, `$ ${Number(item.priceARS || 0).toLocaleString('es-AR')}`);
-        result = result.replace(regexUSD, `u$s ${Number(item.priceUSD || 0).toLocaleString('es-AR')}`);
+        result = result.replace(new RegExp(`\\{\\{PrecioARS_${item.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\}\\}`, 'g'), `$ ${Number(item.priceARS || 0).toLocaleString('es-AR')}`);
+        result = result.replace(new RegExp(`\\{\\{PrecioUSD_${item.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\}\\}`, 'g'), `u$s ${Number(item.priceUSD || 0).toLocaleString('es-AR')}`);
       });
     }
 
     if (dynamicVals) {
       Object.entries(dynamicVals).forEach(([key, val]) => {
-        const regex = new RegExp(`\\{\\{\\?${escapeRegExp(key)}\\}\\}`, 'g');
-        result = result.replace(regex, val);
+        result = result.replace(new RegExp(`\\{\\{\\?${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\}\\}`, 'g'), val);
       });
     }
     return result;
-  };
-
-  const getDynamicKeys = (body: string) => {
-    const matches = body.match(/\{\{\?([^}]+)\}\}/g) || [];
-    return Array.from(new Set(matches.map(m => m.replace(/\{\{\?|\}\}/g, ''))));
   };
 
   const handleSendSingleEmail = () => {
@@ -293,35 +286,6 @@ function CustomersContent() {
     setIsSingleWsOpen(false);
   };
 
-  const handleSendBulkWsNext = () => {
-    if (bulkStep === 0) {
-      const client = filteredCustomers[0];
-      const template = wsTemplates?.find(t => t.id === selectedTemplateId);
-      if (template && client) {
-        const message = replaceMarkers(template.body, client, dynamicValues);
-        const phone = client.telefono?.replace(/\D/g, "");
-        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
-      }
-      setBulkStep(1);
-      return;
-    }
-
-    if (bulkStep >= filteredCustomers.length) {
-      setIsBulkWsOpen(false);
-      setBulkStep(0);
-      return;
-    }
-
-    const client = filteredCustomers[bulkStep];
-    const template = wsTemplates?.find(t => t.id === selectedTemplateId);
-    if (template && client) {
-      const message = replaceMarkers(template.body, client, dynamicValues);
-      const phone = client.telefono?.replace(/\D/g, "");
-      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
-    }
-    setBulkStep(prev => prev + 1);
-  };
-
   const handleSendBulkEmail = () => {
     const template = emailTemplates?.find(t => t.id === selectedTemplateId);
     if (!template) return;
@@ -332,9 +296,7 @@ function CustomersContent() {
       const parts = c.mail.split(/[;, ]+/);
       parts.forEach(p => {
         const cleaned = p.trim().toLowerCase();
-        if (cleaned && cleaned.includes('@') && cleaned.includes('.')) {
-          allEmailsSet.add(cleaned);
-        }
+        if (cleaned && cleaned.includes('@') && cleaned.includes('.')) allEmailsSet.add(cleaned);
       });
     });
 
@@ -352,23 +314,32 @@ function CustomersContent() {
     setIsBulkEmailOpen(false);
   };
 
+  const handleSendBulkWsNext = () => {
+    if (bulkStep >= filteredCustomers.length) {
+      setIsBulkWsOpen(false);
+      setBulkStep(0);
+      return;
+    }
+    const client = filteredCustomers[bulkStep];
+    const template = wsTemplates?.find(t => t.id === selectedTemplateId);
+    if (template && client) {
+      const message = replaceMarkers(template.body, client, dynamicValues);
+      const phone = client.telefono?.replace(/\D/g, "");
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+    }
+    setBulkStep(prev => prev + 1);
+  };
+
   const activeTemplate = useMemo(() => {
     const all = [...(emailTemplates || []), ...(wsTemplates || [])];
     return all.find(t => t.id === selectedTemplateId);
   }, [selectedTemplateId, emailTemplates, wsTemplates]);
 
   const dynamicKeys = useMemo(() => {
-    return activeTemplate ? getDynamicKeys(activeTemplate.body + (activeTemplate.subject || "")) : [];
+    return activeTemplate ? (activeTemplate.body + (activeTemplate.subject || "")).match(/\{\{\?([^}]+)\}\}/g)?.map(m => m.replace(/\{\{\?|\}\}/g, '')) || [] : [];
   }, [activeTemplate]);
 
-  if (isUserLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="mt-4 text-sm text-muted-foreground font-medium">Cargando clientes...</p>
-      </div>
-    )
-  }
+  if (isUserLoading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
 
   return (
     <div className="flex min-h-screen bg-background w-full">
@@ -386,11 +357,7 @@ function CustomersContent() {
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={() => { setBulkStep(0); setDynamicValues({}); setSelectedTemplateId(""); setIsBulkEmailOpen(true); }} className="h-9 gap-2 font-bold"><Mail className="h-4 w-4" /> Mail Masivo</Button>
                 <Button variant="outline" size="sm" onClick={() => { setBulkStep(0); setDynamicValues({}); setSelectedTemplateId(""); setIsBulkWsOpen(true); }} className="h-9 gap-2 font-bold border-emerald-200 text-emerald-700 bg-emerald-50"><MessageSquare className="h-4 w-4" /> WhatsApp Masivo</Button>
-                {isAdmin && (
-                  <Button onClick={() => handleOpenDialog()} className="shadow-lg font-bold bg-primary h-9">
-                    <Plus className="mr-2 h-5 w-5" /> Nuevo Cliente
-                  </Button>
-                )}
+                {isAdmin && <Button onClick={() => handleOpenDialog()} className="shadow-lg font-bold bg-primary h-9"><Plus className="mr-2 h-5 w-5" /> Nuevo Cliente</Button>}
               </div>
             </div>
 
@@ -417,49 +384,10 @@ function CustomersContent() {
                 <input placeholder="Buscar por nombre, apellido o CUIT/DNI..." className="w-full pl-10 h-11 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
               </div>
               <div className="flex flex-wrap gap-3 items-end p-4 bg-muted/20 rounded-xl border border-dashed">
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Saldo</Label>
-                  <Select value={filterBalance} onValueChange={setFilterBalance}>
-                    <SelectTrigger className="w-[140px] h-9 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all" className="text-xs">Todos</SelectItem>
-                      <SelectItem value="debt" className="text-rose-600 text-xs font-bold">Sólo deuda</SelectItem>
-                      <SelectItem value="credit" className="text-emerald-600 text-xs font-bold">Sólo a favor</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Comodato</Label>
-                  <Select value={filterComodato} onValueChange={setFilterComodato}>
-                    <SelectTrigger className="w-[110px] h-9 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all" className="text-xs">Todos</SelectItem>
-                      <SelectItem value="yes" className="text-xs">Sí</SelectItem>
-                      <SelectItem value="no" className="text-xs">No</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Reposición</Label>
-                  <Select value={filterReposicion} onValueChange={setFilterReposicion}>
-                    <SelectTrigger className="w-[110px] h-9 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all" className="text-xs">Todos</SelectItem>
-                      <SelectItem value="yes" className="text-xs">Sí</SelectItem>
-                      <SelectItem value="no" className="text-xs">No</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Zona</Label>
-                  <Select value={filterZone} onValueChange={setFilterZone}>
-                    <SelectTrigger className="w-[140px] h-9 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all" className="text-xs">Todas</SelectItem>
-                      {zones?.map((z: any) => (<SelectItem key={z.id} value={z.id} className="text-xs">{z.name}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Saldo</Label><Select value={filterBalance} onValueChange={setFilterBalance}><SelectTrigger className="w-[140px] h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem><SelectItem value="debt" className="text-rose-600 font-bold">Sólo deuda</SelectItem><SelectItem value="credit" className="text-emerald-600 font-bold">Sólo a favor</SelectItem></SelectContent></Select></div>
+                <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Comodato</Label><Select value={filterComodato} onValueChange={setFilterComodato}><SelectTrigger className="w-[110px] h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem><SelectItem value="yes">Sí</SelectItem><SelectItem value="no">No</SelectItem></SelectContent></Select></div>
+                <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Reposición</Label><Select value={filterReposicion} onValueChange={setFilterReposicion}><SelectTrigger className="w-[110px] h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem><SelectItem value="yes">Sí</SelectItem><SelectItem value="no">No</SelectItem></SelectContent></Select></div>
+                <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Zona</Label><Select value={filterZone} onValueChange={setFilterZone}><SelectTrigger className="w-[140px] h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{zones?.map((z: any) => (<SelectItem key={z.id} value={z.id} className="text-xs">{z.name}</SelectItem>))}</SelectContent></Select></div>
                 <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => { setSearchTerm(""); setFilterBalance("all"); setFilterComodato("all"); setFilterReposicion("all"); setFilterZone("all"); }}><FilterX className="h-4 w-4" /></Button>
               </div>
             </div>
@@ -498,15 +426,13 @@ function CustomersContent() {
                       <div className="flex flex-wrap gap-1.5">
                         <Button variant="default" size="sm" className="h-8 gap-1.5 font-bold px-4" asChild><Link href={`/transactions?clientId=${customer.id}&mode=new`}><PlusCircle className="h-3.5 w-3.5" /> OPERAR</Link></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8 text-rose-600 border-rose-200 bg-rose-50 hover:bg-rose-100" onClick={() => handleOpenStatement(customer)} title="Estado de Cuenta"><Receipt className="h-3.5 w-3.5" /></Button>
-                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => window.open(`https://google.com/maps/search/?api=1&query=${encodeURIComponent(customer.direccion + ", " + customer.localidad)}`, '_blank')} title="Ver Mapa"><MapPinned className="h-3.5 w-3.5" /></Button>
-                        <Button variant="outline" size="icon" className="h-8 w-8 text-emerald-700 border-emerald-200 bg-emerald-50" onClick={() => window.open(`https://wa.me/${customer.telefono?.replace(/\D/g, '')}`, '_blank')} title="WhatsApp Directo"><PhoneCall className="h-3.5 w-3.5" /></Button>
-                        <Button variant="outline" size="icon" className="h-8 w-8 text-blue-700 border-blue-200 bg-blue-50" asChild title="Ver Historial"><Link href={`/transactions?clientId=${customer.id}`}><History className="h-3.5 w-3.5" /></Link></Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => window.open(`https://google.com/maps/search/?api=1&query=${encodeURIComponent(customer.direccion + ", " + customer.localidad)}`, '_blank')} title="Mapa"><MapPinned className="h-3.5 w-3.5" /></Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8 text-emerald-700 border-emerald-200 bg-emerald-50" onClick={() => window.open(`https://wa.me/${customer.telefono?.replace(/\D/g, '')}`, '_blank')} title="WhatsApp"><PhoneCall className="h-3.5 w-3.5" /></Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8 text-blue-700 border-blue-200 bg-blue-50" asChild title="Historial"><Link href={`/transactions?clientId=${customer.id}`}><History className="h-3.5 w-3.5" /></Link></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenDialog(customer)} title="Editar"><Edit className="h-3.5 w-3.5" /></Button>
-                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => { if(customer.mail) { setSelectedCommCustomer(customer); setDynamicValues({}); setSelectedTemplateId(""); setIsSingleEmailOpen(true); } else { toast({title:"Sin Mail", variant:"destructive"}); } }} title="Enviar Mail (Plantilla)"><Mail className="h-3.5 w-3.5" /></Button>
-                        <Button variant="outline" size="icon" className="h-8 w-8 text-emerald-600" onClick={() => { setSelectedCommCustomer(customer); setDynamicValues({}); setSelectedTemplateId(""); setIsSingleWsOpen(true); }} title="WhatsApp (Plantilla)"><MessageSquare className="h-3.5 w-3.5" /></Button>
-                        {isAdmin && (
-                          <Button variant="outline" size="icon" className="h-8 w-8 text-rose-600 border-rose-200 hover:bg-rose-100" onClick={() => setCustomerToDelete(customer)} title="Eliminar"><Trash2 className="h-3.5 w-3.5" /></Button>
-                        )}
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => { if(customer.mail) { setSelectedCommCustomer(customer); setDynamicValues({}); setSelectedTemplateId(""); setIsSingleEmailOpen(true); } }} title="Mail"><Mail className="h-3.5 w-3.5" /></Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8 text-emerald-600" onClick={() => { setSelectedCommCustomer(customer); setDynamicValues({}); setSelectedTemplateId(""); setIsSingleWsOpen(true); }} title="WS Plantilla"><MessageSquare className="h-3.5 w-3.5" /></Button>
+                        {isAdmin && <Button variant="outline" size="icon" className="h-8 w-8 text-rose-600 border-rose-200 hover:bg-rose-100" onClick={() => setCustomerToDelete(customer)} title="Eliminar"><Trash2 className="h-3.5 w-3.5" /></Button>}
                       </div>
                     </CardContent>
                   </Card>
@@ -515,7 +441,6 @@ function CustomersContent() {
             </div>
           )}
 
-          {/* Diálogos */}
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle>{editingCustomer ? 'Editar Cliente' : 'Nuevo Cliente'}</DialogTitle></DialogHeader>
@@ -525,7 +450,6 @@ function CustomersContent() {
                   <TabsTrigger value="location" className="font-bold">Ubicación</TabsTrigger>
                   <TabsTrigger value="equipment" className="font-bold">Equipo</TabsTrigger>
                 </TabsList>
-                
                 <TabsContent value="general" className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2"><Label>Apellido</Label><Input value={formData.apellido} onChange={(e) => setFormData({...formData, apellido: e.target.value})} /></div>
@@ -533,49 +457,26 @@ function CustomersContent() {
                     <div className="space-y-2"><Label>CUIT / DNI</Label><Input value={formData.cuit_dni} onChange={(e) => setFormData({...formData, cuit_dni: e.target.value})} /></div>
                     <div className="space-y-2"><Label>Teléfono</Label><Input value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: e.target.value})} /></div>
                     <div className="col-span-2 space-y-2"><Label>Email</Label><Input value={formData.mail} onChange={(e) => setFormData({...formData, mail: e.target.value})} /></div>
-                    
                     <div className="p-4 bg-muted/10 rounded-xl border border-dashed grid grid-cols-2 gap-4 col-span-2">
-                      <div className="space-y-2">
-                        <Label className="text-blue-700 font-bold">Saldo ARS ($)</Label>
-                        <Input type="number" value={formData.saldoActual} onChange={(e) => setFormData({...formData, saldoActual: Number(e.target.value)})} className="border-blue-200 font-bold" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-emerald-700 font-bold">Saldo USD (u$s)</Label>
-                        <Input type="number" value={formData.saldoUSD} onChange={(e) => setFormData({...formData, saldoUSD: Number(e.target.value)})} className="border-emerald-200 font-bold" />
-                      </div>
+                      <div className="space-y-2"><Label className="text-blue-700 font-bold">Saldo ARS ($)</Label><Input type="number" value={formData.saldoActual} onChange={(e) => setFormData({...formData, saldoActual: Number(e.target.value)})} className="border-blue-200 font-bold" /></div>
+                      <div className="space-y-2"><Label className="text-emerald-700 font-bold">Saldo USD (u$s)</Label><Input type="number" value={formData.saldoUSD} onChange={(e) => setFormData({...formData, saldoUSD: Number(e.target.value)})} className="border-emerald-200 font-bold" /></div>
                     </div>
-
                     <div className="flex flex-col gap-4 pt-2 col-span-2">
-                      <div className="flex items-center gap-3 p-3 border rounded-lg bg-white shadow-sm">
-                        <Switch checked={formData.esClienteReposicion} onCheckedChange={(v) => setFormData({...formData, esClienteReposicion: v})} />
-                        <Label className="font-bold">Cliente de Reposición</Label>
-                      </div>
-                      <div className={cn("flex items-center gap-3 p-3 border rounded-lg transition-colors", formData.equipoInstalado?.enComodato ? "bg-amber-50 border-amber-200 shadow-sm" : "bg-white")}>
-                        <Switch checked={formData.equipoInstalado?.enComodato} onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v}})} />
-                        <Label className={cn("font-bold", formData.equipoInstalado?.enComodato && "text-amber-800")}>Equipo en Comodato</Label>
-                      </div>
+                      <div className="flex items-center gap-3 p-3 border rounded-lg bg-white shadow-sm"><Switch checked={formData.esClienteReposicion} onCheckedChange={(v) => setFormData({...formData, esClienteReposicion: v})} /><Label className="font-bold">Cliente de Reposición</Label></div>
+                      <div className={cn("flex items-center gap-3 p-3 border rounded-lg transition-colors", formData.equipoInstalado?.enComodato ? "bg-amber-50 border-amber-200 shadow-sm" : "bg-white")}><Switch checked={formData.equipoInstalado?.enComodato} onCheckedChange={(v) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, enComodato: v}})} /><Label className={cn("font-bold", formData.equipoInstalado?.enComodato && "text-amber-800")}>Equipo en Comodato</Label></div>
                     </div>
-
-                    <div className="col-span-2 space-y-2 pt-2">
-                      <Label className="font-bold">Notas Generales</Label>
-                      <Textarea value={formData.observaciones} onChange={(e) => setFormData({...formData, observaciones: e.target.value})} className="min-h-[100px]" />
-                    </div>
+                    <div className="col-span-2 space-y-2 pt-2"><Label className="font-bold">Notas Generales</Label><Textarea value={formData.observaciones} onChange={(e) => setFormData({...formData, observaciones: e.target.value})} className="min-h-[100px]" /></div>
                   </div>
                 </TabsContent>
-
                 <TabsContent value="location" className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="col-span-2 space-y-2"><Label>Dirección</Label><Input value={formData.direccion} onChange={(e) => setFormData({...formData, direccion: e.target.value})} /></div>
                     <div className="space-y-2"><Label>Localidad</Label><Input value={formData.localidad} onChange={(e) => setFormData({...formData, localidad: e.target.value})} /></div>
                     <div className="space-y-2"><Label>Zona</Label><Select value={formData.zonaId} onValueChange={(v) => setFormData({...formData, zonaId: v})}><SelectTrigger><SelectValue placeholder="Zona..." /></SelectTrigger><SelectContent>{zones?.map((z: any) => (<SelectItem key={z.id} value={z.id}>{z.name}</SelectItem>))}</SelectContent></Select></div>
                     <div className="space-y-2"><Label>Provincia</Label><Input value={formData.provincia} onChange={(e) => setFormData({...formData, provincia: e.target.value})} /></div>
-                    <div className="col-span-2 space-y-2 pt-4">
-                      <Label className="font-bold">Observaciones de Ubicación</Label>
-                      <Textarea value={formData.observacionesUbicacion} onChange={(e) => setFormData({...formData, observacionesUbicacion: e.target.value})} placeholder="Ej: Portón verde, calle de tierra..." />
-                    </div>
+                    <div className="col-span-2 space-y-2 pt-4"><Label className="font-bold">Observaciones de Ubicación</Label><Textarea value={formData.observacionesUbicacion} onChange={(e) => setFormData({...formData, observacionesUbicacion: e.target.value})} placeholder="Ej: Portón verde..." /></div>
                   </div>
                 </TabsContent>
-
                 <TabsContent value="equipment" className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2"><Label>Medidas Pileta</Label><Input value={formData.equipoInstalado.medidasPileta} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, medidasPileta: e.target.value}})} /></div>
@@ -591,45 +492,18 @@ function CustomersContent() {
 
           <Dialog open={isStatementOpen} onOpenChange={setIsStatementOpen}>
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <div className="flex items-center gap-2">
-                  <Receipt className="h-6 w-6 text-rose-600" />
-                  <DialogTitle className="text-2xl font-black">Estado de Cuenta</DialogTitle>
-                </div>
-                <DialogDescription className="font-bold text-lg text-slate-800">
-                  {selectedCustomerForStatement?.apellido}, {selectedCustomerForStatement?.nombre}
-                </DialogDescription>
-              </DialogHeader>
+              <DialogHeader><div className="flex items-center gap-2"><Receipt className="h-6 w-6 text-rose-600" /><DialogTitle className="text-2xl font-black">Estado de Cuenta</DialogTitle></div><DialogDescription className="font-bold text-lg text-slate-800">{selectedCustomerForStatement?.apellido}, {selectedCustomerForStatement?.nombre}</DialogDescription></DialogHeader>
               <div className="py-6 space-y-6">
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl">
-                    <p className="text-[10px] font-black uppercase text-rose-700 tracking-widest">Saldo Deudor ARS</p>
-                    <p className="text-3xl font-black text-rose-800">${Math.abs(selectedCustomerForStatement?.saldoActual || 0).toLocaleString('es-AR')}</p>
-                  </div>
-                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl">
-                    <p className="text-[10px] font-black uppercase text-rose-700 tracking-widest">Saldo Deudor USD</p>
-                    <p className="text-3xl font-black text-rose-800">u$s {Math.abs(selectedCustomerForStatement?.saldoUSD || 0).toLocaleString('es-AR')}</p>
-                  </div>
+                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl"><p className="text-[10px] font-black uppercase text-rose-700 tracking-widest">Saldo Deudor ARS</p><p className="text-3xl font-black text-rose-800">${Math.abs(selectedCustomerForStatement?.saldoActual || 0).toLocaleString('es-AR')}</p></div>
+                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl"><p className="text-[10px] font-black uppercase text-rose-700 tracking-widest">Saldo Deudor USD</p><p className="text-3xl font-black text-rose-800">u$s {Math.abs(selectedCustomerForStatement?.saldoUSD || 0).toLocaleString('es-AR')}</p></div>
                 </div>
-
                 <div className="space-y-3">
                   <h4 className="text-xs font-black uppercase text-slate-500 tracking-widest px-1">Operaciones Pendientes de Pago</h4>
                   <div className="border rounded-2xl overflow-hidden bg-white shadow-sm">
-                    <Table>
-                      <TableHeader className="bg-slate-50">
-                        <TableRow>
-                          <TableHead className="text-[10px] font-black uppercase">Fecha</TableHead>
-                          <TableHead className="text-[10px] font-black uppercase">Operación</TableHead>
-                          <TableHead className="text-right text-[10px] font-black uppercase">Monto Original</TableHead>
-                          <TableHead className="text-right text-[10px] font-black uppercase">Deuda Pendiente</TableHead>
-                        </TableRow>
-                      </TableHeader>
+                    <Table><TableHeader className="bg-slate-50"><TableRow><TableHead className="text-[10px] font-black uppercase">Fecha</TableHead><TableHead className="text-[10px] font-black uppercase">Operación</TableHead><TableHead className="text-right text-[10px] font-black uppercase">Monto Original</TableHead><TableHead className="text-right text-[10px] font-black uppercase">Deuda Pendiente</TableHead></TableRow></TableHeader>
                       <TableBody>
-                        {pendingOperations.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={4} className="text-center py-12 text-muted-foreground italic">No hay operaciones con saldo pendiente.</TableCell>
-                          </TableRow>
-                        ) : pendingOperations.map(tx => (
+                        {pendingOperations.length === 0 ? (<TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground italic">Sin deudas pendientes.</TableCell></TableRow>) : pendingOperations.map(tx => (
                           <TableRow key={tx.id} className="hover:bg-muted/5 transition-colors">
                             <TableCell className="text-xs font-medium">{formatLocalDate(tx.date)}</TableCell>
                             <TableCell><Badge variant="outline" className={cn("text-[9px] uppercase font-bold", txTypeMap[tx.type]?.color || "bg-slate-50")}>{txTypeMap[tx.type]?.label || tx.type}</Badge></TableCell>
@@ -642,57 +516,20 @@ function CustomersContent() {
                   </div>
                 </div>
               </div>
-              <DialogFooter>
-                <Button onClick={() => setIsStatementOpen(false)} className="w-full font-bold h-12">Cerrar</Button>
-              </DialogFooter>
+              <DialogFooter><Button onClick={() => setIsStatementOpen(false)} className="w-full font-bold h-12">Cerrar</Button></DialogFooter>
             </DialogContent>
           </Dialog>
 
           <Dialog open={isBulkEmailOpen || isSingleCommOpen} onOpenChange={(o) => { if(!o) { setIsBulkEmailOpen(false); setIsSingleEmailOpen(false); } }}>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>{isBulkEmailOpen ? 'Email Masivo' : `Enviar Email a ${selectedCommCustomer?.nombre}`}</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>{isBulkEmailOpen ? 'Email Masivo' : `Email a ${selectedCommCustomer?.nombre}`}</DialogTitle></DialogHeader>
               <div className="space-y-4 py-4">
-                <Card className="bg-amber-50 border-amber-100 p-4 space-y-2">
-                  <p className="text-xs font-bold text-amber-800 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Verificar Remitente</p>
-                  <p className="text-[11px] leading-relaxed text-amber-700">Al abrir tu aplicación de correo, asegurate de seleccionar la cuenta Remitente (De:) correspondiente a DOSIMAT antes de enviar este mensaje.</p>
-                </Card>
-
-                <div className="space-y-2">
-                  <Label>Seleccionar Plantilla</Label>
-                  <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
-                    <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
-                    <SelectContent>{emailTemplates?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-
-                {dynamicKeys.length > 0 && (
-                  <div className="p-4 border border-dashed rounded-xl space-y-4 bg-muted/5">
-                    <p className="text-[10px] font-black uppercase text-primary">Datos Manuales Requeridos</p>
-                    <div className="grid grid-cols-1 gap-4">
-                      {dynamicKeys.map(key => (
-                        <div key={key} className="space-y-1">
-                          <Label className="text-xs font-bold">{key}</Label>
-                          <Input value={dynamicValues[key] || ""} onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})} className="bg-white h-9" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {activeTemplate && (
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-muted-foreground">Vista Previa del Mensaje</Label>
-                    <ScrollArea className="h-48 border rounded-xl bg-white p-4 italic text-sm text-slate-700 shadow-inner">
-                      <p className="font-bold mb-2">Asunto: {replaceMarkers(activeTemplate.subject || "", selectedCommCustomer, dynamicValues)}</p>
-                      <div className="whitespace-pre-wrap">{replaceMarkers(activeTemplate.body, selectedCommCustomer, dynamicValues)}</div>
-                    </ScrollArea>
-                  </div>
-                )}
+                <Card className="bg-amber-50 border-amber-100 p-4"><p className="text-xs font-bold text-amber-800 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Verificar Remitente (DOSIMAT)</p></Card>
+                <div className="space-y-2"><Label>Plantilla</Label><Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}><SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger><SelectContent>{emailTemplates?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select></div>
+                {dynamicKeys.length > 0 && (<div className="p-4 border border-dashed rounded-xl space-y-4 bg-muted/5"><p className="text-[10px] font-black uppercase text-primary">Datos Manuales</p><div className="grid grid-cols-1 gap-4">{dynamicKeys.map(key => (<div key={key} className="space-y-1"><Label className="text-xs font-bold">{key}</Label><Input value={dynamicValues[key] || ""} onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})} className="bg-white h-9" /></div>))}</div></div>)}
+                {activeTemplate && (<div className="space-y-2"><Label className="text-[10px] font-black uppercase text-muted-foreground">Vista Previa</Label><ScrollArea className="h-48 border rounded-xl bg-white p-4 italic text-sm text-slate-700 shadow-inner"><p className="font-bold mb-2">Asunto: {replaceMarkers(activeTemplate.subject || "", selectedCommCustomer, dynamicValues)}</p><div className="whitespace-pre-wrap">{replaceMarkers(activeTemplate.body, selectedCommCustomer, dynamicValues)}</div></ScrollArea></div>)}
               </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => { setIsBulkEmailOpen(false); setIsSingleEmailOpen(false); }}>Cancelar</Button>
-                <Button disabled={!selectedTemplateId || dynamicKeys.some(k => !dynamicValues[k])} onClick={isBulkEmailOpen ? handleSendBulkEmail : handleSendSingleEmail} className="bg-primary font-bold">Abrir Mail App</Button>
-              </DialogFooter>
+              <DialogFooter><Button variant="outline" onClick={() => { setIsBulkEmailOpen(false); setIsSingleEmailOpen(false); }}>Cancelar</Button><Button disabled={!selectedTemplateId || dynamicKeys.some(k => !dynamicValues[k])} onClick={isBulkEmailOpen ? handleSendBulkEmail : handleSendSingleEmail} className="bg-primary font-bold">Abrir Mail App</Button></DialogFooter>
             </DialogContent>
           </Dialog>
 
@@ -702,68 +539,19 @@ function CustomersContent() {
               <div className="space-y-4 py-4">
                 {bulkStep === 0 || isSingleWsOpen ? (
                   <>
-                    <div className="space-y-2">
-                      <Label>Seleccionar Plantilla</Label>
-                      <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
-                        <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
-                        <SelectContent>{wsTemplates?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                    {dynamicKeys.length > 0 && (
-                      <div className="p-4 border border-dashed rounded-xl space-y-4 bg-muted/5">
-                        <p className="text-[10px] font-black uppercase text-primary">Datos Manuales Requeridos</p>
-                        <div className="grid grid-cols-1 gap-4">
-                          {dynamicKeys.map(key => (
-                            <div key={key} className="space-y-1">
-                              <Label className="text-xs font-bold">{key}</Label>
-                              <Input value={dynamicValues[key] || ""} onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})} className="bg-white h-9" />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {activeTemplate && (
-                      <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase text-muted-foreground">Vista Previa</Label>
-                        <div className="p-4 border rounded-xl bg-white italic text-sm text-slate-700 shadow-inner whitespace-pre-wrap">
-                          {replaceMarkers(templateType === 'whatsapp' ? activeTemplate.body : "", selectedCommCustomer || filteredCustomers[0], dynamicValues)}
-                        </div>
-                      </div>
-                    )}
+                    <div className="space-y-2"><Label>Plantilla</Label><Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}><SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger><SelectContent>{wsTemplates?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select></div>
+                    {dynamicKeys.length > 0 && (<div className="p-4 border border-dashed rounded-xl space-y-4 bg-muted/5"><p className="text-[10px] font-black uppercase text-primary">Datos Manuales</p><div className="grid grid-cols-1 gap-4">{dynamicKeys.map(key => (<div key={key} className="space-y-1"><Label className="text-xs font-bold">{key}</Label><Input value={dynamicValues[key] || ""} onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})} className="bg-white h-9" /></div>))}</div></div>)}
+                    {activeTemplate && (<div className="space-y-2"><Label className="text-[10px] font-black uppercase text-muted-foreground">Vista Previa</Label><div className="p-4 border rounded-xl bg-white italic text-sm text-slate-700 shadow-inner whitespace-pre-wrap">{replaceMarkers(activeTemplate.body, selectedCommCustomer || filteredCustomers[0], dynamicValues)}</div></div>)}
                   </>
                 ) : (
-                  <div className="space-y-6 text-center py-6">
-                    <Progress value={(bulkStep / filteredCustomers.length) * 100} className="h-2" />
-                    <div className="space-y-2">
-                      <h3 className="text-2xl font-black">Paso {bulkStep} de {filteredCustomers.length}</h3>
-                      <p className="text-muted-foreground">Enviando a: <b>{filteredCustomers[bulkStep-1]?.apellido}, {filteredCustomers[bulkStep-1]?.nombre}</b></p>
-                    </div>
-                    <div className="p-4 bg-muted/20 rounded-xl text-left italic text-sm shadow-inner whitespace-pre-wrap">
-                      "{replaceMarkers(wsTemplates?.find(t => t.id === selectedTemplateId)?.body || "", filteredCustomers[bulkStep-1], dynamicValues)}"
-                    </div>
-                  </div>
+                  <div className="space-y-6 text-center py-6"><Progress value={(bulkStep / filteredCustomers.length) * 100} className="h-2" /><div className="space-y-2"><h3 className="text-2xl font-black">Paso {bulkStep} de {filteredCustomers.length}</h3><p className="text-muted-foreground">Para: <b>{filteredCustomers[bulkStep-1]?.apellido}, {filteredCustomers[bulkStep-1]?.nombre}</b></p></div></div>
                 )}
               </div>
-              <DialogFooter>
-                {isSingleWsOpen ? (
-                  <Button disabled={!selectedTemplateId || dynamicKeys.some(k => !dynamicValues[k])} onClick={handleSendSingleWs} className="w-full bg-emerald-600 font-bold">Abrir WhatsApp</Button>
-                ) : bulkStep === 0 ? (
-                  <Button disabled={!selectedTemplateId || dynamicKeys.some(k => !dynamicValues[k])} onClick={handleSendBulkWsNext} className="w-full bg-emerald-600 font-bold">Comenzar Secuencia</Button>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2 w-full">
-                    <Button variant="outline" onClick={() => setIsBulkWsOpen(false)}>Cancelar</Button>
-                    <Button onClick={handleSendBulkWsNext} className="bg-emerald-600 font-bold">
-                      {bulkStep < filteredCustomers.length ? "Siguiente WhatsApp" : "Finalizar"}
-                    </Button>
-                  </div>
-                )}
-              </DialogFooter>
+              <DialogFooter>{isSingleWsOpen ? (<Button disabled={!selectedTemplateId || dynamicKeys.some(k => !dynamicValues[k])} onClick={handleSendSingleWs} className="w-full bg-emerald-600 font-bold">Abrir WhatsApp</Button>) : bulkStep === 0 ? (<Button disabled={!selectedTemplateId || dynamicKeys.some(k => !dynamicValues[k])} onClick={() => setBulkStep(1)} className="w-full bg-emerald-600 font-bold">Comenzar Secuencia</Button>) : (<div className="grid grid-cols-2 gap-2 w-full"><Button variant="outline" onClick={() => setIsBulkWsOpen(false)}>Cerrar</Button><Button onClick={handleSendBulkWsNext} className="bg-emerald-600 font-bold">{bulkStep < filteredCustomers.length ? "Siguiente" : "Finalizar"}</Button></div>)}</DialogFooter>
             </DialogContent>
           </Dialog>
 
-          <AlertDialog open={!!customerToDelete} onOpenChange={(o) => !o && setCustomerToDelete(null)}>
-            <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle><AlertDialogDescription>Se borrará permanentemente a <b>{customerToDelete?.apellido}, {customerToDelete?.nombre}</b>.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={confirmDelete} className="bg-destructive">Eliminar</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
-          </AlertDialog>
+          <AlertDialog open={!!customerToDelete} onOpenChange={(o) => !o && setCustomerToDelete(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle><AlertDialogDescription>Se borrará permanentemente a <b>{customerToDelete?.apellido}, {customerToDelete?.nombre}</b>.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={confirmDelete} className="bg-destructive">Eliminar</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
         </SidebarInset>
       </div>
       <MobileNav />
@@ -772,7 +560,5 @@ function CustomersContent() {
 }
 
 export default function CustomersPage() {
-  return (
-    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}><CustomersContent /></Suspense>
-  )
+  return (<Suspense fallback={<div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}><CustomersContent /></Suspense>)
 }
