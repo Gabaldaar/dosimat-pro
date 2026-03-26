@@ -374,12 +374,26 @@ email: ${c.mail || '---'}`;
     const template = emailTemplates?.find(t => t.id === selectedTemplateId);
     if (!template) return;
 
-    // Normalizar correos: sin espacios, minúsculas, y deduplicar con Set
-    const uniqueEmails = Array.from(new Set(
-      filteredCustomers
-        .map(c => c.mail?.trim().toLowerCase())
-        .filter(m => m && m.includes('@'))
-    ));
+    // Normalización avanzada: dividir por delimitadores, limpiar y deduplicar de forma granular
+    const allEmails = new Set<string>();
+    filteredCustomers.forEach(c => {
+      if (!c.mail) return;
+      // Dividir por punto y coma, coma o espacio para detectar múltiples direcciones por campo
+      const parts = c.mail.split(/[;, ]+/);
+      parts.forEach(p => {
+        const cleaned = p.trim().toLowerCase();
+        // Validación básica de formato para evitar incluir basura en el BCC
+        if (cleaned && cleaned.includes('@') && cleaned.includes('.')) {
+          allEmails.add(cleaned);
+        }
+      });
+    });
+
+    const uniqueEmails = Array.from(allEmails);
+    if (uniqueEmails.length === 0) {
+      toast({ title: "Sin destinatarios", description: "No hay emails válidos en la lista filtrada.", variant: "destructive" });
+      return;
+    }
 
     const bcc = uniqueEmails.join(';');
     const body = replaceMarkers(template.body, null, dynamicValues);
@@ -435,7 +449,7 @@ email: ${c.mail || '---'}`;
                   <div><p className="text-[10px] font-black uppercase text-emerald-700/60 tracking-widest">Total Filtrado USD</p><h3 className={cn("text-2xl font-black mt-1", filteredTotals.usd < 0 ? "text-rose-600" : "text-emerald-600")}>u$s {filteredTotals.usd.toLocaleString('es-AR')}</h3></div>
                   <TrendingUp className="h-8 w-8 text-emerald-500/20" />
                 </CardContent>
-              </Card>
+              </div>
             </div>
           </header>
 
