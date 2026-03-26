@@ -125,7 +125,7 @@ function TransactionsContent() {
   const [filterFlow, setFilterFlow] = useState("all")
   const [itemFilterCategory, setItemFilterCategory] = useState("all")
 
-  // Desbloqueador global de puntero (Evita congelamientos de Radix UI)
+  // Observador de pointer-events para forzar desbloqueo del mouse ante bugs de Radix UI
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -386,7 +386,10 @@ function TransactionsContent() {
       const txDateStr = tx.date.split('T')[0];
       const matchStart = !filterStartDate || txDateStr >= filterStartDate;
       const matchEnd = !filterEndDate || txDateStr <= filterEndDate;
-      const matchType = filterOpType === "all" || tx.type === filterOpType;
+      
+      // Lógica de búsqueda unificada para Reposición
+      const matchType = filterOpType === "all" || 
+                        (filterOpType === 'Reposición' ? (tx.type === 'Reposición' || tx.type === 'refill') : tx.type === filterOpType);
       
       let matchFlow = true;
       if (filterFlow === 'income') matchFlow = tx.amount > 0 || tx.type === 'cobro';
@@ -783,7 +786,12 @@ function TransactionsContent() {
                  <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Cliente</Label><Select value={filterCustomer} onValueChange={setFilterCustomer}><SelectTrigger className="w-[180px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos los clientes</SelectItem>{customers?.map(c => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}</SelectContent></Select></div>
                  <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Caja</Label><Select value={filterAccount} onValueChange={setFilterAccount}><SelectTrigger className="w-[160px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas las cajas</SelectItem><SelectItem value="null">Sin Caja / A Cuenta</SelectItem>{accounts?.map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent></Select></div>
                  <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Flujo</Label><Select value={filterFlow} onValueChange={setFilterFlow}><SelectTrigger className="w-[120px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos los flujos</SelectItem><SelectItem value="income" className="text-emerald-600 font-bold">Ingresos</SelectItem><SelectItem value="expense" className="text-rose-600 font-bold">Egresos</SelectItem></SelectContent></Select></div>
-                 <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Operación</Label><Select value={filterOpType} onValueChange={setFilterOpType}><SelectTrigger className="w-[140px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{Object.keys(txTypeMap).filter(k => !['Adjustment','Expense'].includes(k)).map(k => <SelectItem key={k} value={k}>{txTypeMap[k].label}</SelectItem>)}</SelectContent></Select></div>
+                 <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Operación</Label><Select value={filterOpType} onValueChange={setFilterOpType}><SelectTrigger className="w-[140px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>
+                   {Object.keys(txTypeMap)
+                    .filter(k => !['Adjustment','Expense', 'refill', 'adjustment'].includes(k)) // Eliminamos refill y Ajuste duplicado
+                    .concat(['adjustment']) // Mantenemos una sola opción de Ajuste
+                    .map(k => <SelectItem key={k} value={k}>{txTypeMap[k].label}</SelectItem>)}
+                 </SelectContent></Select></div>
                  <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Desde</Label><Input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="h-10 w-[140px] bg-white" /></div>
                  <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Hasta</Label><Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="h-10 w-[140px] bg-white" /></div>
                  <Button variant="outline" size="icon" className="h-10 w-10 border-primary/20" onClick={() => { setFilterCustomer("all"); setFilterAccount("all"); setFilterStartDate(""); setFilterEndDate(""); setFilterOpType("all"); setFilterFlow("all"); }}><FilterX className="h-4 w-4" /></Button>
