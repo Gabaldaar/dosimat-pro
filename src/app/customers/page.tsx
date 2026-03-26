@@ -117,19 +117,6 @@ function CustomersContent() {
   const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({})
   const [bulkStep, setBulkStep] = useState(0)
 
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      if (document.body.style.pointerEvents === 'none') {
-        const anyOpen = isDialogOpen || isStatementOpen || !!customerToDelete || isBulkEmailOpen || isBulkWsOpen || isSingleCommOpen || isSingleWsOpen;
-        if (!anyOpen) {
-          document.body.style.pointerEvents = 'auto';
-        }
-      }
-    });
-    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
-    return () => observer.disconnect();
-  }, [isDialogOpen, isStatementOpen, customerToDelete, isBulkEmailOpen, isBulkWsOpen, isSingleCommOpen, isSingleWsOpen]);
-
   const defaultFormData = {
     apellido: "",
     nombre: "",
@@ -371,6 +358,7 @@ function CustomersContent() {
     const allEmails = new Set<string>();
     filteredCustomers.forEach(c => {
       if (!c.mail) return;
+      // Descomponer listas de correos separadas por punto y coma, coma o espacio
       const parts = c.mail.split(/[;, ]+/);
       parts.forEach(p => {
         const cleaned = p.trim().toLowerCase();

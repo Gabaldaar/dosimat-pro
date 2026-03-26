@@ -391,6 +391,10 @@ function TransactionsContent() {
       result = result.replace(/\{\{Saldo_Cuenta\}\}/g, tx.currency === 'USD' ? `u$s ${Number(client.saldoUSD || 0).toLocaleString('es-AR')}` : `$ ${Number(client.saldoActual || 0).toLocaleString('es-AR')}`);
     }
 
+    const account = accounts?.find(a => a.id === tx.financialAccountId);
+    result = result.replace(/\{\{Caja_Destino\}\}/g, account?.name || "A cuenta");
+    result = result.replace(/\{\{Metodo_Pago\}\}/g, account ? (account.type === 'Bank' ? 'Transferencia/Banco' : 'Efectivo') : "A cuenta");
+
     result = result.replace(/\{\{Fecha\}\}/g, formatLocalDate(tx.date));
     result = result.replace(/\{\{Tipo_Operacion\}\}/g, txTypeMap[tx.type]?.label || tx.type);
     result = result.replace(/\{\{Total\}\}/g, `${symbol} ${Math.abs(tx.amount || 0).toLocaleString('es-AR')}`);
@@ -794,7 +798,11 @@ function TransactionsContent() {
                         <TableCell className="text-right text-[10px] font-mono">{tx.currency==='USD'?'u$s':'$'} {Number(tx.accountBalanceAfter || 0).toLocaleString()}</TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
-                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="opacity-40 group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setSelectedTxDetails(tx); }}><Info className="h-4 w-4 mr-2" /> Ficha completa</DropdownMenuItem>
                               <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'ws'); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp (Plantilla)</DropdownMenuItem>
