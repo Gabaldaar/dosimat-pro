@@ -113,7 +113,6 @@ function TransactionsContent() {
   const [filterFlow, setFilterFlow] = useState("all")
   const [itemFilterCategory, setItemFilterCategory] = useState("all")
 
-  // Fix for pointer-events stuck in 'none'
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -314,6 +313,7 @@ function TransactionsContent() {
   const replaceMarkers = (text: string, tx: any, dynamicVals?: Record<string, string>) => {
     let result = text;
     const client = customers?.find(c => c.id === tx.clientId);
+    const symbol = tx.currency === 'USD' ? 'u$s' : '$';
     
     if (client) {
       result = result.replace(/\{\{Nombre\}\}/g, client.nombre || "");
@@ -325,10 +325,10 @@ function TransactionsContent() {
 
     result = result.replace(/\{\{Fecha\}\}/g, formatLocalDate(tx.date));
     result = result.replace(/\{\{Tipo_Operacion\}\}/g, txTypeMap[tx.type]?.label || tx.type);
-    result = result.replace(/\{\{Total\}\}/g, Math.abs(tx.amount || 0).toLocaleString('es-AR'));
-    result = result.replace(/\{\{Pendiente_Operacion\}\}/g, Math.abs(tx.pendingAmount || 0).toLocaleString('es-AR'));
+    result = result.replace(/\{\{Total\}\}/g, `${symbol} ${Math.abs(tx.amount || 0).toLocaleString('es-AR')}`);
+    result = result.replace(/\{\{Pendiente_Operacion\}\}/g, `${symbol} ${Math.abs(tx.pendingAmount || 0).toLocaleString('es-AR')}`);
     result = result.replace(/\{\{Moneda\}\}/g, tx.currency);
-    result = result.replace(/\{\{Monto_Abonado\}\}/g, Number(tx.paidAmount || 0).toLocaleString('es-AR'));
+    result = result.replace(/\{\{Monto_Abonado\}\}/g, `${symbol} ${Number(tx.paidAmount || 0).toLocaleString('es-AR')}`);
     result = result.replace(/\{\{Descripción\}\}/g, tx.description || "");
 
     let detailItemsText = "";
@@ -710,14 +710,14 @@ function TransactionsContent() {
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => setSelectedTxDetails(tx)}><Info className="h-4 w-4 mr-2" /> Ficha completa</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleOpenCommDialog(tx, 'ws')} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp (Plantilla)</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleCopyTxDetail(tx)}><Copy className="h-4 w-4 mr-2" /> Copiar Detalle</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleOpenCommDialog(tx, 'mail')}><Mail className="h-4 w-4 mr-2" /> Enviar mail</DropdownMenuItem>
+                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setSelectedTxDetails(tx); }}><Info className="h-4 w-4 mr-2" /> Ficha completa</DropdownMenuItem>
+                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'ws'); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp (Plantilla)</DropdownMenuItem>
+                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleCopyTxDetail(tx); }}><Copy className="h-4 w-4 mr-2" /> Copiar Detalle</DropdownMenuItem>
+                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'mail'); }}><Mail className="h-4 w-4 mr-2" /> Enviar mail</DropdownMenuItem>
                               {isAdmin && (
                                 <>
-                                  <DropdownMenuItem onClick={() => { setEditingTx(tx); resetRegisterForm(); setActiveTab(tx.type); setMainView("register"); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
-                                  <DropdownMenuItem className="text-destructive" onClick={() => setTxToDelete(tx)}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
+                                  <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setEditingTx(tx); resetRegisterForm(); setActiveTab(tx.type); setMainView("register"); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
+                                  <DropdownMenuItem className="text-destructive" onSelect={(e) => { e.preventDefault(); setTxToDelete(tx); }}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
                                 </>
                               )}
                             </DropdownMenuContent>

@@ -89,7 +89,7 @@ function CustomersContent() {
   const wsTemplatesQuery = useMemoFirebase(() => collection(db, 'whatsapp_templates'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   
-  const { data: customers } = useCollection(clientsQuery)
+  const { data: customers, isLoading } = useCollection(clientsQuery)
   const { data: zones } = useCollection(zonesQuery)
   const { data: transactions } = useCollection(txQuery)
   const { data: emailTemplates } = useCollection(emailTemplatesQuery)
@@ -117,7 +117,6 @@ function CustomersContent() {
   const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({})
   const [bulkStep, setBulkStep] = useState(0)
 
-  // Fix for pointer-events stuck in 'none' after dialog closures
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -435,7 +434,7 @@ email: ${c.mail || '---'}`;
                   <div><p className="text-[10px] font-black uppercase text-emerald-700/60 tracking-widest">Total Filtrado USD</p><h3 className={cn("text-2xl font-black mt-1", filteredTotals.usd < 0 ? "text-rose-600" : "text-emerald-600")}>u$s {filteredTotals.usd.toLocaleString('es-AR')}</h3></div>
                   <TrendingUp className="h-8 w-8 text-emerald-500/20" />
                 </CardContent>
-              </Card>
+              </div>
             </div>
           </header>
 
