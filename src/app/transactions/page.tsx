@@ -29,15 +29,14 @@ import {
   Calculator, 
   TrendingUp,
   FilterX,
-  MessageSquare,
   PlusCircle,
   Copy,
   Send,
-  ArrowRight,
   Mail,
   AlertTriangle,
   CheckCircle2,
-  Check
+  Check,
+  MessageSquare
 } from "lucide-react"
 import { useToast } from "../../hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -531,11 +530,12 @@ function TransactionsContent() {
                     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
                       <TabsList className="grid grid-cols-5 w-full h-auto p-1 bg-muted/50 border">
                           {['sale', 'refill', 'service', 'cobro', 'adjustment'].map(key => {
-                            const Icon = txTypeMap[key].icon;
+                            const info = txTypeMap[key];
+                            const Icon = info.icon;
                             return (
                               <TabsTrigger key={key} value={key} className="data-[state=active]:bg-primary data-[state=active]:text-white py-2 flex flex-col gap-1">
                                 <Icon className="h-4 w-4" />
-                                <span className="text-[9px] font-black uppercase">{txTypeMap[key].label}</span>
+                                <span className="text-[9px] font-black uppercase">{info.label}</span>
                               </TabsTrigger>
                             );
                           })}

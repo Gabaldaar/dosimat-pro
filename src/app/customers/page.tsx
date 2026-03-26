@@ -33,7 +33,6 @@ import {
   Phone,
   AlertTriangle,
   Info,
-  ChevronRight,
   Plus,
   CheckCircle2
 } from "lucide-react"
@@ -53,7 +52,7 @@ import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "../../hooks/use-toast"
-import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, useUser, updateDocumentNonBlocking } from "../../firebase"
+import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from "../../firebase"
 import { collection, doc, query, orderBy } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
@@ -247,12 +246,7 @@ function CustomersContent() {
   }
 
   const getClientDataText = (c: any) => {
-    return `*${c.apellido}, ${c.nombre}*
-Celular: ${c.telefono || '---'} 
-Dir: ${c.direccion || ''}${c.localidad ? ' - ' + c.localidad : ''}${c.provincia ? ', ' + c.provincia : ''}
-Saldo ARS: $${Number(c.saldoActual || 0).toLocaleString('es-AR')}
-Saldo USD: u$s ${Number(c.saldoUSD || 0).toLocaleString('es-AR')}
-email: ${c.mail || '---'}`;
+    return `*${c.apellido}, ${c.nombre}*\nCelular: ${c.telefono || '---'}\nDir: ${c.direccion || ''}${c.localidad ? ' - ' + c.localidad : ''}${c.provincia ? ', ' + c.provincia : ''}\nSaldo ARS: $${Number(c.saldoActual || 0).toLocaleString('es-AR')}\nSaldo USD: u$s ${Number(c.saldoUSD || 0).toLocaleString('es-AR')}\nemail: ${c.mail || '---'}`;
   }
 
   const handleCopyClientData = (c: any) => {
@@ -374,15 +368,12 @@ email: ${c.mail || '---'}`;
     const template = emailTemplates?.find(t => t.id === selectedTemplateId);
     if (!template) return;
 
-    // Normalización avanzada: dividir por delimitadores, limpiar y deduplicar de forma granular
     const allEmails = new Set<string>();
     filteredCustomers.forEach(c => {
       if (!c.mail) return;
-      // Dividir por punto y coma, coma o espacio para detectar múltiples direcciones por campo
       const parts = c.mail.split(/[;, ]+/);
       parts.forEach(p => {
         const cleaned = p.trim().toLowerCase();
-        // Validación básica de formato para evitar incluir basura en el BCC
         if (cleaned && cleaned.includes('@') && cleaned.includes('.')) {
           allEmails.add(cleaned);
         }
@@ -449,7 +440,7 @@ email: ${c.mail || '---'}`;
                   <div><p className="text-[10px] font-black uppercase text-emerald-700/60 tracking-widest">Total Filtrado USD</p><h3 className={cn("text-2xl font-black mt-1", filteredTotals.usd < 0 ? "text-rose-600" : "text-emerald-600")}>u$s {filteredTotals.usd.toLocaleString('es-AR')}</h3></div>
                   <TrendingUp className="h-8 w-8 text-emerald-500/20" />
                 </CardContent>
-              </div>
+              </Card>
             </div>
           </header>
 
@@ -628,7 +619,7 @@ email: ${c.mail || '---'}`;
                     <div className="space-y-2"><Label>Medidas Pileta</Label><Input value={formData.equipoInstalado.medidasPileta} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, medidasPileta: e.target.value}})} /></div>
                     <div className="space-y-2"><Label>Volumen (Lts)</Label><Input type="number" value={formData.equipoInstalado.volumen} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, volumen: Number(e.target.value)}})} /></div>
                     <div className="space-y-2"><Label>Modelo Equipo</Label><Input value={formData.equipoInstalado.modeloEquipo} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, modeloEquipo: e.target.value}})} /></div>
-                    <div className="col-span-2 space-y-2"><Label>Notas de Equipo</Label><Textarea value={formData.equipoInstalado.notes} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, notes: e.target.value}})} /></div>
+                    <div className="col-span-2 space-y-2"><Label>Notas de Equipo</Label><Textarea value={formData.equipoInstalado.notas} onChange={(e) => setFormData({...formData, equipoInstalado: {...formData.equipoInstalado, notas: e.target.value}})} /></div>
                   </div>
                 </TabsContent>
               </Tabs>
