@@ -784,6 +784,7 @@ function TransactionsContent() {
                     const acc = accounts?.find(a => a.id === tx.financialAccountId);
                     const info = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
                     const Icon = info.icon;
+                    const pendingAmt = Number(tx.pendingAmount || 0);
                     return (
                       <TableRow key={tx.id} className="cursor-pointer hover:bg-primary/5 transition-colors group" onClick={() => setSelectedTxDetails(tx)}>
                         <TableCell className="text-xs font-medium">{formatLocalDate(tx.date)}</TableCell>
@@ -792,7 +793,18 @@ function TransactionsContent() {
                         <TableCell><span className="text-[10px] font-bold text-muted-foreground uppercase">{acc?.name || "---"}</span></TableCell>
                         <TableCell className="text-right font-bold">{tx.currency==='USD'?'u$s':'$'} {Math.abs(tx.amount || 0).toLocaleString()}</TableCell>
                         <TableCell className="text-right text-xs font-medium">{tx.currency==='USD'?'u$s':'$'} {Number(tx.paidAmount || 0).toLocaleString()}</TableCell>
-                        <TableCell className="text-right text-xs text-rose-600 font-bold">{tx.currency==='USD'?'u$s':'$'} {Math.abs(tx.pendingAmount || 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right text-xs">
+                          <span className={cn(
+                            "px-2 py-0.5 rounded border text-[10px] font-bold",
+                            Math.abs(pendingAmt) < 0.01 
+                              ? "text-black border-transparent bg-transparent" 
+                              : pendingAmt < 0 
+                                ? "bg-rose-50 text-rose-700 border-rose-200" 
+                                : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          )}>
+                            {tx.currency==='USD'?'u$s':'$'} {Math.abs(pendingAmt).toLocaleString()}
+                          </span>
+                        </TableCell>
                         <TableCell className="text-right text-[10px] font-mono">{tx.currency==='USD'?'u$s':'$'} {Number(tx.accountBalanceAfter || 0).toLocaleString()}</TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
@@ -808,7 +820,7 @@ function TransactionsContent() {
                               <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleOpenCommDialog(tx, 'mail'), 100); }}><Mail className="h-4 w-4 mr-2" /> Enviar mail</DropdownMenuItem>
                               {isAdmin && (
                                 <>
-                                  <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleStartEdit(tx), 100); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
+                                  <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleStartEdit(tx); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
                                   <DropdownMenuItem className="text-destructive" onSelect={(e) => { e.preventDefault(); setTimeout(() => setTxToDelete(tx), 100); }}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
                                 </>
                               )}
