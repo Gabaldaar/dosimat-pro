@@ -32,7 +32,8 @@ import {
   Info,
   Plus,
   CheckCircle2,
-  Droplets
+  Droplets,
+  Copy
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import {
@@ -115,7 +116,7 @@ function CustomersContent() {
   const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({})
   const [bulkStep, setBulkStep] = useState(0)
 
-  // Pointer events safety observer
+  // Desbloqueador global de puntero (Evita congelamientos de Radix UI)
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -221,6 +222,35 @@ function CustomersContent() {
     setTimeout(() => setIsStatementOpen(true), 50);
   }
 
+  const handleCopyStatement = () => {
+    if (!selectedCustomerForStatement) return;
+    
+    const now = new Date();
+    let text = `*ESTADO DE CUENTA - DOSIMAT PRO*\n`;
+    text += `*Cliente:* ${selectedCustomerForStatement.apellido}, ${selectedCustomerForStatement.nombre}\n`;
+    text += `*Fecha:* ${now.toLocaleDateString('es-AR')}\n\n`;
+    
+    text += `*RESUMEN DE SALDOS:*\n`;
+    text += `ARS: $${Number(selectedCustomerForStatement.saldoActual || 0).toLocaleString('es-AR')} ${selectedCustomerForStatement.saldoActual < 0 ? '(Deuda)' : '(A favor)'}\n`;
+    text += `USD: u$s ${Number(selectedCustomerForStatement.saldoUSD || 0).toLocaleString('es-AR')} ${selectedCustomerForStatement.saldoUSD < 0 ? '(Deuda)' : '(A favor)'}\n\n`;
+    
+    if (pendingOperations.length > 0) {
+      text += `*DETALLE DE COMPROBANTES PENDIENTES:* \n`;
+      pendingOperations.forEach(tx => {
+        const type = txTypeMap[tx.type]?.label || tx.type;
+        const symbol = tx.currency === 'USD' ? 'u$s' : '$';
+        text += `- ${formatLocalDate(tx.date)} | ${type}: Pendiente ${symbol} ${Math.abs(tx.pendingAmount || 0).toLocaleString('es-AR')}\n`;
+      });
+    } else {
+      text += `No se registran comprobantes con deuda pendiente.\n`;
+    }
+    
+    text += `\n_Generado automáticamente por Dosimat Pro_`;
+    
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copiado", description: "Estado de cuenta listo para pegar." });
+  }
+
   const handleSave = () => {
     if (!formData.nombre || !formData.apellido) {
       toast({ title: "Error", description: "Nombre y Apellido son obligatorios", variant: "destructive" })
@@ -239,6 +269,29 @@ function CustomersContent() {
     deleteDocumentNonBlocking(doc(db, 'clients', customerToDelete.id))
     setCustomerToDelete(null)
     toast({ title: "Cliente eliminado" })
+  }
+
+  const handleBulkEmail = () => {
+    // Deduplicación inteligente: separa listas de mails y asegura que cada uno sea único
+    const uniqueEmails = new Set<string>();
+    filteredCustomers.forEach(c => {
+      if (!c.mail) return;
+      const parts = c.mail.split(/[;, ]+/);
+      parts.forEach(p => {
+        const cleaned = p.trim().toLowerCase();
+        if (cleaned && cleaned.includes('@') && cleaned.includes('.')) uniqueEmails.add(cleaned);
+      });
+    });
+
+    if (uniqueEmails.size === 0) {
+      toast({ title: "Sin destinatarios", description: "No hay emails válidos en la lista filtrada.", variant: "destructive" });
+      return;
+    }
+
+    setBulkStep(0);
+    setDynamicValues({});
+    setSelectedTemplateId("");
+    setIsBulkEmailOpen(true);
   }
 
   const replaceMarkers = (text: string, client?: any, dynamicVals?: Record<string, string>) => {
@@ -286,27 +339,21 @@ function CustomersContent() {
     setIsSingleWsOpen(false);
   };
 
-  const handleSendBulkEmail = () => {
+  const handleSendBulkEmailConfirm = () => {
     const template = emailTemplates?.find(t => t.id === selectedTemplateId);
     if (!template) return;
 
-    const allEmailsSet = new Set<string>();
+    const uniqueEmails = new Set<string>();
     filteredCustomers.forEach(c => {
       if (!c.mail) return;
       const parts = c.mail.split(/[;, ]+/);
       parts.forEach(p => {
         const cleaned = p.trim().toLowerCase();
-        if (cleaned && cleaned.includes('@') && cleaned.includes('.')) allEmailsSet.add(cleaned);
+        if (cleaned && cleaned.includes('@') && cleaned.includes('.')) uniqueEmails.add(cleaned);
       });
     });
 
-    const uniqueEmails = Array.from(allEmailsSet);
-    if (uniqueEmails.length === 0) {
-      toast({ title: "Sin destinatarios", description: "No hay emails válidos en la lista filtrada.", variant: "destructive" });
-      return;
-    }
-
-    const bcc = uniqueEmails.join(';');
+    const bcc = Array.from(uniqueEmails).join(';');
     const body = replaceMarkers(template.body, null, dynamicValues);
     const subject = replaceMarkers(template.subject || "", null, dynamicValues);
     const mailtoUrl = `mailto:?bcc=${bcc}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body).replace(/%0A/g, '%0D%0A')}`;
@@ -355,20 +402,20 @@ function CustomersContent() {
                 </h1>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" onClick={() => { setBulkStep(0); setDynamicValues({}); setSelectedTemplateId(""); setIsBulkEmailOpen(true); }} className="h-9 gap-2 font-bold"><Mail className="h-4 w-4" /> Mail Masivo</Button>
+                <Button variant="outline" size="sm" onClick={handleBulkEmail} className="h-9 gap-2 font-bold"><Mail className="h-4 w-4" /> Mail Masivo</Button>
                 <Button variant="outline" size="sm" onClick={() => { setBulkStep(0); setDynamicValues({}); setSelectedTemplateId(""); setIsBulkWsOpen(true); }} className="h-9 gap-2 font-bold border-emerald-200 text-emerald-700 bg-emerald-50"><MessageSquare className="h-4 w-4" /> WhatsApp Masivo</Button>
                 {isAdmin && <Button onClick={() => handleOpenDialog()} className="shadow-lg font-bold bg-primary h-9"><Plus className="mr-2 h-5 w-5" /> Nuevo Cliente</Button>}
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Card className="bg-primary/5 border-l-4 border-l-primary">
+              <Card className="bg-primary/5 border-l-4 border-l-primary shadow-sm">
                 <CardContent className="p-4 flex items-center justify-between">
                   <div><p className="text-[10px] font-black uppercase text-primary/60 tracking-widest">Total Filtrado ARS</p><h3 className={cn("text-2xl font-black mt-1", filteredTotals.ars < 0 ? "text-rose-600" : "text-emerald-600")}>${filteredTotals.ars.toLocaleString('es-AR')}</h3></div>
                   <Calculator className="h-8 w-8 text-primary/20" />
                 </CardContent>
               </Card>
-              <Card className="bg-emerald-50 border-l-4 border-l-emerald-500">
+              <Card className="bg-emerald-50 border-l-4 border-l-emerald-500 shadow-sm">
                 <CardContent className="p-4 flex items-center justify-between">
                   <div><p className="text-[10px] font-black uppercase text-emerald-700/60 tracking-widest">Total Filtrado USD</p><h3 className={cn("text-2xl font-black mt-1", filteredTotals.usd < 0 ? "text-rose-600" : "text-emerald-600")}>u$s {filteredTotals.usd.toLocaleString('es-AR')}</h3></div>
                   <TrendingUp className="h-8 w-8 text-emerald-500/20" />
@@ -492,11 +539,34 @@ function CustomersContent() {
 
           <Dialog open={isStatementOpen} onOpenChange={setIsStatementOpen}>
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader><div className="flex items-center gap-2"><Receipt className="h-6 w-6 text-rose-600" /><DialogTitle className="text-2xl font-black">Estado de Cuenta</DialogTitle></div><DialogDescription className="font-bold text-lg text-slate-800">{selectedCustomerForStatement?.apellido}, {selectedCustomerForStatement?.nombre}</DialogDescription></DialogHeader>
+              <DialogHeader>
+                <div className="flex items-center justify-between pr-8">
+                  <div className="flex items-center gap-2">
+                    <Receipt className="h-6 w-6 text-rose-600" />
+                    <DialogTitle className="text-2xl font-black">Estado de Cuenta</DialogTitle>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={handleCopyStatement} className="h-8 gap-2 font-bold border-primary text-primary hover:bg-primary/5">
+                    <Copy className="h-4 w-4" /> COPIAR
+                  </Button>
+                </div>
+                <DialogDescription className="font-bold text-lg text-slate-800">
+                  {selectedCustomerForStatement?.apellido}, {selectedCustomerForStatement?.nombre}
+                </DialogDescription>
+              </DialogHeader>
               <div className="py-6 space-y-6">
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl"><p className="text-[10px] font-black uppercase text-rose-700 tracking-widest">Saldo Deudor ARS</p><p className="text-3xl font-black text-rose-800">${Math.abs(selectedCustomerForStatement?.saldoActual || 0).toLocaleString('es-AR')}</p></div>
-                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl"><p className="text-[10px] font-black uppercase text-rose-700 tracking-widest">Saldo Deudor USD</p><p className="text-3xl font-black text-rose-800">u$s {Math.abs(selectedCustomerForStatement?.saldoUSD || 0).toLocaleString('es-AR')}</p></div>
+                  <div className={cn("p-4 border rounded-2xl", (selectedCustomerForStatement?.saldoActual || 0) < 0 ? "bg-rose-50 border-rose-200" : "bg-emerald-50 border-emerald-200")}>
+                    <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Saldo ARS</p>
+                    <p className={cn("text-3xl font-black", (selectedCustomerForStatement?.saldoActual || 0) < 0 ? "text-rose-800" : "text-emerald-800")}>
+                      ${Number(selectedCustomerForStatement?.saldoActual || 0).toLocaleString('es-AR')}
+                    </p>
+                  </div>
+                  <div className={cn("p-4 border rounded-2xl", (selectedCustomerForStatement?.saldoUSD || 0) < 0 ? "bg-rose-50 border-rose-200" : "bg-emerald-50 border-emerald-200")}>
+                    <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Saldo USD</p>
+                    <p className={cn("text-3xl font-black", (selectedCustomerForStatement?.saldoUSD || 0) < 0 ? "text-rose-800" : "text-emerald-800")}>
+                      u$s {Number(selectedCustomerForStatement?.saldoUSD || 0).toLocaleString('es-AR')}
+                    </p>
+                  </div>
                 </div>
                 <div className="space-y-3">
                   <h4 className="text-xs font-black uppercase text-slate-500 tracking-widest px-1">Operaciones Pendientes de Pago</h4>
@@ -529,7 +599,7 @@ function CustomersContent() {
                 {dynamicKeys.length > 0 && (<div className="p-4 border border-dashed rounded-xl space-y-4 bg-muted/5"><p className="text-[10px] font-black uppercase text-primary">Datos Manuales</p><div className="grid grid-cols-1 gap-4">{dynamicKeys.map(key => (<div key={key} className="space-y-1"><Label className="text-xs font-bold">{key}</Label><Input value={dynamicValues[key] || ""} onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})} className="bg-white h-9" /></div>))}</div></div>)}
                 {activeTemplate && (<div className="space-y-2"><Label className="text-[10px] font-black uppercase text-muted-foreground">Vista Previa</Label><ScrollArea className="h-48 border rounded-xl bg-white p-4 italic text-sm text-slate-700 shadow-inner"><p className="font-bold mb-2">Asunto: {replaceMarkers(activeTemplate.subject || "", selectedCommCustomer, dynamicValues)}</p><div className="whitespace-pre-wrap">{replaceMarkers(activeTemplate.body, selectedCommCustomer, dynamicValues)}</div></ScrollArea></div>)}
               </div>
-              <DialogFooter><Button variant="outline" onClick={() => { setIsBulkEmailOpen(false); setIsSingleEmailOpen(false); }}>Cancelar</Button><Button disabled={!selectedTemplateId || dynamicKeys.some(k => !dynamicValues[k])} onClick={isBulkEmailOpen ? handleSendBulkEmail : handleSendSingleEmail} className="bg-primary font-bold">Abrir Mail App</Button></DialogFooter>
+              <DialogFooter><Button variant="outline" onClick={() => { setIsBulkEmailOpen(false); setIsSingleEmailOpen(false); }}>Cancelar</Button><Button disabled={!selectedTemplateId || dynamicKeys.some(k => !dynamicValues[k])} onClick={isBulkEmailOpen ? handleSendBulkEmailConfirm : handleSendSingleEmail} className="bg-primary font-bold">Abrir Mail App</Button></DialogFooter>
             </DialogContent>
           </Dialog>
 
