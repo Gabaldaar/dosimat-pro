@@ -1,5 +1,7 @@
 
-// Service Worker básico para habilitar la instalación de la PWA
+// Service Worker básico para cumplir con los requisitos de instalación PWA
+const CACHE_NAME = 'dosimat-pro-v1';
+
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
@@ -9,6 +11,6 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Estrategia de red solamente para asegurar datos frescos de Firestore
-  event.respondWith(fetch(event.request));
+  // Requerido para la activación del banner de instalación
+  // Aquí se podría implementar lógica de caché offline en el futuro
 });

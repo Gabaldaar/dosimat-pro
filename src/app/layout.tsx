@@ -10,6 +10,12 @@ import Script from 'next/script';
 export const metadata: Metadata = {
   title: 'Dosimat Pro | Gestión de Piscinas',
   description: 'Sistema inteligente para el mantenimiento de piscinas y control financiero',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Dosimat Pro',
+  },
   icons: {
     icon: [
       { url: 'https://i.ibb.co/tM1VCHQ5/logo.png', type: 'image/png' },
@@ -37,6 +43,8 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
       </head>
       <body className="font-body antialiased bg-background text-foreground min-h-screen">
         <FirebaseClientProvider>
@@ -50,12 +58,12 @@ export default function RootLayout({
         
         <Script id="register-sw" strategy="afterInteractive">
           {`
-            if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+            if ('serviceWorker' in navigator) {
               window.addEventListener('load', function() {
-                navigator.serviceWorker.getRegistrations().then(registrations => {
-                  for(let registration of registrations) {
-                    registration.unregister();
-                  }
+                navigator.serviceWorker.register('/sw.js').then(function(registration) {
+                  console.log('Dosimat Pro PWA: Registro de ServiceWorker exitoso');
+                }, function(err) {
+                  console.log('Dosimat Pro PWA: Error al registrar ServiceWorker: ', err);
                 });
               });
             }

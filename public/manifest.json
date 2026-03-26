@@ -2,20 +2,21 @@
 {
   "name": "Dosimat Pro",
   "short_name": "Dosimat",
-  "description": "Gestión inteligente de mantenimiento de piscinas y finanzas.",
+  "description": "Gestión inteligente de piscinas y finanzas para profesionales.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#eff6ff",
+  "background_color": "#f8fafc",
   "theme_color": "#3b82f6",
+  "orientation": "portrait",
   "icons": [
     {
-      "src": "https://picsum.photos/seed/dosimat-pwa-192/192/192",
+      "src": "https://i.ibb.co/tM1VCHQ5/logo.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "https://picsum.photos/seed/dosimat-pwa-512/512/512",
+      "src": "https://i.ibb.co/tM1VCHQ5/logo.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
