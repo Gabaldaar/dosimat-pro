@@ -35,7 +35,8 @@ import {
   Send,
   ArrowRight,
   Mail,
-  AlertTriangle
+  AlertTriangle,
+  CheckCircle2
 } from "lucide-react"
 import { useToast } from "../../hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -112,19 +113,6 @@ function TransactionsContent() {
   const [filterOpType, setFilterOpType] = useState("all") 
   const [filterFlow, setFilterFlow] = useState("all")
   const [itemFilterCategory, setItemFilterCategory] = useState("all")
-
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      if (document.body.style.pointerEvents === 'none') {
-        const anyOpen = !!selectedTxDetails || isWsDialogOpen || isMailDialogOpen || !!txToDelete || !!editingTx;
-        if (!anyOpen) {
-          document.body.style.pointerEvents = 'auto';
-        }
-      }
-    });
-    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
-    return () => observer.disconnect();
-  }, [selectedTxDetails, isWsDialogOpen, isMailDialogOpen, txToDelete, editingTx]);
 
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
@@ -209,12 +197,55 @@ function TransactionsContent() {
     setSelectedItems(prev => [...prev, { itemId: item.id, name: item.name, qty: 1, price: defaultPrice, currency: defaultCurrency, discount: 0 }])
   }
 
+  const handleStartEdit = (tx: any) => {
+    setEditingTx(tx);
+    setSelectedCustomerId(tx.clientId || "none");
+    setOperationDate(tx.date.split('T')[0]);
+    setActiveTab(tx.type);
+    setTxDescription(tx.description || "");
+    
+    if (['cobro', 'adjustment', 'Expense'].includes(tx.type)) {
+      setManualAmount(Math.abs(tx.amount));
+      setManualCurrency(tx.currency);
+      setManualAccountId(tx.financialAccountId || "pending");
+      setAdjustmentSign(tx.amount >= 0 ? "1" : "-1");
+      setImputations(tx.imputations || {});
+    } else {
+      setSelectedItems(tx.items || []);
+      const newPaid: Record<string, number> = { ARS: 0, USD: 0 };
+      const newAccs: Record<string, string> = { ARS: "pending", USD: "pending" };
+      newPaid[tx.currency] = Number(tx.paidAmount || 0);
+      newAccs[tx.currency] = tx.financialAccountId || "pending";
+      setPaidAmounts(newPaid);
+      setDestinationAccounts(newAccs);
+    }
+    setMainView("register");
+  };
+
   const handleSaveTransaction = () => {
+    // Si estamos editando, primero revertimos el impacto financiero de la versión vieja
+    if (editingTx) {
+      const tx = editingTx;
+      if (tx.clientId) {
+        const field = tx.currency === 'USD' ? 'saldoUSD' : 'saldoActual';
+        updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [field]: increment(-Number(tx.amount || 0)) });
+      }
+      if (tx.financialAccountId) {
+        const amountToRevert = tx.type === 'cobro' ? -Number(tx.amount) : -Number(tx.paidAmount || 0);
+        updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), { initialBalance: increment(amountToRevert) });
+      }
+      if (tx.type === 'cobro' && tx.imputations) {
+        Object.entries(tx.imputations).forEach(([targetId, amount]) => {
+          updateDocumentNonBlocking(doc(db, 'transactions', targetId), { pendingAmount: increment(Number(amount)) });
+        });
+      }
+    }
+
     const client = selectedCustomerId && selectedCustomerId !== "none" ? customers?.find(c => c.id === selectedCustomerId) : null;
     const finalDateStr = new Date(operationDate + 'T12:00:00').toISOString();
 
     if (['cobro', 'adjustment', 'Expense'].includes(activeTab)) {
-      const txId = Math.random().toString(36).substring(2, 11)
+      const txId = editingTx?.id || Math.random().toString(36).substring(2, 11)
       const finalAmount = Number(manualAmount) * (activeTab === 'adjustment' ? Number(adjustmentSign) : activeTab === 'Expense' ? -1 : 1)
       
       const acc = manualAccountId !== "pending" ? accounts?.find(a => a.id === manualAccountId) : null;
@@ -227,7 +258,7 @@ function TransactionsContent() {
         type: activeTab, 
         amount: finalAmount, 
         currency: manualCurrency, 
-        description: txDescription || `${activeTab} manual`, 
+        description: txDescription || `${txTypeMap[activeTab].label} manual`, 
         financialAccountId: manualAccountId === "pending" ? null : manualAccountId, 
         paidAmount: activeTab === 'cobro' ? finalAmount : 0, 
         pendingAmount: (activeTab === 'adjustment' && finalAmount < 0) ? finalAmount : 0,
@@ -257,7 +288,7 @@ function TransactionsContent() {
       ['ARS', 'USD'].forEach(curr => {
         const total = cartTotals[curr as 'ARS' | 'USD']; if (total <= 0) return;
         const paid = Number(paidAmounts[curr] || 0); const debt = total - paid;
-        const txId = Math.random().toString(36).substring(2, 11);
+        const txId = editingTx?.id || Math.random().toString(36).substring(2, 11);
         
         const acc = destinationAccounts[curr] !== "pending" ? accounts?.find(a => a.id === destinationAccounts[curr]) : null;
         const accountBalanceAfter = (Number(acc?.initialBalance || 0)) + paid;
@@ -271,7 +302,7 @@ function TransactionsContent() {
           paidAmount: paid, 
           debtAmount: debt, 
           currency: curr, 
-          description: txDescription || `Operación ${activeTab}`, 
+          description: txDescription || `Operación ${txTypeMap[activeTab].label}`, 
           financialAccountId: (destinationAccounts[curr]==="pending" || paid === 0) ? null : destinationAccounts[curr], 
           items: selectedItems.filter(i => i.currency === curr), 
           pendingAmount: -debt,
@@ -282,52 +313,45 @@ function TransactionsContent() {
         if (client && debt !== 0) { const field = curr === 'ARS' ? 'saldoActual' : 'saldoUSD'; updateDocumentNonBlocking(doc(db, 'clients', client.id), { [field]: increment(-debt) }); }
       })
     }
-    toast({ title: "Operación registrada" }); resetRegisterForm(); setMainView("history");
+    toast({ title: editingTx ? "Operación actualizada" : "Operación registrada" }); 
+    resetRegisterForm(); 
+    setMainView("history");
   }
 
   const resetRegisterForm = () => {
-    setEditingTx(null); setSelectedCustomerId(""); setSelectedItems([]); setTxDescription(""); setManualAmount(0); setPaidAmounts({ ARS: 0, USD: 0 }); setDestinationAccounts({ ARS: "pending", USD: "pending" }); setImputations({});
+    setEditingTx(null); 
+    setSelectedCustomerId(""); 
+    setSelectedItems([]); 
+    setTxDescription(""); 
+    setManualAmount(0); 
+    setPaidAmounts({ ARS: 0, USD: 0 }); 
+    setDestinationAccounts({ ARS: "pending", USD: "pending" }); 
+    setImputations({});
   }
 
   const handleDeleteTx = () => {
     if (!txToDelete) return;
     const tx = txToDelete;
 
-    // 1. Revertir Saldo de Cliente
     if (tx.clientId) {
       const field = tx.currency === 'USD' ? 'saldoUSD' : 'saldoActual';
-      // Restamos el monto para volver atrás. Si el monto fue positivo (cobro), restarlo aumenta la deuda.
-      // Si fue negativo (venta), restarlo restaura el saldo a favor o limpia deuda.
-      updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), {
-        [field]: increment(-Number(tx.amount || 0))
-      });
+      updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [field]: increment(-Number(tx.amount || 0)) });
     }
 
-    // 2. Revertir Saldo de Caja
     if (tx.financialAccountId) {
-      // Si fue cobro (positivo), restamos el total cobrado de la caja.
-      // Si fue venta, restamos el paidAmount (lo que efectivamente entró a caja).
       const amountToRevert = tx.type === 'cobro' ? -Number(tx.amount) : -Number(tx.paidAmount || 0);
-      updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), {
-        initialBalance: increment(amountToRevert)
-      });
+      updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), { initialBalance: increment(amountToRevert) });
     }
 
-    // 3. Revertir Imputaciones (si es cobro)
     if (tx.type === 'cobro' && tx.imputations) {
       Object.entries(tx.imputations).forEach(([targetId, amount]) => {
-        // Al cobrar restamos del pendiente. Al borrar, sumamos de vuelta el monto pagado para que vuelva a figurar como deuda.
-        updateDocumentNonBlocking(doc(db, 'transactions', targetId), {
-          pendingAmount: increment(Number(amount))
-        });
+        updateDocumentNonBlocking(doc(db, 'transactions', targetId), { pendingAmount: increment(Number(amount)) });
       });
     }
 
-    // 4. Eliminar el documento
     deleteDocumentNonBlocking(doc(db, 'transactions', tx.id));
-    
     setTxToDelete(null);
-    toast({ title: "Operación eliminada y saldos revertidos" });
+    toast({ title: "Operación eliminada" });
   };
 
   const filteredTransactions = useMemo(() => {
@@ -494,7 +518,7 @@ function TransactionsContent() {
           </div>
           <Tabs value={mainView} onValueChange={setMainView}>
             <TabsList className="bg-muted/40 h-10 p-1 rounded-xl shadow-inner border">
-              <TabsTrigger value="register" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary uppercase">NUEVA</TabsTrigger>
+              <TabsTrigger value="register" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary uppercase">{editingTx ? 'EDITAR' : 'NUEVA'}</TabsTrigger>
               <TabsTrigger value="history" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary uppercase">HISTORIAL</TabsTrigger>
             </TabsList>
           </Tabs>
@@ -506,7 +530,7 @@ function TransactionsContent() {
               <CardHeader className="pb-4">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                    <div className="space-y-1">
-                     <CardTitle className="text-xl flex items-center gap-2">Registrar {txTypeMap[activeTab]?.label}</CardTitle>
+                     <CardTitle className="text-xl flex items-center gap-2">{editingTx ? 'Editando' : 'Registrar'} {txTypeMap[activeTab]?.label}</CardTitle>
                      <p className="text-xs text-muted-foreground">{txTypeMap[activeTab]?.description}</p>
                    </div>
                     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
@@ -576,16 +600,27 @@ function TransactionsContent() {
                               {customerPendingTxs.filter(tx => tx.currency === manualCurrency).map(tx => (
                                 <TableRow key={tx.id}>
                                   <TableCell className="text-xs">{formatLocalDate(tx.date)}</TableCell>
-                                  <TableCell><Badge variant="outline" className="text-[9px] uppercase">{tx.type}</Badge></TableCell>
+                                  <TableCell><Badge variant="outline" className={cn("text-[9px] uppercase", txTypeMap[tx.type]?.color)}>{txTypeMap[tx.type]?.label || tx.type}</Badge></TableCell>
                                   <TableCell className="text-right font-bold text-rose-600">{manualCurrency==='USD'?'u$s':'$'} {Math.abs(tx.pendingAmount || 0).toLocaleString()}</TableCell>
                                   <TableCell>
-                                    <Input 
-                                      type="number" 
-                                      className="h-8 text-right font-black border-emerald-200" 
-                                      value={imputations[tx.id] || ""} 
-                                      onChange={(e) => setImputations({...imputations, [tx.id]: Number(e.target.value)})}
-                                      placeholder="0"
-                                    />
+                                    <div className="flex items-center gap-2">
+                                      <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 shrink-0"
+                                        onClick={() => setImputations({...imputations, [tx.id]: Math.abs(tx.pendingAmount)})}
+                                        title="Saldar factura completa"
+                                      >
+                                        <CheckCircle2 className="h-4 w-4" />
+                                      </Button>
+                                      <Input 
+                                        type="number" 
+                                        className="h-8 text-right font-black border-emerald-200" 
+                                        value={imputations[tx.id] || ""} 
+                                        onChange={(e) => setImputations({...imputations, [tx.id]: Number(e.target.value)})}
+                                        placeholder="0"
+                                      />
+                                    </div>
                                   </TableCell>
                                 </TableRow>
                               ))}
@@ -705,7 +740,13 @@ function TransactionsContent() {
                     })}
                   </div>
                 )}
-                <Button className="w-full h-14 font-black shadow-xl text-lg uppercase" onClick={handleSaveTransaction}>REGISTRAR</Button>
+                {activeTab === 'cobro' && (
+                  <div className="p-4 rounded-xl border bg-emerald-50 mb-4">
+                    <p className="text-xs font-black uppercase text-emerald-700 mb-2">Total a registrar</p>
+                    <p className="text-3xl font-black text-emerald-800">{manualCurrency === 'USD' ? 'u$s' : '$'} {manualAmount.toLocaleString()}</p>
+                  </div>
+                )}
+                <Button className="w-full h-14 font-black shadow-xl text-lg uppercase" onClick={handleSaveTransaction}>{editingTx ? 'GUARDAR CAMBIOS' : 'REGISTRAR'}</Button>
                 <Button variant="outline" className="w-full h-12 border-rose-600 text-rose-600 hover:bg-rose-50 font-bold uppercase" onClick={() => { resetRegisterForm(); setMainView("history"); }}>CANCELAR</Button>
               </CardContent>
             </Card>
@@ -766,7 +807,7 @@ function TransactionsContent() {
                               <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'mail'); }}><Mail className="h-4 w-4 mr-2" /> Enviar mail</DropdownMenuItem>
                               {isAdmin && (
                                 <>
-                                  <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setEditingTx(tx); resetRegisterForm(); setActiveTab(tx.type); setMainView("register"); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
+                                  <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleStartEdit(tx); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
                                   <DropdownMenuItem className="text-destructive" onSelect={(e) => { e.preventDefault(); setTxToDelete(tx); }}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
                                 </>
                               )}
@@ -840,7 +881,7 @@ function TransactionsContent() {
                             return (
                               <TableRow key={tid}>
                                 <TableCell className="text-xs">{originalTx ? formatLocalDate(originalTx.date) : "---"}</TableCell>
-                                <TableCell className="text-xs font-bold">{originalTx?.description || "Factura original"}</TableCell>
+                                <TableCell className="text-xs font-bold">{originalTx ? (txTypeMap[originalTx.type]?.label || originalTx.type) : "Factura original"}</TableCell>
                                 <TableCell className="text-right font-black">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {amount.toLocaleString()}</TableCell>
                               </TableRow>
                             )
