@@ -39,7 +39,9 @@ import {
   MapPin,
   Target,
   Coins,
-  Info
+  Info,
+  HandCoins,
+  AlertCircle
 } from "lucide-react"
 import { useFirestore, useCollection, useMemoFirebase, useUser } from "../../firebase"
 import { collection, query, orderBy } from "firebase/firestore"
@@ -51,9 +53,12 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 const LABEL_MAP: Record<string, string> = {
   sale: 'Ventas',
   refill: 'Reposiciones',
+  'Reposición': 'Reposiciones',
   service: 'Servicio Técnico',
   adjustment: 'Ajustes / Otros',
-  Expense: 'Gastos Generales'
+  Adjustment: 'Ajustes / Otros',
+  Expense: 'Gastos Generales',
+  cobro_saldo: 'Cobro de Saldo Histórico'
 }
 
 export default function AnalysisPage() {
@@ -142,7 +147,7 @@ export default function AnalysisPage() {
       
       if (tx.type === 'cobro') {
         acc[curr].income += Math.abs(tx.amount)
-      } else if (tx.type === 'sale' || tx.type === 'refill' || tx.type === 'service') {
+      } else if (['sale', 'refill', 'service', 'Reposición'].includes(tx.type)) {
         acc[curr].income += Number(tx.paidAmount || 0)
       } else if ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount > 0) {
         acc[curr].income += tx.amount
@@ -158,6 +163,17 @@ export default function AnalysisPage() {
       USD: { income: 0, expense: 0 } 
     })
   }, [filteredTxsForSummary])
+
+  const totalDebt = useMemo(() => {
+    if (!clients) return { ARS: 0, USD: 0 };
+    return clients.reduce((acc, c) => {
+      const ars = Number(c.saldoActual || 0);
+      const usd = Number(c.saldoUSD || 0);
+      if (ars < 0) acc.ARS += Math.abs(ars);
+      if (usd < 0) acc.USD += Math.abs(usd);
+      return acc;
+    }, { ARS: 0, USD: 0 });
+  }, [clients]);
 
   const annualData = useMemo(() => {
     if (!transactions) return []
@@ -180,7 +196,7 @@ export default function AnalysisPage() {
       const point = last12.find(p => p.month === txDate.getMonth() && p.year === txDate.getFullYear())
       if (point && tx.currency === analysisCurrency) {
         if (tx.type === 'cobro') point.ingresos += Math.abs(tx.amount)
-        else if (['sale', 'refill', 'service'].includes(tx.type)) point.ingresos += Number(tx.paidAmount || 0)
+        else if (['sale', 'refill', 'service', 'Reposición'].includes(tx.type)) point.ingresos += Number(tx.paidAmount || 0)
         else if ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount > 0) point.ingresos += tx.amount
         
         if (tx.type === 'Expense' || ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount < 0)) {
@@ -194,28 +210,40 @@ export default function AnalysisPage() {
 
   const incomePieData = useMemo(() => {
     const counts: Record<string, number> = {}
+    
     filteredTxsByCurrency.forEach(tx => {
-      let amount = 0
-      let source = ''
-
       if (tx.type === 'cobro') {
-        amount = Math.abs(tx.amount)
-        source = tx.relatedType || 'sale'
-      } else if (['sale', 'refill', 'service'].includes(tx.type)) {
-        amount = Number(tx.paidAmount || 0)
-        source = tx.type
-      } else if ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount > 0) {
-        amount = tx.amount
-        source = 'adjustment'
-      }
+        const totalCobro = Math.abs(tx.amount);
+        let distributedAmount = 0;
 
-      if (amount > 0) {
-        const label = LABEL_MAP[source] || source
-        counts[label] = (counts[label] || 0) + amount
+        if (tx.imputations) {
+          Object.entries(tx.imputations).forEach(([targetId, amount]) => {
+            const targetTx = transactions?.find(t => t.id === targetId);
+            const sourceKey = targetTx?.type || 'adjustment';
+            const label = LABEL_MAP[sourceKey] || sourceKey;
+            counts[label] = (counts[label] || 0) + Number(amount);
+            distributedAmount += Number(amount);
+          });
+        }
+
+        const remaining = totalCobro - distributedAmount;
+        if (remaining > 0.01) {
+          const label = LABEL_MAP['cobro_saldo'];
+          counts[label] = (counts[label] || 0) + remaining;
+        }
+      } else if (['sale', 'refill', 'service', 'Reposición'].includes(tx.type)) {
+        const amount = Number(tx.paidAmount || 0);
+        if (amount > 0) {
+          const label = LABEL_MAP[tx.type] || tx.type;
+          counts[label] = (counts[label] || 0) + amount;
+        }
+      } else if ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount > 0) {
+        const label = LABEL_MAP['adjustment'];
+        counts[label] = (counts[label] || 0) + tx.amount;
       }
     })
     return Object.entries(counts).map(([name, value]) => ({ name, value }))
-  }, [filteredTxsByCurrency])
+  }, [filteredTxsByCurrency, transactions])
 
   const expensePieData = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -234,7 +262,7 @@ export default function AnalysisPage() {
     filteredTxsByCurrency.forEach(tx => {
       let amount = 0
       if (tx.type === 'cobro') amount = Math.abs(tx.amount)
-      else if (['sale', 'refill', 'service'].includes(tx.type)) amount = Number(tx.paidAmount || 0)
+      else if (['sale', 'refill', 'service', 'Reposición'].includes(tx.type)) amount = Number(tx.paidAmount || 0)
 
       if (amount > 0) {
         const client = clients?.find(c => c.id === tx.clientId)
@@ -351,7 +379,7 @@ export default function AnalysisPage() {
         </Card>
 
         {/* Totals Section */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <Card className="glass-card bg-emerald-50/30 border-l-4 border-l-emerald-500 relative overflow-hidden">
             <div className="absolute top-2 right-2 opacity-10"><TrendingUp className="h-12 w-12 text-emerald-600" /></div>
             <CardContent className="pt-6">
@@ -404,6 +432,21 @@ export default function AnalysisPage() {
               </div>
             </CardContent>
           </Card>
+
+          <Card className="glass-card bg-amber-50/30 border-l-4 border-l-amber-500 relative overflow-hidden">
+            <div className="absolute top-2 right-2 opacity-10"><HandCoins className="h-12 w-12 text-amber-600" /></div>
+            <CardContent className="pt-6">
+              <p className="text-[10px] font-black uppercase text-amber-700 tracking-widest mb-4">Cuentas a Cobrar (Deuda)</p>
+              <div className="space-y-1">
+                <h3 className="text-3xl font-black text-amber-800">
+                  {currencySymbol} {totalDebt[analysisCurrency as 'ARS' | 'USD'].toLocaleString('es-AR')}
+                </h3>
+                <p className="text-xs font-bold text-amber-600 opacity-60">
+                  Ref. {otherSymbol} {totalDebt[otherCurrency as 'ARS' | 'USD'].toLocaleString('es-AR')}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Charts Section */}
@@ -442,9 +485,9 @@ export default function AnalysisPage() {
           <Card className="glass-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-emerald-700">
-                <PieChartIcon className="h-5 w-5" /> Ingresos por Rubro ({analysisCurrency})
+                <PieChartIcon className="h-5 w-5" /> Ingresos Reales por Rubro ({analysisCurrency})
               </CardTitle>
-              <CardDescription>Origen del dinero cobrado en {analysisCurrency}</CardDescription>
+              <CardDescription>Origen del dinero según imputaciones en {analysisCurrency}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[300px] w-full">
@@ -481,7 +524,7 @@ export default function AnalysisPage() {
           <Card className="glass-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-rose-700">
-                <PieChartIcon className="h-5 w-5" /> Gastos por Categoría ({analysisCurrency})
+                <PieChartIcon className="h-5 w-5" /> Gastos Reales por Categoría ({analysisCurrency})
               </CardTitle>
               <CardDescription>Distribución de egresos en {analysisCurrency}</CardDescription>
             </CardHeader>
@@ -523,7 +566,7 @@ export default function AnalysisPage() {
            <Card className="glass-card">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <MapPin className="h-5 w-5 text-primary" /> Top 5 Zonas ({analysisCurrency})
+                  <MapPin className="h-5 w-5 text-primary" /> Top 5 Zonas Recaudación ({analysisCurrency})
                 </CardTitle>
                 <CardDescription>Recaudación real por ubicación geográfica</CardDescription>
               </CardHeader>
@@ -558,15 +601,15 @@ export default function AnalysisPage() {
                 </div>
                 <div className="pt-4 border-t border-white/10 space-y-3">
                    <div className="flex gap-3">
-                     <div className="bg-white/20 p-2 rounded-lg h-fit"><Info className="h-4 w-4" /></div>
+                     <div className="bg-white/20 p-2 rounded-lg h-fit"><AlertCircle className="h-4 w-4" /></div>
                      <p className="text-xs leading-relaxed">
-                       Estás visualizando el análisis en <b>{analysisCurrency === 'ARS' ? 'Pesos (ARS)' : 'Dólares (USD)'}</b>. Los gráficos y tablas omiten los movimientos que no correspondan a esta moneda.
+                       <b>Trazabilidad Total:</b> Los cobros ahora se desglosan según las facturas que cancelaron. Esto evita que todo aparezca como "Venta" y muestra la realidad de tus cobros de Reposiciones y Servicios.
                      </p>
                    </div>
                    <div className="flex gap-3">
                      <div className="bg-white/20 p-2 rounded-lg h-fit"><Wallet className="h-4 w-4" /></div>
                      <p className="text-xs leading-relaxed">
-                       <b>Criterio de Caja:</b> Este panel solo contabiliza el dinero que realmente ingresó o egresó de tus cajas. Las deudas pendientes no se reflejan en estos totales de ingresos.
+                       <b>Criterio de Caja:</b> Este panel solo contabiliza el dinero que realmente ingresó o egresó de tus cajas. Las deudas pendientes no se reflejan en los ingresos, sino en el nuevo bloque de "Dinero en la Calle".
                      </p>
                    </div>
                 </div>
