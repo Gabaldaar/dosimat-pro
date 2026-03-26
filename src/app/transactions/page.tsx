@@ -763,79 +763,166 @@ function TransactionsContent() {
                  <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Hasta</Label><Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="h-10 w-[140px]" /></div>
                  <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => { setFilterCustomer("all"); setFilterAccount("all"); setFilterStartDate(""); setFilterEndDate(""); setFilterOpType("all"); setFilterFlow("all"); }}><FilterX className="h-4 w-4" /></Button>
             </Card>
-            <Card className="glass-card overflow-hidden shadow-sm">
-              <Table>
-                <TableHeader className="bg-muted/30">
-                  <TableRow>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Caja</TableHead>
-                    <TableHead className="text-right">Monto</TableHead>
-                    <TableHead className="text-right">Abonado</TableHead>
-                    <TableHead className="text-right">Pendiente</TableHead>
-                    <TableHead className="text-right">Saldo Caja</TableHead>
-                    <TableHead className="w-12"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredTransactions.map((tx: any) => {
-                    const cust = customers?.find(c => c.id === tx.clientId);
-                    const acc = accounts?.find(a => a.id === tx.financialAccountId);
-                    const info = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
-                    const Icon = info.icon;
-                    const pendingAmt = Number(tx.pendingAmount || 0);
-                    return (
-                      <TableRow key={tx.id} className="cursor-pointer hover:bg-primary/5 transition-colors group" onClick={() => setSelectedTxDetails(tx)}>
-                        <TableCell className="text-xs font-medium">{formatLocalDate(tx.date)}</TableCell>
-                        <TableCell><span className="font-bold">{cust ? `${cust.apellido}, ${cust.nombre}` : 'Global'}</span></TableCell>
-                        <TableCell><Badge variant="outline" className={cn("text-[9px] gap-1", info.color)}><Icon className="h-3 w-3" />{info.label}</Badge></TableCell>
-                        <TableCell><span className="text-[10px] font-bold text-muted-foreground uppercase">{acc?.name || "---"}</span></TableCell>
-                        <TableCell className="text-right font-bold">{tx.currency==='USD'?'u$s':'$'} {Math.abs(tx.amount || 0).toLocaleString()}</TableCell>
-                        <TableCell className="text-right text-xs font-medium">{tx.currency==='USD'?'u$s':'$'} {Number(tx.paidAmount || 0).toLocaleString()}</TableCell>
-                        <TableCell className="text-right text-xs">
-                          <span className={cn(
-                            "px-2 py-0.5 rounded border text-[10px] font-bold",
+
+            {/* VISTA DESKTOP: TABLA */}
+            <div className="hidden md:block">
+              <Card className="glass-card overflow-hidden shadow-sm">
+                <Table>
+                  <TableHeader className="bg-muted/30">
+                    <TableRow>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Caja</TableHead>
+                      <TableHead className="text-right">Monto</TableHead>
+                      <TableHead className="text-right">Abonado</TableHead>
+                      <TableHead className="text-right">Pendiente</TableHead>
+                      <TableHead className="text-right">Saldo Caja</TableHead>
+                      <TableHead className="w-12"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTransactions.map((tx: any) => {
+                      const cust = customers?.find(c => c.id === tx.clientId);
+                      const acc = accounts?.find(a => a.id === tx.financialAccountId);
+                      const info = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
+                      const Icon = info.icon;
+                      const pendingAmt = Number(tx.pendingAmount || 0);
+                      return (
+                        <TableRow key={tx.id} className="cursor-pointer hover:bg-primary/5 transition-colors group" onClick={() => setSelectedTxDetails(tx)}>
+                          <TableCell className="text-xs font-medium">{formatLocalDate(tx.date)}</TableCell>
+                          <TableCell><span className="font-bold">{cust ? `${cust.apellido}, ${cust.nombre}` : 'Global'}</span></TableCell>
+                          <TableCell><Badge variant="outline" className={cn("text-[9px] gap-1", info.color)}><Icon className="h-3 w-3" />{info.label}</Badge></TableCell>
+                          <TableCell><span className="text-[10px] font-bold text-muted-foreground uppercase">{acc?.name || "---"}</span></TableCell>
+                          <TableCell className="text-right font-bold">{tx.currency==='USD'?'u$s':'$'} {Math.abs(tx.amount || 0).toLocaleString()}</TableCell>
+                          <TableCell className="text-right text-xs font-medium">{tx.currency==='USD'?'u$s':'$'} {Number(tx.paidAmount || 0).toLocaleString()}</TableCell>
+                          <TableCell className="text-right text-xs">
+                            <span className={cn(
+                              "px-2 py-0.5 rounded border text-[10px] font-bold",
+                              Math.abs(pendingAmt) < 0.01 
+                                ? "text-black border-transparent bg-transparent" 
+                                : pendingAmt < 0 
+                                  ? "bg-rose-50 text-rose-700 border-rose-200" 
+                                  : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            )}>
+                              {tx.currency==='USD'?'u$s':'$'} {Math.abs(pendingAmt).toLocaleString()}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right text-[10px] font-mono">{tx.currency==='USD'?'u$s':'$'} {Number(tx.accountBalanceAfter || 0).toLocaleString()}</TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="opacity-40 group-hover:opacity-100">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => setSelectedTxDetails(tx), 150); }}><Info className="h-4 w-4 mr-2" /> Ficha completa</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleOpenCommDialog(tx, 'ws'), 150); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp (Plantilla)</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleCopyTxDetail(tx); }}><Copy className="h-4 w-4 mr-2" /> Copiar Detalle</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleOpenCommDialog(tx, 'mail'), 150); }}><Mail className="h-4 w-4 mr-2" /> Enviar mail</DropdownMenuItem>
+                                {isAdmin && (
+                                  <>
+                                    <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleStartEdit(tx); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
+                                    <DropdownMenuItem className="text-destructive" onSelect={(e) => { e.preventDefault(); setTimeout(() => setTxToDelete(tx), 150); }}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
+                                  </>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </Card>
+            </div>
+
+            {/* VISTA MÓVIL: TARJETAS */}
+            <div className="md:hidden space-y-4">
+              {filteredTransactions.map((tx: any) => {
+                const cust = customers?.find(c => c.id === tx.clientId);
+                const acc = accounts?.find(a => a.id === tx.financialAccountId);
+                const info = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
+                const Icon = info.icon;
+                const pendingAmt = Number(tx.pendingAmount || 0);
+                const symbol = tx.currency === 'USD' ? 'u$s' : '$';
+
+                return (
+                  <Card key={tx.id} className="glass-card shadow-sm active:scale-[0.98] transition-transform" onClick={() => setSelectedTxDetails(tx)}>
+                    <CardContent className="p-4 space-y-4">
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase">{formatLocalDate(tx.date)}</p>
+                          <h4 className="font-black text-slate-800 leading-tight truncate max-w-[200px]">
+                            {cust ? `${cust.apellido}, ${cust.nombre}` : 'Global'}
+                          </h4>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => setSelectedTxDetails(tx), 150); }}><Info className="h-4 w-4 mr-2" /> Ver Ficha</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleOpenCommDialog(tx, 'ws'), 150); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleCopyTxDetail(tx); }}><Copy className="h-4 w-4 mr-2" /> Copiar</DropdownMenuItem>
+                            {isAdmin && (
+                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleStartEdit(tx); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className={cn("text-[9px] gap-1 px-2 py-0.5", info.color)}>
+                          <Icon className="h-3 w-3" /> {info.label}
+                        </Badge>
+                        <span className="text-[9px] font-black text-muted-foreground uppercase bg-muted/30 px-2 py-0.5 rounded border">
+                          {acc?.name || "A cuenta"}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 pt-2 border-t border-dashed">
+                        <div>
+                          <p className="text-[8px] font-black uppercase text-slate-400">Monto Total</p>
+                          <p className="text-base font-black text-slate-800">{symbol} {Math.abs(tx.amount || 0).toLocaleString()}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[8px] font-black uppercase text-slate-400">Saldo Pendiente</p>
+                          <div className={cn(
+                            "inline-block px-2 py-0.5 rounded border text-[10px] font-black",
                             Math.abs(pendingAmt) < 0.01 
-                              ? "text-black border-transparent bg-transparent" 
+                              ? "text-black border-transparent" 
                               : pendingAmt < 0 
                                 ? "bg-rose-50 text-rose-700 border-rose-200" 
                                 : "bg-emerald-50 text-emerald-700 border-emerald-200"
                           )}>
-                            {tx.currency==='USD'?'u$s':'$'} {Math.abs(pendingAmt).toLocaleString()}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right text-[10px] font-mono">{tx.currency==='USD'?'u$s':'$'} {Number(tx.accountBalanceAfter || 0).toLocaleString()}</TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()}>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="opacity-40 group-hover:opacity-100">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => setSelectedTxDetails(tx), 100); }}><Info className="h-4 w-4 mr-2" /> Ficha completa</DropdownMenuItem>
-                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleOpenCommDialog(tx, 'ws'), 100); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp (Plantilla)</DropdownMenuItem>
-                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleCopyTxDetail(tx); }}><Copy className="h-4 w-4 mr-2" /> Copiar Detalle</DropdownMenuItem>
-                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleOpenCommDialog(tx, 'mail'), 100); }}><Mail className="h-4 w-4 mr-2" /> Enviar mail</DropdownMenuItem>
-                              {isAdmin && (
-                                <>
-                                  <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleStartEdit(tx); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
-                                  <DropdownMenuItem className="text-destructive" onSelect={(e) => { e.preventDefault(); setTimeout(() => setTxToDelete(tx), 100); }}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
-                                </>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </Card>
+                            {symbol} {Math.abs(pendingAmt).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-between items-center bg-slate-50 p-2 rounded-lg text-[9px] font-bold border">
+                        <div className="flex gap-2">
+                          <span className="text-slate-400 uppercase">Abonado:</span>
+                          <span className="text-slate-700">{symbol} {Number(tx.paidAmount || 0).toLocaleString()}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <span className="text-slate-400 uppercase">Saldo Caja:</span>
+                          <span className="text-primary font-mono">{symbol} {Number(tx.accountBalanceAfter || 0).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
           </div>
         )}
 
+        {/* Diálogos */}
         <Dialog open={!!selectedTxDetails} onOpenChange={(o) => !o && setSelectedTxDetails(null)}>
           <DialogContent className="max-w-3xl">
             <DialogHeader>
