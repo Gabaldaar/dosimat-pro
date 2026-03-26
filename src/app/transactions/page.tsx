@@ -502,6 +502,23 @@ function TransactionsContent() {
     result = result.replace(/\{\{Moneda\}\}/g, tx.currency);
     result = result.replace(/\{\{Monto_Abonado\}\}/g, `${symbol} ${Number(tx.paidAmount || 0).toLocaleString('es-AR')}`);
     result = result.replace(/\{\{Descripción\}\}/g, tx.description || "");
+    result = result.replace(/\{\{Saldo_Caja_Final\}\}/g, `${symbol} ${Number(tx.accountBalanceAfter || 0).toLocaleString('es-AR')}`);
+
+    if (tx.items && tx.items.length > 0) {
+      const itemsText = tx.items.map((i: any) => {
+        const iSymbol = i.currency === 'USD' ? 'u$s' : '$';
+        const sub = i.price * i.qty * (1 - (i.discount || 0)/100);
+        return `- ${i.qty} x ${i.name} (${iSymbol} ${i.price.toLocaleString('es-AR')}) = ${iSymbol} ${sub.toLocaleString('es-AR')}`;
+      }).join('\n');
+      
+      const totalDisc = tx.items.reduce((sum: number, i: any) => sum + (i.price * i.qty * ((i.discount || 0)/100)), 0);
+      
+      result = result.replace(/\{\{Detalle_Items\}\}/g, itemsText);
+      result = result.replace(/\{\{Total_Descuento\}\}/g, `${symbol} ${totalDisc.toLocaleString('es-AR')}`);
+    } else {
+      result = result.replace(/\{\{Detalle_Items\}\}/g, "");
+      result = result.replace(/\{\{Total_Descuento\}\}/g, `${symbol} 0`);
+    }
 
     if (dynamicVals) {
       Object.entries(dynamicVals).forEach(([key, val]) => {
