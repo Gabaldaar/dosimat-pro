@@ -38,7 +38,8 @@ import {
   Check,
   MessageSquare,
   ChevronRight,
-  Wallet
+  Wallet,
+  Printer
 } from "lucide-react"
 import { useToast } from "../../hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -387,7 +388,6 @@ function TransactionsContent() {
       const matchStart = !filterStartDate || txDateStr >= filterStartDate;
       const matchEnd = !filterEndDate || txDateStr <= filterEndDate;
       
-      // Lógica de búsqueda unificada para Reposición
       const matchType = filterOpType === "all" || 
                         (filterOpType === 'Reposición' ? (tx.type === 'Reposición' || tx.type === 'refill') : tx.type === filterOpType);
       
@@ -474,7 +474,6 @@ function TransactionsContent() {
     const content = activeTemplate.body + (activeTemplate.subject || "");
     const matches = content.match(/\{\{\?([^}]+)\}\}/g);
     if (!matches) return [];
-    // Deduplicación para evitar error de claves duplicadas en React
     const uniqueKeys = Array.from(new Set(matches.map(m => m.replace(/\{\{\?|\}\}/g, ''))));
     return uniqueKeys;
   }, [activeTemplate]);
@@ -531,328 +530,406 @@ function TransactionsContent() {
     return result;
   };
 
+  const handlePrintPDF = () => {
+    if (typeof window !== 'undefined') {
+      window.print();
+    }
+  };
+
+  const activeFilters = useMemo(() => {
+    const list: { label: string, value: string }[] = [];
+    if (filterCustomer !== 'all') {
+      const c = customers?.find(cust => cust.id === filterCustomer);
+      list.push({ label: 'Cliente', value: c ? `${c.apellido}, ${c.nombre}` : filterCustomer });
+    }
+    if (filterAccount !== 'all') {
+      if (filterAccount === 'null') list.push({ label: 'Caja', value: 'A Cuenta / Sin Caja' });
+      else {
+        const a = accounts?.find(acc => acc.id === filterAccount);
+        list.push({ label: 'Caja', value: a ? a.name : filterAccount });
+      }
+    }
+    if (filterOpType !== 'all') list.push({ label: 'Operación', value: filterOpType });
+    if (filterFlow !== 'all') list.push({ label: 'Flujo', value: filterFlow === 'income' ? 'Ingresos' : 'Egresos' });
+    if (filterStartDate) list.push({ label: 'Desde', value: formatLocalDate(filterStartDate) });
+    if (filterEndDate) list.push({ label: 'Hasta', value: formatLocalDate(filterEndDate) });
+    return list;
+  }, [filterCustomer, filterAccount, filterOpType, filterFlow, filterStartDate, filterEndDate, customers, accounts]);
+
   return (
     <div className="flex min-h-screen bg-background w-full">
-      <Sidebar />
-      <SidebarInset className="flex-1 w-full p-4 md:p-8 space-y-6 pb-48 overflow-x-hidden">
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <SidebarTrigger className="flex" />
-            <h1 className="text-xl md:text-3xl font-bold text-primary font-headline uppercase tracking-tighter italic">Operaciones</h1>
-          </div>
-          <Tabs value={mainView} onValueChange={setMainView}>
-            <TabsList className="bg-muted/40 h-10 p-1 rounded-xl shadow-inner border">
-              <TabsTrigger value="register" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary uppercase">{editingTx ? 'EDITAR' : 'NUEVA'}</TabsTrigger>
-              <TabsTrigger value="history" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary uppercase">HISTORIAL</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </header>
+      <div className="no-print w-full flex">
+        <Sidebar />
+        <SidebarInset className="flex-1 w-full p-4 md:p-8 space-y-6 pb-48 overflow-x-hidden">
+          <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <SidebarTrigger className="flex" />
+              <h1 className="text-xl md:text-3xl font-bold text-primary font-headline uppercase tracking-tighter italic">Operaciones</h1>
+            </div>
+            <Tabs value={mainView} onValueChange={setMainView}>
+              <TabsList className="bg-muted/40 h-10 p-1 rounded-xl shadow-inner border">
+                <TabsTrigger value="register" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary uppercase">{editingTx ? 'EDITAR' : 'NUEVA'}</TabsTrigger>
+                <TabsTrigger value="history" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary uppercase">HISTORIAL</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </header>
 
-        {mainView === "register" ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-300">
-            <Card className="lg:col-span-2 glass-card border-t-4 border-t-primary">
-              <CardHeader className="pb-4">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                   <div className="space-y-1">
-                     <CardTitle className="text-xl flex items-center gap-2">{editingTx ? 'Editando' : 'Registrar'} {txTypeMap[activeTab]?.label}</CardTitle>
-                     <p className="text-xs text-muted-foreground">{txTypeMap[activeTab]?.description}</p>
-                   </div>
-                    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
-                      <TabsList className="grid grid-cols-5 w-full h-auto p-1 bg-muted/50 border">
-                          {['sale', 'refill', 'service', 'cobro', 'adjustment'].map(key => {
-                            const info = txTypeMap[key];
-                            const Icon = info.icon;
-                            return (
-                              <TabsTrigger key={key} value={key} className="data-[state=active]:bg-primary data-[state=active]:text-white py-2 flex flex-col gap-1">
-                                <Icon className="h-4 w-4" />
-                                <span className="text-[9px] font-black uppercase">{info.label}</span>
-                              </TabsTrigger>
-                            );
-                          })}
-                      </TabsList>
-                    </Tabs>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-muted/20 rounded-xl border border-dashed">
-                  <div className="space-y-2"><Label className="flex items-center gap-2 text-primary font-bold uppercase text-[10px] tracking-widest"><User className="h-3 w-3" /> Cliente</Label>
-                    <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
-                      <SelectTrigger className="bg-white"><SelectValue placeholder="Buscar cliente..." /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">GLOBAL / SIN CLIENTE</SelectItem>
-                        {customers?.map((c: any) => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre} (${Number(c.saldoActual || 0).toLocaleString()})</SelectItem>))}
-                      </SelectContent>
-                    </Select>
+          {mainView === "register" ? (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-300">
+              <Card className="lg:col-span-2 glass-card border-t-4 border-t-primary">
+                <CardHeader className="pb-4">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div className="space-y-1">
+                      <CardTitle className="text-xl flex items-center gap-2">{editingTx ? 'Editando' : 'Registrar'} {txTypeMap[activeTab]?.label}</CardTitle>
+                      <p className="text-xs text-muted-foreground">{txTypeMap[activeTab]?.description}</p>
+                    </div>
+                      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
+                        <TabsList className="grid grid-cols-5 w-full h-auto p-1 bg-muted/50 border">
+                            {['sale', 'refill', 'service', 'cobro', 'adjustment'].map(key => {
+                              const info = txTypeMap[key];
+                              const Icon = info.icon;
+                              return (
+                                <TabsTrigger key={key} value={key} className="data-[state=active]:bg-primary data-[state=active]:text-white py-2 flex flex-col gap-1">
+                                  <Icon className="h-4 w-4" />
+                                  <span className="text-[9px] font-black uppercase">{info.label}</span>
+                                </TabsTrigger>
+                              );
+                            })}
+                        </TabsList>
+                      </Tabs>
                   </div>
-                  <div className="space-y-2"><Label className="flex items-center gap-2 text-primary font-bold uppercase text-[10px] tracking-widest"><CalendarIcon className="h-3 w-3" /> Fecha</Label>
-                    <Input type="date" value={operationDate} onChange={(e) => setOperationDate(e.target.value)} className="bg-white" />
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-muted/20 rounded-xl border border-dashed">
+                    <div className="space-y-2"><Label className="flex items-center gap-2 text-primary font-bold uppercase text-[10px] tracking-widest"><User className="h-3 w-3" /> Cliente</Label>
+                      <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
+                        <SelectTrigger className="bg-white"><SelectValue placeholder="Buscar cliente..." /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">GLOBAL / SIN CLIENTE</SelectItem>
+                          {customers?.map((c: any) => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre} (${Number(c.saldoActual || 0).toLocaleString()})</SelectItem>))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2"><Label className="flex items-center gap-2 text-primary font-bold uppercase text-[10px] tracking-widest"><CalendarIcon className="h-3 w-3" /> Fecha</Label>
+                      <Input type="date" value={operationDate} onChange={(e) => setOperationDate(e.target.value)} className="bg-white" />
+                    </div>
                   </div>
-                </div>
-                {activeTab === 'cobro' ? (
-                  <div className="space-y-6">
+                  {activeTab === 'cobro' ? (
+                    <div className="space-y-6">
+                      <div className="p-6 border rounded-xl space-y-4 bg-muted/5">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="space-y-2"><Label>Monto a Cobrar</Label><Input type="number" value={manualAmount} onChange={(e) => setManualAmount(Number(e.target.value))} className="bg-white font-black text-xl h-12" /></div>
+                          <div className="space-y-2"><Label>Moneda</Label>
+                            <Tabs value={manualCurrency} onValueChange={setManualCurrency} className="w-full">
+                              <TabsList className="grid grid-cols-2 h-12 p-1 border">
+                                <TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-blue-600 data-[state=active]:text-white uppercase">ARS</TabsTrigger>
+                                <TabsTrigger value="USD" className="text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white uppercase">USD</TabsTrigger>
+                              </TabsList>
+                            </Tabs>
+                          </div>
+                          <div className="space-y-2"><Label>Caja Destino</Label>
+                            <Select value={manualAccountId} onValueChange={setManualAccountId}><SelectTrigger className="bg-white h-12"><SelectValue /></SelectTrigger>
+                              <SelectContent><SelectItem value="pending">A CUENTA</SelectItem>{accounts?.filter(a => a.currency === manualCurrency).map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+                      {customerPendingTxs.length > 0 && (
+                        <div className="space-y-3">
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Imputar a Facturas Pendientes ({manualCurrency})</Label>
+                          <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
+                            <Table>
+                              <TableHeader className="bg-muted/30">
+                                <TableRow>
+                                  <TableHead className="text-[9px] font-black uppercase">Fecha</TableHead>
+                                  <TableHead className="text-[9px] font-black uppercase">Tipo</TableHead>
+                                  <TableHead className="text-right text-[9px] font-black uppercase">Pendiente</TableHead>
+                                  <TableHead className="w-40 text-right text-[9px] font-black uppercase">Asignar</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {customerPendingTxs.filter(tx => tx.currency === manualCurrency).map(tx => (
+                                  <TableRow key={tx.id}>
+                                    <TableCell className="text-xs font-bold">{formatLocalDate(tx.date)}</TableCell>
+                                    <TableCell><Badge variant="outline" className={cn("text-[9px] uppercase font-black", txTypeMap[tx.type]?.color)}>{txTypeMap[tx.type]?.label || tx.type}</Badge></TableCell>
+                                    <TableCell className="text-right font-black text-rose-600">{manualCurrency==='USD'?'u$s':'$'} {Math.abs(tx.pendingAmount || 0).toLocaleString()}</TableCell>
+                                    <TableCell>
+                                      <div className="flex items-center gap-2">
+                                        <Button 
+                                          variant="ghost" 
+                                          size="icon" 
+                                          className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 shrink-0"
+                                          onClick={() => setImputations({...imputations, [tx.id]: Math.abs(tx.pendingAmount)})}
+                                          title="Saldar factura completa"
+                                        >
+                                          <CheckCircle2 className="h-4 w-4" />
+                                        </Button>
+                                        <Input 
+                                          type="number" 
+                                          className="h-8 text-right font-black border-emerald-200" 
+                                          value={imputations[tx.id] || ""} 
+                                          onChange={(e) => setImputations({...imputations, [tx.id]: Number(e.target.value)})}
+                                          placeholder="0"
+                                        />
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : activeTab === 'adjustment' ? (
                     <div className="p-6 border rounded-xl space-y-4 bg-muted/5">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-2"><Label>Monto a Cobrar</Label><Input type="number" value={manualAmount} onChange={(e) => setManualAmount(Number(e.target.value))} className="bg-white font-black text-xl h-12" /></div>
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="space-y-2"><Label>Signo</Label>
+                          <Select value={adjustmentSign} onValueChange={(v: any) => setAdjustmentSign(v)}>
+                            <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                            <SelectContent><SelectItem value="1">Ingreso (+) / Reduce Deuda</SelectItem><SelectItem value="-1">Egreso (-) / Aumenta Deuda</SelectItem></SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2"><Label>Monto</Label><Input type="number" value={manualAmount} onChange={(e) => setManualAmount(Number(e.target.value))} className="bg-white font-black" /></div>
                         <div className="space-y-2"><Label>Moneda</Label>
-                          <Tabs value={manualCurrency} onValueChange={setManualCurrency} className="w-full">
-                            <TabsList className="grid grid-cols-2 h-12 p-1 border">
-                              <TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-blue-600 data-[state=active]:text-white uppercase">ARS</TabsTrigger>
-                              <TabsTrigger value="USD" className="text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white uppercase">USD</TabsTrigger>
+                          <Tabs value={manualCurrency} onValueChange={setManualCurrency}>
+                            <TabsList className="grid grid-cols-2 h-10 p-1 border">
+                              <TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
+                              <TabsTrigger value="USD" className="text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
                             </TabsList>
                           </Tabs>
                         </div>
                         <div className="space-y-2"><Label>Caja Destino</Label>
-                          <Select value={manualAccountId} onValueChange={setManualAccountId}><SelectTrigger className="bg-white h-12"><SelectValue /></SelectTrigger>
+                          <Select value={manualAccountId} onValueChange={setManualAccountId}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                             <SelectContent><SelectItem value="pending">A CUENTA</SelectItem>{accounts?.filter(a => a.currency === manualCurrency).map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent>
                           </Select>
-                        </div>
                       </div>
-                    </div>
-                    {customerPendingTxs.length > 0 && (
-                      <div className="space-y-3">
-                        <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Imputar a Facturas Pendientes ({manualCurrency})</Label>
-                        <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
-                          <Table>
-                            <TableHeader className="bg-muted/30">
-                              <TableRow>
-                                <TableHead className="text-[9px] font-black uppercase">Fecha</TableHead>
-                                <TableHead className="text-[9px] font-black uppercase">Tipo</TableHead>
-                                <TableHead className="text-right text-[9px] font-black uppercase">Pendiente</TableHead>
-                                <TableHead className="w-40 text-right text-[9px] font-black uppercase">Asignar</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {customerPendingTxs.filter(tx => tx.currency === manualCurrency).map(tx => (
-                                <TableRow key={tx.id}>
-                                  <TableCell className="text-xs font-bold">{formatLocalDate(tx.date)}</TableCell>
-                                  <TableCell><Badge variant="outline" className={cn("text-[9px] uppercase font-black", txTypeMap[tx.type]?.color)}>{txTypeMap[tx.type]?.label || tx.type}</Badge></TableCell>
-                                  <TableCell className="text-right font-black text-rose-600">{manualCurrency==='USD'?'u$s':'$'} {Math.abs(tx.pendingAmount || 0).toLocaleString()}</TableCell>
-                                  <TableCell>
-                                    <div className="flex items-center gap-2">
-                                      <Button 
-                                        variant="ghost" 
-                                        size="icon" 
-                                        className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 shrink-0"
-                                        onClick={() => setImputations({...imputations, [tx.id]: Math.abs(tx.pendingAmount)})}
-                                        title="Saldar factura completa"
-                                      >
-                                        <CheckCircle2 className="h-4 w-4" />
-                                      </Button>
-                                      <Input 
-                                        type="number" 
-                                        className="h-8 text-right font-black border-emerald-200" 
-                                        value={imputations[tx.id] || ""} 
-                                        onChange={(e) => setImputations({...imputations, [tx.id]: Number(e.target.value)})}
-                                        placeholder="0"
-                                      />
-                                    </div>
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : activeTab === 'adjustment' ? (
-                  <div className="p-6 border rounded-xl space-y-4 bg-muted/5">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <div className="space-y-2"><Label>Signo</Label>
-                        <Select value={adjustmentSign} onValueChange={(v: any) => setAdjustmentSign(v)}>
-                          <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                          <SelectContent><SelectItem value="1">Ingreso (+) / Reduce Deuda</SelectItem><SelectItem value="-1">Egreso (-) / Aumenta Deuda</SelectItem></SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2"><Label>Monto</Label><Input type="number" value={manualAmount} onChange={(e) => setManualAmount(Number(e.target.value))} className="bg-white font-black" /></div>
-                      <div className="space-y-2"><Label>Moneda</Label>
-                        <Tabs value={manualCurrency} onValueChange={setManualCurrency}>
-                          <TabsList className="grid grid-cols-2 h-10 p-1 border">
-                            <TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
-                            <TabsTrigger value="USD" className="text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
-                          </TabsList>
-                        </Tabs>
-                      </div>
-                      <div className="space-y-2"><Label>Caja Destino</Label>
-                        <Select value={manualAccountId} onValueChange={setManualAccountId}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                          <SelectContent><SelectItem value="pending">A CUENTA</SelectItem>{accounts?.filter(a => a.currency === manualCurrency).map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent>
-                        </Select>
                     </div>
                   </div>
-                </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <Select value={itemFilterCategory} onValueChange={setItemFilterCategory}>
-                        <SelectTrigger><SelectValue placeholder="Filtrar categoría..." /></SelectTrigger>
-                        <SelectContent className="max-h-60">
-                          <SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem>
-                          {sortedProductCategories.map(c => (
-                            <SelectItem key={c.id} value={c.id}>{c.name} {c.isFavorite && "⭐"}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Select onValueChange={handleAddItem}>
-                        <SelectTrigger><SelectValue placeholder="Añadir producto..." /></SelectTrigger>
-                        <SelectContent className="max-h-60">
-                          {filteredCatalogItems.map(i => (<SelectItem key={i.id} value={i.id}>{i.name} (${i.priceARS} / u$s {i.priceUSD})</SelectItem>))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
-                      <Table>
-                        <TableHeader className="bg-muted/30">
-                          <TableRow>
-                            <TableHead className="text-[9px] font-black uppercase">Ítem</TableHead>
-                            <TableHead className="w-28 text-center text-[9px] font-black uppercase">Cant.</TableHead>
-                            <TableHead className="w-32 text-center text-[9px] font-black uppercase">Precio</TableHead>
-                            <TableHead className="w-28 text-center text-[9px] font-black uppercase">Desc %</TableHead>
-                            <TableHead className="w-32 text-center text-[9px] font-black uppercase">Moneda</TableHead>
-                            <TableHead className="text-right text-[9px] font-black uppercase">Subtotal</TableHead>
-                            <TableHead className="w-10"></TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {selectedItems.map((item, i) => (
-                            <TableRow key={i}>
-                              <TableCell className="font-bold text-xs">{item.name}</TableCell>
-                              <TableCell><Input type="number" value={item.qty} className="h-8 text-center font-black px-1" onChange={(e) => { const n = [...selectedItems]; n[i].qty = Number(e.target.value); setSelectedItems(n); }} /></TableCell>
-                              <TableCell><Input type="number" value={item.price} className="h-8 text-center font-black px-1" onChange={(e) => { const n = [...selectedItems]; n[i].price = Number(e.target.value); setSelectedItems(n); }} /></TableCell>
-                              <TableCell><Input type="number" value={item.discount} className="h-8 text-center font-bold px-1" onChange={(e) => { const n = [...selectedItems]; n[i].discount = Number(e.target.value); setSelectedItems(n); }} /></TableCell>
-                              <TableCell>
-                                <Tabs value={item.currency} onValueChange={(v) => { const n = [...selectedItems]; n[i].currency = v; setSelectedItems(n); }} className="w-full">
-                                  <TabsList className="grid grid-cols-2 h-7 p-0.5 border">
-                                    <TabsTrigger value="ARS" className="text-[7px] font-black data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
-                                    <TabsTrigger value="USD" className="text-[7px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
-                                  </TabsList>
-                                </Tabs>
-                              </TableCell>
-                              <TableCell className="text-right font-black text-xs">{(item.price * item.qty * (1 - item.discount/100)).toLocaleString()}</TableCell>
-                              <TableCell><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setSelectedItems(selectedItems.filter((_, idx) => idx !== i))}><Trash2 className="h-3 w-3" /></Button></TableCell>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <Select value={itemFilterCategory} onValueChange={setItemFilterCategory}>
+                          <SelectTrigger><SelectValue placeholder="Filtrar categoría..." /></SelectTrigger>
+                          <SelectContent className="max-h-60">
+                            <SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem>
+                            {sortedProductCategories.map(c => (
+                              <SelectItem key={c.id} value={c.id}>{c.name} {c.isFavorite && "⭐"}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select onValueChange={handleAddItem}>
+                          <SelectTrigger><SelectValue placeholder="Añadir producto..." /></SelectTrigger>
+                          <SelectContent className="max-h-60">
+                            {filteredCatalogItems.map(i => (<SelectItem key={i.id} value={i.id}>{i.name} (${i.priceARS} / u$s {i.priceUSD})</SelectItem>))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
+                        <Table>
+                          <TableHeader className="bg-muted/30">
+                            <TableRow>
+                              <TableHead className="text-[9px] font-black uppercase">Ítem</TableHead>
+                              <TableHead className="w-28 text-center text-[9px] font-black uppercase">Cant.</TableHead>
+                              <TableHead className="w-32 text-center text-[9px] font-black uppercase">Precio</TableHead>
+                              <TableHead className="w-28 text-center text-[9px] font-black uppercase">Desc %</TableHead>
+                              <TableHead className="w-32 text-center text-[9px] font-black uppercase">Moneda</TableHead>
+                              <TableHead className="text-right text-[9px] font-black uppercase">Subtotal</TableHead>
+                              <TableHead className="w-10"></TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                          </TableHeader>
+                          <TableBody>
+                            {selectedItems.map((item, i) => (
+                              <TableRow key={i}>
+                                <TableCell className="font-bold text-xs">{item.name}</TableCell>
+                                <TableCell><Input type="number" value={item.qty} className="h-8 text-center font-black px-1" onChange={(e) => { const n = [...selectedItems]; n[i].qty = Number(e.target.value); setSelectedItems(n); }} /></TableCell>
+                                <TableCell><Input type="number" value={item.price} className="h-8 text-center font-black px-1" onChange={(e) => { const n = [...selectedItems]; n[i].price = Number(e.target.value); setSelectedItems(n); }} /></TableCell>
+                                <TableCell><Input type="number" value={item.discount} className="h-8 text-center font-bold px-1" onChange={(e) => { const n = [...selectedItems]; n[i].discount = Number(e.target.value); setSelectedItems(n); }} /></TableCell>
+                                <TableCell>
+                                  <Tabs value={item.currency} onValueChange={(v) => { const n = [...selectedItems]; n[i].currency = v; setSelectedItems(n); }} className="w-full">
+                                    <TabsList className="grid grid-cols-2 h-7 p-0.5 border">
+                                      <TabsTrigger value="ARS" className="text-[7px] font-black data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
+                                      <TabsTrigger value="USD" className="text-[7px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
+                                    </TabsList>
+                                  </Tabs>
+                                </TableCell>
+                                <TableCell className="text-right font-black text-xs">{(item.price * item.qty * (1 - item.discount/100)).toLocaleString()}</TableCell>
+                                <TableCell><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setSelectedItems(selectedItems.filter((_, idx) => idx !== i))}><Trash2 className="h-3 w-3" /></Button></TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
                     </div>
-                  </div>
-                )}
-                <div className="space-y-2"><Label className="font-bold uppercase text-[10px] tracking-widest">Notas / Concepto</Label><Input value={txDescription} onChange={(e) => setTxDescription(e.target.value)} className="bg-white h-11 italic" /></div>
-              </CardContent>
-            </Card>
-            <Card className="glass-card h-fit sticky top-8 border-primary/20 shadow-2xl">
-              <CardHeader className="bg-primary/5 border-b"><CardTitle className="text-xs uppercase font-black tracking-widest text-primary">Resumen de Operación</CardTitle></CardHeader>
-              <CardContent className="space-y-6 pt-6">
-                {!['cobro', 'adjustment', 'Expense'].includes(activeTab) && (
-                  <div className="space-y-4">
-                    {['ARS', 'USD'].map(curr => {
-                      const total = cartTotals[curr as 'ARS'|'USD'];
-                      if (total <= 0) return null;
-                      const paid = paidAmounts[curr];
-                      const debt = total - paid;
-                      return (
-                        <div key={curr} className="p-4 rounded-2xl border bg-muted/10 space-y-3 shadow-inner">
-                          <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase text-muted-foreground">Total {curr}:</span><span className="text-2xl font-black">{curr==='USD'?'u$s':'$'} {total.toLocaleString()}</span></div>
-                          <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-emerald-700">Abonado hoy ({curr}):</Label><Input type="number" value={paid} onChange={(e) => setPaidAmounts({...paidAmounts, [curr]: Number(e.target.value)})} className="h-12 border-emerald-200 font-black text-2xl text-emerald-700 bg-white" /></div>
-                          <div className="space-y-1"><Label className="text-[10px] uppercase font-black">Caja de Cobro:</Label><Select value={destinationAccounts[curr]} onValueChange={(v) => setDestinationAccounts({...destinationAccounts, [curr]: v})}><SelectTrigger className="h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">A CUENTA / SIN CAJA</SelectItem>{accounts?.filter(a => a.currency === curr).map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent></Select></div>
-                          {debt > 0 && (
-                            <div className="pt-2 border-t border-dashed mt-2 text-rose-600 font-black text-[10px] flex justify-between uppercase italic">
-                              <span>Quedará a cuenta:</span>
-                              <span>{curr==='USD'?'u$s':'$'} {debt.toLocaleString()}</span>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-                {activeTab === 'cobro' && (
-                  <div className="p-5 rounded-2xl border bg-emerald-50 mb-4 shadow-inner">
-                    <p className="text-[10px] font-black uppercase text-emerald-700 tracking-widest mb-2">Total a registrar</p>
-                    <p className="text-4xl font-black text-emerald-800">{manualCurrency === 'USD' ? 'u$s' : '$'} {manualAmount.toLocaleString()}</p>
-                  </div>
-                )}
-                <Button className="w-full h-16 font-black shadow-xl text-xl uppercase tracking-tighter" onClick={handleSaveTransaction}>{editingTx ? 'GUARDAR CAMBIOS' : 'REGISTRAR OPERACIÓN'}</Button>
-                <Button variant="outline" className="w-full h-12 border-rose-600 text-rose-600 hover:bg-rose-50 font-bold uppercase text-xs" onClick={() => { resetRegisterForm(); setMainView("history"); }}>CANCELAR</Button>
-              </CardContent>
-            </Card>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Card className="bg-primary/5 border-l-4 border-l-primary shadow-sm"><CardContent className="p-4 flex items-center justify-between"><div><p className="text-[10px] font-black uppercase text-primary/60 tracking-widest">Flujo Neto ARS</p><h3 className={cn("text-2xl font-black mt-1", filteredTotals.ars < 0 ? "text-rose-600" : "text-emerald-600")}>${filteredTotals.ars.toLocaleString()}</h3></div><Calculator className="h-8 w-8 text-primary/20" /></CardContent></Card>
-              <Card className="bg-emerald-50 border-l-4 border-l-emerald-500 shadow-sm"><CardContent className="p-4 flex items-center justify-between"><div><p className="text-[10px] font-black uppercase text-emerald-700/60 tracking-widest">Flujo Neto USD</p><h3 className={cn("text-2xl font-black mt-1", filteredTotals.usd < 0 ? "text-rose-600" : "text-emerald-600")}>u$s {filteredTotals.usd.toLocaleString()}</h3></div><TrendingUp className="h-8 w-8 text-emerald-500/20" /></CardContent></Card>
+                  )}
+                  <div className="space-y-2"><Label className="font-bold uppercase text-[10px] tracking-widest">Notas / Concepto</Label><Input value={txDescription} onChange={(e) => setTxDescription(e.target.value)} className="bg-white h-11 italic" /></div>
+                </CardContent>
+              </Card>
+              <Card className="glass-card h-fit sticky top-8 border-primary/20 shadow-2xl">
+                <CardHeader className="bg-primary/5 border-b"><CardTitle className="text-xs uppercase font-black tracking-widest text-primary">Resumen de Operación</CardTitle></CardHeader>
+                <CardContent className="space-y-6 pt-6">
+                  {!['cobro', 'adjustment', 'Expense'].includes(activeTab) && (
+                    <div className="space-y-4">
+                      {['ARS', 'USD'].map(curr => {
+                        const total = cartTotals[curr as 'ARS'|'USD'];
+                        if (total <= 0) return null;
+                        const paid = paidAmounts[curr];
+                        const debt = total - paid;
+                        return (
+                          <div key={curr} className="p-4 rounded-2xl border bg-muted/10 space-y-3 shadow-inner">
+                            <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase text-muted-foreground">Total {curr}:</span><span className="text-2xl font-black">{curr==='USD'?'u$s':'$'} {total.toLocaleString()}</span></div>
+                            <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-emerald-700">Abonado hoy ({curr}):</Label><Input type="number" value={paid} onChange={(e) => setPaidAmounts({...paidAmounts, [curr]: Number(e.target.value)})} className="h-12 border-emerald-200 font-black text-2xl text-emerald-700 bg-white" /></div>
+                            <div className="space-y-1"><Label className="text-[10px] uppercase font-black">Caja de Cobro:</Label><Select value={destinationAccounts[curr]} onValueChange={(v) => setDestinationAccounts({...destinationAccounts, [curr]: v})}><SelectTrigger className="h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">A CUENTA / SIN CAJA</SelectItem>{accounts?.filter(a => a.currency === curr).map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent></Select></div>
+                            {debt > 0 && (
+                              <div className="pt-2 border-t border-dashed mt-2 text-rose-600 font-black text-[10px] flex justify-between uppercase italic">
+                                <span>Quedará a cuenta:</span>
+                                <span>{curr==='USD'?'u$s':'$'} {debt.toLocaleString()}</span>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                  {activeTab === 'cobro' && (
+                    <div className="p-5 rounded-2xl border bg-emerald-50 mb-4 shadow-inner">
+                      <p className="text-[10px] font-black uppercase text-emerald-700 tracking-widest mb-2">Total a registrar</p>
+                      <p className="text-4xl font-black text-emerald-800">{manualCurrency === 'USD' ? 'u$s' : '$'} {manualAmount.toLocaleString()}</p>
+                    </div>
+                  )}
+                  <Button className="w-full h-16 font-black shadow-xl text-xl uppercase tracking-tighter" onClick={handleSaveTransaction}>{editingTx ? 'GUARDAR CAMBIOS' : 'REGISTRAR OPERACIÓN'}</Button>
+                  <Button variant="outline" className="w-full h-12 border-rose-600 text-rose-600 hover:bg-rose-50 font-bold uppercase text-xs" onClick={() => { resetRegisterForm(); setMainView("history"); }}>CANCELAR</Button>
+                </CardContent>
+              </Card>
             </div>
-            <Card className="glass-card p-4 flex flex-wrap gap-4 items-end border-dashed border-primary/20">
-                 <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Cliente</Label><Select value={filterCustomer} onValueChange={setFilterCustomer}><SelectTrigger className="w-[180px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos los clientes</SelectItem>{customers?.map(c => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}</SelectContent></Select></div>
-                 <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Caja</Label><Select value={filterAccount} onValueChange={setFilterAccount}><SelectTrigger className="w-[160px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas las cajas</SelectItem><SelectItem value="null">Sin Caja / A Cuenta</SelectItem>{accounts?.map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent></Select></div>
-                 <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Flujo</Label><Select value={filterFlow} onValueChange={setFilterFlow}><SelectTrigger className="w-[120px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos los flujos</SelectItem><SelectItem value="income" className="text-emerald-600 font-bold">Ingresos</SelectItem><SelectItem value="expense" className="text-rose-600 font-bold">Egresos</SelectItem></SelectContent></Select></div>
-                 <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Operación</Label><Select value={filterOpType} onValueChange={setFilterOpType}><SelectTrigger className="w-[140px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>
-                   {Object.keys(txTypeMap)
-                    .filter(k => !['Adjustment','Expense', 'refill', 'adjustment'].includes(k)) // Eliminamos refill y Ajuste duplicado
-                    .concat(['adjustment']) // Mantenemos una sola opción de Ajuste
-                    .map(k => <SelectItem key={k} value={k}>{txTypeMap[k].label}</SelectItem>)}
-                 </SelectContent></Select></div>
-                 <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Desde</Label><Input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="h-10 w-[140px] bg-white" /></div>
-                 <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Hasta</Label><Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="h-10 w-[140px] bg-white" /></div>
-                 <Button variant="outline" size="icon" className="h-10 w-10 border-primary/20" onClick={() => { setFilterCustomer("all"); setFilterAccount("all"); setFilterStartDate(""); setFilterEndDate(""); setFilterOpType("all"); setFilterFlow("all"); }}><FilterX className="h-4 w-4" /></Button>
-            </Card>
+          ) : (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card className="bg-primary/5 border-l-4 border-l-primary shadow-sm"><CardContent className="p-4 flex items-center justify-between"><div><p className="text-[10px] font-black uppercase text-primary/60 tracking-widest">Flujo Neto ARS</p><h3 className={cn("text-2xl font-black mt-1", filteredTotals.ars < 0 ? "text-rose-600" : "text-emerald-600")}>${filteredTotals.ars.toLocaleString()}</h3></div><Calculator className="h-8 w-8 text-primary/20" /></CardContent></Card>
+                <Card className="bg-emerald-50 border-l-4 border-l-emerald-500 shadow-sm"><CardContent className="p-4 flex items-center justify-between"><div><p className="text-[10px] font-black uppercase text-emerald-700/60 tracking-widest">Flujo Neto USD</p><h3 className={cn("text-2xl font-black mt-1", filteredTotals.usd < 0 ? "text-rose-600" : "text-emerald-600")}>u$s {filteredTotals.usd.toLocaleString()}</h3></div><TrendingUp className="h-8 w-8 text-emerald-500/20" /></CardContent></Card>
+              </div>
+              <Card className="glass-card p-4 flex flex-wrap gap-4 items-end border-dashed border-primary/20">
+                   <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Cliente</Label><Select value={filterCustomer} onValueChange={setFilterCustomer}><SelectTrigger className="w-[180px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos los clientes</SelectItem>{customers?.map(c => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}</SelectContent></Select></div>
+                   <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Caja</Label><Select value={filterAccount} onValueChange={setFilterAccount}><SelectTrigger className="w-[160px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas las cajas</SelectItem><SelectItem value="null">Sin Caja / A Cuenta</SelectItem>{accounts?.map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent></Select></div>
+                   <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Flujo</Label><Select value={filterFlow} onValueChange={setFilterFlow}><SelectTrigger className="w-[120px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos los flujos</SelectItem><SelectItem value="income" className="text-emerald-600 font-bold">Ingresos</SelectItem><SelectItem value="expense" className="text-rose-600 font-bold">Egresos</SelectItem></SelectContent></Select></div>
+                   <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Operación</Label><Select value={filterOpType} onValueChange={setFilterOpType}><SelectTrigger className="w-[140px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>
+                     {Object.keys(txTypeMap)
+                      .filter(k => !['Adjustment','Expense', 'refill', 'adjustment'].includes(k))
+                      .concat(['adjustment'])
+                      .map(k => <SelectItem key={k} value={k}>{txTypeMap[k].label}</SelectItem>)}
+                   </SelectContent></Select></div>
+                   <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Desde</Label><Input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="h-10 w-[140px] bg-white" /></div>
+                   <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Hasta</Label><Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="h-10 w-[140px] bg-white" /></div>
+                   <div className="flex gap-2">
+                     <Button variant="outline" size="icon" className="h-10 w-10 border-primary/20" onClick={() => { setFilterCustomer("all"); setFilterAccount("all"); setFilterStartDate(""); setFilterEndDate(""); setFilterOpType("all"); setFilterFlow("all"); }}><FilterX className="h-4 w-4" /></Button>
+                     <Button variant="outline" size="icon" className="h-10 w-10 border-emerald-200 text-emerald-700 bg-emerald-50" onClick={handlePrintPDF} title="Generar reporte PDF de la selección"><Printer className="h-4 w-4" /></Button>
+                   </div>
+              </Card>
 
-            <div className="hidden md:block">
-              <Card className="glass-card overflow-hidden shadow-md border-primary/10">
-                <Table>
-                  <TableHeader className="bg-muted/30">
-                    <TableRow>
-                      <TableHead className="text-[10px] font-black uppercase">Fecha</TableHead>
-                      <TableHead className="text-[10px] font-black uppercase">Cliente</TableHead>
-                      <TableHead className="text-[10px] font-black uppercase">Tipo</TableHead>
-                      <TableHead className="text-[10px] font-black uppercase">Caja</TableHead>
-                      <TableHead className="text-right text-[10px] font-black uppercase">Monto</TableHead>
-                      <TableHead className="text-right text-[10px] font-black uppercase">Abonado</TableHead>
-                      <TableHead className="text-right text-[10px] font-black uppercase">Pendiente</TableHead>
-                      <TableHead className="text-right text-[10px] font-black uppercase">Saldo Caja</TableHead>
-                      <TableHead className="w-12"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredTransactions.map((tx: any) => {
-                      const cust = customers?.find(c => c.id === tx.clientId);
-                      const acc = accounts?.find(a => a.id === tx.financialAccountId);
-                      const info = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
-                      const Icon = info.icon;
-                      const pendingAmt = Number(tx.pendingAmount || 0);
-                      return (
-                        <TableRow key={tx.id} className="cursor-pointer hover:bg-primary/5 transition-colors group" onClick={() => setSelectedTxDetails(tx)}>
-                          <TableCell className="text-xs font-bold text-slate-600">{formatLocalDate(tx.date)}</TableCell>
-                          <TableCell><span className="font-black text-slate-800">{cust ? `${cust.apellido}, ${cust.nombre}` : 'Global'}</span></TableCell>
-                          <TableCell><Badge variant="outline" className={cn("text-[9px] gap-1 px-2 font-black uppercase", info.color)}><Icon className="h-3 w-3" />{info.label}</Badge></TableCell>
-                          <TableCell><span className="text-[10px] font-black text-muted-foreground uppercase">{acc?.name || "---"}</span></TableCell>
-                          <TableCell className="text-right font-black text-slate-800">{tx.currency==='USD'?'u$s':'$'} {Math.abs(tx.amount || 0).toLocaleString()}</TableCell>
-                          <TableCell className="text-right text-xs font-bold text-emerald-700">{tx.currency==='USD'?'u$s':'$'} {Number(tx.paidAmount || 0).toLocaleString()}</TableCell>
-                          <TableCell className="text-right text-xs">
-                            <span className={cn(
-                              "px-2 py-0.5 rounded border text-[10px] font-black",
-                              Math.abs(pendingAmt) < 0.01 
-                                ? "text-black border-transparent bg-transparent" 
-                                : pendingAmt < 0 
-                                  ? "bg-rose-50 text-rose-700 border-rose-200" 
-                                  : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            )}>
-                              {tx.currency==='USD'?'u$s':'$'} {Math.abs(pendingAmt).toLocaleString()}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right text-[10px] font-mono font-bold text-primary">{tx.currency==='USD'?'u$s':'$'} {Number(tx.accountBalanceAfter || 0).toLocaleString()}</TableCell>
-                          <TableCell onClick={(e) => e.stopPropagation()}>
+              <div className="hidden md:block">
+                <Card className="glass-card overflow-hidden shadow-md border-primary/10">
+                  <Table>
+                    <TableHeader className="bg-muted/30">
+                      <TableRow>
+                        <TableHead className="text-[10px] font-black uppercase">Fecha</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase">Cliente</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase">Tipo</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase">Caja</TableHead>
+                        <TableHead className="text-right text-[10px] font-black uppercase">Monto</TableHead>
+                        <TableHead className="text-right text-[10px] font-black uppercase">Abonado</TableHead>
+                        <TableHead className="text-right text-[10px] font-black uppercase">Pendiente</TableHead>
+                        <TableHead className="text-right text-[10px] font-black uppercase">Saldo Caja</TableHead>
+                        <TableHead className="w-12"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredTransactions.map((tx: any) => {
+                        const cust = customers?.find(c => c.id === tx.clientId);
+                        const acc = accounts?.find(a => a.id === tx.financialAccountId);
+                        const info = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
+                        const Icon = info.icon;
+                        const pendingAmt = Number(tx.pendingAmount || 0);
+                        return (
+                          <TableRow key={tx.id} className="cursor-pointer hover:bg-primary/5 transition-colors group" onClick={() => setSelectedTxDetails(tx)}>
+                            <TableCell className="text-xs font-bold text-slate-600">{formatLocalDate(tx.date)}</TableCell>
+                            <TableCell><span className="font-black text-slate-800">{cust ? `${cust.apellido}, ${cust.nombre}` : 'Global'}</span></TableCell>
+                            <TableCell><Badge variant="outline" className={cn("text-[9px] gap-1 px-2 font-black uppercase", info.color)}><Icon className="h-3 w-3" />{info.label}</Badge></TableCell>
+                            <TableCell><span className="text-[10px] font-black text-muted-foreground uppercase">{acc?.name || "---"}</span></TableCell>
+                            <TableCell className="text-right font-black text-slate-800">{tx.currency==='USD'?'u$s':'$'} {Math.abs(tx.amount || 0).toLocaleString()}</TableCell>
+                            <TableCell className="text-right text-xs font-bold text-emerald-700">{tx.currency==='USD'?'u$s':'$'} {Number(tx.paidAmount || 0).toLocaleString()}</TableCell>
+                            <TableCell className="text-right text-xs">
+                              <span className={cn(
+                                "px-2 py-0.5 rounded border text-[10px] font-black",
+                                Math.abs(pendingAmt) < 0.01 
+                                  ? "text-black border-transparent bg-transparent" 
+                                  : pendingAmt < 0 
+                                    ? "bg-rose-50 text-rose-700 border-rose-200" 
+                                    : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              )}>
+                                {tx.currency==='USD'?'u$s':'$'} {Math.abs(pendingAmt).toLocaleString()}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right text-[10px] font-mono font-bold text-primary">{tx.currency==='USD'?'u$s':'$'} {Number(tx.accountBalanceAfter || 0).toLocaleString()}</TableCell>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="opacity-40 group-hover:opacity-100">
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48 font-bold">
+                                  <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => setSelectedTxDetails(tx), 100); }}><Info className="h-4 w-4 mr-2" /> Ficha completa</DropdownMenuItem>
+                                  <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'ws'); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp</DropdownMenuItem>
+                                  <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'mail'); }}><Mail className="h-4 w-4 mr-2" /> Enviar mail</DropdownMenuItem>
+                                  <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleCopyTxDetail(tx); }}><Copy className="h-4 w-4 mr-2" /> Copiar Detalle</DropdownMenuItem>
+                                  {isAdmin && (
+                                    <>
+                                      <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleStartEdit(tx), 100); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
+                                      <DropdownMenuItem className="text-destructive font-black" onSelect={(e) => { e.preventDefault(); setTimeout(() => setTxToDelete(tx), 100); }}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
+                                    </>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </Card>
+              </div>
+
+              <div className="md:hidden space-y-4">
+                {filteredTransactions.map((tx: any) => {
+                  const cust = customers?.find(c => c.id === tx.clientId);
+                  const acc = accounts?.find(a => a.id === tx.financialAccountId);
+                  const info = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
+                  const Icon = info.icon;
+                  const pendingAmt = Number(tx.pendingAmount || 0);
+                  const symbol = tx.currency === 'USD' ? 'u$s' : '$';
+
+                  return (
+                    <Card key={tx.id} className="glass-card shadow-md active:scale-[0.98] transition-transform border-primary/5" onClick={() => setSelectedTxDetails(tx)}>
+                      <CardContent className="p-4 space-y-4">
+                        <div className="flex justify-between items-start">
+                          <div className="space-y-1">
+                            <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">{formatLocalDate(tx.date)}</p>
+                            <h4 className="font-black text-slate-800 leading-tight truncate max-w-[200px] text-base">
+                              {cust ? `${cust.apellido}, ${cust.nombre}` : 'Global'}
+                            </h4>
+                          </div>
+                          <div onClick={(e) => e.stopPropagation()}>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="opacity-40 group-hover:opacity-100">
-                                  <MoreVertical className="h-4 w-4" />
+                                <Button variant="ghost" size="icon" className="h-10 w-10">
+                                  <MoreVertical className="h-5 w-5" />
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-48 font-bold">
-                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => setSelectedTxDetails(tx), 100); }}><Info className="h-4 w-4 mr-2" /> Ficha completa</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => setSelectedTxDetails(tx), 100); }}><Info className="h-4 w-4 mr-2" /> Ver Ficha</DropdownMenuItem>
                                 <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'ws'); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp</DropdownMenuItem>
                                 <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'mail'); }}><Mail className="h-4 w-4 mr-2" /> Enviar mail</DropdownMenuItem>
-                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleCopyTxDetail(tx); }}><Copy className="h-4 w-4 mr-2" /> Copiar Detalle</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleCopyTxDetail(tx); }}><Copy className="h-4 w-4 mr-2" /> Copiar</DropdownMenuItem>
                                 {isAdmin && (
                                   <>
                                     <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleStartEdit(tx), 100); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
@@ -861,299 +938,334 @@ function TransactionsContent() {
                                 )}
                               </DropdownMenuContent>
                             </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </Card>
-            </div>
-
-            <div className="md:hidden space-y-4">
-              {filteredTransactions.map((tx: any) => {
-                const cust = customers?.find(c => c.id === tx.clientId);
-                const acc = accounts?.find(a => a.id === tx.financialAccountId);
-                const info = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
-                const Icon = info.icon;
-                const pendingAmt = Number(tx.pendingAmount || 0);
-                const symbol = tx.currency === 'USD' ? 'u$s' : '$';
-
-                return (
-                  <Card key={tx.id} className="glass-card shadow-md active:scale-[0.98] transition-transform border-primary/5" onClick={() => setSelectedTxDetails(tx)}>
-                    <CardContent className="p-4 space-y-4">
-                      <div className="flex justify-between items-start">
-                        <div className="space-y-1">
-                          <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">{formatLocalDate(tx.date)}</p>
-                          <h4 className="font-black text-slate-800 leading-tight truncate max-w-[200px] text-base">
-                            {cust ? `${cust.apellido}, ${cust.nombre}` : 'Global'}
-                          </h4>
-                        </div>
-                        <div onClick={(e) => e.stopPropagation()}>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-10 w-10">
-                                <MoreVertical className="h-5 w-5" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-48 font-bold">
-                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => setSelectedTxDetails(tx), 100); }}><Info className="h-4 w-4 mr-2" /> Ver Ficha</DropdownMenuItem>
-                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'ws'); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp</DropdownMenuItem>
-                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'mail'); }}><Mail className="h-4 w-4 mr-2" /> Enviar mail</DropdownMenuItem>
-                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleCopyTxDetail(tx); }}><Copy className="h-4 w-4 mr-2" /> Copiar</DropdownMenuItem>
-                              {isAdmin && (
-                                <>
-                                  <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleStartEdit(tx), 100); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
-                                  <DropdownMenuItem className="text-destructive font-black" onSelect={(e) => { e.preventDefault(); setTimeout(() => setTxToDelete(tx), 100); }}><Trash2 className="h-4 w-4 mr-2" /> Eliminar</DropdownMenuItem>
-                                </>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className={cn("text-[9px] font-black uppercase gap-1 px-2 py-0.5 shadow-sm", info.color)}>
-                          <Icon className="h-3 w-3" /> {info.label}
-                        </Badge>
-                        <span className="text-[9px] font-black text-muted-foreground uppercase bg-muted/30 px-2 py-0.5 rounded border">
-                          {acc?.name || "A cuenta"}
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3 pt-2 border-t border-dashed">
-                        <div>
-                          <p className="text-[8px] font-black uppercase text-slate-400">Total</p>
-                          <p className="text-lg font-black text-slate-800">{symbol} {Math.abs(tx.amount || 0).toLocaleString()}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-[8px] font-black uppercase text-slate-400">Pendiente</p>
-                          <div className={cn(
-                            "inline-block px-2 py-0.5 rounded border text-[10px] font-black",
-                            Math.abs(pendingAmt) < 0.01 
-                              ? "text-black border-transparent" 
-                              : pendingAmt < 0 
-                                ? "bg-rose-50 text-rose-700 border-rose-200" 
-                                : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                          )}>
-                            {symbol} {Math.abs(pendingAmt).toLocaleString()}
                           </div>
                         </div>
-                      </div>
 
-                      <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl text-[10px] font-bold border shadow-inner">
-                        <div className="flex gap-2">
-                          <span className="text-slate-400 uppercase font-black text-[8px]">Abonado:</span>
-                          <span className="text-emerald-700">{symbol} {Number(tx.paidAmount || 0).toLocaleString()}</span>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className={cn("text-[9px] font-black uppercase gap-1 px-2 py-0.5 shadow-sm", info.color)}>
+                            <Icon className="h-3 w-3" /> {info.label}
+                          </Badge>
+                          <span className="text-[9px] font-black text-muted-foreground uppercase bg-muted/30 px-2 py-0.5 rounded border">
+                            {acc?.name || "A cuenta"}
+                          </span>
                         </div>
-                        <div className="flex gap-2">
-                          <span className="text-slate-400 uppercase font-black text-[8px]">Caja:</span>
-                          <span className="text-primary font-mono font-black">{symbol} {Number(tx.accountBalanceAfter || 0).toLocaleString()}</span>
+
+                        <div className="grid grid-cols-2 gap-3 pt-2 border-t border-dashed">
+                          <div>
+                            <p className="text-[8px] font-black uppercase text-slate-400">Total</p>
+                            <p className="text-lg font-black text-slate-800">{symbol} {Math.abs(tx.amount || 0).toLocaleString()}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[8px] font-black uppercase text-slate-400">Pendiente</p>
+                            <div className={cn(
+                              "inline-block px-2 py-0.5 rounded border text-[10px] font-black",
+                              Math.abs(pendingAmt) < 0.01 
+                                ? "text-black border-transparent" 
+                                : pendingAmt < 0 
+                                  ? "bg-rose-50 text-rose-700 border-rose-200" 
+                                  : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            )}>
+                              {symbol} {Math.abs(pendingAmt).toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl text-[10px] font-bold border shadow-inner">
+                          <div className="flex gap-2">
+                            <span className="text-slate-400 uppercase font-black text-[8px]">Abonado:</span>
+                            <span className="text-emerald-700">{symbol} {Number(tx.paidAmount || 0).toLocaleString()}</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <span className="text-slate-400 uppercase font-black text-[8px]">Caja:</span>
+                            <span className="text-primary font-mono font-black">{symbol} {Number(tx.accountBalanceAfter || 0).toLocaleString()}</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          <Dialog open={!!selectedTxDetails} onOpenChange={(o) => !o && setSelectedTxDetails(null)}>
+            <DialogContent className="max-w-3xl max-h-[95vh] overflow-y-auto p-0 md:p-6">
+              <DialogHeader className="p-4 pb-2 border-b md:border-none">
+                <div className="flex justify-between items-start w-full">
+                  <div className="space-y-1 pr-8 text-left">
+                    <DialogTitle className="text-xl font-black uppercase flex items-center gap-2 text-primary">
+                      {selectedTxDetails && (
+                        <>
+                          {(() => { const Icon = txTypeMap[selectedTxDetails.type]?.icon || Info; return <Icon className="h-5 w-5" /> })()}
+                          {txTypeMap[selectedTxDetails.type]?.label || 'Detalle'}
+                        </>
+                      )}
+                    </DialogTitle>
+                    <DialogDescription className="font-bold text-slate-800 text-base">{selectedTxDetails && formatLocalDate(selectedTxDetails.date)}</DialogDescription>
+                  </div>
+                  <div className="hidden md:flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => handleCopyTxDetail(selectedTxDetails)} className="h-8 font-bold gap-2"><Copy className="h-3.5 w-3.5" /> COPIAR</Button>
+                    <Button variant="outline" size="sm" onClick={() => handleOpenCommDialog(selectedTxDetails, 'ws')} className="h-8 font-bold gap-2 border-emerald-200 text-emerald-700 bg-emerald-50"><MessageSquare className="h-3.5 w-3.5" /> WHATSAPP</Button>
+                  </div>
+                </div>
+              </DialogHeader>
+              {selectedTxDetails && (
+                <div className="px-4 py-6 md:py-4 space-y-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="p-4 bg-muted/20 rounded-2xl border space-y-1 shadow-inner">
+                      <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Monto Total</p>
+                      <p className="text-3xl font-black">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Math.abs(selectedTxDetails.amount).toLocaleString()}</p>
+                    </div>
+                    <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl space-y-1 shadow-inner">
+                      <p className="text-[10px] font-black uppercase text-emerald-700 tracking-widest">Abonado</p>
+                      <p className="text-3xl font-black text-emerald-800">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Number(selectedTxDetails.paidAmount || 0).toLocaleString()}</p>
+                    </div>
+                    <div className={cn(
+                      "p-4 border rounded-2xl space-y-1 shadow-inner",
+                      Math.abs(selectedTxDetails.pendingAmount || 0) < 0.01 
+                        ? "bg-slate-50 border-slate-200" 
+                        : selectedTxDetails.pendingAmount < 0 
+                          ? "bg-rose-50 border-rose-100" 
+                          : "bg-emerald-50 border-emerald-100"
+                    )}>
+                      <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Saldo Pendiente</p>
+                      <p className={cn(
+                        "text-3xl font-black",
+                        Math.abs(selectedTxDetails.pendingAmount || 0) < 0.01 
+                          ? "text-black" 
+                          : selectedTxDetails.pendingAmount < 0 
+                            ? "text-rose-800" 
+                            : "text-emerald-800"
+                      )}>{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Math.abs(selectedTxDetails.pendingAmount || 0).toLocaleString()}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest flex items-center gap-2"><User className="h-3 w-3" /> Cliente y Caja</p>
+                    <div className="p-4 border rounded-2xl bg-white flex flex-col md:flex-row md:justify-between md:items-center gap-3 shadow-sm">
+                      <span className="font-black text-slate-800 text-lg">{customers?.find(c => c.id === selectedTxDetails.clientId)?.apellido || 'Global'}, {customers?.find(c => c.id === selectedTxDetails.clientId)?.nombre || ''}</span>
+                      <Badge variant="secondary" className="w-fit font-black uppercase text-[10px] py-1 px-3 border-primary/10">{selectedTxDetails.financialAccountId ? (accounts?.find(a => a.id === selectedTxDetails.financialAccountId)?.name || 'Caja') : 'A CUENTA'}</Badge>
+                    </div>
+                  </div>
+
+                  {selectedTxDetails.imputations && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Imputaciones Realizadas</p>
+                      <div className="border rounded-2xl bg-white overflow-hidden shadow-sm">
+                        <Table>
+                          <TableHeader className="bg-emerald-50"><TableRow><TableHead className="text-[10px] font-black uppercase">Fecha Factura</TableHead><TableHead className="text-right text-[10px] font-black uppercase">Monto Aplicado</TableHead></TableRow></TableHeader>
+                          <TableBody>
+                            {Object.entries(selectedTxDetails.imputations as Record<string, number>).map(([tid, amount]) => {
+                              const originalTx = transactions?.find(t => t.id === tid);
+                              return (
+                                <TableRow key={tid}>
+                                  <TableCell className="text-xs">
+                                    <p className="font-black">{originalTx ? formatLocalDate(originalTx.date) : "---"}</p>
+                                    <p className="text-[10px] text-muted-foreground uppercase font-bold">{originalTx ? (txTypeMap[originalTx.type]?.label || originalTx.type) : "Factura"}</p>
+                                  </TableCell>
+                                  <TableCell className="text-right font-black text-emerald-700">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {amount.toLocaleString()}</TableCell>
+                                </TableRow>
+                              )
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedTxDetails.items && selectedTxDetails.items.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest flex items-center gap-2"><ShoppingBag className="h-3 w-3" /> Detalle de Productos</p>
+                      <div className="border rounded-2xl bg-white overflow-hidden shadow-sm">
+                        <div className="hidden md:block">
+                          <Table>
+                            <TableHeader className="bg-muted/10"><TableRow><TableHead className="text-[10px] font-black">Ítem</TableHead><TableHead className="text-center text-[10px] font-black">Cant.</TableHead><TableHead className="text-right text-[10px] font-black">Subtotal</TableHead></TableRow></TableHeader>
+                            <TableBody>
+                              {selectedTxDetails.items.map((item: any, idx: number) => (
+                                <TableRow key={idx}>
+                                  <TableCell className="text-xs font-bold">{item.name}</TableCell>
+                                  <TableCell className="text-center text-xs font-black">{item.qty}</TableCell>
+                                  <TableCell className="text-right text-xs font-black">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {(item.price * item.qty * (1 - (item.discount || 0)/100)).toLocaleString()}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                        <div className="md:hidden divide-y">
+                          {selectedTxDetails.items.map((item: any, idx: number) => (
+                            <div key={idx} className="p-4 flex justify-between items-center bg-white">
+                              <div className="space-y-1">
+                                <p className="text-sm font-black text-slate-800 leading-tight">{item.name}</p>
+                                <p className="text-[10px] text-muted-foreground font-bold uppercase">{item.qty} x {selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {item.price.toLocaleString()}</p>
+                              </div>
+                              <span className="text-sm font-black text-primary">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {(item.price * item.qty * (1 - (item.discount || 0)/100)).toLocaleString()}</span>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    </CardContent>
+                    </div>
+                  )}
+
+                  {selectedTxDetails.description && (
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Notas Adicionales</p>
+                      <div className="p-4 bg-muted/5 border border-dashed rounded-2xl italic text-sm text-slate-700 leading-relaxed shadow-inner">"{selectedTxDetails.description}"</div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3 md:hidden pt-4 border-t">
+                    <Button variant="outline" size="sm" onClick={() => handleCopyTxDetail(selectedTxDetails)} className="h-12 font-black gap-2 text-xs uppercase"><Copy className="h-4 w-4" /> COPIAR</Button>
+                    <Button variant="outline" size="sm" onClick={() => handleOpenCommDialog(selectedTxDetails, 'ws')} className="h-12 font-black gap-2 border-emerald-200 text-emerald-700 bg-emerald-50 text-xs uppercase"><MessageSquare className="h-4 w-4" /> WHATSAPP</Button>
+                  </div>
+                </div>
+              )}
+              <DialogFooter className="p-4 border-t bg-slate-50 md:bg-transparent">
+                <Button onClick={() => setSelectedTxDetails(null)} className="w-full font-black h-12 uppercase tracking-widest">Cerrar Ficha</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isWsDialogOpen || isMailDialogOpen} onOpenChange={(o) => { if(!o) { setIsWsDialogOpen(false); setIsEmailDialogOpen(false); } }}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader><DialogTitle className="flex items-center gap-2 font-black uppercase tracking-tight">{isWsDialogOpen ? <MessageSquare className="h-5 w-5 text-emerald-600" /> : <Mail className="h-5 w-5 text-primary" />} Notificación de Operación</DialogTitle></DialogHeader>
+              <div className="space-y-4 py-4">
+                {!isWsDialogOpen && (
+                  <Card className="bg-amber-50 border-amber-100 p-4 space-y-2">
+                    <p className="text-xs font-bold text-amber-800 flex items-center gap-2 uppercase tracking-widest"><AlertTriangle className="h-4 w-4" /> Verificar Remitente</p>
+                    <p className="text-[11px] leading-relaxed text-amber-700 font-bold italic">Asegurate de seleccionar la cuenta DOSIMAT antes de enviar.</p>
                   </Card>
-                )
-              })}
+                )}
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Seleccionar Plantilla</Label>
+                  <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                    <SelectTrigger className="bg-white h-11"><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                    <SelectContent>{(isWsDialogOpen ? wsTemplates : emailTemplates)?.map((t: any) => (<SelectItem key={t.id} value={t.id} className="font-bold">{t.name}</SelectItem>))}</SelectContent>
+                  </Select>
+                </div>
+                {dynamicKeys.length > 0 && (
+                  <div className="space-y-4 p-4 bg-muted/20 rounded-2xl border border-dashed">
+                    <p className="text-[10px] font-black uppercase text-primary tracking-widest">Datos Requeridos</p>
+                    <div className="grid grid-cols-1 gap-4">
+                      {dynamicKeys.map(key => (
+                        <div key={key} className="space-y-1">
+                          <Label className="text-xs font-bold">{key}</Label>
+                          <Input value={dynamicValues[key] || ""} onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})} className="bg-white h-10 font-bold" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {activeTemplate && (
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Vista Previa</Label>
+                    <ScrollArea className="h-48 border rounded-2xl bg-white p-4 italic text-sm text-slate-700 shadow-inner">
+                      {isMailDialogOpen && <p className="font-black mb-2 text-primary">Asunto: {replaceMarkers(activeTemplate.subject || "", selectedTxForComm, dynamicValues)}</p>}
+                      <div className="whitespace-pre-wrap leading-relaxed">{replaceMarkers(activeTemplate.body, selectedTxForComm, dynamicValues)}</div>
+                    </ScrollArea>
+                  </div>
+                )}
+              </div>
+              <DialogFooter className="border-t pt-4">
+                <Button variant="outline" onClick={() => { setIsWsDialogOpen(false); setIsEmailDialogOpen(false); }} className="font-bold">Cerrar</Button>
+                <Button onClick={() => handleSendComm(isWsDialogOpen ? 'ws' : 'mail')} disabled={!selectedTemplateId || dynamicKeys.some(k => !dynamicValues[k])} className={cn("font-black h-12 md:h-11 uppercase text-xs tracking-widest", isWsDialogOpen ? "bg-emerald-600 hover:bg-emerald-700" : "bg-primary")}>
+                  {isWsDialogOpen ? <Send className="mr-2 h-4 w-4" /> : <Mail className="mr-2 h-4 w-4" />} Abrir {isWsDialogOpen ? 'WhatsApp' : 'Mail App'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <AlertDialog open={!!txToDelete} onOpenChange={(o) => { if(!o) setTxToDelete(null); }}>
+            <AlertDialogContent>
+              <AlertDialogHeader><AlertDialogTitle className="text-rose-600 font-black flex items-center gap-2"><Trash2 className="h-5 w-5" /> ¿Confirmar eliminación?</AlertDialogTitle><AlertDialogDescription className="font-bold text-slate-700">Se revertirán todos los saldos asociados e imputaciones. Esta acción es irreversible.</AlertDialogDescription></AlertDialogHeader>
+              <AlertDialogFooter><AlertDialogCancel className="font-bold">Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDeleteTx} className="bg-destructive font-black uppercase">Eliminar y Revertir</AlertDialogAction></AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+        </SidebarInset>
+        <MobileNav />
+      </div>
+
+      {/* VISTA DE IMPRESIÓN (PDF) */}
+      <div className="print-only w-full p-8 bg-white text-slate-900 font-sans">
+        <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
+          <div>
+            <h1 className="text-2xl font-black uppercase tracking-tight">Reporte de Operaciones</h1>
+            <p className="text-sm font-bold text-slate-600">Dosimat Pro System</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs font-black uppercase text-slate-400">Fecha de emisión</p>
+            <p className="text-sm font-bold">{new Date().toLocaleDateString('es-AR')} {new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</p>
+          </div>
+        </div>
+
+        {activeFilters.length > 0 && (
+          <div className="mb-6 p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl">
+            <h2 className="text-[10px] font-black uppercase text-slate-500 mb-2 tracking-widest">Filtros Aplicados</h2>
+            <div className="flex flex-wrap gap-x-6 gap-y-2">
+              {activeFilters.map((f, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">{f.label}:</span>
+                  <span className="text-xs font-black text-slate-800">{f.value}</span>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
-        <Dialog open={!!selectedTxDetails} onOpenChange={(o) => !o && setSelectedTxDetails(null)}>
-          <DialogContent className="max-w-3xl max-h-[95vh] overflow-y-auto p-0 md:p-6">
-            <DialogHeader className="p-4 pb-2 border-b md:border-none">
-              <div className="flex justify-between items-start w-full">
-                <div className="space-y-1 pr-8 text-left">
-                  <DialogTitle className="text-xl font-black uppercase flex items-center gap-2 text-primary">
-                    {selectedTxDetails && (
-                      <>
-                        {(() => { const Icon = txTypeMap[selectedTxDetails.type]?.icon || Info; return <Icon className="h-5 w-5" /> })()}
-                        {txTypeMap[selectedTxDetails.type]?.label || 'Detalle'}
-                      </>
-                    )}
-                  </DialogTitle>
-                  <DialogDescription className="font-bold text-slate-800 text-base">{selectedTxDetails && formatLocalDate(selectedTxDetails.date)}</DialogDescription>
-                </div>
-                <div className="hidden md:flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => handleCopyTxDetail(selectedTxDetails)} className="h-8 font-bold gap-2"><Copy className="h-3.5 w-3.5" /> COPIAR</Button>
-                  <Button variant="outline" size="sm" onClick={() => handleOpenCommDialog(selectedTxDetails, 'ws')} className="h-8 font-bold gap-2 border-emerald-200 text-emerald-700 bg-emerald-50"><MessageSquare className="h-3.5 w-3.5" /> WHATSAPP</Button>
-                </div>
-              </div>
-            </DialogHeader>
-            {selectedTxDetails && (
-              <div className="px-4 py-6 md:py-4 space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="p-4 bg-muted/20 rounded-2xl border space-y-1 shadow-inner">
-                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Monto Total</p>
-                    <p className="text-3xl font-black">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Math.abs(selectedTxDetails.amount).toLocaleString()}</p>
-                  </div>
-                  <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl space-y-1 shadow-inner">
-                    <p className="text-[10px] font-black uppercase text-emerald-700 tracking-widest">Abonado</p>
-                    <p className="text-3xl font-black text-emerald-800">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Number(selectedTxDetails.paidAmount || 0).toLocaleString()}</p>
-                  </div>
-                  <div className={cn(
-                    "p-4 border rounded-2xl space-y-1 shadow-inner",
-                    Math.abs(selectedTxDetails.pendingAmount || 0) < 0.01 
-                      ? "bg-slate-50 border-slate-200" 
-                      : selectedTxDetails.pendingAmount < 0 
-                        ? "bg-rose-50 border-rose-100" 
-                        : "bg-emerald-50 border-emerald-100"
-                  )}>
-                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Saldo Pendiente</p>
-                    <p className={cn(
-                      "text-3xl font-black",
-                      Math.abs(selectedTxDetails.pendingAmount || 0) < 0.01 
-                        ? "text-black" 
-                        : selectedTxDetails.pendingAmount < 0 
-                          ? "text-rose-800" 
-                          : "text-emerald-800"
-                    )}>{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Math.abs(selectedTxDetails.pendingAmount || 0).toLocaleString()}</p>
-                  </div>
-                </div>
+        <div className="grid grid-cols-2 gap-4 mb-8">
+          <div className="p-4 border-2 border-slate-900 rounded-2xl bg-slate-50">
+            <p className="text-[10px] font-black uppercase text-slate-500 mb-1">Flujo Neto ARS</p>
+            <p className={cn("text-2xl font-black", filteredTotals.ars < 0 ? "text-rose-700" : "text-emerald-700")}>
+              ${filteredTotals.ars.toLocaleString('es-AR')}
+            </p>
+          </div>
+          <div className="p-4 border-2 border-slate-900 rounded-2xl bg-slate-50">
+            <p className="text-[10px] font-black uppercase text-slate-500 mb-1">Flujo Neto USD</p>
+            <p className={cn("text-2xl font-black", filteredTotals.usd < 0 ? "text-rose-700" : "text-emerald-700")}>
+              u$s {filteredTotals.usd.toLocaleString('es-AR')}
+            </p>
+          </div>
+        </div>
 
-                <div className="space-y-2">
-                  <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest flex items-center gap-2"><User className="h-3 w-3" /> Cliente y Caja</p>
-                  <div className="p-4 border rounded-2xl bg-white flex flex-col md:flex-row md:justify-between md:items-center gap-3 shadow-sm">
-                    <span className="font-black text-slate-800 text-lg">{customers?.find(c => c.id === selectedTxDetails.clientId)?.apellido || 'Global'}, {customers?.find(c => c.id === selectedTxDetails.clientId)?.nombre || ''}</span>
-                    <Badge variant="secondary" className="w-fit font-black uppercase text-[10px] py-1 px-3 border-primary/10">{selectedTxDetails.financialAccountId ? (accounts?.find(a => a.id === selectedTxDetails.financialAccountId)?.name || 'Caja') : 'A CUENTA'}</Badge>
-                  </div>
-                </div>
+        <table className="w-full border-collapse border-2 border-slate-900 text-[10px]">
+          <thead>
+            <tr className="bg-slate-900 text-white">
+              <th className="border border-slate-900 p-2 text-left uppercase font-black">Fecha</th>
+              <th className="border border-slate-900 p-2 text-left uppercase font-black">Cliente</th>
+              <th className="border border-slate-900 p-2 text-left uppercase font-black">Operación</th>
+              <th className="border border-slate-900 p-2 text-left uppercase font-black">Caja</th>
+              <th className="border border-slate-900 p-2 text-right uppercase font-black">Total</th>
+              <th className="border border-slate-900 p-2 text-right uppercase font-black">Abonado</th>
+              <th className="border border-slate-900 p-2 text-right uppercase font-black">Pendiente</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredTransactions.map((tx: any) => {
+              const cust = customers?.find(c => c.id === tx.clientId);
+              const acc = accounts?.find(a => a.id === tx.financialAccountId);
+              const symbol = tx.currency === 'USD' ? 'u$s' : '$';
+              return (
+                <tr key={tx.id} className="border-b border-slate-300">
+                  <td className="border border-slate-900 p-2 font-bold">{formatLocalDate(tx.date)}</td>
+                  <td className="border border-slate-900 p-2 font-black">{cust ? `${cust.apellido}, ${cust.nombre}` : 'Global'}</td>
+                  <td className="border border-slate-900 p-2 uppercase font-bold">{txTypeMap[tx.type]?.label || tx.type}</td>
+                  <td className="border border-slate-900 p-2 uppercase font-medium">{acc?.name || 'A Cuenta'}</td>
+                  <td className="border border-slate-900 p-2 text-right font-black">{symbol} {Math.abs(tx.amount).toLocaleString('es-AR')}</td>
+                  <td className="border border-slate-900 p-2 text-right font-bold text-emerald-700">{symbol} {Number(tx.paidAmount || 0).toLocaleString('es-AR')}</td>
+                  <td className="border border-slate-900 p-2 text-right font-black">
+                    {Math.abs(tx.pendingAmount || 0) < 0.01 ? '-' : `${symbol} ${Math.abs(tx.pendingAmount).toLocaleString('es-AR')}`}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
 
-                {selectedTxDetails.imputations && (
-                  <div className="space-y-2">
-                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Imputaciones Realizadas</p>
-                    <div className="border rounded-2xl bg-white overflow-hidden shadow-sm">
-                      <Table>
-                        <TableHeader className="bg-emerald-50"><TableRow><TableHead className="text-[10px] font-black uppercase">Fecha Factura</TableHead><TableHead className="text-right text-[10px] font-black uppercase">Monto Aplicado</TableHead></TableRow></TableHeader>
-                        <TableBody>
-                          {Object.entries(selectedTxDetails.imputations as Record<string, number>).map(([tid, amount]) => {
-                            const originalTx = transactions?.find(t => t.id === tid);
-                            return (
-                              <TableRow key={tid}>
-                                <TableCell className="text-xs">
-                                  <p className="font-black">{originalTx ? formatLocalDate(originalTx.date) : "---"}</p>
-                                  <p className="text-[10px] text-muted-foreground uppercase font-bold">{originalTx ? (txTypeMap[originalTx.type]?.label || originalTx.type) : "Factura"}</p>
-                                </TableCell>
-                                <TableCell className="text-right font-black text-emerald-700">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {amount.toLocaleString()}</TableCell>
-                              </TableRow>
-                            )
-                          })}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
-                )}
-
-                {selectedTxDetails.items && selectedTxDetails.items.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest flex items-center gap-2"><ShoppingBag className="h-3 w-3" /> Detalle de Productos</p>
-                    <div className="border rounded-2xl bg-white overflow-hidden shadow-sm">
-                      <div className="hidden md:block">
-                        <Table>
-                          <TableHeader className="bg-muted/10"><TableRow><TableHead className="text-[10px] font-black">Ítem</TableHead><TableHead className="text-center text-[10px] font-black">Cant.</TableHead><TableHead className="text-right text-[10px] font-black">Subtotal</TableHead></TableRow></TableHeader>
-                          <TableBody>
-                            {selectedTxDetails.items.map((item: any, idx: number) => (
-                              <TableRow key={idx}>
-                                <TableCell className="text-xs font-bold">{item.name}</TableCell>
-                                <TableCell className="text-center text-xs font-black">{item.qty}</TableCell>
-                                <TableCell className="text-right text-xs font-black">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {(item.price * item.qty * (1 - (item.discount || 0)/100)).toLocaleString()}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                      <div className="md:hidden divide-y">
-                        {selectedTxDetails.items.map((item: any, idx: number) => (
-                          <div key={idx} className="p-4 flex justify-between items-center bg-white">
-                            <div className="space-y-1">
-                              <p className="text-sm font-black text-slate-800 leading-tight">{item.name}</p>
-                              <p className="text-[10px] text-muted-foreground font-bold uppercase">{item.qty} x {selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {item.price.toLocaleString()}</p>
-                            </div>
-                            <span className="text-sm font-black text-primary">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {(item.price * item.qty * (1 - (item.discount || 0)/100)).toLocaleString()}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {selectedTxDetails.description && (
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Notas Adicionales</p>
-                    <div className="p-4 bg-muted/5 border border-dashed rounded-2xl italic text-sm text-slate-700 leading-relaxed shadow-inner">"{selectedTxDetails.description}"</div>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-3 md:hidden pt-4 border-t">
-                  <Button variant="outline" size="sm" onClick={() => handleCopyTxDetail(selectedTxDetails)} className="h-12 font-black gap-2 text-xs uppercase"><Copy className="h-4 w-4" /> COPIAR</Button>
-                  <Button variant="outline" size="sm" onClick={() => handleOpenCommDialog(selectedTxDetails, 'ws')} className="h-12 font-black gap-2 border-emerald-200 text-emerald-700 bg-emerald-50 text-xs uppercase"><MessageSquare className="h-4 w-4" /> WHATSAPP</Button>
-                </div>
-              </div>
-            )}
-            <DialogFooter className="p-4 border-t bg-slate-50 md:bg-transparent">
-              <Button onClick={() => setSelectedTxDetails(null)} className="w-full font-black h-12 uppercase tracking-widest">Cerrar Ficha</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={isWsDialogOpen || isMailDialogOpen} onOpenChange={(o) => { if(!o) { setIsWsDialogOpen(false); setIsEmailDialogOpen(false); } }}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle className="flex items-center gap-2 font-black uppercase tracking-tight">{isWsDialogOpen ? <MessageSquare className="h-5 w-5 text-emerald-600" /> : <Mail className="h-5 w-5 text-primary" />} Notificación de Operación</DialogTitle></DialogHeader>
-            <div className="space-y-4 py-4">
-              {!isWsDialogOpen && (
-                <Card className="bg-amber-50 border-amber-100 p-4 space-y-2">
-                  <p className="text-xs font-bold text-amber-800 flex items-center gap-2 uppercase tracking-widest"><AlertTriangle className="h-4 w-4" /> Verificar Remitente</p>
-                  <p className="text-[11px] leading-relaxed text-amber-700 font-bold italic">Asegurate de seleccionar la cuenta DOSIMAT antes de enviar.</p>
-                </Card>
-              )}
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Seleccionar Plantilla</Label>
-                <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
-                  <SelectTrigger className="bg-white h-11"><SelectValue placeholder="Elegir..." /></SelectTrigger>
-                  <SelectContent>{(isWsDialogOpen ? wsTemplates : emailTemplates)?.map((t: any) => (<SelectItem key={t.id} value={t.id} className="font-bold">{t.name}</SelectItem>))}</SelectContent>
-                </Select>
-              </div>
-              {dynamicKeys.length > 0 && (
-                <div className="space-y-4 p-4 bg-muted/20 rounded-2xl border border-dashed">
-                  <p className="text-[10px] font-black uppercase text-primary tracking-widest">Datos Requeridos</p>
-                  <div className="grid grid-cols-1 gap-4">
-                    {dynamicKeys.map(key => (
-                      <div key={key} className="space-y-1">
-                        <Label className="text-xs font-bold">{key}</Label>
-                        <Input value={dynamicValues[key] || ""} onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})} className="bg-white h-10 font-bold" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {activeTemplate && (
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Vista Previa</Label>
-                  <ScrollArea className="h-48 border rounded-2xl bg-white p-4 italic text-sm text-slate-700 shadow-inner">
-                    {isMailDialogOpen && <p className="font-black mb-2 text-primary">Asunto: {replaceMarkers(activeTemplate.subject || "", selectedTxForComm, dynamicValues)}</p>}
-                    <div className="whitespace-pre-wrap leading-relaxed">{replaceMarkers(activeTemplate.body, selectedTxForComm, dynamicValues)}</div>
-                  </ScrollArea>
-                </div>
-              )}
-            </div>
-            <DialogFooter className="border-t pt-4">
-              <Button variant="outline" onClick={() => { setIsWsDialogOpen(false); setIsEmailDialogOpen(false); }} className="font-bold">Cerrar</Button>
-              <Button onClick={() => handleSendComm(isWsDialogOpen ? 'ws' : 'mail')} disabled={!selectedTemplateId || dynamicKeys.some(k => !dynamicValues[k])} className={cn("font-black h-12 md:h-11 uppercase text-xs tracking-widest", isWsDialogOpen ? "bg-emerald-600 hover:bg-emerald-700" : "bg-primary")}>
-                {isWsDialogOpen ? <Send className="mr-2 h-4 w-4" /> : <Mail className="mr-2 h-4 w-4" />} Abrir {isWsDialogOpen ? 'WhatsApp' : 'Mail App'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <AlertDialog open={!!txToDelete} onOpenChange={(o) => { if(!o) setTxToDelete(null); }}>
-          <AlertDialogContent>
-            <AlertDialogHeader><AlertDialogTitle className="text-rose-600 font-black flex items-center gap-2"><Trash2 className="h-5 w-5" /> ¿Confirmar eliminación?</AlertDialogTitle><AlertDialogDescription className="font-bold text-slate-700">Se revertirán todos los saldos asociados e imputaciones. Esta acción es irreversible.</AlertDialogDescription></AlertDialogHeader>
-            <AlertDialogFooter><AlertDialogCancel className="font-bold">Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDeleteTx} className="bg-destructive font-black uppercase">Eliminar y Revertir</AlertDialogAction></AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-      </SidebarInset>
-      <MobileNav />
+        <div className="mt-12 pt-6 border-t border-dashed border-slate-300 flex justify-between items-end italic text-[9px] text-slate-400">
+          <p>Este reporte refleja la situación financiera según los criterios de búsqueda aplicados.</p>
+          <p>Página 1 de 1</p>
+        </div>
+      </div>
     </div>
   )
 }
