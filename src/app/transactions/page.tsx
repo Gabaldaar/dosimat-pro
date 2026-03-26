@@ -467,7 +467,13 @@ function TransactionsContent() {
   }, [selectedTemplateId, emailTemplates, wsTemplates]);
 
   const dynamicKeys = useMemo(() => {
-    return activeTemplate ? (activeTemplate.body + (activeTemplate.subject || "")).match(/\{\{\?([^}]+)\}\}/g)?.map(m => m.replace(/\{\{\?|\}\}/g, '')) || [] : [];
+    if (!activeTemplate) return [];
+    const content = activeTemplate.body + (activeTemplate.subject || "");
+    const matches = content.match(/\{\{\?([^}]+)\}\}/g);
+    if (!matches) return [];
+    // Deduplicación para evitar error de claves duplicadas en React
+    const uniqueKeys = Array.from(new Set(matches.map(m => m.replace(/\{\{\?|\}\}/g, ''))));
+    return uniqueKeys;
   }, [activeTemplate]);
 
   const replaceMarkers = (text: string, tx: any, dynamicVals?: Record<string, string>) => {
@@ -478,6 +484,8 @@ function TransactionsContent() {
     if (client) {
       result = result.replace(/\{\{Nombre\}\}/g, client.nombre || "");
       result = result.replace(/\{\{Apellido\}\}/g, client.apellido || "");
+      result = result.replace(/\{\{Direccion\}\}/g, client.direccion || "");
+      result = result.replace(/\{\{Localidad\}\}/g, client.localidad || "");
       result = result.replace(/\{\{Saldo_ARS\}\}/g, `$ ${Number(client.saldoActual || 0).toLocaleString('es-AR')}`);
       result = result.replace(/\{\{Saldo_USD\}\}/g, `u$s ${Number(client.saldoUSD || 0).toLocaleString('es-AR')}`);
       result = result.replace(/\{\{Saldo_Cuenta\}\}/g, tx.currency === 'USD' ? `u$s ${Number(client.saldoUSD || 0).toLocaleString('es-AR')}` : `$ ${Number(client.saldoActual || 0).toLocaleString('es-AR')}`);

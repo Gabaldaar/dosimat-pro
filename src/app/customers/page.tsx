@@ -383,7 +383,12 @@ function CustomersContent() {
   }, [selectedTemplateId, emailTemplates, wsTemplates]);
 
   const dynamicKeys = useMemo(() => {
-    return activeTemplate ? (activeTemplate.body + (activeTemplate.subject || "")).match(/\{\{\?([^}]+)\}\}/g)?.map(m => m.replace(/\{\{\?|\}\}/g, '')) || [] : [];
+    if (!activeTemplate) return [];
+    const content = activeTemplate.body + (activeTemplate.subject || "");
+    const matches = content.match(/\{\{\?([^}]+)\}\}/g);
+    if (!matches) return [];
+    // Deduplicación para evitar error de claves duplicadas en React
+    return Array.from(new Set(matches.map(m => m.replace(/\{\{\?|\}\}/g, ''))));
   }, [activeTemplate]);
 
   if (isUserLoading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
@@ -595,7 +600,10 @@ function CustomersContent() {
               <DialogHeader><DialogTitle>{isBulkEmailOpen ? 'Email Masivo' : `Email a ${selectedCommCustomer?.nombre}`}</DialogTitle></DialogHeader>
               <div className="space-y-4 py-4">
                 <Card className="bg-amber-50 border-amber-100 p-4"><p className="text-xs font-bold text-amber-800 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Verificar Remitente (DOSIMAT)</p></Card>
-                <div className="space-y-2"><Label>Plantilla</Label><Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}><SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger><SelectContent>{emailTemplates?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select></div>
+                <div className="space-y-2"><Label>Plantilla</Label><Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                  <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                  <SelectContent>{emailTemplates?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+                </Select></div>
                 {dynamicKeys.length > 0 && (<div className="p-4 border border-dashed rounded-xl space-y-4 bg-muted/5"><p className="text-[10px] font-black uppercase text-primary">Datos Manuales</p><div className="grid grid-cols-1 gap-4">{dynamicKeys.map(key => (<div key={key} className="space-y-1"><Label className="text-xs font-bold">{key}</Label><Input value={dynamicValues[key] || ""} onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})} className="bg-white h-9" /></div>))}</div></div>)}
                 {activeTemplate && (<div className="space-y-2"><Label className="text-[10px] font-black uppercase text-muted-foreground">Vista Previa</Label><ScrollArea className="h-48 border rounded-xl bg-white p-4 italic text-sm text-slate-700 shadow-inner"><p className="font-bold mb-2">Asunto: {replaceMarkers(activeTemplate.subject || "", selectedCommCustomer, dynamicValues)}</p><div className="whitespace-pre-wrap">{replaceMarkers(activeTemplate.body, selectedCommCustomer, dynamicValues)}</div></ScrollArea></div>)}
               </div>
