@@ -89,7 +89,7 @@ function CustomersContent() {
   const wsTemplatesQuery = useMemoFirebase(() => collection(db, 'whatsapp_templates'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   
-  const { data: customers, isLoading } = useCollection(clientsQuery)
+  const { data: customers } = useCollection(clientsQuery)
   const { data: zones } = useCollection(zonesQuery)
   const { data: transactions } = useCollection(txQuery)
   const { data: emailTemplates } = useCollection(emailTemplatesQuery)
@@ -116,6 +116,20 @@ function CustomersContent() {
   const [selectedCommCustomer, setSelectedCommCustomer] = useState<any>(null)
   const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({})
   const [bulkStep, setBulkStep] = useState(0)
+
+  // Fix for pointer-events stuck in 'none' after dialog closures
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      if (document.body.style.pointerEvents === 'none') {
+        const anyOpen = isDialogOpen || isStatementOpen || !!customerToDelete || isBulkEmailOpen || isBulkWsOpen || isSingleCommOpen || isSingleWsOpen;
+        if (!anyOpen) {
+          document.body.style.pointerEvents = 'auto';
+        }
+      }
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+    return () => observer.disconnect();
+  }, [isDialogOpen, isStatementOpen, customerToDelete, isBulkEmailOpen, isBulkWsOpen, isSingleCommOpen, isSingleWsOpen]);
 
   const defaultFormData = {
     apellido: "",
@@ -360,7 +374,14 @@ email: ${c.mail || '---'}`;
     const template = emailTemplates?.find(t => t.id === selectedTemplateId);
     if (!template) return;
 
-    const bcc = filteredCustomers.map(c => c.mail).filter(m => !!m).join(';');
+    // Filter unique and valid emails
+    const uniqueEmails = Array.from(new Set(
+      filteredCustomers
+        .map(c => c.mail?.trim().toLowerCase())
+        .filter(m => m && m.includes('@'))
+    ));
+
+    const bcc = uniqueEmails.join(';');
     const body = replaceMarkers(template.body, null, dynamicValues);
     const subject = replaceMarkers(template.subject, null, dynamicValues);
     const mailtoUrl = `mailto:?bcc=${bcc}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body).replace(/%0A/g, '%0D%0A')}`;
@@ -609,7 +630,7 @@ email: ${c.mail || '---'}`;
                   <p className="text-xs font-bold text-blue-800 flex items-center gap-2"><Info className="h-4 w-4" /> Nota del sistema</p>
                   <p className="text-[11px] leading-relaxed text-blue-700">
                     {isBulkEmailOpen 
-                      ? "En los envíos masivos, marcadores como {{Nombre}} no se personalizarán por cliente. Pero los precios de productos y datos manuales sí."
+                      ? "En los envíos masivos, los marcadores dinámicos (como el nombre o saldo) no se personalizarán para cada cliente. Sin embargo, los precios de productos y los datos que ingreses arriba sí se actualizarán automáticamente. Mails duplicados o inválidos serán ignorados."
                       : "Los marcadores dinámicos se completarán automáticamente con los datos del cliente."}
                   </p>
                 </Card>

@@ -113,6 +113,20 @@ function TransactionsContent() {
   const [filterFlow, setFilterFlow] = useState("all")
   const [itemFilterCategory, setItemFilterCategory] = useState("all")
 
+  // Fix for pointer-events stuck in 'none'
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      if (document.body.style.pointerEvents === 'none') {
+        const anyOpen = !!selectedTxDetails || isWsDialogOpen || isMailDialogOpen || !!txToDelete || !!editingTx;
+        if (!anyOpen) {
+          document.body.style.pointerEvents = 'auto';
+        }
+      }
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+    return () => observer.disconnect();
+  }, [selectedTxDetails, isWsDialogOpen, isMailDialogOpen, txToDelete, editingTx]);
+
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
@@ -293,6 +307,61 @@ function TransactionsContent() {
     }, { ars: 0, usd: 0 })
   }, [filteredTransactions]);
 
+  const escapeRegExp = (string: string) => {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  const replaceMarkers = (text: string, tx: any, dynamicVals?: Record<string, string>) => {
+    let result = text;
+    const client = customers?.find(c => c.id === tx.clientId);
+    
+    if (client) {
+      result = result.replace(/\{\{Nombre\}\}/g, client.nombre || "");
+      result = result.replace(/\{\{Apellido\}\}/g, client.apellido || "");
+      result = result.replace(/\{\{Saldo_ARS\}\}/g, `$ ${Number(client.saldoActual || 0).toLocaleString('es-AR')}`);
+      result = result.replace(/\{\{Saldo_USD\}\}/g, `u$s ${Number(client.saldoUSD || 0).toLocaleString('es-AR')}`);
+      result = result.replace(/\{\{Saldo_Cuenta\}\}/g, tx.currency === 'USD' ? `u$s ${Number(client.saldoUSD || 0).toLocaleString('es-AR')}` : `$ ${Number(client.saldoActual || 0).toLocaleString('es-AR')}`);
+    }
+
+    result = result.replace(/\{\{Fecha\}\}/g, formatLocalDate(tx.date));
+    result = result.replace(/\{\{Tipo_Operacion\}\}/g, txTypeMap[tx.type]?.label || tx.type);
+    result = result.replace(/\{\{Total\}\}/g, Math.abs(tx.amount || 0).toLocaleString('es-AR'));
+    result = result.replace(/\{\{Pendiente_Operacion\}\}/g, Math.abs(tx.pendingAmount || 0).toLocaleString('es-AR'));
+    result = result.replace(/\{\{Moneda\}\}/g, tx.currency);
+    result = result.replace(/\{\{Monto_Abonado\}\}/g, Number(tx.paidAmount || 0).toLocaleString('es-AR'));
+    result = result.replace(/\{\{Descripción\}\}/g, tx.description || "");
+
+    let detailItemsText = "";
+    if (tx.items && tx.items.length > 0) {
+      tx.items.forEach((i: any) => {
+        const iSymbol = i.currency === 'USD' ? 'u$s' : '$';
+        const sub = i.price * i.qty * (1 - (i.discount || 0)/100);
+        detailItemsText += `- ${i.qty} x ${i.name} (${iSymbol} ${i.price.toLocaleString('es-AR')}) = ${iSymbol} ${sub.toLocaleString('es-AR')}\n`;
+      });
+    } else if (tx.type === 'cobro' && tx.imputations) {
+      detailItemsText = "Imputación de cobro a facturas pendientes.";
+    }
+    result = result.replace(/\{\{Detalle_Items\}\}/g, detailItemsText);
+
+    if (catalog) {
+      catalog.forEach(item => {
+        const escapedName = escapeRegExp(item.name);
+        const regexARS = new RegExp(`\\{\\{PrecioARS_${escapedName}\\}\\}`, 'g');
+        const regexUSD = new RegExp(`\\{\\{PrecioUSD_${escapedName}\\}\\}`, 'g');
+        result = result.replace(regexARS, `$ ${Number(item.priceARS || 0).toLocaleString('es-AR')}`);
+        result = result.replace(regexUSD, `u$s ${Number(item.priceUSD || 0).toLocaleString('es-AR')}`);
+      });
+    }
+
+    if (dynamicVals) {
+      Object.entries(dynamicVals).forEach(([key, val]) => {
+        const regex = new RegExp(`\\{\\{\\?${escapeRegExp(key)}\\}\\}`, 'g');
+        result = result.replace(regex, val);
+      });
+    }
+    return result;
+  };
+
   const handleCopyTxDetail = (tx: any) => {
     const client = customers?.find(c => c.id === tx.clientId);
     const dateStr = formatLocalDate(tx.date);
@@ -321,46 +390,6 @@ function TransactionsContent() {
 
     navigator.clipboard.writeText(text);
     toast({ title: "Detalle copiado" });
-  };
-
-  const escapeRegExp = (string: string) => {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
-  const replaceMarkers = (text: string, tx: any, dynamicVals?: Record<string, string>) => {
-    let result = text;
-    const client = customers?.find(c => c.id === tx.clientId);
-    
-    if (client) {
-      result = result.replace(/\{\{Nombre\}\}/g, client.nombre || "");
-      result = result.replace(/\{\{Apellido\}\}/g, client.apellido || "");
-      result = result.replace(/\{\{Saldo_ARS\}\}/g, `$ ${Number(client.saldoActual || 0).toLocaleString('es-AR')}`);
-      result = result.replace(/\{\{Saldo_USD\}\}/g, `u$s ${Number(client.saldoUSD || 0).toLocaleString('es-AR')}`);
-    }
-
-    result = result.replace(/\{\{Fecha\}\}/g, formatLocalDate(tx.date));
-    result = result.replace(/\{\{Total\}\}/g, Math.abs(tx.amount || 0).toLocaleString('es-AR'));
-    result = result.replace(/\{\{Pendiente_Operacion\}\}/g, Math.abs(tx.pendingAmount || 0).toLocaleString('es-AR'));
-    result = result.replace(/\{\{Moneda\}\}/g, tx.currency);
-    result = result.replace(/\{\{Descripción\}\}/g, tx.description || "");
-
-    if (catalog) {
-      catalog.forEach(item => {
-        const escapedName = escapeRegExp(item.name);
-        const regexARS = new RegExp(`\\{\\{PrecioARS_${escapedName}\\}\\}`, 'g');
-        const regexUSD = new RegExp(`\\{\\{PrecioUSD_${escapedName}\\}\\}`, 'g');
-        result = result.replace(regexARS, `$ ${Number(item.priceARS || 0).toLocaleString('es-AR')}`);
-        result = result.replace(regexUSD, `u$s ${Number(item.priceUSD || 0).toLocaleString('es-AR')}`);
-      });
-    }
-
-    if (dynamicVals) {
-      Object.entries(dynamicVals).forEach(([key, val]) => {
-        const regex = new RegExp(`\\{\\{\\?${escapeRegExp(key)}\\}\\}`, 'g');
-        result = result.replace(regex, val);
-      });
-    }
-    return result;
   };
 
   const getDynamicKeys = (body: string) => {
@@ -396,7 +425,7 @@ function TransactionsContent() {
       setIsWsDialogOpen(false);
     } else {
       const subject = replaceMarkers(activeTemplate.subject || "", selectedTxForComm, dynamicValues);
-      const mailtoUrl = `mailto:${client?.mail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body).replace(/%0A/g, '%0D%0A')}`;
+      const mailtoUrl = `mailto:${client?.mail || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body).replace(/%0A/g, '%0D%0A')}`;
       window.open(mailtoUrl, '_blank');
       setIsEmailDialogOpen(false);
     }
@@ -655,7 +684,9 @@ function TransactionsContent() {
                     <TableHead>Tipo</TableHead>
                     <TableHead>Caja</TableHead>
                     <TableHead className="text-right">Monto</TableHead>
+                    <TableHead className="text-right">Abonado</TableHead>
                     <TableHead className="text-right">Pendiente</TableHead>
+                    <TableHead className="text-right">Saldo Caja</TableHead>
                     <TableHead className="w-12"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -672,7 +703,9 @@ function TransactionsContent() {
                         <TableCell><Badge variant="outline" className={cn("text-[9px] gap-1", info.color)}><Icon className="h-3 w-3" />{info.label}</Badge></TableCell>
                         <TableCell><span className="text-[10px] font-bold text-muted-foreground uppercase">{acc?.name || "---"}</span></TableCell>
                         <TableCell className="text-right font-bold">{tx.currency==='USD'?'u$s':'$'} {Math.abs(tx.amount || 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right text-xs font-medium">{tx.currency==='USD'?'u$s':'$'} {Number(tx.paidAmount || 0).toLocaleString()}</TableCell>
                         <TableCell className="text-right text-xs text-rose-600 font-bold">{tx.currency==='USD'?'u$s':'$'} {Math.abs(tx.pendingAmount || 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right text-[10px] font-mono">{tx.currency==='USD'?'u$s':'$'} {Number(tx.accountBalanceAfter || 0).toLocaleString()}</TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
