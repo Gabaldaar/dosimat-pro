@@ -20,21 +20,19 @@ import {
   Calculator,
   Mail,
   PlusCircle,
-  Copy,
   MapPinned,
   MessageSquare,
   History,
   Receipt,
-  Users,
   Send,
   Loader2,
-  Printer,
   Edit,
   Phone,
   AlertTriangle,
   Info,
   Plus,
-  CheckCircle2
+  CheckCircle2,
+  Droplets
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import {
@@ -62,6 +60,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { Progress } from "@/components/ui/progress"
 import Link from "next/link"
 
+function formatLocalDate(dateString: string) {
+  if (!dateString) return "---";
+  const date = dateString.includes('T') ? new Date(dateString) : new Date(dateString + 'T12:00:00');
+  return date.toLocaleDateString('es-AR');
+}
+
 const txTypeMap: Record<string, { label: string, color: string }> = {
   sale: { label: "Venta", color: "text-blue-600 bg-blue-50" },
   refill: { label: "Reposición", color: "text-cyan-600 bg-cyan-50" },
@@ -69,16 +73,9 @@ const txTypeMap: Record<string, { label: string, color: string }> = {
   adjustment: { label: "Ajuste", color: "text-slate-600 bg-slate-50" },
 }
 
-function formatLocalDate(dateString: string) {
-  if (!dateString) return "---";
-  const date = dateString.includes('T') ? new Date(dateString) : new Date(dateString + 'T12:00:00');
-  return date.toLocaleDateString('es-AR');
-}
-
 function CustomersContent() {
   const { toast } = useToast()
   const db = useFirestore()
-  const router = useRouter()
   const { user, userData, isUserLoading } = useUser()
   const isAdmin = userData?.role === 'Admin'
   
@@ -292,7 +289,6 @@ function CustomersContent() {
 
   const handleSendBulkWsNext = () => {
     if (bulkStep === 0) {
-      setBulkStep(1);
       const client = filteredCustomers[0];
       const template = wsTemplates?.find(t => t.id === selectedTemplateId);
       if (template && client) {
@@ -300,6 +296,7 @@ function CustomersContent() {
         const phone = client.telefono?.replace(/\D/g, "");
         window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
       }
+      setBulkStep(1);
       return;
     }
 
@@ -323,20 +320,19 @@ function CustomersContent() {
     const template = emailTemplates?.find(t => t.id === selectedTemplateId);
     if (!template) return;
 
-    const allEmails = new Set<string>();
+    const allEmailsSet = new Set<string>();
     filteredCustomers.forEach(c => {
       if (!c.mail) return;
-      // Descomponemos por ;, coma o espacio
       const parts = c.mail.split(/[;, ]+/);
       parts.forEach(p => {
         const cleaned = p.trim().toLowerCase();
         if (cleaned && cleaned.includes('@') && cleaned.includes('.')) {
-          allEmails.add(cleaned);
+          allEmailsSet.add(cleaned);
         }
       });
     });
 
-    const uniqueEmails = Array.from(allEmails);
+    const uniqueEmails = Array.from(allEmailsSet);
     if (uniqueEmails.length === 0) {
       toast({ title: "Sin destinatarios", description: "No hay emails válidos en la lista filtrada.", variant: "destructive" });
       return;
@@ -586,6 +582,65 @@ function CustomersContent() {
                 </TabsContent>
               </Tabs>
               <DialogFooter><Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button><Button onClick={handleSave} className="px-8 font-bold">Guardar</Button></DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isStatementOpen} onOpenChange={setIsStatementOpen}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <div className="flex items-center gap-2">
+                  <Receipt className="h-6 w-6 text-rose-600" />
+                  <DialogTitle className="text-2xl font-black">Estado de Cuenta</DialogTitle>
+                </div>
+                <DialogDescription className="font-bold text-lg text-slate-800">
+                  {selectedCustomerForStatement?.apellido}, {selectedCustomerForStatement?.nombre}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-6 space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl">
+                    <p className="text-[10px] font-black uppercase text-rose-700 tracking-widest">Saldo Deudor ARS</p>
+                    <p className="text-3xl font-black text-rose-800">${Math.abs(selectedCustomerForStatement?.saldoActual || 0).toLocaleString('es-AR')}</p>
+                  </div>
+                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl">
+                    <p className="text-[10px] font-black uppercase text-rose-700 tracking-widest">Saldo Deudor USD</p>
+                    <p className="text-3xl font-black text-rose-800">u$s {Math.abs(selectedCustomerForStatement?.saldoUSD || 0).toLocaleString('es-AR')}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <h4 className="text-xs font-black uppercase text-slate-500 tracking-widest px-1">Operaciones Pendientes de Pago</h4>
+                  <div className="border rounded-2xl overflow-hidden bg-white shadow-sm">
+                    <Table>
+                      <TableHeader className="bg-slate-50">
+                        <TableRow>
+                          <TableHead className="text-[10px] font-black uppercase">Fecha</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase">Operación</TableHead>
+                          <TableHead className="text-right text-[10px] font-black uppercase">Monto Original</TableHead>
+                          <TableHead className="text-right text-[10px] font-black uppercase">Deuda Pendiente</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pendingOperations.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={4} className="text-center py-12 text-muted-foreground italic">No hay operaciones con saldo pendiente.</TableCell>
+                          </TableRow>
+                        ) : pendingOperations.map(tx => (
+                          <TableRow key={tx.id} className="hover:bg-muted/5 transition-colors">
+                            <TableCell className="text-xs font-medium">{formatLocalDate(tx.date)}</TableCell>
+                            <TableCell><Badge variant="outline" className={cn("text-[9px] uppercase font-bold", txTypeMap[tx.type]?.color || "bg-slate-50")}>{txTypeMap[tx.type]?.label || tx.type}</Badge></TableCell>
+                            <TableCell className="text-right font-medium text-xs">{tx.currency==='USD'?'u$s':'$'} {Math.abs(tx.amount || 0).toLocaleString('es-AR')}</TableCell>
+                            <TableCell className="text-right font-black text-rose-600">{tx.currency==='USD'?'u$s':'$'} {Math.abs(tx.pendingAmount || 0).toLocaleString('es-AR')}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={() => setIsStatementOpen(false)} className="w-full font-bold h-12">Cerrar</Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
 
