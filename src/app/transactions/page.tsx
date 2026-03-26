@@ -818,8 +818,8 @@ function TransactionsContent() {
                               <DropdownMenuContent align="end" className="w-48 font-bold">
                                 <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => setSelectedTxDetails(tx), 100); }}><Info className="h-4 w-4 mr-2" /> Ficha completa</DropdownMenuItem>
                                 <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'ws'); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp</DropdownMenuItem>
-                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleCopyTxDetail(tx); }}><Copy className="h-4 w-4 mr-2" /> Copiar Detalle</DropdownMenuItem>
                                 <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'mail'); }}><Mail className="h-4 w-4 mr-2" /> Enviar mail</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleCopyTxDetail(tx); }}><Copy className="h-4 w-4 mr-2" /> Copiar Detalle</DropdownMenuItem>
                                 {isAdmin && (
                                   <>
                                     <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => handleStartEdit(tx), 100); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
@@ -866,6 +866,7 @@ function TransactionsContent() {
                             <DropdownMenuContent align="end" className="w-48 font-bold">
                               <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTimeout(() => setSelectedTxDetails(tx), 100); }}><Info className="h-4 w-4 mr-2" /> Ver Ficha</DropdownMenuItem>
                               <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'ws'); }} className="text-emerald-600"><MessageSquare className="h-4 w-4 mr-2" /> WhatsApp</DropdownMenuItem>
+                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenCommDialog(tx, 'mail'); }}><Mail className="h-4 w-4 mr-2" /> Enviar mail</DropdownMenuItem>
                               <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleCopyTxDetail(tx); }}><Copy className="h-4 w-4 mr-2" /> Copiar</DropdownMenuItem>
                               {isAdmin && (
                                 <>
