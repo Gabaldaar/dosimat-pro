@@ -34,7 +34,8 @@ import {
   AlertTriangle,
   Info,
   ChevronRight,
-  Plus
+  Plus,
+  CheckCircle2
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import {
@@ -434,7 +435,7 @@ email: ${c.mail || '---'}`;
                   <div><p className="text-[10px] font-black uppercase text-emerald-700/60 tracking-widest">Total Filtrado USD</p><h3 className={cn("text-2xl font-black mt-1", filteredTotals.usd < 0 ? "text-rose-600" : "text-emerald-600")}>u$s {filteredTotals.usd.toLocaleString('es-AR')}</h3></div>
                   <TrendingUp className="h-8 w-8 text-emerald-500/20" />
                 </CardContent>
-              </div>
+              </Card>
             </div>
           </header>
 

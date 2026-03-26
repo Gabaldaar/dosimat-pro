@@ -228,8 +228,12 @@ function TransactionsContent() {
         financialAccountId: manualAccountId === "pending" ? null : manualAccountId, 
         paidAmount: activeTab === 'cobro' ? finalAmount : 0, 
         pendingAmount: (activeTab === 'adjustment' && finalAmount < 0) ? finalAmount : 0,
-        imputations: activeTab === 'cobro' ? imputations : null
+        imputations: activeTab === 'cobro' ? imputations : null,
+        accountBalanceAfter: 0 // Will be calculated by looking at current balance
       }
+
+      const acc = manualAccountId !== "pending" ? accounts?.find(a => a.id === manualAccountId) : null;
+      txData.accountBalanceAfter = (Number(acc?.initialBalance || 0)) + finalAmount;
 
       setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
       
@@ -254,6 +258,9 @@ function TransactionsContent() {
         const total = cartTotals[curr as 'ARS' | 'USD']; if (total <= 0) return;
         const paid = Number(paidAmounts[curr] || 0); const debt = total - paid;
         const txId = Math.random().toString(36).substring(2, 11);
+        
+        const acc = destinationAccounts[curr] !== "pending" ? accounts?.find(a => a.id === destinationAccounts[curr]) : null;
+        
         const txData = { 
           id: txId, 
           date: finalDateStr, 
@@ -266,7 +273,8 @@ function TransactionsContent() {
           description: txDescription || `Operación ${activeTab}`, 
           financialAccountId: (destinationAccounts[curr]==="pending" || paid === 0) ? null : destinationAccounts[curr], 
           items: selectedItems.filter(i => i.currency === curr), 
-          pendingAmount: -debt 
+          pendingAmount: -debt,
+          accountBalanceAfter: (Number(acc?.initialBalance || 0)) + paid
         }
         setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
         if (destinationAccounts[curr] !== "pending" && paid !== 0) updateDocumentNonBlocking(doc(db, 'financial_accounts', destinationAccounts[curr]), { initialBalance: increment(paid) });
