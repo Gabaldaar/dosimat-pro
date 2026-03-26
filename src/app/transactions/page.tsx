@@ -36,7 +36,8 @@ import {
   ArrowRight,
   Mail,
   AlertTriangle,
-  CheckCircle2
+  CheckCircle2,
+  Check
 } from "lucide-react"
 import { useToast } from "../../hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -78,6 +79,14 @@ const txTypeMap: Record<string, { label: string, icon: any, color: string, descr
   adjustment: { label: "Ajuste", icon: Settings2, color: "text-slate-600 bg-slate-50", description: "Corrección manual de saldo." },
   Adjustment: { label: "Ajuste", icon: RefreshCw, color: "text-slate-600 bg-slate-50", description: "Ajuste manual." },
   Expense: { label: "Gasto", icon: ArrowDownLeft, color: "text-rose-600 bg-rose-50", description: "Gasto manual registrado." },
+}
+
+function getLocalDateString() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function formatLocalDate(dateString: string) {
@@ -166,7 +175,7 @@ function TransactionsContent() {
   const [selectedItems, setSelectedItems] = useState<any[]>([])
   const [destinationAccounts, setDestinationAccounts] = useState<Record<string, string>>({ ARS: "pending", USD: "pending" })
   const [paidAmounts, setPaidAmounts] = useState<Record<string, number>>({ ARS: 0, USD: 0 })
-  const [operationDate, setOperationDate] = useState(new Date().toISOString().split('T')[0])
+  const [operationDate, setOperationDate] = useState(getLocalDateString())
   const [manualAmount, setManualAmount] = useState(0)
   const [manualCurrency, setManualCurrency] = useState("ARS")
   const [manualAccountId, setManualAccountId] = useState("pending")
@@ -223,7 +232,6 @@ function TransactionsContent() {
   };
 
   const handleSaveTransaction = () => {
-    // Si estamos editando, primero revertimos el impacto financiero de la versión vieja
     if (editingTx) {
       const tx = editingTx;
       if (tx.clientId) {
@@ -267,23 +275,9 @@ function TransactionsContent() {
       }
 
       setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
-      
-      if (manualAccountId !== "pending") {
-        updateDocumentNonBlocking(doc(db, 'financial_accounts', manualAccountId), { initialBalance: increment(finalAmount) });
-      }
-      
-      if (client) {
-        const field = manualCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD';
-        updateDocumentNonBlocking(doc(db, 'clients', client.id), { [field]: increment(finalAmount) });
-      }
-
-      if (activeTab === 'cobro') {
-        Object.entries(imputations).forEach(([targetTxId, amount]) => {
-          updateDocumentNonBlocking(doc(db, 'transactions', targetTxId), {
-            pendingAmount: increment(-Number(amount))
-          });
-        });
-      }
+      if (manualAccountId !== "pending") updateDocumentNonBlocking(doc(db, 'financial_accounts', manualAccountId), { initialBalance: increment(finalAmount) });
+      if (client) { const field = manualCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'; updateDocumentNonBlocking(doc(db, 'clients', client.id), { [field]: increment(finalAmount) }); }
+      if (activeTab === 'cobro') { Object.entries(imputations).forEach(([targetTxId, amount]) => { updateDocumentNonBlocking(doc(db, 'transactions', targetTxId), { pendingAmount: increment(-Number(amount)) }); }); }
     } else {
       ['ARS', 'USD'].forEach(curr => {
         const total = cartTotals[curr as 'ARS' | 'USD']; if (total <= 0) return;
@@ -327,6 +321,7 @@ function TransactionsContent() {
     setPaidAmounts({ ARS: 0, USD: 0 }); 
     setDestinationAccounts({ ARS: "pending", USD: "pending" }); 
     setImputations({});
+    setOperationDate(getLocalDateString());
   }
 
   const handleDeleteTx = () => {
