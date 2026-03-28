@@ -276,8 +276,12 @@ export default function CatalogPage() {
       }
     }
     
-    let totalARS = Number(itemData.laborCostARS) || 0;
-    let totalUSD = Number(itemData.laborCostUSD) || 0;
+    // Para productos compuestos, sumamos la mano de obra convertida a ambas monedas
+    const laborARS = Number(itemData.laborCostARS) || 0;
+    const laborUSD = Number(itemData.laborCostUSD) || 0;
+    
+    let totalARS = laborARS + (laborUSD * currentExchangeRate);
+    let totalUSD = laborUSD + (laborARS / currentExchangeRate);
 
     itemData.components?.forEach((comp: any) => {
       const child = allItems.find(i => i.id === comp.productId);
@@ -488,6 +492,10 @@ export default function CatalogPage() {
     if (!items || !formData.isCompuesto) return { ars: 0, usd: 0 };
     return calculateCost(formData, items, currentRate);
   }, [formData, items, currentRate, calculateCost]);
+
+  const totalLaborARS = useMemo(() => {
+    return (formData.laborCostARS || 0) + (formData.laborCostUSD || 0) * currentRate;
+  }, [formData.laborCostARS, formData.laborCostUSD, currentRate]);
 
   const sortedAddedComponents = useMemo(() => {
     if (!items || !formData.components) return []
@@ -1980,7 +1988,7 @@ export default function CatalogPage() {
                 <DialogTitle className="text-2xl font-black font-headline text-primary">
                   {editingItemId ? 'Configurar Ítem' : 'Nuevo Ítem'}
                 </DialogTitle>
-                <DialogDescription>Gestión vertical unificada de precios y estructura BOM.</DialogDescription>
+                <DialogDescription>Gestión unificada de precios y estructura de armado.</DialogDescription>
               </div>
               {editingItemId && (
                 <Button variant="outline" size="icon" onClick={() => handleExportBOM(items?.find(i => i.id === editingItemId))} className="text-primary border-primary/20">
@@ -1990,7 +1998,7 @@ export default function CatalogPage() {
             </div>
           </DialogHeader>
           
-          <div className="flex-1 overflow-y-auto p-6 space-y-10">
+          <div className="flex-1 overflow-y-auto p-6 space-y-8">
             {/* SECCIÓN 1: DATOS BÁSICOS */}
             <section className="space-y-6">
               <div className="flex items-center gap-2 border-b-2 pb-2">
@@ -2085,7 +2093,7 @@ export default function CatalogPage() {
               </div>
             </section>
 
-            {/* SECCIÓN 2: RESUMEN FINANCIERO (VISIBLE SIEMPRE QUE SEA COMPUESTO) */}
+            {/* SECCIÓN 2: RESUMEN FINANCIERO */}
             {formData.isCompuesto && (
               <section className="animate-in fade-in zoom-in-95 duration-500">
                 <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-2xl border-t-8 border-amber-500 relative overflow-hidden">
@@ -2099,11 +2107,11 @@ export default function CatalogPage() {
                     <div className="flex gap-12 border-t md:border-t-0 md:border-l border-white/10 pt-6 md:pt-0 md:pl-12 w-full md:w-auto">
                       <div className="flex-1 text-center md:text-right space-y-1">
                         <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Insumos (BOM)</p>
-                        <p className="text-2xl font-bold text-blue-400">$ {(currentEditingCosts.ars - (formData.laborCostARS || 0)).toLocaleString()}</p>
+                        <p className="text-2xl font-bold text-blue-400">$ {(currentEditingCosts.ars - totalLaborARS).toLocaleString()}</p>
                       </div>
                       <div className="flex-1 text-center md:text-right space-y-1">
                         <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Mano de Obra</p>
-                        <p className="text-2xl font-bold text-amber-400">$ {formData.laborCostARS?.toLocaleString()}</p>
+                        <p className="text-2xl font-bold text-amber-400">$ {totalLaborARS.toLocaleString()}</p>
                       </div>
                     </div>
                   </div>
@@ -2140,7 +2148,7 @@ export default function CatalogPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3">
+                <div className="grid grid-cols-1 gap-3 pb-24">
                   {sortedAddedComponents.map((comp) => { 
                     const product = items?.find(i => i.id === comp.productId); 
                     if (!product) return null;
@@ -2321,11 +2329,11 @@ export default function CatalogPage() {
                 <div className="flex flex-col gap-2">
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] font-bold opacity-70">MATERIALES:</span>
-                    <span className="text-xs font-bold text-blue-400">${(itemToPrint.calculatedCostARS - (itemToPrint.laborCostARS || 0)).toLocaleString('es-AR')}</span>
+                    <span className="text-xs font-bold text-blue-400">${(itemToPrint.calculatedCostARS - ((Number(itemToPrint.laborCostARS) || 0) + (Number(itemToPrint.laborCostUSD) || 0) * currentRate)).toLocaleString('es-AR')}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] font-bold opacity-70">MANO DE OBRA:</span>
-                    <span className="text-xs font-bold text-amber-400">${(itemToPrint.laborCostARS || 0).toLocaleString('es-AR')}</span>
+                    <span className="text-xs font-bold text-amber-400">${((Number(itemToPrint.laborCostARS) || 0) + (Number(itemToPrint.laborCostUSD) || 0) * currentRate).toLocaleString('es-AR')}</span>
                   </div>
                   <div className="flex justify-between items-center mt-1 pt-1 border-t border-white/10">
                     <span className="text-xs font-black">COSTO TOTAL FINAL:</span>
