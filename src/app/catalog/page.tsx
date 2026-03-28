@@ -1973,7 +1973,7 @@ export default function CatalogPage() {
       </AlertDialog>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-5xl max-h-[95vh] overflow-hidden w-[95vw] p-0 flex flex-col">
+        <DialogContent className="max-w-5xl h-[95vh] overflow-hidden w-[95vw] p-0 flex flex-col">
           <DialogHeader className="p-4 border-b shrink-0">
             <div className="flex justify-between items-start pr-8">
               <div>
@@ -1990,9 +1990,9 @@ export default function CatalogPage() {
             </div>
           </DialogHeader>
           
-          <div className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden">
+          <div className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden min-h-0">
             {/* COLUMNA IZQUIERDA: INFORMACIÓN GENERAL */}
-            <div className="w-full md:w-[380px] p-6 border-b md:border-b-0 md:border-r overflow-y-auto shrink-0 bg-muted/5">
+            <div className="w-full md:w-[380px] p-6 border-b md:border-b-0 md:border-r md:overflow-y-auto shrink-0 bg-muted/5">
               <div className="space-y-6">
                 <div className="space-y-2">
                   <Label className="font-bold">Nombre del Producto / Servicio</Label>
@@ -2082,7 +2082,7 @@ export default function CatalogPage() {
             </div>
 
             {/* COLUMNA DERECHA: ESTRUCTURA BOM */}
-            <div className="flex-1 flex flex-col bg-white min-h-[500px] md:h-full overflow-hidden">
+            <div className="flex-1 flex flex-col bg-white md:h-full overflow-hidden">
               {formData.isCompuesto ? (
                 <div className="flex flex-col h-full overflow-hidden">
                   <div className="p-4 bg-amber-50 border-b flex items-center justify-between shrink-0">
@@ -2172,7 +2172,7 @@ export default function CatalogPage() {
                   </div>
                 </div>
               ) : (
-                <div className="p-8 flex-1 flex flex-col">
+                <div className="p-8 flex-1 flex flex-col md:overflow-y-auto">
                   <Label className="font-bold mb-2">Descripción del Producto</Label>
                   <Textarea value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="flex-1 min-h-[200px] bg-muted/5 font-sans leading-relaxed p-4" placeholder="Escribe detalles técnicos, notas o información relevante..." />
                 </div>
