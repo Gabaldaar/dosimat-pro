@@ -59,7 +59,8 @@ import {
   Lock,
   Unlock,
   ArrowRightLeft,
-  Droplet
+  Droplet,
+  ChevronLeft
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -230,6 +231,8 @@ export default function CatalogPage() {
   const [manualSuppliers, setManualSuppliers] = useState<Record<string, string>>({})
   const [supplierStatuses, setSupplierStatuses] = useState<Record<string, 'pending' | 'ordered'>>({})
   const [initialPlanData, setInitialPlanData] = useState({ qtys: {}, sups: {}, prices: {}, currencies: {}, statuses: {}, qty: 0 })
+
+  const [editHistory, setEditHistory] = useState<any[]>([])
 
   const [formData, setFormData] = useState({
     name: "",
@@ -517,41 +520,45 @@ export default function CatalogPage() {
     return counts
   }, [items])
 
+  const loadItemIntoForm = useCallback((item: any) => {
+    setEditingItemId(item.id)
+    const sanitizedComponents: { productId: string, quantity: number }[] = [];
+    (item.components || []).forEach((c: any) => {
+      const existing = sanitizedComponents.find(sc => sc.productId === c.productId);
+      if (existing) {
+        existing.quantity += (Number(c.quantity) || 0);
+      } else {
+        sanitizedComponents.push({ ...c });
+      }
+    });
+
+    const costCurrency = item.costCurrency || (item.costUSD > 0 && !item.costARS ? 'USD' : 'ARS');
+    const costAmount = costCurrency === 'USD' ? (item.costUSD || 0) : (item.costARS || 0);
+
+    setFormData({
+      name: item.name || "",
+      categoryId: item.categoryId || "",
+      supplier: item.supplier || "none",
+      priceARS: item.priceARS || 0,
+      priceUSD: item.priceUSD || 0,
+      costAmount: costAmount,
+      costCurrency: costCurrency,
+      laborCostARS: item.laborCostARS || 0,
+      laborCostUSD: item.laborCostUSD || 0,
+      isService: item.isService || false,
+      isCompuesto: item.isCompuesto || false,
+      trackStock: item.trackStock !== undefined ? item.trackStock : !item.isService,
+      description: item.description || "",
+      stock: item.stock || 0,
+      minStock: item.minStock || 0,
+      components: sanitizedComponents
+    })
+  }, []);
+
   const handleOpenDialog = (item?: any) => {
+    setEditHistory([]); // Reset history when opening a fresh dialog
     if (item) {
-      setEditingItemId(item.id)
-      const sanitizedComponents: { productId: string, quantity: number }[] = [];
-      (item.components || []).forEach((c: any) => {
-        const existing = sanitizedComponents.find(sc => sc.productId === c.productId);
-        if (existing) {
-          existing.quantity += (Number(c.quantity) || 0);
-        } else {
-          sanitizedComponents.push({ ...c });
-        }
-      });
-
-      const costCurrency = item.costCurrency || (item.costUSD > 0 && !item.costARS ? 'USD' : 'ARS');
-      const costAmount = costCurrency === 'USD' ? (item.costUSD || 0) : (item.costARS || 0);
-
-      setFormData({
-        ...formData,
-        name: item.name || "",
-        categoryId: item.categoryId || "",
-        supplier: item.supplier || "none",
-        priceARS: item.priceARS || 0,
-        priceUSD: item.priceUSD || 0,
-        costAmount: costAmount,
-        costCurrency: costCurrency,
-        laborCostARS: item.laborCostARS || 0,
-        laborCostUSD: item.laborCostUSD || 0,
-        isService: item.isService || false,
-        isCompuesto: item.isCompuesto || false,
-        trackStock: item.trackStock !== undefined ? item.trackStock : !item.isService,
-        description: item.description || "",
-        stock: item.stock || 0,
-        minStock: item.minStock || 0,
-        components: sanitizedComponents
-      })
+      loadItemIntoForm(item);
     } else {
       setEditingItemId(null)
       setFormData({ 
@@ -561,6 +568,35 @@ export default function CatalogPage() {
       })
     }
     setIsDialogOpen(true)
+  }
+
+  const handleJumpToComponent = (componentId: string) => {
+    const component = items?.find(i => i.id === componentId);
+    if (!component) return;
+
+    // Save current state to history stack
+    setEditHistory(prev => [...prev, { id: editingItemId, data: JSON.parse(JSON.stringify(formData)) }]);
+    
+    // Load new component into form
+    loadItemIntoForm(component);
+    
+    // Scroll to top
+    const scrollContainer = document.getElementById('config-item-scroll');
+    if (scrollContainer) scrollContainer.scrollTop = 0;
+  }
+
+  const handleGoBackInHistory = () => {
+    const newHistory = [...editHistory];
+    const previousState = newHistory.pop();
+    if (!previousState) return;
+
+    setEditHistory(newHistory);
+    setEditingItemId(previousState.id);
+    setFormData(previousState.data);
+    
+    // Scroll to top
+    const scrollContainer = document.getElementById('config-item-scroll');
+    if (scrollContainer) scrollContainer.scrollTop = 0;
   }
 
   const handleSave = () => {
@@ -593,8 +629,14 @@ export default function CatalogPage() {
     }
 
     setDocumentNonBlocking(doc(db, 'products_services', id), savePayload, { merge: true })
-    setIsDialogOpen(false)
-    toast({ title: editingItemId ? "Item actualizado" : "Item creado" })
+    
+    if (editHistory.length > 0) {
+      toast({ title: "Cambios guardados en componente" });
+      handleGoBackInHistory();
+    } else {
+      setIsDialogOpen(false)
+      toast({ title: editingItemId ? "Item actualizado" : "Item creado" })
+    }
   }
 
   const handleCreateOrder = () => {
@@ -1984,11 +2026,21 @@ export default function CatalogPage() {
         <DialogContent className="max-w-4xl h-[95vh] overflow-hidden w-[95vw] p-0 flex flex-col">
           <DialogHeader className="p-4 border-b shrink-0 bg-white z-10">
             <div className="flex justify-between items-center pr-8">
-              <div>
-                <DialogTitle className="text-2xl font-black font-headline text-primary">
-                  {editingItemId ? 'Configurar Ítem' : 'Nuevo Ítem'}
-                </DialogTitle>
-                <DialogDescription>Gestión unificada de precios y estructura de armado.</DialogDescription>
+              <div className="flex items-center gap-4">
+                {editHistory.length > 0 && (
+                  <Button variant="ghost" size="icon" onClick={handleGoBackInHistory} className="h-10 w-10 text-primary">
+                    <ChevronLeft className="h-6 w-6" />
+                  </Button>
+                )}
+                <div>
+                  <DialogTitle className="text-2xl font-black font-headline text-primary flex items-center gap-2">
+                    {editingItemId ? 'Configurar Ítem' : 'Nuevo Ítem'}
+                    {editHistory.length > 0 && <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-bold">Sub-ítem</Badge>}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {editHistory.length > 0 ? 'Editando componente del producto anterior.' : 'Gestión unificada de precios y estructura de armado.'}
+                  </DialogDescription>
+                </div>
               </div>
               {editingItemId && (
                 <Button variant="outline" size="icon" onClick={() => handleExportBOM(items?.find(i => i.id === editingItemId))} className="text-primary border-primary/20">
@@ -1998,7 +2050,7 @@ export default function CatalogPage() {
             </div>
           </DialogHeader>
           
-          <div className="flex-1 overflow-y-auto p-6 space-y-8">
+          <div id="config-item-scroll" className="flex-1 overflow-y-auto p-6 space-y-8">
             {/* SECCIÓN 1: DATOS BÁSICOS */}
             <section className="space-y-6">
               <div className="flex items-center gap-2 border-b-2 pb-2">
@@ -2178,7 +2230,14 @@ export default function CatalogPage() {
                             <p className="text-lg font-black text-blue-700 leading-tight">$ {(costData.ars * comp.quantity).toLocaleString()}</p>
                             <p className="text-sm font-black text-emerald-700">u$s {(costData.usd * comp.quantity).toLocaleString()}</p>
                           </div>
-                          <Button variant="ghost" size="icon" className="h-11 w-11 text-destructive shrink-0 hover:bg-rose-50 rounded-full" onClick={() => removeComponent(comp.originalIndex)}><Trash2 className="h-5 w-5" /></Button>
+                          <div className="flex gap-1 shrink-0">
+                            <Button variant="ghost" size="icon" className="h-11 w-11 text-primary hover:bg-primary/5 rounded-full" onClick={() => handleJumpToComponent(comp.productId)} title="Editar este componente">
+                              <ChevronRight className="h-5 w-5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-11 w-11 text-destructive shrink-0 hover:bg-rose-50 rounded-full" onClick={() => removeComponent(comp.originalIndex)}>
+                              <Trash2 className="h-5 w-5" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ); 
@@ -2197,7 +2256,7 @@ export default function CatalogPage() {
             <div className="flex gap-3 w-full justify-end">
               <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="h-12 px-8 font-bold text-base flex-1 md:flex-none">Cancelar</Button>
               <Button onClick={handleSave} className="h-12 px-12 font-black shadow-2xl uppercase tracking-widest flex-1 md:flex-none">
-                <CheckCircle2 className="mr-2 h-5 w-5" /> GUARDAR ÍTEM
+                <CheckCircle2 className="mr-2 h-5 w-5" /> {editHistory.length > 0 ? 'GUARDAR Y VOLVER' : 'GUARDAR ÍTEM'}
               </Button>
             </div>
           </DialogFooter>
