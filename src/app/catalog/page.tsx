@@ -750,7 +750,7 @@ export default function CatalogPage() {
 
   const handleUpdateGlobalSupplier = (productId: string, newSupplier: string) => {
     const cleanSupplier = newSupplier === "Sin Proveedor" ? "" : newSupplier;
-    updateDocumentNonBlocking(doc(db, 'products_services', id), {
+    updateDocumentNonBlocking(doc(db, 'products_services', productId), {
       supplier: cleanSupplier
     });
     toast({ title: "Proveedor actualizado" });
@@ -1749,10 +1749,10 @@ export default function CatalogPage() {
                 <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                   <TableRow>
                     <TableHead className="font-black text-[10px] uppercase">Artículo</TableHead>
-                    <TableHead className="text-center font-black text-[10px] uppercase w-24">Stock</TableHead>
-                    <TableHead className="text-center font-black text-[10px] uppercase w-32">Costo Rep.</TableHead>
-                    <TableHead className="text-center font-black text-[10px] uppercase w-32">Moneda</TableHead>
-                    <TableHead className="text-center font-black text-[10px] uppercase w-48">Proveedor</TableHead>
+                    <TableHead className="text-center text-[10px] font-black uppercase w-24">Stock</TableHead>
+                    <TableHead className="text-center text-[10px] font-black uppercase w-32">Costo Rep.</TableHead>
+                    <TableHead className="text-center text-[10px] font-black uppercase w-32">Moneda</TableHead>
+                    <TableHead className="text-center text-[10px] font-black uppercase w-48">Proveedor</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1973,8 +1973,8 @@ export default function CatalogPage() {
       </AlertDialog>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-5xl max-h-[95vh] overflow-y-auto w-[95vw] p-0 md:p-6">
-          <DialogHeader className="p-4 md:p-0">
+        <DialogContent className="max-w-5xl max-h-[95vh] overflow-hidden w-[95vw] p-0">
+          <DialogHeader className="p-4 border-b shrink-0">
             <div className="flex justify-between items-start pr-8">
               <div>
                 <DialogTitle className="text-2xl font-black font-headline text-primary">
@@ -1989,250 +1989,204 @@ export default function CatalogPage() {
               )}
             </div>
           </DialogHeader>
-          <div className="grid grid-cols-1 md:grid-cols-[350px_1fr] gap-8 p-4 md:p-0 py-4 items-start">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label className="font-bold">Nombre del Producto / Servicio</Label>
-                <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Dosificador G4" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+          
+          <div className="flex flex-col md:flex-row h-[70vh] overflow-hidden">
+            {/* COLUMNA IZQUIERDA: INFORMACIÓN GENERAL */}
+            <div className="w-full md:w-[380px] p-6 border-r overflow-y-auto shrink-0 bg-muted/5">
+              <div className="space-y-6">
                 <div className="space-y-2">
-                  <Label className="font-bold">Categoría</Label>
-                  <Select value={formData.categoryId} onValueChange={(v) => setFormData({...formData, categoryId: v})}>
-                    <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                    <SelectContent className="max-h-60">{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <Label className="font-bold">Nombre del Producto / Servicio</Label>
+                  <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Dosificador G4" />
                 </div>
-                <div className="space-y-2">
-                  <Label className="font-bold">Proveedor</Label>
-                  <Select value={formData.supplier} onValueChange={(v) => setFormData({...formData, supplier: v})}>
-                    <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
-                    <SelectContent className="max-h-60">
-                      <SelectItem value="none">SIN PROVEEDOR</SelectItem>
-                      {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-blue-700 font-black">Venta ARS ($)</Label>
-                  <Input type="number" value={formData.priceARS} onChange={(e) => setFormData({...formData, priceARS: Number(e.target.value)})} className="border-blue-200" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-emerald-700 font-black">Venta USD (u$s)</Label>
-                  <Input type="number" value={formData.priceUSD} onChange={(e) => setFormData({...formData, priceUSD: Number(e.target.value)})} className="border-emerald-200" />
-                </div>
-              </div>
-              {!formData.isCompuesto ? (
-                <div className="p-4 bg-muted/20 rounded-2xl border border-dashed space-y-3 shadow-inner">
-                  <div className="flex items-center justify-between mb-1">
-                    <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Costo de Reposición</Label>
-                    <Badge variant="outline" className={cn("text-[8px] font-black", formData.costCurrency === 'ARS' ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-emerald-50 text-emerald-700 border-emerald-300")}>
-                      BASE {formData.costCurrency}
-                    </Badge>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="font-bold">Categoría</Label>
+                    <Select value={formData.categoryId} onValueChange={(v) => setFormData({...formData, categoryId: v})}>
+                      <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                      <SelectContent className="max-h-60">{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                    </Select>
                   </div>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">{formData.costCurrency === 'USD' ? 'u$s' : '$'}</span>
-                      <Input type="number" value={formData.costAmount} onChange={(e) => setFormData({...formData, costAmount: Number(e.target.value)})} className={cn("pl-8 font-black h-11", formData.costCurrency === 'ARS' ? "border-blue-200" : "border-emerald-200")} />
+                  <div className="space-y-2">
+                    <Label className="font-bold">Proveedor</Label>
+                    <Select value={formData.supplier} onValueChange={(v) => setFormData({...formData, supplier: v})}>
+                      <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                      <SelectContent className="max-h-60">
+                        <SelectItem value="none">SIN PROVEEDOR</SelectItem>
+                        {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-blue-700 font-black">Venta ARS ($)</Label>
+                    <Input type="number" value={formData.priceARS} onChange={(e) => setFormData({...formData, priceARS: Number(e.target.value)})} className="border-blue-200" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-emerald-700 font-black">Venta USD (u$s)</Label>
+                    <Input type="number" value={formData.priceUSD} onChange={(e) => setFormData({...formData, priceUSD: Number(e.target.value)})} className="border-emerald-200" />
+                  </div>
+                </div>
+                {!formData.isCompuesto ? (
+                  <div className="p-4 bg-muted/20 rounded-2xl border border-dashed space-y-3 shadow-inner">
+                    <div className="flex items-center justify-between mb-1">
+                      <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Costo de Reposición</Label>
+                      <Badge variant="outline" className={cn("text-[8px] font-black", formData.costCurrency === 'ARS' ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-emerald-50 text-emerald-700 border-emerald-300")}>
+                        BASE {formData.costCurrency}
+                      </Badge>
                     </div>
-                    <Tabs value={formData.costCurrency} onValueChange={(v: any) => setFormData({...formData, costCurrency: v})} className="shrink-0">
-                      <TabsList className="grid grid-cols-2 w-28 h-11 p-1 border shadow-inner">
-                        <TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
-                        <TabsTrigger value="USD" className="text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
-                      </TabsList>
-                    </Tabs>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">{formData.costCurrency === 'USD' ? 'u$s' : '$'}</span>
+                        <Input type="number" value={formData.costAmount} onChange={(e) => setFormData({...formData, costAmount: Number(e.target.value)})} className={cn("pl-8 font-black h-11", formData.costCurrency === 'ARS' ? "border-blue-200" : "border-emerald-200")} />
+                      </div>
+                      <Tabs value={formData.costCurrency} onValueChange={(v: any) => setFormData({...formData, costCurrency: v})} className="shrink-0">
+                        <TabsList className="grid grid-cols-2 w-28 h-11 p-1 border shadow-inner">
+                          <TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
+                          <TabsTrigger value="USD" className="text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
+                        </TabsList>
+                      </Tabs>
+                    </div>
                   </div>
-                  <p className="text-[10px] font-bold italic text-muted-foreground text-center">
-                    Equivale a {formData.costCurrency === 'ARS' ? `u$s ${(formData.costAmount / currentRate).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : `$ ${(formData.costAmount * currentRate).toLocaleString('es-AR')}`} según dólar {rateType === 'blue' ? 'Blue' : 'Oficial'}
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-4 p-4 bg-amber-50 rounded-2xl border border-amber-200 shadow-inner">
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black text-amber-800 uppercase tracking-widest">Mano Obra ARS</Label>
-                    <Input type="number" value={formData.laborCostARS} onChange={(e) => setFormData({...formData, laborCostARS: Number(e.target.value)})} className="h-10 border-amber-200 font-bold" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black text-amber-800 uppercase tracking-widest">Mano Obra USD</Label>
-                    <Input type="number" value={formData.laborCostUSD} onChange={(e) => setFormData({...formData, laborCostUSD: Number(e.target.value)})} className="h-10 border-amber-200 font-bold" />
-                  </div>
-                </div>
-              )}
-              <div className="flex flex-col gap-3 pt-2">
-                <div className="flex items-center gap-3 p-3 border rounded-xl bg-muted/10">
-                  <Switch checked={formData.isService} onCheckedChange={(v) => { setFormData({...formData, isService: v, trackStock: !v && formData.trackStock, isCompuesto: v ? false : formData.isCompuesto}); }} />
-                  <div>
-                    <Label className="font-bold">Es un servicio técnico</Label>
-                    <p className="text-[10px] text-muted-foreground">No controla stock ni tiene armado.</p>
-                  </div>
-                </div>
-                {!formData.isService && (
-                  <div className={cn("flex items-center gap-3 p-3 border rounded-xl transition-colors", formData.trackStock ? "bg-emerald-50/50 border-emerald-200 shadow-sm" : "bg-blue-50/50 border-blue-200")}>
-                    <Switch checked={formData.trackStock} onCheckedChange={(v) => setFormData({...formData, trackStock: v})} />
-                    <div>
-                      <Label className={cn("font-bold", formData.trackStock ? "text-emerald-800" : "text-blue-800")}>Controlar Stock de este ítem</Label>
-                      <p className={cn("text-[10px]", formData.trackStock ? "text-emerald-600" : "text-blue-600")}>{formData.trackStock ? "Descuenta unidades en cada venta." : "Producto de entrega directa (sin inventario)."}</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4 p-4 bg-amber-50 rounded-2xl border border-amber-200 shadow-inner">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black text-amber-800 uppercase tracking-widest">Mano Obra ARS</Label>
+                      <Input type="number" value={formData.laborCostARS} onChange={(e) => setFormData({...formData, laborCostARS: Number(e.target.value)})} className="h-10 border-amber-200 font-bold" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black text-amber-800 uppercase tracking-widest">Mano Obra USD</Label>
+                      <Input type="number" value={formData.laborCostUSD} onChange={(e) => setFormData({...formData, laborCostUSD: Number(e.target.value)})} className="h-10 border-amber-200 font-bold" />
                     </div>
                   </div>
                 )}
-                {!formData.isService && (
-                  <div className="flex items-center gap-3 p-3 border rounded-xl bg-amber-50/50 border-amber-200 shadow-sm">
-                    <Switch checked={formData.isCompuesto} onCheckedChange={(v) => { setFormData({...formData, isCompuesto: v, trackStock: v ? true : formData.trackStock}); }} />
-                    <div>
-                      <Label className="font-bold text-amber-800">Es un producto compuesto</Label>
-                      <p className="text-[10px] text-amber-600">Se fabrica a partir de otros ítems.</p>
+                <div className="flex flex-col gap-3 pt-2">
+                  <div className="flex items-center gap-3 p-3 border rounded-xl bg-white shadow-sm">
+                    <Switch checked={formData.isService} onCheckedChange={(v) => { setFormData({...formData, isService: v, trackStock: !v && formData.trackStock, isCompuesto: v ? false : formData.isCompuesto}); }} />
+                    <div><Label className="font-bold">Es un servicio</Label><p className="text-[10px] text-muted-foreground">Sin stock ni armado.</p></div>
+                  </div>
+                  {!formData.isService && (
+                    <div className="flex items-center gap-3 p-3 border rounded-xl bg-amber-50/50 border-amber-200 shadow-sm">
+                      <Switch checked={formData.isCompuesto} onCheckedChange={(v) => { setFormData({...formData, isCompuesto: v, trackStock: v ? true : formData.trackStock}); }} />
+                      <div><Label className="font-bold text-amber-800">Producto compuesto</Label><p className="text-[10px] text-amber-600">Se fabrica a partir de otros.</p></div>
                     </div>
+                  )}
+                </div>
+                {!formData.isService && formData.trackStock && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2"><Label className="font-bold">Stock Inicial</Label><Input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} /></div>
+                    <div className="space-y-2"><Label className="font-bold text-rose-600">Mínimo</Label><Input type="number" value={formData.minStock} onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} /></div>
                   </div>
                 )}
               </div>
-              {!formData.isService && formData.trackStock && (
-                <div className="grid grid-cols-2 gap-4 animate-in fade-in zoom-in duration-200">
-                  <div className="space-y-2">
-                    <Label className="font-bold">Stock Inicial</Label>
-                    <Input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="font-bold text-rose-600">Stock Mínimo (Alerta)</Label>
-                    <Input type="number" value={formData.minStock} onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} />
-                  </div>
-                </div>
-              )}
             </div>
-            <div className="space-y-4">
+
+            {/* COLUMNA DERECHA: ESTRUCTURA BOM */}
+            <div className="flex-1 flex flex-col h-full bg-white">
               {formData.isCompuesto ? (
-                <div className="flex flex-col h-full border rounded-2xl bg-white shadow-inner overflow-hidden">
-                  <div className="p-4 bg-amber-50 border-b border-amber-100 flex items-center justify-between">
-                    <span className="text-xs font-black text-amber-800 uppercase tracking-widest flex items-center gap-2">
-                      <Layers className="h-4 w-4" /> Estructura de Armado (BOM)
-                    </span>
-                    <Badge variant="outline" className="bg-white text-amber-700 border-amber-200 font-bold text-[10px]">{formData.components.length} PIEZAS</Badge>
+                <div className="flex flex-col h-full overflow-hidden">
+                  <div className="p-4 bg-amber-50 border-b flex items-center justify-between shrink-0">
+                    <span className="text-xs font-black text-amber-800 uppercase tracking-widest flex items-center gap-2"><Layers className="h-4 w-4" /> Estructura de Armado (BOM)</span>
+                    <Badge className="bg-amber-600 font-bold">{formData.components.length} PIEZAS</Badge>
                   </div>
-                  <div className="p-4 border-b space-y-4 bg-white">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase text-muted-foreground">Filtrar por Categoría</Label>
-                        <Select value={bomFilterCategory} onValueChange={setBomFilterCategory}>
-                          <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-                          <SelectContent className="max-h-60">
-                            <SelectItem value="all">Todas las categorías</SelectItem>
-                            {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase text-primary">Añadir Componente</Label>
-                        <Select onValueChange={addComponent}>
-                          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Elegir parte..." /></SelectTrigger>
-                          <SelectContent className="max-h-60">
-                            {items?.filter(i => i.id !== editingItemId && !i.isService && (bomFilterCategory === "all" || i.categoryId === bomFilterCategory)).sort((a, b) => (a.name || "").localeCompare(b.name || "")).map(i => (
-                              <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                  
+                  <div className="p-4 border-b bg-white grid grid-cols-2 gap-4 shrink-0">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold uppercase text-muted-foreground">Filtrar Piezas</Label>
+                      <Select value={bomFilterCategory} onValueChange={setBomFilterCategory}>
+                        <SelectTrigger className="h-9"><SelectValue placeholder="Categoría..." /></SelectTrigger>
+                        <SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}<SelectItem value="all">Ver Todas</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold uppercase text-primary">Agregar Componente</Label>
+                      <Select onValueChange={addComponent}>
+                        <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar parte..." /></SelectTrigger>
+                        <SelectContent className="max-h-60">
+                          {items?.filter(i => i.id !== editingItemId && !i.isService && (bomFilterCategory === "all" || i.categoryId === bomFilterCategory)).map(i => (
+                            <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
-                  <ScrollArea className="flex-1 p-4 max-h-[400px]">
-                    {formData.components.length === 0 ? (
-                      <div className="py-20 text-center flex flex-col items-center justify-center gap-3 text-muted-foreground italic">
-                        <Package className="h-8 w-8 opacity-20" />
-                        <p className="text-xs">Agrega componentes para armar este producto.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3 pb-4">
-                        {sortedAddedComponents.map((comp) => { 
-                          const product = items?.find(i => i.id === comp.productId); 
-                          if (!product) return null;
-                          const costData = calculateCost(product, items!, currentRate);
-                          const isBaseUSD = product.costCurrency === 'USD' || (!product.costCurrency && (product.costUSD > 0 && !product.costARS));
-                          
-                          return (
-                            <div key={`${comp.productId}-${comp.originalIndex}`} className="flex flex-col gap-2 p-3 rounded-2xl bg-muted/20 border border-muted/30 group hover:border-primary/20 hover:bg-white transition-all shadow-sm">
-                              <div className="flex items-start justify-between gap-4">
-                                <div className="flex flex-col min-w-0 flex-1">
-                                  <span className="text-sm font-black text-slate-800 leading-tight truncate">{product?.name || 'Cargando...'}</span>
-                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
-                                    <div className="flex items-center gap-1.5">
-                                      <div className={cn("px-1.5 py-0.5 rounded text-[10px] font-black border", isBaseUSD ? "text-emerald-700 bg-emerald-50 border-emerald-100" : "text-blue-700 bg-blue-50 border-blue-100")}>
-                                        {isBaseUSD ? `u$s ${product.costUSD?.toLocaleString('es-AR')}` : `$ ${product.costARS?.toLocaleString('es-AR')}`}
-                                      </div>
-                                      <span className="text-[10px] font-bold text-muted-foreground">→ {!isBaseUSD ? `u$s ${costData.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}` : `$ ${costData.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <div className="flex items-center gap-1 border-2 border-primary/20 rounded-xl bg-white px-2 py-1 shadow-sm">
-                                    <span className="text-[10px] font-black text-primary uppercase">Cant:</span>
-                                    <input type="number" value={comp.quantity} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="w-10 text-xs font-black text-center focus:outline-none bg-transparent" />
-                                  </div>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => removeComponent(comp.originalIndex)}><Minus className="h-4 w-4" /></Button>
-                                </div>
-                              </div>
-                              <div className="flex justify-between items-center px-2 py-1.5 border-t border-muted/30 pt-2 mt-1">
-                                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Subtotal Línea</span>
-                                <div className="flex gap-4">
-                                  <span className="text-[11px] font-black text-blue-700">$ {(costData.ars * comp.quantity).toLocaleString('es-AR', { maximumFractionDigits: 0 })}</span>
-                                  <span className="text-[11px] font-black text-emerald-700">u$s {(costData.usd * comp.quantity).toLocaleString('es-AR', { maximumFractionDigits: 2 })}</span>
-                                </div>
-                              </div>
-                            </div>
-                          ); 
-                        })}
+
+                  <ScrollArea className="flex-1 p-4">
+                    <div className="space-y-3 pb-4">
+                      {sortedAddedComponents.map((comp) => { 
+                        const product = items?.find(i => i.id === comp.productId); 
+                        if (!product) return null;
+                        const costData = calculateCost(product, items!, currentRate);
+                        const isBaseUSD = product.costCurrency === 'USD' || (!product.costCurrency && (product.costUSD > 0 && !product.costARS));
                         
-                        {/* RESUMEN FINAL DE COSTOS */}
-                        <Card className="mt-6 p-5 bg-slate-900 text-white rounded-2xl border-none shadow-2xl overflow-hidden relative border-t-4 border-t-amber-500">
-                          <div className="absolute -right-4 -bottom-4 opacity-5"><Calculator className="h-24 w-24" /></div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-400 mb-4 flex items-center gap-2 border-b border-white/10 pb-2">
-                            <Calculator className="h-4 w-4" /> RESUMEN DE PRODUCCIÓN
-                          </p>
-                          <div className="space-y-3">
-                            <div className="flex justify-between items-start">
-                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Costo Insumos</span>
-                              <div className="text-right">
-                                <p className="text-sm font-black text-blue-400 font-mono">$ {(currentEditingCosts.ars - (formData.laborCostARS || 0)).toLocaleString('es-AR', { maximumFractionDigits: 0 })}</p>
-                                <p className="text-[10px] font-bold text-emerald-400 font-mono">u$s {(currentEditingCosts.usd - (formData.laborCostUSD || 0)).toLocaleString('es-AR', { maximumFractionDigits: 2 })}</p>
-                              </div>
-                            </div>
-                            {(formData.laborCostARS > 0 || formData.laborCostUSD > 0) && (
-                              <div className="flex justify-between items-start pt-2 border-t border-white/5">
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Mano de Obra</span>
-                                <div className="text-right">
-                                  <p className="text-sm font-black text-amber-400 font-mono">$ {formData.laborCostARS?.toLocaleString('es-AR')}</p>
-                                  <p className="text-[10px] font-bold text-amber-400 font-mono">u$s {formData.laborCostUSD?.toLocaleString('es-AR')}</p>
+                        return (
+                          <div key={`${comp.productId}-${comp.originalIndex}`} className="flex flex-col p-3 rounded-xl border bg-muted/10 hover:bg-white transition-all shadow-sm group">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-black text-slate-800 leading-tight truncate">{product.name}</p>
+                                <div className="flex items-center gap-3 mt-2">
+                                  <div className={cn("px-2 py-0.5 rounded text-[10px] font-black border", isBaseUSD ? "text-emerald-700 bg-emerald-50 border-emerald-100" : "text-blue-700 bg-blue-50 border-blue-100")}>
+                                    {isBaseUSD ? `u$s ${product.costUSD?.toLocaleString()}` : `$ ${product.costARS?.toLocaleString()}`}
+                                  </div>
+                                  <span className="text-[10px] font-bold text-muted-foreground">→ {!isBaseUSD ? `u$s ${costData.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}` : `$ ${costData.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`}</span>
                                 </div>
                               </div>
-                            )}
-                            <div className="flex justify-between items-center pt-4 border-t-2 border-white/20">
-                              <div className="space-y-0.5">
-                                <span className="text-xs font-black uppercase text-white tracking-widest">COSTO TOTAL</span>
-                                <p className="text-[8px] text-slate-400 italic">IVA No Incluido</p>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <div className="flex items-center gap-1 border-2 border-primary/20 rounded-lg bg-white px-2 py-1">
+                                  <input type="number" value={comp.quantity} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="w-8 text-xs font-black text-center focus:outline-none" />
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeComponent(comp.originalIndex)}><X className="h-4 w-4" /></Button>
                               </div>
-                              <div className="text-right">
-                                <p className="text-2xl font-black text-white leading-none tracking-tighter font-mono">$ {currentEditingCosts.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</p>
-                                <p className="text-sm font-black text-emerald-400 mt-1 font-mono">u$s {currentEditingCosts.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}</p>
+                            </div>
+                            <div className="flex justify-between items-center mt-2 pt-2 border-t border-dashed">
+                              <span className="text-[9px] font-black text-muted-foreground uppercase">Subtotal</span>
+                              <div className="flex gap-4">
+                                <span className="text-xs font-black text-blue-700">$ {(costData.ars * comp.quantity).toLocaleString()}</span>
+                                <span className="text-xs font-black text-emerald-700">u$s {(costData.usd * comp.quantity).toLocaleString()}</span>
                               </div>
                             </div>
                           </div>
-                        </Card>
-                      </div>
-                    )}
+                        ); 
+                      })}
+                    </div>
                   </ScrollArea>
+
+                  {/* FOOTER FIJO DE COSTOS BOM */}
+                  <div className="p-6 bg-slate-900 text-white shrink-0 border-t-4 border-amber-500 shadow-2xl relative">
+                    <div className="absolute right-4 top-4 opacity-10"><Calculator className="h-12 w-12" /></div>
+                    <div className="grid grid-cols-2 gap-8 items-end">
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400">
+                          <span>Materiales</span>
+                          <span className="text-blue-400">$ {(currentEditingCosts.ars - (formData.laborCostARS || 0)).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400">
+                          <span>Mano de Obra</span>
+                          <span className="text-amber-400">$ {formData.laborCostARS?.toLocaleString()}</span>
+                        </div>
+                      </div>
+                      <div className="text-right space-y-1">
+                        <p className="text-[10px] font-black text-amber-500 uppercase tracking-[0.2em] mb-1">Costo Total Final</p>
+                        <p className="text-4xl font-black text-white leading-none tracking-tighter font-mono">$ {currentEditingCosts.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</p>
+                        <p className="text-base font-black text-emerald-400 font-mono">u$s {currentEditingCosts.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ) : (
-                <div className="space-y-2 h-full flex flex-col">
-                  <Label className="font-bold">Descripción (opcional)</Label>
-                  <Textarea value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="flex-1 min-h-[300px] md:min-h-0 bg-muted/5 font-sans leading-relaxed p-4" placeholder="Detalles del producto o servicio..." />
+                <div className="p-8 h-full flex flex-col">
+                  <Label className="font-bold mb-2">Descripción del Producto</Label>
+                  <Textarea value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="flex-1 min-h-0 bg-muted/5 font-sans leading-relaxed p-4" placeholder="Escribe detalles técnicos, notas o información relevante..." />
                 </div>
               )}
             </div>
           </div>
-          <DialogFooter className="p-4 md:p-0 border-t md:border-none pt-4 mt-2">
-            <div className="flex flex-col sm:flex-row gap-2 w-full justify-end">
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="font-bold h-12 px-6">Cancelar</Button>
-              <Button onClick={handleSave} className="font-black h-12 px-10 shadow-xl shadow-primary/20 uppercase tracking-wider">
-                <CheckCircle2 className="mr-2 h-5 w-5" /> GUARDAR ÍTEM
+
+          <DialogFooter className="p-4 border-t bg-white shrink-0">
+            <div className="flex gap-2 w-full justify-end">
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="h-12 px-6 font-bold">Cancelar</Button>
+              <Button onClick={handleSave} className="h-12 px-10 font-black shadow-xl uppercase tracking-wider">
+                <CheckCircle2 className="mr-2 h-5 w-5" /> GUARDAR PRODUCTO
               </Button>
             </div>
           </DialogFooter>
