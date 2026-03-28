@@ -35,7 +35,8 @@ import {
   Link as LinkIcon,
   MessageSquare,
   RefreshCw,
-  Beaker
+  Beaker,
+  Copy
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -311,6 +312,25 @@ function RoutesContent() {
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
   }
 
+  const handleShareOrderWhatsApp = () => {
+    if (!selectedSheet) return;
+    const now = new Date();
+    const greeting = now.getHours() < 13 ? "Buenos días" : "Buenas tardes";
+    const dateStr = new Date(selectedSheet.date + 'T12:00:00').toLocaleDateString('es-AR');
+    
+    let text = `${greeting}\n\n`;
+    text += `*Pedido para la próxima entrega*\n`;
+    text += `Fecha: ${dateStr}\n`;
+    text += `Bidones de Cloro: ${loadTotals.plannedChlorine}\n`;
+    text += `Bidones de Ácido: ${loadTotals.plannedAcid}\n\n`;
+    text += `Muchas gracias.\n`;
+    text += `Saludos, \n`;
+    text += `*DOSIMAT*\n`;
+    text += `www.dosimat.com.ar`;
+
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  }
+
   if (isUserLoading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
 
   const isEditingAllowed = selectedSheet && selectedSheet.status === 'planned' && (isAdmin || isCommunicator)
@@ -337,6 +357,11 @@ function RoutesContent() {
               )
             ) : (
               <div className="flex gap-2">
+                {!isReplenisher && (
+                  <Button type="button" variant="outline" size="icon" onClick={handleShareOrderWhatsApp} className="text-emerald-700 border-emerald-200 bg-emerald-50" title="Copiar pedido para WhatsApp">
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                )}
                 <Button type="button" variant="outline" size="icon" onClick={handleShareLink} className="text-emerald-600 border-emerald-200" title="Compartir Link de acceso">
                   <LinkIcon className="h-4 w-4" />
                 </Button>
