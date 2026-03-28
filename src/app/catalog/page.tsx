@@ -1980,7 +1980,7 @@ export default function CatalogPage() {
                 <DialogTitle className="text-2xl font-black font-headline text-primary">
                   {editingItemId ? 'Configurar Ítem' : 'Nuevo Ítem'}
                 </DialogTitle>
-                <DialogDescription>Gestión de precios, categoría y estructura de armado.</DialogDescription>
+                <DialogDescription>Gestión vertical unificada de precios y estructura BOM.</DialogDescription>
               </div>
               {editingItemId && (
                 <Button variant="outline" size="icon" onClick={() => handleExportBOM(items?.find(i => i.id === editingItemId))} className="text-primary border-primary/20">
@@ -1990,31 +1990,31 @@ export default function CatalogPage() {
             </div>
           </DialogHeader>
           
-          <div className="flex-1 overflow-y-auto p-6 space-y-8">
-            {/* SECCIÓN 1: DATOS GENERALES */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-10">
+            {/* SECCIÓN 1: DATOS BÁSICOS */}
             <section className="space-y-6">
               <div className="flex items-center gap-2 border-b-2 pb-2">
                 <Tag className="h-4 w-4 text-primary" />
-                <h3 className="font-black text-sm uppercase tracking-widest">Datos Generales</h3>
+                <h3 className="font-black text-xs uppercase tracking-[0.2em] text-muted-foreground">Datos Básicos</h3>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label className="font-bold">Nombre del Producto / Servicio</Label>
-                  <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Dosificador G4" />
+                  <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Dosificador G4" className="h-11" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="font-bold">Categoría</Label>
                     <Select value={formData.categoryId} onValueChange={(v) => setFormData({...formData, categoryId: v})}>
-                      <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                      <SelectTrigger className="h-11"><SelectValue placeholder="Elegir..." /></SelectTrigger>
                       <SelectContent className="max-h-60">{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label className="font-bold">Proveedor</Label>
+                    <Label className="font-bold">Proveedor Defecto</Label>
                     <Select value={formData.supplier} onValueChange={(v) => setFormData({...formData, supplier: v})}>
-                      <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                      <SelectTrigger className="h-11"><SelectValue placeholder="Elegir..." /></SelectTrigger>
                       <SelectContent className="max-h-60">
                         <SelectItem value="none">SIN PROVEEDOR</SelectItem>
                         {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
@@ -2024,15 +2024,15 @@ export default function CatalogPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label className="text-blue-700 font-black">Venta ARS ($)</Label>
-                    <Input type="number" value={formData.priceARS} onChange={(e) => setFormData({...formData, priceARS: Number(e.target.value)})} className="border-blue-200" />
+                    <Label className="text-blue-700 font-black text-xs uppercase">Venta ARS ($)</Label>
+                    <Input type="number" value={formData.priceARS} onChange={(e) => setFormData({...formData, priceARS: Number(e.target.value)})} className="h-11 border-blue-200 font-bold" />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-emerald-700 font-black">Venta USD (u$s)</Label>
-                    <Input type="number" value={formData.priceUSD} onChange={(e) => setFormData({...formData, priceUSD: Number(e.target.value)})} className="border-emerald-200" />
+                    <Label className="text-emerald-700 font-black text-xs uppercase">Venta USD (u$s)</Label>
+                    <Input type="number" value={formData.priceUSD} onChange={(e) => setFormData({...formData, priceUSD: Number(e.target.value)})} className="h-11 border-emerald-200 font-bold" />
                   </div>
                 </div>
                 {!formData.isCompuesto ? (
@@ -2041,11 +2041,11 @@ export default function CatalogPage() {
                       <Label className="text-[10px] font-black text-muted-foreground uppercase">Costo Reposición</Label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">{formData.costCurrency === 'USD' ? 'u$s' : '$'}</span>
-                        <Input type="number" value={formData.costAmount} onChange={(e) => setFormData({...formData, costAmount: Number(e.target.value)})} className="pl-8 font-black h-10" />
+                        <Input type="number" value={formData.costAmount} onChange={(e) => setFormData({...formData, costAmount: Number(e.target.value)})} className="pl-8 font-black h-11" />
                       </div>
                     </div>
                     <Tabs value={formData.costCurrency} onValueChange={(v: any) => setFormData({...formData, costCurrency: v})} className="shrink-0 pt-4">
-                      <TabsList className="grid grid-cols-2 w-28 h-10 p-1 border">
+                      <TabsList className="grid grid-cols-2 w-28 h-11 p-1 border">
                         <TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
                         <TabsTrigger value="USD" className="text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
                       </TabsList>
@@ -2055,83 +2055,85 @@ export default function CatalogPage() {
                   <div className="grid grid-cols-2 gap-4 p-4 bg-amber-50 rounded-2xl border border-amber-200 shadow-inner">
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black text-amber-800 uppercase">Mano Obra ARS</Label>
-                      <Input type="number" value={formData.laborCostARS} onChange={(e) => setFormData({...formData, laborCostARS: Number(e.target.value)})} className="h-10 border-amber-200 font-bold" />
+                      <Input type="number" value={formData.laborCostARS} onChange={(e) => setFormData({...formData, laborCostARS: Number(e.target.value)})} className="h-11 border-amber-200 font-bold" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black text-amber-800 uppercase">Mano Obra USD</Label>
-                      <Input type="number" value={formData.laborCostUSD} onChange={(e) => setFormData({...formData, laborCostUSD: Number(e.target.value)})} className="h-10 border-amber-200 font-bold" />
+                      <Input type="number" value={formData.laborCostUSD} onChange={(e) => setFormData({...formData, laborCostUSD: Number(e.target.value)})} className="h-11 border-amber-200 font-bold" />
                     </div>
                   </div>
                 )}
               </div>
 
               <div className="flex flex-wrap gap-4">
-                <div className="flex items-center gap-3 p-3 border rounded-xl bg-white shadow-sm flex-1 min-w-[200px]">
+                <div className="flex items-center gap-3 p-4 border rounded-2xl bg-white shadow-sm flex-1 min-w-[200px]">
                   <Switch checked={formData.isService} onCheckedChange={(v) => { setFormData({...formData, isService: v, trackStock: !v && formData.trackStock, isCompuesto: v ? false : formData.isCompuesto}); }} />
                   <div><Label className="font-bold">Es un servicio</Label><p className="text-[10px] text-muted-foreground">Sin stock ni armado.</p></div>
                 </div>
                 {!formData.isService && (
-                  <div className="flex items-center gap-3 p-3 border rounded-xl bg-amber-50/50 border-amber-200 shadow-sm flex-1 min-w-[200px]">
+                  <div className="flex items-center gap-3 p-4 border rounded-2xl bg-amber-50/50 border-amber-200 shadow-sm flex-1 min-w-[200px]">
                     <Switch checked={formData.isCompuesto} onCheckedChange={(v) => { setFormData({...formData, isCompuesto: v, trackStock: v ? true : formData.trackStock}); }} />
-                    <div><Label className="font-bold text-amber-800">Producto compuesto</Label><p className="text-[10px] text-amber-600">Se fabrica a partir de otros.</p></div>
+                    <div><Label className="font-bold text-amber-800">Producto compuesto</Label><p className="text-[10px] text-amber-600">Requiere estructura BOM.</p></div>
                   </div>
                 )}
                 {!formData.isService && formData.trackStock && (
                   <div className="flex gap-4 flex-1 min-w-[200px]">
-                    <div className="space-y-1 flex-1"><Label className="font-bold text-xs">Stock Inicial</Label><Input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} /></div>
-                    <div className="space-y-1 flex-1"><Label className="font-bold text-rose-600 text-xs">Mínimo</Label><Input type="number" value={formData.minStock} onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} /></div>
+                    <div className="space-y-1 flex-1"><Label className="font-bold text-xs uppercase text-muted-foreground">Stock Actual</Label><Input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} className="h-11 font-black" /></div>
+                    <div className="space-y-1 flex-1"><Label className="font-bold text-rose-600 text-xs uppercase">Mínimo Crítico</Label><Input type="number" value={formData.minStock} onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} className="h-11 border-rose-200 font-black" /></div>
                   </div>
                 )}
               </div>
             </section>
 
-            {/* SECCIÓN 2: RESUMEN DE COSTOS (SI ES COMPUESTO) */}
+            {/* SECCIÓN 2: RESUMEN FINANCIERO (VISIBLE SIEMPRE QUE SEA COMPUESTO) */}
             {formData.isCompuesto && (
-              <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-xl border-t-4 border-amber-500 relative overflow-hidden">
-                <div className="absolute right-4 top-4 opacity-10"><Calculator className="h-16 w-16" /></div>
-                <div className="flex flex-col md:flex-row justify-between items-center gap-8">
-                  <div className="text-center md:text-left space-y-1">
-                    <p className="text-[10px] font-black text-amber-500 uppercase tracking-[0.2em] mb-1">Costo de Producción Total</p>
-                    <p className="text-5xl font-black text-white leading-none tracking-tighter font-mono">$ {currentEditingCosts.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</p>
-                    <p className="text-xl font-black text-emerald-400 font-mono">u$s {currentEditingCosts.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}</p>
-                  </div>
-                  <div className="flex gap-8 border-t md:border-t-0 md:border-l border-white/10 pt-4 md:pt-0 md:pl-8 w-full md:w-auto">
-                    <div className="flex-1 text-center md:text-right space-y-1">
-                      <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Materiales</p>
-                      <p className="text-xl font-bold text-blue-400">$ {(currentEditingCosts.ars - (formData.laborCostARS || 0)).toLocaleString()}</p>
+              <section className="animate-in fade-in zoom-in-95 duration-500">
+                <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-2xl border-t-8 border-amber-500 relative overflow-hidden">
+                  <div className="absolute right-0 top-0 p-4 opacity-5"><Calculator className="h-32 w-32" /></div>
+                  <div className="flex flex-col md:flex-row justify-between items-center gap-8">
+                    <div className="text-center md:text-left space-y-1">
+                      <p className="text-[10px] font-black text-amber-500 uppercase tracking-[0.3em] mb-2">Costo Total Proyectado</p>
+                      <p className="text-6xl font-black text-white leading-none tracking-tighter font-mono">$ {currentEditingCosts.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</p>
+                      <p className="text-2xl font-black text-emerald-400 font-mono mt-2">u$s {currentEditingCosts.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}</p>
                     </div>
-                    <div className="flex-1 text-center md:text-right space-y-1">
-                      <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Mano de Obra</p>
-                      <p className="text-xl font-bold text-amber-400">$ {formData.laborCostARS?.toLocaleString()}</p>
+                    <div className="flex gap-12 border-t md:border-t-0 md:border-l border-white/10 pt-6 md:pt-0 md:pl-12 w-full md:w-auto">
+                      <div className="flex-1 text-center md:text-right space-y-1">
+                        <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Insumos (BOM)</p>
+                        <p className="text-2xl font-bold text-blue-400">$ {(currentEditingCosts.ars - (formData.laborCostARS || 0)).toLocaleString()}</p>
+                      </div>
+                      <div className="flex-1 text-center md:text-right space-y-1">
+                        <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Mano de Obra</p>
+                        <p className="text-2xl font-bold text-amber-400">$ {formData.laborCostARS?.toLocaleString()}</p>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              </section>
             )}
 
-            {/* SECCIÓN 3: ESTRUCTURA BOM (SI ES COMPUESTO) O DESCRIPCIÓN */}
+            {/* SECCIÓN 3: ESTRUCTURA BOM O DESCRIPCIÓN */}
             {formData.isCompuesto ? (
-              <div className="space-y-6">
+              <section className="space-y-6">
                 <div className="flex items-center justify-between border-b-2 pb-2">
-                  <h3 className="font-black text-sm uppercase tracking-widest flex items-center gap-2"><Layers className="h-4 w-4" /> Componentes del Producto (BOM)</h3>
-                  <Badge className="bg-amber-600 font-bold">{formData.components.length} PIEZAS</Badge>
+                  <h3 className="font-black text-xs uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2"><Layers className="h-4 w-4" /> Estructura de Armado (BOM)</h3>
+                  <Badge className="bg-amber-600 font-black px-3 py-1 shadow-lg">{formData.components.length} PIEZAS ACTIVAS</Badge>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-muted/10 rounded-xl border border-dashed">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 bg-muted/10 rounded-2xl border border-dashed border-primary/20">
                   <div className="space-y-1">
                     <Label className="text-[10px] font-bold uppercase text-muted-foreground">Filtrar por Categoría</Label>
                     <Select value={bomFilterCategory} onValueChange={setBomFilterCategory}>
-                      <SelectTrigger className="h-10 bg-white"><SelectValue placeholder="Categoría..." /></SelectTrigger>
-                      <SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}<SelectItem value="all">Ver Todas</SelectItem></SelectContent>
+                      <SelectTrigger className="h-11 bg-white shadow-sm"><SelectValue placeholder="Ver todas..." /></SelectTrigger>
+                      <SelectContent className="max-h-60">{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}<SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem></SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px] font-bold uppercase text-primary">Agregar Componente</Label>
                     <Select onValueChange={addComponent}>
-                      <SelectTrigger className="h-10 bg-white border-primary/30"><SelectValue placeholder="Seleccionar parte para agregar..." /></SelectTrigger>
+                      <SelectTrigger className="h-11 bg-white border-primary/30 shadow-md ring-2 ring-primary/5"><SelectValue placeholder="Seleccionar parte para agregar..." /></SelectTrigger>
                       <SelectContent className="max-h-60">
                         {items?.filter(i => i.id !== editingItemId && !i.isService && (bomFilterCategory === "all" || i.categoryId === bomFilterCategory)).map(i => (
-                          <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
+                          <SelectItem key={i.id} value={i.id} className="font-bold">{i.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -2146,45 +2148,47 @@ export default function CatalogPage() {
                     const isBaseUSD = product.costCurrency === 'USD' || (!product.costCurrency && (product.costUSD > 0 && !product.costARS));
                     
                     return (
-                      <div key={`${comp.productId}-${comp.originalIndex}`} className="flex flex-col md:flex-row items-center gap-4 p-4 rounded-xl border bg-white hover:border-primary/30 transition-all shadow-sm group">
+                      <div key={`${comp.productId}-${comp.originalIndex}`} className="flex flex-col md:flex-row items-center gap-6 p-5 rounded-2xl border bg-white hover:border-primary/40 transition-all shadow-sm hover:shadow-md group">
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-black text-slate-800 leading-tight truncate">{product.name}</p>
-                          <div className="flex items-center gap-3 mt-1.5">
-                            <div className={cn("px-2 py-0.5 rounded text-[10px] font-black border", isBaseUSD ? "text-emerald-700 bg-emerald-50 border-emerald-100" : "text-blue-700 bg-blue-50 border-blue-100")}>
-                              {isBaseUSD ? `u$s ${product.costUSD?.toLocaleString()}` : `$ ${product.costARS?.toLocaleString()}`}
+                          <p className="text-base font-black text-slate-800 leading-tight truncate">{product.name}</p>
+                          <div className="flex items-center gap-4 mt-2">
+                            <div className={cn("px-3 py-1 rounded-full text-[10px] font-black border-2", isBaseUSD ? "text-emerald-700 bg-emerald-50 border-emerald-100" : "text-blue-700 bg-blue-50 border-blue-100")}>
+                              BASE: {isBaseUSD ? `u$s ${product.costUSD?.toLocaleString()}` : `$ ${product.costARS?.toLocaleString()}`}
                             </div>
-                            <span className="text-[10px] font-bold text-muted-foreground">→ {!isBaseUSD ? `u$s ${costData.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}` : `$ ${costData.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`}</span>
+                            <span className="text-[10px] font-bold text-muted-foreground flex items-center gap-1">
+                              <ArrowRight className="h-3 w-3" /> {!isBaseUSD ? `u$s ${costData.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}` : `$ ${costData.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`}
+                            </span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-6 w-full md:w-auto pt-3 md:pt-0 border-t md:border-t-0">
-                          <div className="flex items-center gap-2 bg-muted/20 p-1.5 rounded-lg border">
-                            <Label className="text-[9px] font-black uppercase text-muted-foreground px-1">Cant:</Label>
-                            <input type="number" value={comp.quantity} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="w-12 text-sm font-black text-center bg-transparent focus:outline-none" />
+                        <div className="flex items-center gap-8 w-full md:w-auto pt-4 md:pt-0 border-t md:border-t-0">
+                          <div className="flex items-center gap-3 bg-muted/20 p-2 rounded-xl border shadow-inner">
+                            <Label className="text-[10px] font-black uppercase text-muted-foreground px-1">Cant:</Label>
+                            <input type="number" value={comp.quantity} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="w-14 text-lg font-black text-center bg-transparent focus:outline-none" />
                           </div>
-                          <div className="text-right min-w-[120px]">
-                            <p className="text-[8px] font-black uppercase text-slate-400">Subtotal</p>
-                            <p className="text-xs font-black text-blue-700">$ {(costData.ars * comp.quantity).toLocaleString()}</p>
-                            <p className="text-[10px] font-black text-emerald-700">u$s {(costData.usd * comp.quantity).toLocaleString()}</p>
+                          <div className="text-right min-w-[140px]">
+                            <p className="text-[9px] font-black uppercase text-slate-400">Subtotal Línea</p>
+                            <p className="text-lg font-black text-blue-700 leading-tight">$ {(costData.ars * comp.quantity).toLocaleString()}</p>
+                            <p className="text-sm font-black text-emerald-700">u$s {(costData.usd * comp.quantity).toLocaleString()}</p>
                           </div>
-                          <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive shrink-0" onClick={() => removeComponent(comp.originalIndex)}><Trash2 className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" className="h-11 w-11 text-destructive shrink-0 hover:bg-rose-50 rounded-full" onClick={() => removeComponent(comp.originalIndex)}><Trash2 className="h-5 w-5" /></Button>
                         </div>
                       </div>
                     ); 
                   })}
                 </div>
-              </div>
+              </section>
             ) : (
-              <div className="space-y-2">
-                <Label className="font-bold flex items-center gap-2"><FileText className="h-4 w-4 text-primary" /> Descripción del Producto</Label>
-                <Textarea value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="min-h-[200px] bg-muted/5 font-sans leading-relaxed p-4" placeholder="Escribe detalles técnicos, notas o información relevante..." />
-              </div>
+              <section className="space-y-4">
+                <Label className="font-black text-xs uppercase tracking-widest flex items-center gap-2 text-muted-foreground"><FileText className="h-4 w-4 text-primary" /> Descripción Técnica</Label>
+                <Textarea value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="min-h-[300px] bg-muted/5 font-sans leading-relaxed p-6 text-base rounded-3xl" placeholder="Escribe detalles técnicos, notas de montaje o información comercial relevante..." />
+              </section>
             )}
           </div>
 
           <DialogFooter className="p-4 border-t bg-white shrink-0 z-10">
-            <div className="flex gap-2 w-full justify-end">
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="h-12 px-6 font-bold flex-1 md:flex-none">Cancelar</Button>
-              <Button onClick={handleSave} className="h-12 px-10 font-black shadow-xl uppercase tracking-wider flex-1 md:flex-none">
+            <div className="flex gap-3 w-full justify-end">
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="h-12 px-8 font-bold text-base flex-1 md:flex-none">Cancelar</Button>
+              <Button onClick={handleSave} className="h-12 px-12 font-black shadow-2xl uppercase tracking-widest flex-1 md:flex-none">
                 <CheckCircle2 className="mr-2 h-5 w-5" /> GUARDAR ÍTEM
               </Button>
             </div>
@@ -2236,7 +2240,7 @@ export default function CatalogPage() {
                     </div>
                   </Card>
                 ); })}</div>
-                <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-x-auto"><Table className="min-w-[500px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="font-black text-[8px] uppercase h-7">Componente</TableHead><TableHead className="text-center font-black text-[8px] uppercase h-7 w-12">Req.</TableHead><TableHead className="text-center font-black text-[8px] uppercase h-7 w-12">Stock</TableHead><TableHead className="text-center font-black text-[8px] uppercase h-7 w-40">Proveedor</TableHead><TableHead className="text-right font-black text-[8px] uppercase h-7 w-20">Estado</TableHead></TableRow></TableHeader><TableBody>{explosionSummary.all.sort((a,b) => a.name.localeCompare(b.name)).map((req) => { const stockRestante = req.available - req.required; const faltaDirecto = stockRestante < 0; return (<TableRow key={req.id} className="h-10"><TableCell className="py-0.5"><span className="font-bold text-[11px]">{req.name}</span></TableCell><TableCell className="text-center font-black text-primary text-[10px]">{req.required}</TableCell><TableCell className="text-center text-slate-500 text-[10px]">{req.available}</TableCell><TableCell className="text-center py-0.5"><Select defaultValue={manualSuppliers[req.id] || req.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateItemSupplierGlobally(req.id, v)}><SelectTrigger className="h-7 text-[9px] bg-transparent border-none focus:ring-0"><SelectValue /></SelectTrigger><SelectContent className="max-h-60"><SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></TableCell><TableCell className="text-right py-0.5">{faltaDirecto ? <Badge className="bg-rose-600 font-bold text-[7px] h-4">FALTA</Badge> : <CheckCircle className="h-3 w-3 text-emerald-500 ml-auto" />}</TableCell></TableRow>); })}</TableBody></Table></div>
+                <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-x-auto"><Table className="min-w-[500px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="font-black text-[8px] uppercase h-7">Componente</TableHead><TableHead className="text-center font-black text-[8px] uppercase h-7 w-12">Req.</TableHead><TableHead className="text-center text-[8px] font-black uppercase h-7 w-12">Stock</TableHead><TableHead className="text-center font-black text-[8px] uppercase h-7 w-40">Proveedor</TableHead><TableHead className="text-right font-black text-[8px] uppercase h-7 w-20">Estado</TableHead></TableRow></TableHeader><TableBody>{explosionSummary.all.sort((a,b) => a.name.localeCompare(b.name)).map((req) => { const stockRestante = req.available - req.required; const faltaDirecto = stockRestante < 0; return (<TableRow key={req.id} className="h-10"><TableCell className="py-0.5"><span className="font-bold text-[11px]">{req.name}</span></TableCell><TableCell className="text-center font-black text-primary text-[10px]">{req.required}</TableCell><TableCell className="text-center text-slate-500 text-[10px]">{req.available}</TableCell><TableCell className="text-center py-0.5"><Select defaultValue={manualSuppliers[req.id] || req.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateItemSupplierGlobally(req.id, v)}><SelectTrigger className="h-7 text-[9px] bg-transparent border-none focus:ring-0"><SelectValue /></SelectTrigger><SelectContent className="max-h-60"><SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></TableCell><TableCell className="text-right py-0.5">{faltaDirecto ? <Badge className="bg-rose-600 font-bold text-[7px] h-4">FALTA</Badge> : <CheckCircle className="h-3 w-3 text-emerald-500 ml-auto" />}</TableCell></TableRow>); })}</TableBody></Table></div>
               </section>
               <section className="space-y-2">
                 <div className="flex items-center justify-between"><h3 className="text-[9px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><ShoppingCart className="h-3 w-3" /> Carrito de Compras</h3><Button variant="outline" size="sm" className="h-6 gap-1 font-bold text-[8px]" onClick={() => { setManualPurchaseQtys({}); setManualPurchasePrices({}); setManualSuppliers({}); setManualPurchaseCurrencies({}); }}><RefreshCw className="h-2 w-2" /> REINICIAR</Button></div>
@@ -2288,17 +2292,17 @@ export default function CatalogPage() {
             <div>
               <h1 className="text-2xl font-black uppercase tracking-tight">{itemToPrint.name}</h1>
               <p className="text-sm font-bold text-slate-600">Categoría: {categoryMap[itemToPrint.categoryId] || 'S/D'}</p>
-              <p className="text-xs text-slate-400 uppercase mt-1">ID: {itemToPrint.id}</p>
+              <p className="text-[10px] text-slate-400 uppercase mt-1">Ficha Generada por Dosimat Pro</p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] font-black uppercase text-slate-400">Dosimat Pro System</p>
+              <p className="text-[10px] font-black uppercase text-slate-400">Fecha de Emisión</p>
               <p className="text-xs font-bold">{new Date().toLocaleDateString('es-AR')}</p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-6 mb-8">
             <div className="p-4 border-2 border-slate-900 rounded-xl bg-slate-50">
-              <h2 className="text-[10px] font-black uppercase mb-3 border-b border-slate-200 pb-1">Precios de Venta</h2>
+              <h2 className="text-[10px] font-black uppercase mb-3 border-b border-slate-200 pb-1">Precios de Venta Vigentes</h2>
               <div className="flex flex-col gap-2">
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-bold">PESOS (ARS):</span>
@@ -2312,16 +2316,23 @@ export default function CatalogPage() {
             </div>
 
             {isAdmin && (
-              <div className="p-4 border-2 border-slate-900 rounded-xl bg-slate-50">
-                <h2 className="text-[10px] font-black uppercase mb-3 border-b border-slate-200 pb-1 text-slate-500">Análisis de Costos (Privado)</h2>
+              <div className="p-4 border-2 border-slate-900 rounded-xl bg-slate-900 text-white shadow-xl">
+                <h2 className="text-[10px] font-black uppercase mb-3 border-b border-white/20 pb-1 text-amber-500">Resumen de Costos de Producción</h2>
                 <div className="flex flex-col gap-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold">COSTO ARS:</span>
-                    <span className="text-sm font-black text-blue-700">${(itemToPrint.calculatedCostARS || 0).toLocaleString('es-AR')}</span>
+                    <span className="text-[10px] font-bold opacity-70">MATERIALES:</span>
+                    <span className="text-xs font-bold text-blue-400">${(itemToPrint.calculatedCostARS - (itemToPrint.laborCostARS || 0)).toLocaleString('es-AR')}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold">COSTO USD:</span>
-                    <span className="text-sm font-black text-emerald-700">u$s {(itemToPrint.calculatedCostUSD || 0).toLocaleString('es-AR')}</span>
+                    <span className="text-[10px] font-bold opacity-70">MANO DE OBRA:</span>
+                    <span className="text-xs font-bold text-amber-400">${(itemToPrint.laborCostARS || 0).toLocaleString('es-AR')}</span>
+                  </div>
+                  <div className="flex justify-between items-center mt-1 pt-1 border-t border-white/10">
+                    <span className="text-xs font-black">COSTO TOTAL FINAL:</span>
+                    <div className="text-right">
+                      <p className="text-sm font-black text-white">${(itemToPrint.calculatedCostARS || 0).toLocaleString('es-AR')}</p>
+                      <p className="text-[10px] font-black text-emerald-400">u$s {(itemToPrint.calculatedCostUSD || 0).toLocaleString('es-AR')}</p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2330,28 +2341,41 @@ export default function CatalogPage() {
 
           {itemToPrint.isCompuesto && (
             <div className="space-y-4">
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-gap-2">
-                <Layers className="h-4 w-4" /> Estructura de Armado (BOM)
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
+                <Layers className="h-4 w-4" /> Estructura Detallada de Insumos (BOM)
               </h3>
-              <table className="w-full border-collapse border-2 border-slate-900 text-xs">
+              <table className="w-full border-collapse border-2 border-slate-900 text-[10px]">
                 <thead>
                   <tr className="bg-slate-900 text-white">
                     <th className="border border-slate-900 p-2 text-left uppercase font-black">Componente / Pieza</th>
-                    <th className="border border-slate-900 p-2 text-center uppercase font-black w-24">Cantidad</th>
-                    <th className="border border-slate-900 p-2 text-center uppercase font-black w-32">Proveedor</th>
+                    <th className="border border-slate-900 p-2 text-center uppercase font-black w-16">Cant.</th>
+                    <th className="border border-slate-900 p-2 text-right uppercase font-black w-28">Costo Unit. Base</th>
+                    <th className="border border-slate-900 p-2 text-right uppercase font-black w-28">Costo Unit. Ref.</th>
+                    <th className="border border-slate-900 p-2 text-right uppercase font-black w-28">Subtotal (Base)</th>
                   </tr>
                 </thead>
                 <tbody>
                   {itemToPrint.components?.map((comp: any, idx: number) => {
                     const product = items?.find(i => i.id === comp.productId);
+                    if (!product) return null;
+                    const costData = calculateCost(product, items!, currentRate);
+                    const isBaseUSD = product.costCurrency === 'USD' || (!product.costCurrency && (product.costUSD > 0 && !product.costARS));
                     return (
                       <tr key={idx} className="border-b border-slate-300">
                         <td className="border border-slate-900 p-2">
-                          <p className="font-black">{product?.name || 'Cargando...'}</p>
-                          <p className="text-[9px] text-slate-500 uppercase mt-0.5">{categoryMap[product?.categoryId || ''] || 'S/D'}</p>
+                          <p className="font-black text-xs leading-tight">{product.name}</p>
+                          <p className="text-[8px] text-slate-500 uppercase mt-0.5">{categoryMap[product.categoryId] || 'S/D'}</p>
                         </td>
-                        <td className="border border-slate-900 p-2 text-center font-black text-base">{comp.quantity}</td>
-                        <td className="border border-slate-900 p-2 text-center font-medium">{product?.supplier || '---'}</td>
+                        <td className="border border-slate-900 p-2 text-center font-black text-sm">{comp.quantity}</td>
+                        <td className="border border-slate-900 p-2 text-right font-bold text-slate-600 bg-slate-50">
+                          {isBaseUSD ? `u$s ${product.costUSD?.toLocaleString()}` : `$ ${product.costARS?.toLocaleString()}`}
+                        </td>
+                        <td className="border border-slate-900 p-2 text-right font-medium italic text-slate-400">
+                          {!isBaseUSD ? `u$s ${costData.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}` : `$ ${costData.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`}
+                        </td>
+                        <td className="border border-slate-900 p-2 text-right font-black text-xs">
+                          {isBaseUSD ? `u$s ${(product.costUSD * comp.quantity).toLocaleString()}` : `$ ${(product.costARS * comp.quantity).toLocaleString()}`}
+                        </td>
                       </tr>
                     );
                   })}
@@ -2362,16 +2386,16 @@ export default function CatalogPage() {
 
           {!itemToPrint.isCompuesto && itemToPrint.description && (
             <div className="mt-8">
-              <h3 className="text-[10px] font-black uppercase mb-2">Descripción del Producto</h3>
-              <div className="p-4 border border-dashed border-slate-400 rounded-lg text-sm italic leading-relaxed text-slate-700">
+              <h3 className="text-[10px] font-black uppercase mb-2 text-slate-500 tracking-widest">Descripción Técnica y Notas</h3>
+              <div className="p-6 border border-dashed border-slate-400 rounded-2xl text-sm italic leading-relaxed text-slate-700 bg-slate-50">
                 {itemToPrint.description}
               </div>
             </div>
           )}
 
-          <div className="mt-12 pt-6 border-t-2 border-slate-900 flex justify-between items-end italic text-[10px] text-slate-400">
-            <p>Este documento es una ficha técnica oficial generada por el sistema Dosimat Pro.</p>
-            <p>Pág 1/1</p>
+          <div className="mt-12 pt-6 border-t-2 border-slate-900 flex justify-between items-end italic text-[9px] text-slate-400">
+            <p>Ficha técnica oficial emitida para control interno y comercial de Dosimat Pro.</p>
+            <p>Página 1 de 1</p>
           </div>
         </div>
       )}
