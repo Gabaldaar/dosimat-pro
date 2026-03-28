@@ -1973,9 +1973,9 @@ export default function CatalogPage() {
       </AlertDialog>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-5xl h-[95vh] overflow-hidden w-[95vw] p-0 flex flex-col">
-          <DialogHeader className="p-4 border-b shrink-0">
-            <div className="flex justify-between items-start pr-8">
+        <DialogContent className="max-w-4xl h-[95vh] overflow-hidden w-[95vw] p-0 flex flex-col">
+          <DialogHeader className="p-4 border-b shrink-0 bg-white z-10">
+            <div className="flex justify-between items-center pr-8">
               <div>
                 <DialogTitle className="text-2xl font-black font-headline text-primary">
                   {editingItemId ? 'Configurar Ítem' : 'Nuevo Ítem'}
@@ -1990,10 +1990,15 @@ export default function CatalogPage() {
             </div>
           </DialogHeader>
           
-          <div className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden min-h-0">
-            {/* COLUMNA IZQUIERDA: INFORMACIÓN GENERAL */}
-            <div className="w-full md:w-[380px] p-6 border-b md:border-b-0 md:border-r md:overflow-y-auto shrink-0 bg-muted/5">
-              <div className="space-y-6">
+          <div className="flex-1 overflow-y-auto p-6 space-y-8">
+            {/* SECCIÓN 1: DATOS GENERALES */}
+            <section className="space-y-6">
+              <div className="flex items-center gap-2 border-b-2 pb-2">
+                <Tag className="h-4 w-4 text-primary" />
+                <h3 className="font-black text-sm uppercase tracking-widest">Datos Generales</h3>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label className="font-bold">Nombre del Producto / Servicio</Label>
                   <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Dosificador G4" />
@@ -2017,6 +2022,9 @@ export default function CatalogPage() {
                     </Select>
                   </div>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-blue-700 font-black">Venta ARS ($)</Label>
@@ -2028,163 +2036,156 @@ export default function CatalogPage() {
                   </div>
                 </div>
                 {!formData.isCompuesto ? (
-                  <div className="p-4 bg-muted/20 rounded-2xl border border-dashed space-y-3 shadow-inner">
-                    <div className="flex items-center justify-between mb-1">
-                      <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Costo de Reposición</Label>
-                      <Badge variant="outline" className={cn("text-[8px] font-black", formData.costCurrency === 'ARS' ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-emerald-50 text-emerald-700 border-emerald-300")}>
-                        BASE {formData.costCurrency}
-                      </Badge>
-                    </div>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
+                  <div className="p-4 bg-muted/20 rounded-2xl border border-dashed flex items-center gap-4 shadow-inner">
+                    <div className="flex-1 space-y-1">
+                      <Label className="text-[10px] font-black text-muted-foreground uppercase">Costo Reposición</Label>
+                      <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">{formData.costCurrency === 'USD' ? 'u$s' : '$'}</span>
-                        <Input type="number" value={formData.costAmount} onChange={(e) => setFormData({...formData, costAmount: Number(e.target.value)})} className={cn("pl-8 font-black h-11", formData.costCurrency === 'ARS' ? "border-blue-200" : "border-emerald-200")} />
+                        <Input type="number" value={formData.costAmount} onChange={(e) => setFormData({...formData, costAmount: Number(e.target.value)})} className="pl-8 font-black h-10" />
                       </div>
-                      <Tabs value={formData.costCurrency} onValueChange={(v: any) => setFormData({...formData, costCurrency: v})} className="shrink-0">
-                        <TabsList className="grid grid-cols-2 w-28 h-11 p-1 border shadow-inner">
-                          <TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
-                          <TabsTrigger value="USD" className="text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
-                        </TabsList>
-                      </Tabs>
                     </div>
+                    <Tabs value={formData.costCurrency} onValueChange={(v: any) => setFormData({...formData, costCurrency: v})} className="shrink-0 pt-4">
+                      <TabsList className="grid grid-cols-2 w-28 h-10 p-1 border">
+                        <TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
+                        <TabsTrigger value="USD" className="text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-4 p-4 bg-amber-50 rounded-2xl border border-amber-200 shadow-inner">
                     <div className="space-y-2">
-                      <Label className="text-[10px] font-black text-amber-800 uppercase tracking-widest">Mano Obra ARS</Label>
+                      <Label className="text-[10px] font-black text-amber-800 uppercase">Mano Obra ARS</Label>
                       <Input type="number" value={formData.laborCostARS} onChange={(e) => setFormData({...formData, laborCostARS: Number(e.target.value)})} className="h-10 border-amber-200 font-bold" />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-[10px] font-black text-amber-800 uppercase tracking-widest">Mano Obra USD</Label>
+                      <Label className="text-[10px] font-black text-amber-800 uppercase">Mano Obra USD</Label>
                       <Input type="number" value={formData.laborCostUSD} onChange={(e) => setFormData({...formData, laborCostUSD: Number(e.target.value)})} className="h-10 border-amber-200 font-bold" />
                     </div>
                   </div>
                 )}
-                <div className="flex flex-col gap-3 pt-2">
-                  <div className="flex items-center gap-3 p-3 border rounded-xl bg-white shadow-sm">
-                    <Switch checked={formData.isService} onCheckedChange={(v) => { setFormData({...formData, isService: v, trackStock: !v && formData.trackStock, isCompuesto: v ? false : formData.isCompuesto}); }} />
-                    <div><Label className="font-bold">Es un servicio</Label><p className="text-[10px] text-muted-foreground">Sin stock ni armado.</p></div>
-                  </div>
-                  {!formData.isService && (
-                    <div className="flex items-center gap-3 p-3 border rounded-xl bg-amber-50/50 border-amber-200 shadow-sm">
-                      <Switch checked={formData.isCompuesto} onCheckedChange={(v) => { setFormData({...formData, isCompuesto: v, trackStock: v ? true : formData.trackStock}); }} />
-                      <div><Label className="font-bold text-amber-800">Producto compuesto</Label><p className="text-[10px] text-amber-600">Se fabrica a partir de otros.</p></div>
-                    </div>
-                  )}
+              </div>
+
+              <div className="flex flex-wrap gap-4">
+                <div className="flex items-center gap-3 p-3 border rounded-xl bg-white shadow-sm flex-1 min-w-[200px]">
+                  <Switch checked={formData.isService} onCheckedChange={(v) => { setFormData({...formData, isService: v, trackStock: !v && formData.trackStock, isCompuesto: v ? false : formData.isCompuesto}); }} />
+                  <div><Label className="font-bold">Es un servicio</Label><p className="text-[10px] text-muted-foreground">Sin stock ni armado.</p></div>
                 </div>
+                {!formData.isService && (
+                  <div className="flex items-center gap-3 p-3 border rounded-xl bg-amber-50/50 border-amber-200 shadow-sm flex-1 min-w-[200px]">
+                    <Switch checked={formData.isCompuesto} onCheckedChange={(v) => { setFormData({...formData, isCompuesto: v, trackStock: v ? true : formData.trackStock}); }} />
+                    <div><Label className="font-bold text-amber-800">Producto compuesto</Label><p className="text-[10px] text-amber-600">Se fabrica a partir de otros.</p></div>
+                  </div>
+                )}
                 {!formData.isService && formData.trackStock && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2"><Label className="font-bold">Stock Inicial</Label><Input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} /></div>
-                    <div className="space-y-2"><Label className="font-bold text-rose-600">Mínimo</Label><Input type="number" value={formData.minStock} onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} /></div>
+                  <div className="flex gap-4 flex-1 min-w-[200px]">
+                    <div className="space-y-1 flex-1"><Label className="font-bold text-xs">Stock Inicial</Label><Input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} /></div>
+                    <div className="space-y-1 flex-1"><Label className="font-bold text-rose-600 text-xs">Mínimo</Label><Input type="number" value={formData.minStock} onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} /></div>
                   </div>
                 )}
               </div>
-            </div>
+            </section>
 
-            {/* COLUMNA DERECHA: ESTRUCTURA BOM */}
-            <div className="flex-1 flex flex-col bg-white md:h-full overflow-hidden">
-              {formData.isCompuesto ? (
-                <div className="flex flex-col h-full overflow-hidden">
-                  <div className="p-4 bg-amber-50 border-b flex items-center justify-between shrink-0">
-                    <span className="text-xs font-black text-amber-800 uppercase tracking-widest flex items-center gap-2"><Layers className="h-4 w-4" /> Estructura de Armado (BOM)</span>
-                    <Badge className="bg-amber-600 font-bold">{formData.components.length} PIEZAS</Badge>
+            {/* SECCIÓN 2: RESUMEN DE COSTOS (SI ES COMPUESTO) */}
+            {formData.isCompuesto && (
+              <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-xl border-t-4 border-amber-500 relative overflow-hidden">
+                <div className="absolute right-4 top-4 opacity-10"><Calculator className="h-16 w-16" /></div>
+                <div className="flex flex-col md:flex-row justify-between items-center gap-8">
+                  <div className="text-center md:text-left space-y-1">
+                    <p className="text-[10px] font-black text-amber-500 uppercase tracking-[0.2em] mb-1">Costo de Producción Total</p>
+                    <p className="text-5xl font-black text-white leading-none tracking-tighter font-mono">$ {currentEditingCosts.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</p>
+                    <p className="text-xl font-black text-emerald-400 font-mono">u$s {currentEditingCosts.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}</p>
                   </div>
-                  
-                  <div className="p-4 border-b bg-white grid grid-cols-2 gap-4 shrink-0">
-                    <div className="space-y-1">
-                      <Label className="text-[10px] font-bold uppercase text-muted-foreground">Filtrar Piezas</Label>
-                      <Select value={bomFilterCategory} onValueChange={setBomFilterCategory}>
-                        <SelectTrigger className="h-9"><SelectValue placeholder="Categoría..." /></SelectTrigger>
-                        <SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}<SelectItem value="all">Ver Todas</SelectItem></SelectContent>
-                      </Select>
+                  <div className="flex gap-8 border-t md:border-t-0 md:border-l border-white/10 pt-4 md:pt-0 md:pl-8 w-full md:w-auto">
+                    <div className="flex-1 text-center md:text-right space-y-1">
+                      <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Materiales</p>
+                      <p className="text-xl font-bold text-blue-400">$ {(currentEditingCosts.ars - (formData.laborCostARS || 0)).toLocaleString()}</p>
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] font-bold uppercase text-primary">Agregar Componente</Label>
-                      <Select onValueChange={addComponent}>
-                        <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar parte..." /></SelectTrigger>
-                        <SelectContent className="max-h-60">
-                          {items?.filter(i => i.id !== editingItemId && !i.isService && (bomFilterCategory === "all" || i.categoryId === bomFilterCategory)).map(i => (
-                            <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                    {sortedAddedComponents.map((comp) => { 
-                      const product = items?.find(i => i.id === comp.productId); 
-                      if (!product) return null;
-                      const costData = calculateCost(product, items!, currentRate);
-                      const isBaseUSD = product.costCurrency === 'USD' || (!product.costCurrency && (product.costUSD > 0 && !product.costARS));
-                      
-                      return (
-                        <div key={`${comp.productId}-${comp.originalIndex}`} className="flex flex-col p-3 rounded-xl border bg-muted/10 hover:bg-white transition-all shadow-sm group">
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-black text-slate-800 leading-tight truncate">{product.name}</p>
-                              <div className="flex items-center gap-3 mt-2">
-                                <div className={cn("px-2 py-0.5 rounded text-[10px] font-black border", isBaseUSD ? "text-emerald-700 bg-emerald-50 border-emerald-100" : "text-blue-700 bg-blue-50 border-blue-100")}>
-                                  {isBaseUSD ? `u$s ${product.costUSD?.toLocaleString()}` : `$ ${product.costARS?.toLocaleString()}`}
-                                </div>
-                                <span className="text-[10px] font-bold text-muted-foreground">→ {!isBaseUSD ? `u$s ${costData.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}` : `$ ${costData.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`}</span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <div className="flex items-center gap-1 border-2 border-primary/20 rounded-lg bg-white px-2 py-1">
-                                <input type="number" value={comp.quantity} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="w-8 text-xs font-black text-center focus:outline-none" />
-                              </div>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeComponent(comp.originalIndex)}><X className="h-4 w-4" /></Button>
-                            </div>
-                          </div>
-                          <div className="flex justify-between items-center mt-2 pt-2 border-t border-dashed">
-                            <span className="text-[9px] font-black text-muted-foreground uppercase">Subtotal</span>
-                            <div className="flex gap-4">
-                              <span className="text-xs font-black text-blue-700">$ {(costData.ars * comp.quantity).toLocaleString()}</span>
-                              <span className="text-xs font-black text-emerald-700">u$s {(costData.usd * comp.quantity).toLocaleString()}</span>
-                            </div>
-                          </div>
-                        </div>
-                      ); 
-                    })}
-                  </div>
-
-                  {/* FOOTER FIJO DE COSTOS BOM */}
-                  <div className="p-6 bg-slate-900 text-white shrink-0 border-t-4 border-amber-500 shadow-2xl relative">
-                    <div className="absolute right-4 top-4 opacity-10"><Calculator className="h-12 w-12" /></div>
-                    <div className="grid grid-cols-2 gap-8 items-end">
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400">
-                          <span>Materiales</span>
-                          <span className="text-blue-400">$ {(currentEditingCosts.ars - (formData.laborCostARS || 0)).toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400">
-                          <span>Mano de Obra</span>
-                          <span className="text-amber-400">$ {formData.laborCostARS?.toLocaleString()}</span>
-                        </div>
-                      </div>
-                      <div className="text-right space-y-1">
-                        <p className="text-[10px] font-black text-amber-500 uppercase tracking-[0.2em] mb-1">Costo Total Final</p>
-                        <p className="text-4xl font-black text-white leading-none tracking-tighter font-mono">$ {currentEditingCosts.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</p>
-                        <p className="text-base font-black text-emerald-400 font-mono">u$s {currentEditingCosts.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}</p>
-                      </div>
+                    <div className="flex-1 text-center md:text-right space-y-1">
+                      <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Mano de Obra</p>
+                      <p className="text-xl font-bold text-amber-400">$ {formData.laborCostARS?.toLocaleString()}</p>
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div className="p-8 flex-1 flex flex-col md:overflow-y-auto">
-                  <Label className="font-bold mb-2">Descripción del Producto</Label>
-                  <Textarea value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="flex-1 min-h-[200px] bg-muted/5 font-sans leading-relaxed p-4" placeholder="Escribe detalles técnicos, notas o información relevante..." />
+              </div>
+            )}
+
+            {/* SECCIÓN 3: ESTRUCTURA BOM (SI ES COMPUESTO) O DESCRIPCIÓN */}
+            {formData.isCompuesto ? (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between border-b-2 pb-2">
+                  <h3 className="font-black text-sm uppercase tracking-widest flex items-center gap-2"><Layers className="h-4 w-4" /> Componentes del Producto (BOM)</h3>
+                  <Badge className="bg-amber-600 font-bold">{formData.components.length} PIEZAS</Badge>
                 </div>
-              )}
-            </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-muted/10 rounded-xl border border-dashed">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-bold uppercase text-muted-foreground">Filtrar por Categoría</Label>
+                    <Select value={bomFilterCategory} onValueChange={setBomFilterCategory}>
+                      <SelectTrigger className="h-10 bg-white"><SelectValue placeholder="Categoría..." /></SelectTrigger>
+                      <SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}<SelectItem value="all">Ver Todas</SelectItem></SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-bold uppercase text-primary">Agregar Componente</Label>
+                    <Select onValueChange={addComponent}>
+                      <SelectTrigger className="h-10 bg-white border-primary/30"><SelectValue placeholder="Seleccionar parte para agregar..." /></SelectTrigger>
+                      <SelectContent className="max-h-60">
+                        {items?.filter(i => i.id !== editingItemId && !i.isService && (bomFilterCategory === "all" || i.categoryId === bomFilterCategory)).map(i => (
+                          <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3">
+                  {sortedAddedComponents.map((comp) => { 
+                    const product = items?.find(i => i.id === comp.productId); 
+                    if (!product) return null;
+                    const costData = calculateCost(product, items!, currentRate);
+                    const isBaseUSD = product.costCurrency === 'USD' || (!product.costCurrency && (product.costUSD > 0 && !product.costARS));
+                    
+                    return (
+                      <div key={`${comp.productId}-${comp.originalIndex}`} className="flex flex-col md:flex-row items-center gap-4 p-4 rounded-xl border bg-white hover:border-primary/30 transition-all shadow-sm group">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-black text-slate-800 leading-tight truncate">{product.name}</p>
+                          <div className="flex items-center gap-3 mt-1.5">
+                            <div className={cn("px-2 py-0.5 rounded text-[10px] font-black border", isBaseUSD ? "text-emerald-700 bg-emerald-50 border-emerald-100" : "text-blue-700 bg-blue-50 border-blue-100")}>
+                              {isBaseUSD ? `u$s ${product.costUSD?.toLocaleString()}` : `$ ${product.costARS?.toLocaleString()}`}
+                            </div>
+                            <span className="text-[10px] font-bold text-muted-foreground">→ {!isBaseUSD ? `u$s ${costData.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}` : `$ ${costData.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-6 w-full md:w-auto pt-3 md:pt-0 border-t md:border-t-0">
+                          <div className="flex items-center gap-2 bg-muted/20 p-1.5 rounded-lg border">
+                            <Label className="text-[9px] font-black uppercase text-muted-foreground px-1">Cant:</Label>
+                            <input type="number" value={comp.quantity} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="w-12 text-sm font-black text-center bg-transparent focus:outline-none" />
+                          </div>
+                          <div className="text-right min-w-[120px]">
+                            <p className="text-[8px] font-black uppercase text-slate-400">Subtotal</p>
+                            <p className="text-xs font-black text-blue-700">$ {(costData.ars * comp.quantity).toLocaleString()}</p>
+                            <p className="text-[10px] font-black text-emerald-700">u$s {(costData.usd * comp.quantity).toLocaleString()}</p>
+                          </div>
+                          <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive shrink-0" onClick={() => removeComponent(comp.originalIndex)}><Trash2 className="h-4 w-4" /></Button>
+                        </div>
+                      </div>
+                    ); 
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label className="font-bold flex items-center gap-2"><FileText className="h-4 w-4 text-primary" /> Descripción del Producto</Label>
+                <Textarea value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="min-h-[200px] bg-muted/5 font-sans leading-relaxed p-4" placeholder="Escribe detalles técnicos, notas o información relevante..." />
+              </div>
+            )}
           </div>
 
-          <DialogFooter className="p-4 border-t bg-white shrink-0">
+          <DialogFooter className="p-4 border-t bg-white shrink-0 z-10">
             <div className="flex gap-2 w-full justify-end">
               <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="h-12 px-6 font-bold flex-1 md:flex-none">Cancelar</Button>
               <Button onClick={handleSave} className="h-12 px-10 font-black shadow-xl uppercase tracking-wider flex-1 md:flex-none">
-                <CheckCircle2 className="mr-2 h-5 w-5" /> GUARDAR
+                <CheckCircle2 className="mr-2 h-5 w-5" /> GUARDAR ÍTEM
               </Button>
             </div>
           </DialogFooter>
@@ -2329,7 +2330,7 @@ export default function CatalogPage() {
 
           {itemToPrint.isCompuesto && (
             <div className="space-y-4">
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-gap-2">
                 <Layers className="h-4 w-4" /> Estructura de Armado (BOM)
               </h3>
               <table className="w-full border-collapse border-2 border-slate-900 text-xs">
