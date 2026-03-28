@@ -484,6 +484,11 @@ export default function CatalogPage() {
     };
   }, [explosionSummary, manualPurchaseQtys, manualPurchasePrices, manualPurchaseCurrencies, manualSuppliers, items]);
 
+  const currentEditingCosts = useMemo(() => {
+    if (!items || !formData.isCompuesto) return { ars: 0, usd: 0 };
+    return calculateCost(formData, items, currentRate);
+  }, [formData, items, currentRate, calculateCost]);
+
   const sortedAddedComponents = useMemo(() => {
     if (!items || !formData.components) return []
     return formData.components
@@ -1873,7 +1878,7 @@ export default function CatalogPage() {
                                 <SelectTrigger className="h-6 text-[9px] bg-muted/20 border-none p-1 flex-1">
                                   <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent>
+                                <SelectContent className="max-h-40">
                                   <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
                                   {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
                                 </SelectContent>
@@ -1980,7 +1985,78 @@ export default function CatalogPage() {
               <TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
               <TabsTrigger value="USD" className="text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
             </TabsList></Tabs></div><p className="text-[10px] font-bold italic text-muted-foreground text-center">Equivale a {formData.costCurrency === 'ARS' ? `u$s ${(formData.costAmount / currentRate).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : `$ ${(formData.costAmount * currentRate).toLocaleString('es-AR')}`} según dólar {rateType === 'blue' ? 'Blue' : 'Oficial'}</p></div>) : (<div className="grid grid-cols-2 gap-4 p-3 bg-amber-50 rounded-xl border border-amber-200"><div className="space-y-2"><Label className="text-xs font-bold text-amber-800 uppercase">Mano Obra ARS</Label><Input type="number" value={formData.laborCostARS} onChange={(e) => setFormData({...formData, laborCostARS: Number(e.target.value)})} className="h-8 border-amber-200" /></div><div className="space-y-2"><Label className="text-xs font-bold text-amber-800 uppercase">Mano Obra USD</Label><Input type="number" value={formData.laborCostUSD} onChange={(e) => setFormData({...formData, laborCostUSD: Number(e.target.value)})} className="h-8 border-amber-200" /></div></div>)}<div className="flex flex-col gap-3 pt-2"><div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/10"><Switch checked={formData.isService} onCheckedChange={(v) => { setFormData({...formData, isService: v, trackStock: !v && formData.trackStock, isCompuesto: v ? false : formData.isCompuesto}); }} /><div><Label className="font-bold">Es un servicio técnico</Label><p className="text-[10px] text-muted-foreground">No controla stock ni tiene armado.</p></div></div>{!formData.isService && (<div className={cn("flex items-center gap-3 p-3 border rounded-lg transition-colors", formData.trackStock ? "bg-emerald-50/50 border-emerald-200" : "bg-blue-50/50 border-blue-200")}><Switch checked={formData.trackStock} onCheckedChange={(v) => setFormData({...formData, trackStock: v})} /><div><Label className={cn("font-bold", formData.trackStock ? "text-emerald-800" : "text-blue-800")}>Controlar Stock de este ítem</Label><p className={cn("text-[10px]", formData.trackStock ? "text-emerald-600" : "text-blue-600")}>{formData.trackStock ? "Descuenta unidades en cada venta." : "Producto de entrega directa (sin inventario)."}</p></div></div>)}{!formData.isService && (<div className="flex items-center gap-3 p-3 border rounded-lg bg-amber-50/50 border-amber-200"><Switch checked={formData.isCompuesto} onCheckedChange={(v) => { setFormData({...formData, isCompuesto: v, trackStock: v ? true : formData.trackStock}); }} /><div><Label className="font-bold text-amber-800">Es un producto compuesto</Label><p className="text-[10px] text-amber-600">Se fabrica a partir de otros ítems.</p></div></div>)}</div>{!formData.isService && formData.trackStock && (<div className="grid grid-cols-2 gap-4 animate-in fade-in zoom-in duration-200"><div className="space-y-2"><Label className="font-bold">Stock Inicial</Label><Input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} /></div><div className="space-y-2"><Label className="font-bold text-rose-600">Stock Mínimo (Alerta)</Label><Input type="number" value={formData.minStock} onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} /></div></div>)}</div>
-            <div className="space-y-4">{formData.isCompuesto ? (<div className="flex flex-col h-full border rounded-xl bg-white shadow-inner overflow-hidden"><div className="p-3 bg-amber-50 border-b border-amber-100 flex items-center justify-between"><span className="text-xs font-black text-amber-800 uppercase tracking-widest flex items-center gap-2"><Layers className="h-4 w-4" /> Estructura de Armado (BOM)</span><Badge variant="outline" className="bg-white text-amber-700 border-amber-200 font-bold text-[10px]">{formData.components.length} PIEZAS</Badge></div><div className="p-3 border-b space-y-3"><div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Filtrar por Categoría</Label><Select value={bomFilterCategory} onValueChange={setBomFilterCategory}><SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent className="max-h-60"><SelectItem value="all">Todas las categorías</SelectItem>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Añadir Componente</Label><Select onValueChange={addComponent}><SelectTrigger className="h-9"><SelectValue placeholder="Elegir parte..." /></SelectTrigger><SelectContent className="max-h-60">{items?.filter(i => i.id !== editingItemId && !i.isService && (bomFilterCategory === "all" || i.categoryId === bomFilterCategory)).sort((a, b) => (a.name || "").localeCompare(b.name || "")).map(i => (<SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>))}</SelectContent></Select></div></div><ScrollArea className="flex-1 p-2">{formData.components.length === 0 ? (<div className="py-10 text-center text-xs text-muted-foreground italic">Agrega componentes para armar este producto.</div>) : (<div className="space-y-2">{sortedAddedComponents.map((comp) => { const product = items?.find(i => i.id === comp.productId); return (<div key={`${comp.productId}-${comp.originalIndex}`} className="flex items-center justify-between p-2 rounded bg-muted/20 border border-muted/30"><div className="flex flex-col min-w-0"><span className="text-xs font-bold truncate">{product?.name || 'Cargando...'}</span>{product?.trackStock !== false && (<span className="text-[9px] text-muted-foreground">Stock: {product?.stock || 0} | {product?.supplier || "---"}</span>)}</div><div className="flex items-center gap-2 shrink-0"><div className="flex items-center gap-1 border rounded bg-white px-1"><span className="text-[10px] font-bold text-muted-foreground">x</span><input type="number" value={comp.quantity} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="w-10 h-7 text-xs font-bold text-center focus:outline-none" /></div><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeComponent(comp.originalIndex)}><Minus className="h-4 w-4" /></Button></div></div>); })}</div>)}</ScrollArea></div>) : (<div className="space-y-2"><Label className="font-bold">Descripción (opcional)</Label><Textarea value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="min-h-[200px]" placeholder="Detalles del producto o servicio..." /></div>)}</div>
+            <div className="space-y-4">{formData.isCompuesto ? (<div className="flex flex-col h-full border rounded-xl bg-white shadow-inner overflow-hidden"><div className="p-3 bg-amber-50 border-b border-amber-100 flex items-center justify-between"><span className="text-xs font-black text-amber-800 uppercase tracking-widest flex items-center gap-2"><Layers className="h-4 w-4" /> Estructura de Armado (BOM)</span><Badge variant="outline" className="bg-white text-amber-700 border-amber-200 font-bold text-[10px]">{formData.components.length} PIEZAS</Badge></div><div className="p-3 border-b space-y-3"><div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Filtrar por Categoría</Label><Select value={bomFilterCategory} onValueChange={setBomFilterCategory}><SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent className="max-h-60"><SelectItem value="all">Todas las categorías</SelectItem>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Añadir Componente</Label><Select onValueChange={addComponent}><SelectTrigger className="h-9"><SelectValue placeholder="Elegir parte..." /></SelectTrigger><SelectContent className="max-h-60">{items?.filter(i => i.id !== editingItemId && !i.isService && (bomFilterCategory === "all" || i.categoryId === bomFilterCategory)).sort((a, b) => (a.name || "").localeCompare(b.name || "")).map(i => (<SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>))}</SelectContent></Select></div></div><ScrollArea className="flex-1 p-2">{formData.components.length === 0 ? (<div className="py-10 text-center text-xs text-muted-foreground italic">Agrega componentes para armar este producto.</div>) : (<div className="space-y-3 p-1">
+              {sortedAddedComponents.map((comp) => { 
+                const product = items?.find(i => i.id === comp.productId); 
+                if (!product) return null;
+                const costData = calculateCost(product, items!, currentRate);
+                const isBaseUSD = product.costCurrency === 'USD' || (!product.costCurrency && (product.costUSD > 0 && !product.costARS));
+                
+                return (
+                  <div key={`${comp.productId}-${comp.originalIndex}`} className="flex flex-col gap-1 p-2 rounded-xl bg-muted/20 border border-muted/30 group">
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xs font-black truncate">{product?.name || 'Cargando...'}</span>
+                        <div className="flex items-center gap-2">
+                          <span className={cn("text-[10px] font-bold", isBaseUSD ? "text-emerald-700" : "text-blue-700")}>
+                            Base: {isBaseUSD ? `u$s ${product.costUSD?.toLocaleString('es-AR')}` : `$ ${product.costARS?.toLocaleString('es-AR')}`}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            ({!isBaseUSD ? `u$s ${costData.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}` : `$ ${costData.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`})
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1 border-2 border-primary/20 rounded-lg bg-white px-1 shadow-sm">
+                          <span className="text-[10px] font-black text-primary">x</span>
+                          <input type="number" value={comp.quantity} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="w-10 h-7 text-xs font-black text-center focus:outline-none" />
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive opacity-40 group-hover:opacity-100" onClick={() => removeComponent(comp.originalIndex)}><Minus className="h-4 w-4" /></Button>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center px-1 border-t border-muted/30 pt-1">
+                      <span className="text-[9px] font-bold text-muted-foreground uppercase">Subtotal Ítem</span>
+                      <div className="flex gap-3">
+                        <span className="text-[10px] font-black text-blue-700">$ {(costData.ars * comp.quantity).toLocaleString('es-AR', { maximumFractionDigits: 0 })}</span>
+                        <span className="text-[10px] font-black text-emerald-700">u$s {(costData.usd * comp.quantity).toLocaleString('es-AR', { maximumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+                  </div>
+                ); 
+              })}
+              
+              <Card className="mt-4 p-3 bg-slate-900 text-white rounded-xl border-none shadow-xl overflow-hidden relative">
+                <div className="absolute -right-2 -bottom-2 opacity-5"><Calculator className="h-16 w-16" /></div>
+                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2 border-b border-white/10 pb-2">
+                  <Calculator className="h-3 w-3" /> Resumen de Costos de Producción
+                </p>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Costo Materiales</span>
+                    <div className="text-right">
+                      <p className="text-xs font-black text-blue-400">$ {(currentEditingCosts.ars - (formData.laborCostARS || 0)).toLocaleString('es-AR', { maximumFractionDigits: 0 })}</p>
+                      <p className="text-[9px] font-bold text-emerald-400">u$s {(currentEditingCosts.usd - (formData.laborCostUSD || 0)).toLocaleString('es-AR', { maximumFractionDigits: 2 })}</p>
+                    </div>
+                  </div>
+                  {(formData.laborCostARS > 0 || formData.laborCostUSD > 0) && (
+                    <div className="flex justify-between items-center pt-1 border-t border-white/5">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Mano de Obra</span>
+                      <div className="text-right">
+                        <p className="text-xs font-black text-amber-400">$ {formData.laborCostARS?.toLocaleString('es-AR')}</p>
+                        <p className="text-[9px] font-bold text-amber-400">u$s {formData.laborCostUSD?.toLocaleString('es-AR')}</p>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center pt-2 border-t border-white/20">
+                    <span className="text-xs font-black uppercase text-white">COSTO TOTAL FINAL</span>
+                    <div className="text-right">
+                      <p className="text-lg font-black text-blue-400 leading-none">$ {currentEditingCosts.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</p>
+                      <p className="text-xs font-bold text-emerald-400 mt-1">u$s {currentEditingCosts.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}</p>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </div>)}</ScrollArea></div>) : (<div className="space-y-2"><Label className="font-bold">Descripción (opcional)</Label><Textarea value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="min-h-[200px]" placeholder="Detalles del producto o servicio..." /></div>)}</div>
           </div>
           <DialogFooter className="border-t pt-4 mt-4"><Button variant="outline" onClick={() => setIsDialogOpen(false)} className="font-bold">Cancelar</Button><Button onClick={handleSave} className="font-black px-8 shadow-xl shadow-primary/20"><CheckCircle2 className="mr-2 h-4 w-4" /> GUARDAR ÍTEM</Button></DialogFooter>
         </DialogContent>
