@@ -1973,7 +1973,7 @@ export default function CatalogPage() {
       </AlertDialog>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-5xl max-h-[95vh] overflow-hidden w-[95vw] p-0">
+        <DialogContent className="max-w-5xl max-h-[95vh] overflow-hidden w-[95vw] p-0 flex flex-col">
           <DialogHeader className="p-4 border-b shrink-0">
             <div className="flex justify-between items-start pr-8">
               <div>
@@ -1990,9 +1990,9 @@ export default function CatalogPage() {
             </div>
           </DialogHeader>
           
-          <div className="flex flex-col md:flex-row h-[70vh] overflow-hidden">
+          <div className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden">
             {/* COLUMNA IZQUIERDA: INFORMACIÓN GENERAL */}
-            <div className="w-full md:w-[380px] p-6 border-r overflow-y-auto shrink-0 bg-muted/5">
+            <div className="w-full md:w-[380px] p-6 border-b md:border-b-0 md:border-r overflow-y-auto shrink-0 bg-muted/5">
               <div className="space-y-6">
                 <div className="space-y-2">
                   <Label className="font-bold">Nombre del Producto / Servicio</Label>
@@ -2082,7 +2082,7 @@ export default function CatalogPage() {
             </div>
 
             {/* COLUMNA DERECHA: ESTRUCTURA BOM */}
-            <div className="flex-1 flex flex-col h-full bg-white">
+            <div className="flex-1 flex flex-col bg-white min-h-[500px] md:h-full overflow-hidden">
               {formData.isCompuesto ? (
                 <div className="flex flex-col h-full overflow-hidden">
                   <div className="p-4 bg-amber-50 border-b flex items-center justify-between shrink-0">
@@ -2111,45 +2111,43 @@ export default function CatalogPage() {
                     </div>
                   </div>
 
-                  <ScrollArea className="flex-1 p-4">
-                    <div className="space-y-3 pb-4">
-                      {sortedAddedComponents.map((comp) => { 
-                        const product = items?.find(i => i.id === comp.productId); 
-                        if (!product) return null;
-                        const costData = calculateCost(product, items!, currentRate);
-                        const isBaseUSD = product.costCurrency === 'USD' || (!product.costCurrency && (product.costUSD > 0 && !product.costARS));
-                        
-                        return (
-                          <div key={`${comp.productId}-${comp.originalIndex}`} className="flex flex-col p-3 rounded-xl border bg-muted/10 hover:bg-white transition-all shadow-sm group">
-                            <div className="flex items-start justify-between gap-4">
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-black text-slate-800 leading-tight truncate">{product.name}</p>
-                                <div className="flex items-center gap-3 mt-2">
-                                  <div className={cn("px-2 py-0.5 rounded text-[10px] font-black border", isBaseUSD ? "text-emerald-700 bg-emerald-50 border-emerald-100" : "text-blue-700 bg-blue-50 border-blue-100")}>
-                                    {isBaseUSD ? `u$s ${product.costUSD?.toLocaleString()}` : `$ ${product.costARS?.toLocaleString()}`}
-                                  </div>
-                                  <span className="text-[10px] font-bold text-muted-foreground">→ {!isBaseUSD ? `u$s ${costData.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}` : `$ ${costData.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`}</span>
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    {sortedAddedComponents.map((comp) => { 
+                      const product = items?.find(i => i.id === comp.productId); 
+                      if (!product) return null;
+                      const costData = calculateCost(product, items!, currentRate);
+                      const isBaseUSD = product.costCurrency === 'USD' || (!product.costCurrency && (product.costUSD > 0 && !product.costARS));
+                      
+                      return (
+                        <div key={`${comp.productId}-${comp.originalIndex}`} className="flex flex-col p-3 rounded-xl border bg-muted/10 hover:bg-white transition-all shadow-sm group">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-black text-slate-800 leading-tight truncate">{product.name}</p>
+                              <div className="flex items-center gap-3 mt-2">
+                                <div className={cn("px-2 py-0.5 rounded text-[10px] font-black border", isBaseUSD ? "text-emerald-700 bg-emerald-50 border-emerald-100" : "text-blue-700 bg-blue-50 border-blue-100")}>
+                                  {isBaseUSD ? `u$s ${product.costUSD?.toLocaleString()}` : `$ ${product.costARS?.toLocaleString()}`}
                                 </div>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <div className="flex items-center gap-1 border-2 border-primary/20 rounded-lg bg-white px-2 py-1">
-                                  <input type="number" value={comp.quantity} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="w-8 text-xs font-black text-center focus:outline-none" />
-                                </div>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeComponent(comp.originalIndex)}><X className="h-4 w-4" /></Button>
+                                <span className="text-[10px] font-bold text-muted-foreground">→ {!isBaseUSD ? `u$s ${costData.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}` : `$ ${costData.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`}</span>
                               </div>
                             </div>
-                            <div className="flex justify-between items-center mt-2 pt-2 border-t border-dashed">
-                              <span className="text-[9px] font-black text-muted-foreground uppercase">Subtotal</span>
-                              <div className="flex gap-4">
-                                <span className="text-xs font-black text-blue-700">$ {(costData.ars * comp.quantity).toLocaleString()}</span>
-                                <span className="text-xs font-black text-emerald-700">u$s {(costData.usd * comp.quantity).toLocaleString()}</span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <div className="flex items-center gap-1 border-2 border-primary/20 rounded-lg bg-white px-2 py-1">
+                                <input type="number" value={comp.quantity} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="w-8 text-xs font-black text-center focus:outline-none" />
                               </div>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeComponent(comp.originalIndex)}><X className="h-4 w-4" /></Button>
                             </div>
                           </div>
-                        ); 
-                      })}
-                    </div>
-                  </ScrollArea>
+                          <div className="flex justify-between items-center mt-2 pt-2 border-t border-dashed">
+                            <span className="text-[9px] font-black text-muted-foreground uppercase">Subtotal</span>
+                            <div className="flex gap-4">
+                              <span className="text-xs font-black text-blue-700">$ {(costData.ars * comp.quantity).toLocaleString()}</span>
+                              <span className="text-xs font-black text-emerald-700">u$s {(costData.usd * comp.quantity).toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ); 
+                    })}
+                  </div>
 
                   {/* FOOTER FIJO DE COSTOS BOM */}
                   <div className="p-6 bg-slate-900 text-white shrink-0 border-t-4 border-amber-500 shadow-2xl relative">
@@ -2174,9 +2172,9 @@ export default function CatalogPage() {
                   </div>
                 </div>
               ) : (
-                <div className="p-8 h-full flex flex-col">
+                <div className="p-8 flex-1 flex flex-col">
                   <Label className="font-bold mb-2">Descripción del Producto</Label>
-                  <Textarea value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="flex-1 min-h-0 bg-muted/5 font-sans leading-relaxed p-4" placeholder="Escribe detalles técnicos, notas o información relevante..." />
+                  <Textarea value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="flex-1 min-h-[200px] bg-muted/5 font-sans leading-relaxed p-4" placeholder="Escribe detalles técnicos, notas o información relevante..." />
                 </div>
               )}
             </div>
@@ -2184,9 +2182,9 @@ export default function CatalogPage() {
 
           <DialogFooter className="p-4 border-t bg-white shrink-0">
             <div className="flex gap-2 w-full justify-end">
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="h-12 px-6 font-bold">Cancelar</Button>
-              <Button onClick={handleSave} className="h-12 px-10 font-black shadow-xl uppercase tracking-wider">
-                <CheckCircle2 className="mr-2 h-5 w-5" /> GUARDAR PRODUCTO
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="h-12 px-6 font-bold flex-1 md:flex-none">Cancelar</Button>
+              <Button onClick={handleSave} className="h-12 px-10 font-black shadow-xl uppercase tracking-wider flex-1 md:flex-none">
+                <CheckCircle2 className="mr-2 h-5 w-5" /> GUARDAR
               </Button>
             </div>
           </DialogFooter>
