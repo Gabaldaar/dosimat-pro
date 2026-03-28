@@ -510,10 +510,6 @@ export default function CatalogPage() {
   }, [items])
 
   const handleOpenDialog = (item?: any) => {
-    if (!isAdmin) {
-      toast({ title: "Acceso denegado", variant: "destructive" })
-      return
-    }
     if (item) {
       setEditingItemId(item.id)
       const sanitizedComponents: { productId: string, quantity: number }[] = [];
@@ -754,7 +750,7 @@ export default function CatalogPage() {
 
   const handleUpdateGlobalSupplier = (productId: string, newSupplier: string) => {
     const cleanSupplier = newSupplier === "Sin Proveedor" ? "" : newSupplier;
-    updateDocumentNonBlocking(doc(db, 'products_services', productId), {
+    updateDocumentNonBlocking(doc(db, 'products_services', id), {
       supplier: cleanSupplier
     });
     toast({ title: "Proveedor actualizado" });
@@ -906,7 +902,6 @@ export default function CatalogPage() {
   }
 
   const handleDeleteSupplier = (id: string) => {
-    if (!isAdmin) return
     deleteDocumentNonBlocking(doc(db, 'suppliers', id))
     toast({ title: "Proveedor eliminado" })
   }
@@ -1978,7 +1973,7 @@ export default function CatalogPage() {
       </AlertDialog>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto w-[95vw] p-0 md:p-6">
+        <DialogContent className="max-w-5xl max-h-[95vh] overflow-y-auto w-[95vw] p-0 md:p-6">
           <DialogHeader className="p-4 md:p-0">
             <div className="flex justify-between items-start pr-8">
               <div>
@@ -1994,7 +1989,7 @@ export default function CatalogPage() {
               )}
             </div>
           </DialogHeader>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 md:p-0 py-4">
+          <div className="grid grid-cols-1 md:grid-cols-[350px_1fr] gap-8 p-4 md:p-0 py-4 items-start">
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label className="font-bold">Nombre del Producto / Servicio</Label>
@@ -2139,14 +2134,14 @@ export default function CatalogPage() {
                       </div>
                     </div>
                   </div>
-                  <ScrollArea className="flex-1 p-4">
+                  <ScrollArea className="flex-1 p-4 max-h-[400px]">
                     {formData.components.length === 0 ? (
                       <div className="py-20 text-center flex flex-col items-center justify-center gap-3 text-muted-foreground italic">
                         <Package className="h-8 w-8 opacity-20" />
                         <p className="text-xs">Agrega componentes para armar este producto.</p>
                       </div>
                     ) : (
-                      <div className="space-y-4 pb-4">
+                      <div className="space-y-3 pb-4">
                         {sortedAddedComponents.map((comp) => { 
                           const product = items?.find(i => i.id === comp.productId); 
                           if (!product) return null;
@@ -2155,37 +2150,31 @@ export default function CatalogPage() {
                           
                           return (
                             <div key={`${comp.productId}-${comp.originalIndex}`} className="flex flex-col gap-2 p-3 rounded-2xl bg-muted/20 border border-muted/30 group hover:border-primary/20 hover:bg-white transition-all shadow-sm">
-                              <div className="flex items-start justify-between">
-                                <div className="flex flex-col min-w-0 pr-4">
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex flex-col min-w-0 flex-1">
                                   <span className="text-sm font-black text-slate-800 leading-tight truncate">{product?.name || 'Cargando...'}</span>
-                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
                                     <div className="flex items-center gap-1.5">
-                                      <span className="text-[9px] font-black uppercase text-muted-foreground tracking-tighter">Unit. Base:</span>
-                                      <span className={cn("text-[10px] font-bold px-1.5 rounded border", isBaseUSD ? "text-emerald-700 bg-emerald-50 border-emerald-100" : "text-blue-700 bg-blue-50 border-blue-100")}>
+                                      <div className={cn("px-1.5 py-0.5 rounded text-[10px] font-black border", isBaseUSD ? "text-emerald-700 bg-emerald-50 border-emerald-100" : "text-blue-700 bg-blue-50 border-blue-100")}>
                                         {isBaseUSD ? `u$s ${product.costUSD?.toLocaleString('es-AR')}` : `$ ${product.costARS?.toLocaleString('es-AR')}`}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5 opacity-60">
-                                      <span className="text-[9px] font-black uppercase text-muted-foreground tracking-tighter">Conv:</span>
-                                      <span className="text-[10px] font-bold">
-                                        {!isBaseUSD ? `u$s ${costData.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}` : `$ ${costData.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`}
-                                      </span>
+                                      </div>
+                                      <span className="text-[10px] font-bold text-muted-foreground">→ {!isBaseUSD ? `u$s ${costData.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}` : `$ ${costData.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`}</span>
                                     </div>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
                                   <div className="flex items-center gap-1 border-2 border-primary/20 rounded-xl bg-white px-2 py-1 shadow-sm">
                                     <span className="text-[10px] font-black text-primary uppercase">Cant:</span>
-                                    <input type="number" value={comp.quantity} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="w-12 text-sm font-black text-center focus:outline-none bg-transparent" />
+                                    <input type="number" value={comp.quantity} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="w-10 text-xs font-black text-center focus:outline-none bg-transparent" />
                                   </div>
                                   <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => removeComponent(comp.originalIndex)}><Minus className="h-4 w-4" /></Button>
                                 </div>
                               </div>
                               <div className="flex justify-between items-center px-2 py-1.5 border-t border-muted/30 pt-2 mt-1">
-                                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Subtotal Ítem</span>
+                                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Subtotal Línea</span>
                                 <div className="flex gap-4">
-                                  <span className="text-[11px] font-black text-blue-700 font-mono">$ {(costData.ars * comp.quantity).toLocaleString('es-AR', { maximumFractionDigits: 0 })}</span>
-                                  <span className="text-[11px] font-black text-emerald-700 font-mono">u$s {(costData.usd * comp.quantity).toLocaleString('es-AR', { maximumFractionDigits: 2 })}</span>
+                                  <span className="text-[11px] font-black text-blue-700">$ {(costData.ars * comp.quantity).toLocaleString('es-AR', { maximumFractionDigits: 0 })}</span>
+                                  <span className="text-[11px] font-black text-emerald-700">u$s {(costData.usd * comp.quantity).toLocaleString('es-AR', { maximumFractionDigits: 2 })}</span>
                                 </div>
                               </div>
                             </div>
