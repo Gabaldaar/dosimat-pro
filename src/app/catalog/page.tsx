@@ -71,6 +71,12 @@ import {
   DropdownMenuContent, 
   DropdownMenuItem, 
   DropdownMenuTrigger 
+} from "react-day-picker" // Placeholder for shadcn imports if needed elsewhere
+import {
+  DropdownMenu as DropdownMenuUI,
+  DropdownMenuContent as DropdownMenuContentUI,
+  DropdownMenuItem as DropdownMenuItemUI,
+  DropdownMenuTrigger as DropdownMenuTriggerUI
 } from "@/components/ui/dropdown-menu"
 import {
   Dialog,
@@ -290,7 +296,6 @@ export default function CatalogPage() {
       }
     }
     
-    // El cálculo de mano de obra ahora considera ambas monedas convertidas
     const laborARS = (Number(itemData.laborCostARS) || 0) + (Number(itemData.laborCostUSD || 0) * currentExchangeRate);
     const laborUSD = (Number(itemData.laborCostUSD) || 0) + (Number(itemData.laborCostARS || 0) / currentExchangeRate);
     
@@ -326,12 +331,15 @@ export default function CatalogPage() {
   }, [items, searchTerm, selectedCategories, calculateCost, currentRate])
 
   const explosionSummary = useMemo(() => {
-    if (orderToView?.status === 'completed' && orderToView.explosionSnapshot) {
-      return orderToView.explosionSnapshot;
+    // Para asegurar actualización en tiempo real, buscamos la versión más reciente de la orden en la lista 'orders'
+    const currentOrder = orderToView ? (orders?.find(o => o.id === orderToView.id) || orderToView) : null;
+    
+    if (currentOrder?.status === 'completed' && currentOrder.explosionSnapshot) {
+      return currentOrder.explosionSnapshot;
     }
 
-    const target = orderToView ? items?.find(i => i.id === orderToView.productId) : selectedForAssembly;
-    const qty = orderToView ? orderToView.quantity : assemblyQty;
+    const target = currentOrder ? items?.find(i => i.id === currentOrder.productId) : selectedForAssembly;
+    const qty = currentOrder ? currentOrder.quantity : assemblyQty;
     
     if (!target || !items) return null;
 
@@ -399,18 +407,22 @@ export default function CatalogPage() {
       all: flatList,
       toBuySuggested: flatList.filter(f => f.suggestedToBuy > 0)
     };
-  }, [selectedForAssembly, assemblyQty, items, orderToView]);
+  }, [selectedForAssembly, assemblyQty, items, orderToView, orders]);
 
   // Actualizar el estado de la Orden de Producción según el stock real
   useEffect(() => {
     if (orderToView && orderToView.status !== 'completed' && explosionSummary) {
+      const currentOrder = orders?.find(o => o.id === orderToView.id);
+      if (!currentOrder) return;
+      
       const anyMissing = explosionSummary.all.some(f => (f.available - f.required) < 0);
       const newStatus = anyMissing ? 'pending_purchase' : 'ready';
-      if (newStatus !== orderToView.status) {
+      
+      if (newStatus !== currentOrder.status) {
         updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), { status: newStatus });
       }
     }
-  }, [items, orderToView, explosionSummary]);
+  }, [items, orderToView, explosionSummary, orders, db]);
 
   useEffect(() => {
     if (purchaseOrderToView) {
@@ -670,7 +682,7 @@ export default function CatalogPage() {
       productId: item.id,
       productName: item.name,
       quantity: Number(item.qtyToAdd) || 1,
-      price: item.costCurrency === 'USD' ? item.costUSD : item.costARS,
+      price: item.costCurrency === 'USD' ? (item.costUSD || 0) : (item.costARS || 0),
       currency: item.costCurrency || 'ARS',
       supplier: item.supplier || "Sin Proveedor",
       received: false
@@ -710,6 +722,7 @@ export default function CatalogPage() {
 
     if (existingPO && existingPO.status !== 'completed') {
       const updatedItems = [...existingPO.items];
+      const newSupplierStatuses = { ...(existingPO.supplierStatuses || {}) };
       let itemsAdded = 0;
 
       missingItems.forEach(missing => {
@@ -723,9 +736,16 @@ export default function CatalogPage() {
         
         if (netMissing > 0) {
           itemsAdded++;
+          const supplier = missing.supplier || "Sin Proveedor";
+          
+          // Al agregar items, desbloqueamos al proveedor automáticamente
+          if (newSupplierStatuses[supplier] === 'ordered') {
+            newSupplierStatuses[supplier] = 'pending';
+          }
+
           const pendingLineIdx = updatedItems.findIndex((i: any) => 
             i.productId === missing.id && 
-            (existingPO.supplierStatuses?.[i.supplier || "Sin Proveedor"] !== 'ordered') &&
+            (newSupplierStatuses[i.supplier || "Sin Proveedor"] !== 'ordered') &&
             !i.received
           );
 
@@ -739,7 +759,7 @@ export default function CatalogPage() {
               quantity: netMissing,
               price: missing.costCurrency === 'USD' ? missing.costUSD : missing.costARS,
               currency: missing.costCurrency || 'ARS',
-              supplier: missing.supplier || "Sin Proveedor",
+              supplier: supplier,
               received: false
             });
           }
@@ -747,8 +767,11 @@ export default function CatalogPage() {
       });
 
       if (itemsAdded > 0) {
-        updateDocumentNonBlocking(doc(db, 'purchase_orders', existingPO.id), { items: updatedItems });
-        toast({ title: "Orden de Compra sincronizada", description: `Se agregaron ${itemsAdded} ajustes de cantidad.` });
+        updateDocumentNonBlocking(doc(db, 'purchase_orders', existingPO.id), { 
+          items: updatedItems,
+          supplierStatuses: newSupplierStatuses 
+        });
+        toast({ title: "Orden de Compra actualizada", description: `Se añadieron ${itemsAdded} ajustes de cantidad. Proveedores afectados desbloqueados.` });
       } else {
         toast({ title: "Orden al día", description: "La orden de compra vinculada ya cubre los materiales necesarios." });
       }
@@ -839,13 +862,22 @@ export default function CatalogPage() {
     };
 
     const updatedItems = [...purchaseOrderToView.items, newItem];
+    const supplier = newItem.supplier;
+    const newStatuses = { ...supplierStatuses };
+    
+    // Si el proveedor estaba bloqueado, lo desbloqueamos al añadir items manuales
+    if (newStatuses[supplier] === 'ordered') {
+      newStatuses[supplier] = 'pending';
+      setSupplierStatuses(newStatuses);
+    }
+
     setPurchaseOrderToView({ ...purchaseOrderToView, items: updatedItems });
     setManualPurchaseQtys(prev => ({ ...prev, [lineId]: 1 }));
     setManualPurchasePrices(prev => ({ ...prev, [lineId]: newItem.price }));
     setManualPurchaseCurrencies(prev => ({ ...prev, [lineId]: newItem.currency as 'ARS' | 'USD' }));
     setManualSuppliers(prev => ({ ...prev, [lineId]: newItem.supplier }));
     
-    toast({ title: "Ítem agregado", description: "Recuerda guardar los cambios de la orden." });
+    toast({ title: "Ítem agregado", description: "Recuerda guardar los cambios de la orden. Proveedor desbloqueado si era necesario." });
   }
 
   const handleRemoveItemFromPurchaseOrder = (lineId: string) => {
@@ -973,18 +1005,32 @@ export default function CatalogPage() {
 
   const handleUpdateItemSupplierGlobally = useCallback((lineId: string, productId: string, newSupplier: string) => {
     const cleanSupplier = newSupplier === "Sin Proveedor" ? "" : newSupplier;
+    
+    // Si cambiamos de proveedor, el nuevo proveedor debe estar en estado 'pending' (desbloqueado)
+    const newStatuses = { ...supplierStatuses };
+    if (newStatuses[newSupplier] === 'ordered') {
+      newStatuses[newSupplier] = 'pending';
+      setSupplierStatuses(newStatuses);
+    }
+
     setManualSuppliers(prev => ({ ...prev, [lineId]: newSupplier }));
     updateDocumentNonBlocking(doc(db, 'products_services', productId), {
       supplier: cleanSupplier
     });
+    
     if (purchaseOrderToView && purchaseOrderToView.status !== 'completed') {
       const updatedItems = purchaseOrderToView.items.map((i: any) => 
         (i.id || i.productId) === lineId ? { ...i, supplier: newSupplier } : i
       );
       setPurchaseOrderToView({ ...purchaseOrderToView, items: updatedItems });
+      
+      updateDocumentNonBlocking(doc(db, 'purchase_orders', purchaseOrderToView.id), {
+        items: updatedItems,
+        supplierStatuses: newStatuses
+      });
     }
-    toast({ title: "Proveedor asignado permanentemente", description: `El ítem ahora tiene a ${newSupplier} como su proveedor oficial.` });
-  }, [db, purchaseOrderToView, manualSuppliers, toast]);
+    toast({ title: "Proveedor asignado", description: `El ítem ahora tiene a ${newSupplier} como su proveedor. Grupo desbloqueado si era necesario.` });
+  }, [db, purchaseOrderToView, manualSuppliers, supplierStatuses, toast]);
 
   const handleAssembleFinal = () => {
     if (!orderToView || !items) return;
@@ -1263,7 +1309,7 @@ export default function CatalogPage() {
               }[order.status as keyof typeof statusInfo] || { label: order.status, icon: Factory, color: "bg-muted" };
               const StatusIcon = statusInfo.icon;
               return (
-                <Card key={order.id} className={cn("glass-card hover:shadow-lg transition-all cursor-pointer border-l-4 group", order.status === 'completed' ? 'border-l-emerald-500 opacity-70' : 'border-l-primary')} onClick={() => setOrderToView(order)}>
+                <Card key={order.id} className={cn("glass-card hover:shadow-lg transition-all cursor-pointer border-l-4 group", order.status === 'completed' ? 'border-l-emerald-500 opacity-70' : 'border-l-amber-500')} onClick={() => setOrderToView(order)}>
                   <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                       <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5", statusInfo.color)}>
@@ -1279,7 +1325,7 @@ export default function CatalogPage() {
                   <CardContent className="space-y-4">
                     <div className="bg-white/50 border rounded-lg p-3 flex items-center justify-between shadow-inner">
                       <span className="text-[10px] font-black text-muted-foreground uppercase">Unidades a Fabricar</span>
-                      <span className="text-2xl font-black text-primary">{order.quantity}</span>
+                      <span className="text-2xl font-black text-amber-600">{order.quantity}</span>
                     </div>
                     {order.purchaseOrderId && (
                       <div className="flex items-center gap-2 text-[9px] font-bold text-emerald-700 bg-emerald-50 p-1.5 rounded border border-emerald-100">
@@ -1387,7 +1433,7 @@ export default function CatalogPage() {
               <div key={sup} className={cn("space-y-4 p-4 rounded-2xl border transition-all", isOrdered ? "bg-slate-50 border-slate-200" : "bg-white border-primary/10 shadow-sm")}>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <div className={cn("p-2 rounded-lg text-white", isOrdered ? "bg-slate-400" : "bg-slate-900")}>
+                    <div className={cn("p-2 rounded-lg text-white", isOrdered ? "bg-slate-400" : "bg-emerald-600")}>
                       {isOrdered ? <Lock className="h-4 w-4" /> : <Truck className="h-4 w-4" />}
                     </div>
                     <div>
@@ -1616,21 +1662,21 @@ export default function CatalogPage() {
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 group-hover:text-primary transition-colors" onClick={() => { setSelectedProductForHistory(item); setIsPurchaseHistoryOpen(true); }} title="Ver Historial de Compras"><History className="h-4 w-4" /></Button>
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                      <DropdownMenuItem onSelect={() => handleExportBOM(item)}><Printer className="mr-2 h-4 w-4" /> Exportar Ficha (PDF)</DropdownMenuItem>
+                                  <DropdownMenuUI>
+                                    <DropdownMenuTriggerUI asChild><Button variant="ghost" size="icon" className="h-8 w-8 opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTriggerUI>
+                                    <DropdownMenuContentUI align="end">
+                                      <DropdownMenuItemUI onSelect={() => handleExportBOM(item)}><Printer className="mr-2 h-4 w-4" /> Exportar Ficha (PDF)</DropdownMenuItemUI>
                                       {isAdmin && (
                                         <>
-                                          <DropdownMenuItem onSelect={() => handleOpenDialog(item)}><Edit className="mr-2 h-4 w-4" /> Editar parámetros</DropdownMenuItem>
+                                          <DropdownMenuItemUI onSelect={() => handleOpenDialog(item)}><Edit className="mr-2 h-4 w-4" /> Editar parámetros</DropdownMenuItemUI>
                                           {item.isCompuesto && (
-                                            <DropdownMenuItem className="text-amber-600 font-bold" onSelect={() => { setSelectedForAssembly(item); setAssemblyQty(1); setIsAssemblyOpen(true); }}><Hammer className="mr-2 h-4 w-4" /> Orden de Armado</DropdownMenuItem>
+                                            <DropdownMenuItemUI className="text-amber-600 font-bold" onSelect={() => { setSelectedForAssembly(item); setAssemblyQty(1); setIsAssemblyOpen(true); }}><Hammer className="mr-2 h-4 w-4" /> Orden de Armado</DropdownMenuItemUI>
                                           )}
-                                          <DropdownMenuItem className="text-destructive" onSelect={() => setItemToDelete(item)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem>
+                                          <DropdownMenuItemUI className="text-destructive" onSelect={() => setItemToDelete(item)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItemUI>
                                         </>
                                       )}
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
+                                    </DropdownMenuContentUI>
+                                  </DropdownMenuUI>
                                 </div>
                               </div>
                               <CardTitle className="text-lg mt-2 truncate font-bold">{item.name}</CardTitle>
@@ -1681,12 +1727,12 @@ export default function CatalogPage() {
       {/* Create Manual Purchase Order Dialog */}
       <Dialog open={isNewPurchaseOrderOpen} onOpenChange={setIsNewPurchaseOrderOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
-          <DialogHeader className="p-6 border-b shrink-0 bg-white">
+          <DialogHeader className="p-6 border-b shrink-0 bg-emerald-500/5">
             <div className="flex items-center gap-2">
               <ShoppingCart className="h-6 w-6 text-emerald-600" />
-              <DialogTitle className="text-xl font-black">Plan de Reposición Manual</DialogTitle>
+              <DialogTitle className="text-xl font-black uppercase text-emerald-700 tracking-tighter">Nueva Orden de Compra</DialogTitle>
             </div>
-            <DialogDescription>Agrega ítems del catálogo para armar una orden de compra agrupada por proveedor.</DialogDescription>
+            <DialogDescription className="font-bold text-emerald-600/60 uppercase text-[10px]">REPOSICIÓN MANUAL DE INVENTARIO</DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
             <div className="space-y-2">
@@ -1774,13 +1820,13 @@ export default function CatalogPage() {
       {/* Dialog para configurar nueva orden de armado */}
       <Dialog open={isAssemblyOpen} onOpenChange={setIsAssemblyOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
-          <DialogHeader className="p-6 border-b shrink-0 bg-white">
+          <DialogHeader className="p-6 border-b shrink-0 bg-amber-500/5">
             <div className="flex items-center gap-2">
               <Hammer className="h-6 w-6 text-amber-600" />
-              <DialogTitle className="text-xl font-black">Planificar Armado</DialogTitle>
+              <DialogTitle className="text-xl font-black uppercase text-amber-700 tracking-tighter">Planificar Armado</DialogTitle>
             </div>
-            <DialogDescription>
-              Configura la cantidad a fabricar de <b>{selectedForAssembly?.name}</b>.
+            <DialogDescription className="font-bold text-amber-600/60 uppercase text-[10px]">
+              CONFIGURACIÓN DE PRODUCCIÓN: <b>{selectedForAssembly?.name}</b>
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -1846,13 +1892,13 @@ export default function CatalogPage() {
       {/* Manual Purchase Order Detail View */}
       <Dialog open={!!purchaseOrderToView} onOpenChange={handleCloseOrderView}>
         <DialogContent className="max-w-6xl h-[95vh] flex flex-col p-0 w-[95vw]">
-          <DialogHeader className="p-4 border-b shrink-0 bg-white">
+          <DialogHeader className="p-4 border-b shrink-0 bg-emerald-500/5">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center pr-8 gap-4">
               <div className="flex items-center gap-3">
                 <ShoppingCart className="h-6 w-6 text-emerald-600" />
                 <div>
-                  <DialogTitle className="text-xl font-black">{purchaseOrderToView?.description || "Orden de Reposición"}</DialogTitle>
-                  <DialogDescription className="text-[10px] font-bold uppercase">Reposición manual de componentes</DialogDescription>
+                  <DialogTitle className="text-xl font-black uppercase text-emerald-700 tracking-tighter">Orden de Compra #{purchaseOrderToView?.id.toUpperCase().slice(0, 6)}</DialogTitle>
+                  <DialogDescription className="text-[10px] font-bold uppercase text-emerald-600/60">{purchaseOrderToView?.description || "Reposición manual de componentes"}</DialogDescription>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -2061,26 +2107,29 @@ export default function CatalogPage() {
       {/* Production Order View - Simplified to Plan only */}
       <Dialog open={!!orderToView} onOpenChange={handleCloseOrderView}>
         <DialogContent className="max-w-6xl h-[95vh] flex flex-col p-0 w-[95vw]">
-          <DialogHeader className="p-4 border-b shrink-0">
+          <DialogHeader className="p-4 border-b shrink-0 bg-amber-500/5">
             <div className="flex flex-col md:flex-row justify-between items-start pr-8 gap-4">
               <div className="space-y-1">
-                <div className="flex items-center gap-2"><Factory className="h-5 w-5 text-primary" /><DialogTitle className="text-xl font-black">Orden de Armado #{orderToView?.id.toUpperCase().slice(0, 6)}</DialogTitle></div>
+                <div className="flex items-center gap-2">
+                  <Factory className="h-5 w-5 text-amber-600" />
+                  <DialogTitle className="text-xl font-black uppercase text-amber-700 tracking-tighter">Plan de Producción #{orderToView?.id.toUpperCase().slice(0, 6)}</DialogTitle>
+                </div>
                 <div className="flex items-center gap-3">
-                  <DialogDescription className="text-base">Fabricar <b>{orderToView?.productName}</b></DialogDescription>
+                  <DialogDescription className="text-base text-amber-800 font-bold">Fabricar <b>{orderToView?.productName}</b></DialogDescription>
                   {orderToView?.status !== 'completed' && (
-                    <div className="flex items-center gap-2 bg-primary/5 px-2 py-1 rounded-xl border border-primary/20">
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-primary" onClick={() => { const newQty = Math.max(1, orderToView.quantity - 1); updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), { quantity: newQty }); }}><Minus className="h-4 w-4" /></Button>
-                      <span className="text-sm font-black text-primary tabular-nums">{orderToView?.quantity}</span>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-primary" onClick={() => { const newQty = orderToView.quantity + 1; updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), { quantity: newQty }); }}><Plus className="h-4 w-4" /></Button>
+                    <div className="flex items-center gap-2 bg-amber-100 px-2 py-1 rounded-xl border border-amber-200 shadow-inner">
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-amber-700" onClick={() => { const newQty = Math.max(1, orderToView.quantity - 1); updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), { quantity: newQty }); }}><Minus className="h-4 w-4" /></Button>
+                      <span className="text-sm font-black text-amber-900 tabular-nums">{orderToView?.quantity}</span>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-amber-700" onClick={() => { const newQty = orderToView.quantity + 1; updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), { quantity: newQty }); }}><Plus className="h-4 w-4" /></Button>
                     </div>
                   )}
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Button variant="outline" size="sm" className="h-9 gap-2 font-bold text-xs" onClick={() => handlePrintProductionOrder(orderToView)}>
+                <Button variant="outline" size="sm" className="h-9 gap-2 font-bold text-xs bg-white border-amber-200 text-amber-700" onClick={() => handlePrintProductionOrder(orderToView)}>
                   <Printer className="h-4 w-4" /> IMPRIMIR PLAN
                 </Button>
-                <Badge className={cn("font-black uppercase text-[10px] px-3 py-1", { draft: "bg-slate-100 text-slate-600", pending_purchase: "bg-amber-100 text-amber-700", ready: "bg-blue-100 text-blue-700", completed: "bg-emerald-100 text-emerald-700" }[orderToView?.status as string])}>
+                <Badge className={cn("font-black uppercase text-[10px] px-3 py-1", { draft: "bg-slate-100 text-slate-600", pending_purchase: "bg-rose-100 text-rose-700 border-rose-200", ready: "bg-blue-100 text-blue-700 border-blue-200", completed: "bg-emerald-100 text-emerald-700 border-emerald-200" }[orderToView?.status as string])}>
                   {orderToView?.status === 'pending_purchase' ? 'FALTAN MATERIALES' : orderToView?.status === 'ready' ? 'LISTO PARA ARMAR' : orderToView?.status}
                 </Badge>
               </div>
@@ -2268,7 +2317,7 @@ export default function CatalogPage() {
                   {sortedAddedComponents.map((comp) => { 
                     const product = items?.find(i => i.id === comp.productId); if (!product) return null;
                     const costData = calculateCost(product, items!, currentRate);
-                    const isBaseUSD = product.costCurrency === 'USD' || (!product.costCurrency && (product.costUSD > 0 && !product.costARS));
+                    const isBaseUSD = product.costCurrency === 'USD' || (!product.costCurrency && product.costUSD > 0);
                     const baseSymbol = isBaseUSD ? 'u$s' : '$';
                     const baseAmount = isBaseUSD ? product.costUSD : product.costARS;
                     const convSymbol = isBaseUSD ? '$' : 'u$s';
@@ -2485,7 +2534,7 @@ export default function CatalogPage() {
   function confirmDeletePurchaseOrder() {
     if (!purchaseOrderToDelete) return
     deleteDocumentNonBlocking(doc(db, 'purchase_orders', purchaseOrderToDelete.id))
-    purchaseOrderToDelete(null)
+    setPurchaseOrderToDelete(null)
     toast({ title: "Orden de compra eliminada" })
   }
 }
