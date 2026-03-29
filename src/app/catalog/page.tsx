@@ -180,6 +180,10 @@ function CatalogContent() {
   const categories = useMemo(() => {
     if (!rawCategories) return []
     return [...rawCategories].sort((a: any, b: any) => {
+      // Priorizar favoritos
+      if (a.isFavorite && !b.isFavorite) return -1;
+      if (!a.isFavorite && b.isFavorite) return 1;
+      // Luego por nombre alfabéticamente
       return (a.name || "").localeCompare(b.name || "")
     })
   }, [rawCategories])
@@ -344,10 +348,8 @@ function CatalogContent() {
     const currentOrder = liveOrderToView;
     
     if (currentOrder?.status === 'completed' && currentOrder.explosionSnapshot) {
-      if (currentOrder.explosionSnapshot.all) {
-        currentOrder.explosionSnapshot.all.sort((a: any, b: any) => a.name.localeCompare(b.name));
-      }
-      return currentOrder.explosionSnapshot;
+      const all = [...currentOrder.explosionSnapshot.all].sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""));
+      return { ...currentOrder.explosionSnapshot, all };
     }
 
     const target = currentOrder ? items?.find(i => i.id === currentOrder.productId) : selectedForAssembly;
@@ -415,7 +417,7 @@ function CatalogContent() {
           suggestedToBuy: totalSuggestedToBuy
         };
       })
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
     return {
       all: flatList,
@@ -1212,7 +1214,7 @@ function CatalogContent() {
       toast({ title: "Sin ítems", description: "No hay faltantes para este proveedor." });
       return;
     }
-    const sortedItemsToInclude = [...itemsToInclude].sort((a, b) => a.name.localeCompare(b.name));
+    const sortedItemsToInclude = [...itemsToInclude].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     sortedItemsToInclude.forEach(f => {
       const lineId = f.id;
       const currency = manualPurchaseCurrencies[lineId] || (f.manualCurrency || 'ARS');
@@ -1412,7 +1414,7 @@ function CatalogContent() {
         if (!groups[sup]) groups[sup] = [];
         groups[sup].push(item);
       });
-      Object.keys(groups).forEach(sup => groups[sup].sort((a, b) => a.name.localeCompare(b.name)));
+      Object.keys(groups).forEach(sup => groups[sup].sort((a, b) => (a.name || "").localeCompare(b.name || "")));
       return groups;
     }, [purchaseCalculations.items]);
     const supplierNames = Object.keys(itemsBySupplier).sort();
@@ -2361,7 +2363,7 @@ function CatalogContent() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2"><Label className="font-bold">Nombre del Producto / Servicio</Label><Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Dosificador G4" className="h-11" /></div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label className="font-bold">Categoría</Label><Select value={formData.categoryId} onValueChange={(v) => setFormData({...formData, categoryId: v})}><SelectTrigger className="h-11"><SelectValue placeholder="Elegir..." /></SelectTrigger><SelectContent className="max-h-60">{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
+                  <div className="space-y-2"><Label className="font-bold">Categoría</Label><Select value={formData.categoryId} onValueChange={(v) => setFormData({...formData, categoryId: v})}><SelectTrigger className="h-11"><SelectValue placeholder="Elegir..." /></SelectTrigger><SelectContent className="max-h-60">{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name} {c.isFavorite && "⭐"}</SelectItem>)}</SelectContent></Select></div>
                   <div className="space-y-2"><Label className="font-bold">Proveedor Defecto</Label><Select value={formData.supplier} onValueChange={(v) => setFormData({...formData, supplier: v})}><SelectTrigger className="h-11"><SelectValue placeholder="Elegir..." /></SelectTrigger><SelectContent className="max-h-60"><SelectItem value="none">SIN PROVEEDOR</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
                 </div>
               </div>
@@ -2413,7 +2415,7 @@ function CatalogContent() {
               <section className="space-y-6 pt-8 border-t-2">
                 <div className="flex items-center justify-between border-b-2 pb-2"><h3 className="font-black text-xs uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2"><Layers className="h-4 w-4" /> Estructura de Armado (BOM)</h3><Badge className="bg-amber-600 font-black px-3 py-1 shadow-lg">{formData.components.length} PIEZAS ACTIVAS</Badge></div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 bg-muted/10 rounded-2xl border border-dashed border-primary/20">
-                  <div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Filtrar por Categoría</Label><Select value={bomFilterCategory} onValueChange={setBomFilterCategory}><SelectTrigger className="h-11 bg-white shadow-sm"><SelectValue placeholder="Ver todas..." /></SelectTrigger><SelectContent className="max-h-60">{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}<SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem></SelectContent></Select></div>
+                  <div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Filtrar por Categoría</Label><Select value={bomFilterCategory} onValueChange={setBomFilterCategory}><SelectTrigger className="h-11 bg-white shadow-sm"><SelectValue placeholder="Ver todas..." /></SelectTrigger><SelectContent className="max-h-60">{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name} {c.isFavorite && "⭐"}</SelectItem>)}<SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem></SelectContent></Select></div>
                   <div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-primary">Agregar Componente</Label><Select onValueChange={addComponent}><SelectTrigger className="h-11 bg-white border-primary/30 shadow-md ring-2 ring-primary/5"><SelectValue placeholder="Seleccionar parte para agregar..." /></SelectTrigger><SelectContent className="max-h-60">{items?.filter(i => i.id !== editingItemId && !i.isService && (bomFilterCategory === "all" || i.categoryId === bomFilterCategory)).map(i => (<SelectItem key={i.id} value={i.id} className="font-bold">{i.name}</SelectItem>))}</SelectContent></Select></div>
                 </div>
                 <div className="grid grid-cols-1 gap-3 pb-24">
@@ -2491,7 +2493,7 @@ function CatalogContent() {
 
       <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Gestionar Categorías</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Categorías de Gasto</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="flex gap-2">
               <Input placeholder="Nueva categoría..." value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} />
@@ -2643,7 +2645,7 @@ function CatalogContent() {
                           const prod = items?.find(i => i.id === comp.productId);
                           return { ...comp, name: prod?.name || "Sin nombre" };
                         })
-                        .sort((a, b) => a.name.localeCompare(b.name));
+                        .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
                       return components.map((comp: any, idx: number) => {
                         const prod = items?.find(i => i.id === comp.productId);
@@ -2748,7 +2750,7 @@ function CatalogContent() {
                     });
 
                     return Object.values(requirements)
-                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
                       .map((req, idx) => (
                         <tr key={idx} className="border-b border-slate-200 h-12">
                           <td className="p-2 font-bold text-sm">{req.name}</td>

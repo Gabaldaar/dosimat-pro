@@ -186,6 +186,9 @@ function TransactionsContent() {
   const sortedProductCategories = useMemo(() => {
     if (!productCategories) return []
     return [...productCategories].sort((a: any, b: any) => {
+      // Priorizar favoritos en el selector de operaciones también
+      if (a.isFavorite && !b.isFavorite) return -1;
+      if (!a.isFavorite && b.isFavorite) return 1;
       return (a.name || "").localeCompare(b.name || "");
     });
   }, [productCategories]);
@@ -1066,7 +1069,7 @@ function TransactionsContent() {
                   {selectedTxDetails.imputations && (
                     <div className="space-y-2">
                       <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Imputaciones Realizadas</p>
-                      <div className="border rounded-2xl bg-white overflow-hidden shadow-sm">
+                      <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
                         <Table>
                           <TableHeader className="bg-emerald-50"><TableRow><TableHead className="text-[10px] font-black uppercase">Fecha Factura</TableHead><TableHead className="text-right text-[10px] font-black uppercase">Monto Aplicado</TableHead></TableRow></TableHeader>
                           <TableBody>
