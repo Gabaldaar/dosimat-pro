@@ -342,6 +342,10 @@ function CatalogContent() {
     const currentOrder = liveOrderToView;
     
     if (currentOrder?.status === 'completed' && currentOrder.explosionSnapshot) {
+      // Si ya está completada, devolvemos el snapshot pero aseguramos orden alfabético por nombre
+      if (currentOrder.explosionSnapshot.all) {
+        currentOrder.explosionSnapshot.all.sort((a: any, b: any) => a.name.localeCompare(b.name));
+      }
       return currentOrder.explosionSnapshot;
     }
 
@@ -399,16 +403,18 @@ function CatalogContent() {
 
     explode(target.id, qty, true);
 
-    const flatList = Object.values(requirements).map(req => {
-      const missingForOrder = Math.max(0, req.required - req.available);
-      const totalSuggestedToBuy = Math.max(missingForOrder, (req.available < req.required + req.minStock) ? (req.required + req.minStock - req.available) : 0);
-      
-      return {
-        ...req,
-        missing: missingForOrder,
-        suggestedToBuy: totalSuggestedToBuy
-      };
-    });
+    const flatList = Object.values(requirements)
+      .map(req => {
+        const missingForOrder = Math.max(0, req.required - req.available);
+        const totalSuggestedToBuy = Math.max(missingForOrder, (req.available < req.required + req.minStock) ? (req.required + req.minStock - req.available) : 0);
+        
+        return {
+          ...req,
+          missing: missingForOrder,
+          suggestedToBuy: totalSuggestedToBuy
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name)); // ORDEN ALFABÉTICO
 
     return {
       all: flatList,
@@ -2204,7 +2210,7 @@ function CatalogContent() {
             </div>
           </DialogHeader>
           
-          <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
+          <div className="flex-1 min-0 overflow-y-auto p-6 space-y-6">
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
@@ -2565,24 +2571,33 @@ function CatalogContent() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(itemToPrint.components || []).map((comp: any, idx: number) => {
-                      const prod = items?.find(i => i.id === comp.productId);
-                      if (!prod) return null;
-                      const isUSD = prod.costCurrency === 'USD' || (!prod.costCurrency && prod.costUSD > 0);
-                      const basePrice = isUSD ? prod.costUSD : prod.costARS;
-                      const refPrice = isUSD ? (prod.costUSD * currentRate) : (prod.costARS / currentRate);
-                      const subtotal = basePrice * comp.quantity;
-                      
-                      return (
-                        <tr key={idx} className="border-b border-slate-200 h-8">
-                          <td className="p-2 font-bold">{prod.name}</td>
-                          <td className="p-2 text-center font-black">{comp.quantity}</td>
-                          <td className="p-2 text-right">{isUSD ? 'u$s' : '$'} {basePrice.toLocaleString()}</td>
-                          <td className="p-2 text-right text-slate-400 italic">{!isUSD ? 'u$s' : '$'} {refPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                          <td className="p-2 text-right font-black">{isUSD ? 'u$s' : '$'} {subtotal.toLocaleString()}</td>
-                        </tr>
-                      );
-                    })}
+                    {(() => {
+                      const components = [...(itemToPrint.components || [])]
+                        .map(comp => {
+                          const prod = items?.find(i => i.id === comp.productId);
+                          return { ...comp, name: prod?.name || "Sin nombre" };
+                        })
+                        .sort((a, b) => a.name.localeCompare(b.name));
+
+                      return components.map((comp: any, idx: number) => {
+                        const prod = items?.find(i => i.id === comp.productId);
+                        if (!prod) return null;
+                        const isUSD = prod.costCurrency === 'USD' || (!prod.costCurrency && prod.costUSD > 0);
+                        const basePrice = isUSD ? prod.costUSD : prod.costARS;
+                        const refPrice = isUSD ? (prod.costUSD * currentRate) : (prod.costARS / currentRate);
+                        const subtotal = basePrice * comp.quantity;
+                        
+                        return (
+                          <tr key={idx} className="border-b border-slate-200 h-8">
+                            <td className="p-2 font-bold">{prod.name}</td>
+                            <td className="p-2 text-center font-black">{comp.quantity}</td>
+                            <td className="p-2 text-right">{isUSD ? 'u$s' : '$'} {basePrice.toLocaleString()}</td>
+                            <td className="p-2 text-right text-slate-400 italic">{!isUSD ? 'u$s' : '$'} {refPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                            <td className="p-2 text-right font-black">{isUSD ? 'u$s' : '$'} {subtotal.toLocaleString()}</td>
+                          </tr>
+                        );
+                      });
+                    })()}
                   </tbody>
                 </table>
               </div>
@@ -2668,16 +2683,19 @@ function CatalogContent() {
                       }
                     });
 
-                    return Object.values(requirements).map((req, idx) => (
-                      <tr key={idx} className="border-b border-slate-200 h-12">
-                        <td className="p-2 font-bold text-sm">{req.name}</td>
-                        <td className="p-2 text-center font-black text-lg">{req.qty}</td>
-                        <td className="p-2 text-center font-bold text-slate-400">{req.stock}</td>
-                        <td className="p-2 text-center">
-                          <div className="w-6 h-6 border-2 border-slate-300 rounded-md mx-auto"></div>
-                        </td>
-                      </tr>
-                    ));
+                    // ORDEN ALFABÉTICO PARA IMPRESIÓN
+                    return Object.values(requirements)
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((req, idx) => (
+                        <tr key={idx} className="border-b border-slate-200 h-12">
+                          <td className="p-2 font-bold text-sm">{req.name}</td>
+                          <td className="p-2 text-center font-black text-lg">{req.qty}</td>
+                          <td className="p-2 text-center font-bold text-slate-400">{req.stock}</td>
+                          <td className="p-2 text-center">
+                            <div className="w-6 h-6 border-2 border-slate-300 rounded-md mx-auto"></div>
+                          </td>
+                        </tr>
+                      ));
                   })()}
                 </tbody>
               </table>
