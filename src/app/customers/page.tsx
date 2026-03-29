@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -80,6 +80,7 @@ const txTypeMap: Record<string, { label: string, color: string }> = {
 function CustomersContent() {
   const { toast } = useToast()
   const db = useFirestore()
+  const searchParams = useSearchParams()
   const { user, userData, isUserLoading } = useUser()
   const isAdmin = userData?.role === 'Admin'
   
@@ -100,8 +101,20 @@ function CustomersContent() {
   const [searchTerm, setSearchTerm] = useState("")
   const [filterBalance, setFilterBalance] = useState("all") 
   const [filterComodato, setFilterComodato] = useState("all")
-  const [filterReposicion, setFilterReposicion] = useState("yes") // Default to YES per user request
+  const [filterReposicion, setFilterReposicion] = useState("yes") 
   const [filterZone, setFilterZone] = useState("all")
+
+  // Sincronizar filtros con parámetros de URL (Dashboard)
+  useEffect(() => {
+    const balance = searchParams.get('filterBalance')
+    if (balance) setFilterBalance(balance)
+    
+    const repo = searchParams.get('filterReposicion')
+    if (repo) setFilterReposicion(repo)
+    
+    const zone = searchParams.get('filterZone')
+    if (zone) setFilterZone(zone)
+  }, [searchParams])
   
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isStatementOpen, setIsStatementOpen] = useState(false)
@@ -169,8 +182,8 @@ function CustomersContent() {
         
         const saldoARS = Number(c.saldoActual || 0)
         const saldoUSD = Number(c.saldoUSD || 0)
-        if (filterBalance === 'debt' && (saldoARS >= 0 && saldoUSD >= 0)) return false
-        if (filterBalance === 'credit' && (saldoARS <= 0 && saldoUSD <= 0)) return false
+        if (filterBalance === 'debt' && (saldoARS >= -0.01 && saldoUSD >= -0.01)) return false
+        if (filterBalance === 'credit' && (saldoARS <= 0.01 && saldoUSD <= 0.01)) return false
 
         const isComodato = c.equipoInstalado?.enComodato === true
         if (filterComodato === 'yes' && !isComodato) return false
