@@ -342,7 +342,6 @@ function CatalogContent() {
     const currentOrder = liveOrderToView;
     
     if (currentOrder?.status === 'completed' && currentOrder.explosionSnapshot) {
-      // Si ya está completada, devolvemos el snapshot pero aseguramos orden alfabético por nombre
       if (currentOrder.explosionSnapshot.all) {
         currentOrder.explosionSnapshot.all.sort((a: any, b: any) => a.name.localeCompare(b.name));
       }
@@ -414,7 +413,7 @@ function CatalogContent() {
           suggestedToBuy: totalSuggestedToBuy
         };
       })
-      .sort((a, b) => a.name.localeCompare(b.name)); // ORDEN ALFABÉTICO
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     return {
       all: flatList,
@@ -422,7 +421,6 @@ function CatalogContent() {
     };
   }, [selectedForAssembly, assemblyQty, items, liveOrderToView]);
 
-  // Actualizar el estado de la Orden de Producción según el stock real
   useEffect(() => {
     if (liveOrderToView && liveOrderToView.status !== 'completed' && explosionSummary) {
       const anyMissing = explosionSummary.all.some(f => (f.available - f.required) < 0);
@@ -748,7 +746,6 @@ function CatalogContent() {
           itemsAdded++;
           const supplier = missing.supplier || "Sin Proveedor";
           
-          // Al agregar items, desbloqueamos al proveedor automáticamente
           if (newSupplierStatuses[supplier] === 'ordered') {
             newSupplierStatuses[supplier] = 'pending';
           }
@@ -875,7 +872,6 @@ function CatalogContent() {
     const supplier = newItem.supplier;
     const newStatuses = { ...supplierStatuses };
     
-    // Si el proveedor estaba bloqueado, lo desbloqueamos al añadir items manuales
     if (newStatuses[supplier] === 'ordered') {
       newStatuses[supplier] = 'pending';
       setSupplierStatuses(newStatuses);
@@ -1016,7 +1012,6 @@ function CatalogContent() {
   const handleUpdateItemSupplierGlobally = useCallback((lineId: string, productId: string, newSupplier: string) => {
     const cleanSupplier = newSupplier === "Sin Proveedor" ? "" : newSupplier;
     
-    // Si cambiamos de proveedor, el nuevo proveedor debe estar en estado 'pending' (desbloqueado)
     const newStatuses = { ...supplierStatuses };
     if (newStatuses[newSupplier] === 'ordered') {
       newStatuses[newSupplier] = 'pending';
@@ -1638,9 +1633,30 @@ function CatalogContent() {
                   <FilterPanel />
                 </Card>
                 <div className="flex-1 space-y-6 w-full">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <input placeholder="Buscar por nombre..." className="w-full pl-10 h-11 bg-white/50 backdrop-blur-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                  <div className="flex flex-col sm:flex-row gap-4 items-center">
+                    <div className="relative flex-1 w-full">
+                      <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <input placeholder="Buscar por nombre..." className="w-full pl-10 h-11 bg-white/50 backdrop-blur-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                    </div>
+                    
+                    <div className="md:hidden w-full sm:w-auto">
+                      <Sheet>
+                        <SheetTrigger asChild>
+                          <Button variant="outline" className="w-full h-11 gap-2 font-bold border-dashed">
+                            <ListFilter className="h-4 w-4" /> FILTRAR CATEGORÍAS
+                            {selectedCategories.length > 0 && <Badge className="ml-1 h-5 w-5 p-0 flex items-center justify-center rounded-full text-[10px]">{selectedCategories.length}</Badge>}
+                          </Button>
+                        </SheetTrigger>
+                        <SheetContent side="left" className="w-[300px] p-6">
+                          <SheetHeader>
+                            <SheetTitle className="text-left font-black uppercase tracking-tighter">Filtros de Catálogo</SheetTitle>
+                          </SheetHeader>
+                          <div className="mt-8">
+                            <FilterPanel />
+                          </div>
+                        </SheetContent>
+                      </Sheet>
+                    </div>
                   </div>
                   
                   {isLoading ? (
@@ -1732,9 +1748,6 @@ function CatalogContent() {
         </SidebarInset>
       </div>
 
-      {/* DIALOGS */}
-      
-      {/* Create Manual Purchase Order Dialog */}
       <Dialog open={isNewPurchaseOrderOpen} onOpenChange={setIsNewPurchaseOrderOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-6 border-b shrink-0 bg-emerald-500/5">
@@ -1827,7 +1840,6 @@ function CatalogContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog para configurar nueva orden de armado */}
       <Dialog open={isAssemblyOpen} onOpenChange={setIsAssemblyOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-6 border-b shrink-0 bg-amber-500/5">
@@ -1899,7 +1911,6 @@ function CatalogContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Manual Purchase Order Detail View */}
       <Dialog open={!!purchaseOrderToView} onOpenChange={handleCloseOrderView}>
         <DialogContent className="max-w-6xl h-[95vh] flex flex-col p-0 w-[95vw]">
           <DialogHeader className="p-4 border-b shrink-0 bg-emerald-500/5">
@@ -2178,7 +2189,6 @@ function CatalogContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Production Order View - Simplified to Plan only */}
       <Dialog open={!!orderToView} onOpenChange={handleCloseOrderView}>
         <DialogContent className="max-w-6xl h-[95vh] flex flex-col p-0 w-[95vw]">
           <DialogHeader className="p-4 border-b shrink-0 bg-amber-500/5">
@@ -2494,7 +2504,6 @@ function CatalogContent() {
 
       <MobileNav />
 
-      {/* VISTA DE IMPRESIÓN (PDF) - FICHA TÉCNICA A4 */}
       {itemToPrint && (
         <div className="print-only w-full p-8 bg-white text-slate-900 font-sans">
           <div className="flex justify-between items-start border-b-4 border-slate-900 pb-4 mb-6">
@@ -2618,7 +2627,6 @@ function CatalogContent() {
         </div>
       )}
 
-      {/* VISTA DE IMPRESIÓN (PDF) - ORDEN DE PRODUCCIÓN */}
       {orderToPrint && (
         <div className="print-only w-full p-8 bg-white text-slate-900 font-sans">
           <div className="flex justify-between items-start border-b-4 border-amber-600 pb-4 mb-6">
@@ -2671,7 +2679,6 @@ function CatalogContent() {
                     
                     const requirements: Record<string, {name: string, qty: number, stock: number}> = {};
                     
-                    // Simple flat requirements for the worker's checklist
                     target.components?.forEach((c: any) => {
                       const child = items.find(i => i.id === c.productId);
                       if (child) {
@@ -2683,7 +2690,6 @@ function CatalogContent() {
                       }
                     });
 
-                    // ORDEN ALFABÉTICO PARA IMPRESIÓN
                     return Object.values(requirements)
                       .sort((a, b) => a.name.localeCompare(b.name))
                       .map((req, idx) => (
