@@ -270,6 +270,12 @@ export default function CatalogPage() {
     components: [] as { productId: string, quantity: number }[]
   })
 
+  // Obtener la versión actualizada de la orden que se está visualizando
+  const liveOrderToView = useMemo(() => {
+    if (!orderToView || !orders) return null;
+    return orders.find(o => o.id === orderToView.id) || orderToView;
+  }, [orderToView, orders]);
+
   // Fix pointer events
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -331,8 +337,7 @@ export default function CatalogPage() {
   }, [items, searchTerm, selectedCategories, calculateCost, currentRate])
 
   const explosionSummary = useMemo(() => {
-    // Para asegurar actualización en tiempo real, buscamos la versión más reciente de la orden en la lista 'orders'
-    const currentOrder = orderToView ? (orders?.find(o => o.id === orderToView.id) || orderToView) : null;
+    const currentOrder = liveOrderToView;
     
     if (currentOrder?.status === 'completed' && currentOrder.explosionSnapshot) {
       return currentOrder.explosionSnapshot;
@@ -407,22 +412,19 @@ export default function CatalogPage() {
       all: flatList,
       toBuySuggested: flatList.filter(f => f.suggestedToBuy > 0)
     };
-  }, [selectedForAssembly, assemblyQty, items, orderToView, orders]);
+  }, [selectedForAssembly, assemblyQty, items, liveOrderToView]);
 
   // Actualizar el estado de la Orden de Producción según el stock real
   useEffect(() => {
-    if (orderToView && orderToView.status !== 'completed' && explosionSummary) {
-      const currentOrder = orders?.find(o => o.id === orderToView.id);
-      if (!currentOrder) return;
-      
+    if (liveOrderToView && liveOrderToView.status !== 'completed' && explosionSummary) {
       const anyMissing = explosionSummary.all.some(f => (f.available - f.required) < 0);
       const newStatus = anyMissing ? 'pending_purchase' : 'ready';
       
-      if (newStatus !== currentOrder.status) {
-        updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), { status: newStatus });
+      if (newStatus !== liveOrderToView.status) {
+        updateDocumentNonBlocking(doc(db, 'production_orders', liveOrderToView.id), { status: newStatus });
       }
     }
-  }, [items, orderToView, explosionSummary, orders, db]);
+  }, [items, liveOrderToView, explosionSummary, db]);
 
   useEffect(() => {
     if (purchaseOrderToView) {
@@ -708,16 +710,16 @@ export default function CatalogPage() {
   }
 
   const handleGeneratePOFromProduction = () => {
-    if (!orderToView || !explosionSummary) return;
+    if (!liveOrderToView || !explosionSummary) return;
     
     const missingItems = explosionSummary.all.filter(f => (f.required - f.available) > 0);
     
-    if (missingItems.length === 0 && !orderToView.purchaseOrderId) {
+    if (missingItems.length === 0 && !liveOrderToView.purchaseOrderId) {
       toast({ title: "Sin faltantes", description: "No hay materiales faltantes para este armado." });
       return;
     }
 
-    const linkedPOId = orderToView.purchaseOrderId;
+    const linkedPOId = liveOrderToView.purchaseOrderId;
     const existingPO = purchaseOrders?.find(po => po.id === linkedPOId);
 
     if (existingPO && existingPO.status !== 'completed') {
@@ -794,16 +796,16 @@ export default function CatalogPage() {
 
       const newPO = {
         id: newPOId,
-        description: `Faltantes: ${orderToView.productName} (#${orderToView.id.slice(0, 4)})`,
+        description: `Faltantes: ${liveOrderToView.productName} (#${liveOrderToView.id.slice(0, 4)})`,
         status: 'pending',
         createdAt: new Date().toISOString(),
         items: newPOItems,
         supplierStatuses: {},
-        productionOrderId: orderToView.id
+        productionOrderId: liveOrderToView.id
       };
 
       setDocumentNonBlocking(doc(db, 'purchase_orders', newPOId), newPO, { merge: true });
-      updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), { purchaseOrderId: newPOId });
+      updateDocumentNonBlocking(doc(db, 'production_orders', liveOrderToView.id), { purchaseOrderId: newPOId });
       
       setPurchaseOrderToView(newPO);
       setOrderToView(null);
@@ -1033,8 +1035,8 @@ export default function CatalogPage() {
   }, [db, purchaseOrderToView, manualSuppliers, supplierStatuses, toast]);
 
   const handleAssembleFinal = () => {
-    if (!orderToView || !items) return;
-    setOrderToFinalize(orderToView);
+    if (!liveOrderToView || !items) return;
+    setOrderToFinalize(liveOrderToView);
   }
 
   const getSmartExplosion = useCallback((productId: string, qtyNeeded: number, level = 0): any[] => {
@@ -2112,25 +2114,25 @@ export default function CatalogPage() {
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <Factory className="h-5 w-5 text-amber-600" />
-                  <DialogTitle className="text-xl font-black uppercase text-amber-700 tracking-tighter">Plan de Producción #{orderToView?.id.toUpperCase().slice(0, 6)}</DialogTitle>
+                  <DialogTitle className="text-xl font-black uppercase text-amber-700 tracking-tighter">Plan de Producción #{liveOrderToView?.id.toUpperCase().slice(0, 6)}</DialogTitle>
                 </div>
                 <div className="flex items-center gap-3">
-                  <DialogDescription className="text-base text-amber-800 font-bold">Fabricar <b>{orderToView?.productName}</b></DialogDescription>
-                  {orderToView?.status !== 'completed' && (
+                  <DialogDescription className="text-base text-amber-800 font-bold">Fabricar <b>{liveOrderToView?.productName}</b></DialogDescription>
+                  {liveOrderToView?.status !== 'completed' && (
                     <div className="flex items-center gap-2 bg-amber-100 px-2 py-1 rounded-xl border border-amber-200 shadow-inner">
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-amber-700" onClick={() => { const newQty = Math.max(1, orderToView.quantity - 1); updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), { quantity: newQty }); }}><Minus className="h-4 w-4" /></Button>
-                      <span className="text-sm font-black text-amber-900 tabular-nums">{orderToView?.quantity}</span>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-amber-700" onClick={() => { const newQty = orderToView.quantity + 1; updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), { quantity: newQty }); }}><Plus className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-amber-700" onClick={() => { const newQty = Math.max(1, liveOrderToView!.quantity - 1); updateDocumentNonBlocking(doc(db, 'production_orders', liveOrderToView!.id), { quantity: newQty }); }}><Minus className="h-4 w-4" /></Button>
+                      <span className="text-sm font-black text-amber-900 tabular-nums">{liveOrderToView?.quantity}</span>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-amber-700" onClick={() => { const newQty = liveOrderToView!.quantity + 1; updateDocumentNonBlocking(doc(db, 'production_orders', liveOrderToView!.id), { quantity: newQty }); }}><Plus className="h-4 w-4" /></Button>
                     </div>
                   )}
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Button variant="outline" size="sm" className="h-9 gap-2 font-bold text-xs bg-white border-amber-200 text-amber-700" onClick={() => handlePrintProductionOrder(orderToView)}>
+                <Button variant="outline" size="sm" className="h-9 gap-2 font-bold text-xs bg-white border-amber-200 text-amber-700" onClick={() => handlePrintProductionOrder(liveOrderToView)}>
                   <Printer className="h-4 w-4" /> IMPRIMIR PLAN
                 </Button>
-                <Badge className={cn("font-black uppercase text-[10px] px-3 py-1", { draft: "bg-slate-100 text-slate-600", pending_purchase: "bg-rose-100 text-rose-700 border-rose-200", ready: "bg-blue-100 text-blue-700 border-blue-200", completed: "bg-emerald-100 text-emerald-700 border-emerald-200" }[orderToView?.status as string])}>
-                  {orderToView?.status === 'pending_purchase' ? 'FALTAN MATERIALES' : orderToView?.status === 'ready' ? 'LISTO PARA ARMAR' : orderToView?.status}
+                <Badge className={cn("font-black uppercase text-[10px] px-3 py-1", { draft: "bg-slate-100 text-slate-600", pending_purchase: "bg-rose-100 text-rose-700 border-rose-200", ready: "bg-blue-100 text-blue-700 border-blue-200", completed: "bg-emerald-100 text-emerald-700 border-emerald-200" }[liveOrderToView?.status as string])}>
+                  {liveOrderToView?.status === 'pending_purchase' ? 'FALTAN MATERIALES' : liveOrderToView?.status === 'ready' ? 'LISTO PARA ARMAR' : liveOrderToView?.status}
                 </Badge>
               </div>
             </div>
@@ -2142,9 +2144,9 @@ export default function CatalogPage() {
                 <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                   <Layers className="h-4 w-4" /> Necesidades de Insumos (Explosión)
                 </h3>
-                {orderToView?.purchaseOrderId && (
+                {liveOrderToView?.purchaseOrderId && (
                   <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 font-black text-[9px] gap-1.5 px-3">
-                    <Check className="h-3 w-3" /> COMPRA VINCULADA: #{orderToView.purchaseOrderId.slice(0,4).toUpperCase()}
+                    <Check className="h-3 w-3" /> COMPRA VINCULADA: #{liveOrderToView.purchaseOrderId.slice(0,4).toUpperCase()}
                   </Badge>
                 )}
               </div>
@@ -2194,22 +2196,22 @@ export default function CatalogPage() {
               </div>
             </div>
 
-            {orderToView?.status === 'pending_purchase' && (
+            {liveOrderToView?.status === 'pending_purchase' && (
               <Card className="bg-amber-50 border-amber-200 border-dashed p-6">
                 <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                   <div className="space-y-1">
                     <h4 className="text-lg font-black text-amber-800">
-                      {orderToView.purchaseOrderId ? 'Sincronizar Pedido de Compra' : 'Faltan Materiales para Fabricar'}
+                      {liveOrderToView.purchaseOrderId ? 'Sincronizar Pedido de Compra' : 'Faltan Materiales para Fabricar'}
                     </h4>
                     <p className="text-sm text-amber-700">
-                      {orderToView.purchaseOrderId 
+                      {liveOrderToView.purchaseOrderId 
                         ? 'Ya existe una compra vinculada. Haz clic para agregar los faltantes adicionales según la nueva cantidad.'
                         : `Se han detectado ${explosionSummary?.all.filter(f => (f.required - f.available) > 0).length} ítems sin stock suficiente.`}
                     </p>
                   </div>
                   <Button onClick={handleGeneratePOFromProduction} className="bg-amber-600 hover:bg-amber-700 font-black h-12 px-8 shadow-lg shadow-amber-200 gap-2">
-                    {orderToView.purchaseOrderId ? <RefreshCw className="h-5 w-5" /> : <ShoppingCart className="h-5 w-5" />}
-                    {orderToView.purchaseOrderId ? 'ACTUALIZAR COMPRA ASOCIADA' : 'GENERAR ORDEN DE COMPRA POR FALTANTES'}
+                    {liveOrderToView.purchaseOrderId ? <RefreshCw className="h-5 w-5" /> : <ShoppingCart className="h-5 w-5" />}
+                    {liveOrderToView.purchaseOrderId ? 'ACTUALIZAR COMPRA ASOCIADA' : 'GENERAR ORDEN DE COMPRA POR FALTANTES'}
                   </Button>
                 </div>
               </Card>
@@ -2219,18 +2221,18 @@ export default function CatalogPage() {
           <DialogFooter className="p-4 border-t bg-slate-50 shrink-0">
             <div className="flex justify-between items-center w-full">
               <div>
-                {orderToView?.purchaseOrderId && (
+                {liveOrderToView?.purchaseOrderId && (
                   <Button variant="link" className="text-xs font-black text-emerald-700 gap-1.5 p-0 h-auto" onClick={() => { 
-                    const po = purchaseOrders?.find(p => p.id === orderToView.purchaseOrderId);
+                    const po = purchaseOrders?.find(p => p.id === liveOrderToView.purchaseOrderId);
                     if (po) { setPurchaseOrderToView(po); setOrderToView(null); setActiveTab("purchases"); }
                   }}>
-                    <ExternalLink className="h-3 w-3" /> VER ORDEN DE COMPRA #{orderToView.purchaseOrderId.slice(0,4).toUpperCase()}
+                    <ExternalLink className="h-3 w-3" /> VER ORDEN DE COMPRA #{liveOrderToView.purchaseOrderId.slice(0,4).toUpperCase()}
                   </Button>
                 )}
               </div>
               <div className="flex gap-3">
                 <Button variant="ghost" onClick={handleCloseOrderView} className="font-bold">Cerrar</Button>
-                {orderToView?.status === 'ready' && (
+                {liveOrderToView?.status === 'ready' && (
                   <Button onClick={handleAssembleFinal} className="bg-blue-600 hover:bg-blue-700 px-8 font-black shadow-lg h-12 uppercase tracking-widest"><Hammer className="mr-2 h-5 w-5" /> FINALIZAR ARMADO</Button>
                 )}
               </div>
