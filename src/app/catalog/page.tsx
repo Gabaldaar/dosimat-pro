@@ -233,13 +233,14 @@ export default function CatalogPage() {
   // States for Purchase Orders creation
   const [newPOItems, setNewPurchaseOrderItems] = useState<any[]>([])
   const [newPOTitle, setNewPOTitle] = useState("")
+  const [newPOCatFilter, setNewPOCatFilter] = useState("all")
 
   const [manualPurchaseQtys, setManualPurchaseQtys] = useState<Record<string, number>>({})
   const [manualPurchasePrices, setManualPurchasePrices] = useState<Record<string, number>>({})
   const [manualPurchaseCurrencies, setManualPurchaseCurrencies] = useState<Record<string, 'ARS' | 'USD'>>({})
   const [manualSuppliers, setManualSuppliers] = useState<Record<string, string>>({})
   const [supplierStatuses, setSupplierStatuses] = useState<Record<string, 'pending' | 'ordered'>>({})
-  const [initialPlanData, setInitialPlanData] = useState({ qtys: {}, sups: {}, prices: {}, currencies: {}, statuses: {}, qty: 0 })
+  const [initialPlanData, setInitialPlanData] = useState({ qtys: {}, sups: {}, prices: {}, currencies: {}, statuses: {}, qty: 0, itemsCount: 0 })
 
   const [editHistory, setEditHistory] = useState<any[]>([])
 
@@ -426,10 +427,10 @@ export default function CatalogPage() {
         currencies: JSON.parse(JSON.stringify(newManualCurrencies)),
         sups: JSON.parse(JSON.stringify(newManualSups)),
         statuses: JSON.parse(JSON.stringify(newStatuses)),
-        qty: orderToView.quantity
+        qty: orderToView.quantity,
+        itemsCount: 0
       });
     } else if (purchaseOrderToView) {
-      // Logic for Manual Purchase Order View
       const newManualQtys: Record<string, number> = {};
       const newManualPrices: Record<string, number> = {};
       const newManualCurrencies: Record<string, 'ARS' | 'USD'> = {};
@@ -447,6 +448,15 @@ export default function CatalogPage() {
       setManualPurchaseCurrencies(newManualCurrencies);
       setManualSuppliers(newManualSups);
       setSupplierStatuses(purchaseOrderToView.supplierStatuses || {});
+      setInitialPlanData({
+        qtys: JSON.parse(JSON.stringify(newManualQtys)),
+        prices: JSON.parse(JSON.stringify(newManualPrices)),
+        currencies: JSON.parse(JSON.stringify(newManualCurrencies)),
+        sups: JSON.parse(JSON.stringify(newManualSups)),
+        statuses: JSON.parse(JSON.stringify(purchaseOrderToView.supplierStatuses || {})),
+        qty: 0,
+        itemsCount: purchaseOrderToView.items.length
+      });
     } else if (isAssemblyOpen && !orderToView && explosionSummary) {
       const newManualQtys: Record<string, number> = {};
       const newManualPrices: Record<string, number> = {};
@@ -469,20 +479,26 @@ export default function CatalogPage() {
   }, [isAssemblyOpen, orderToView, explosionSummary, purchaseOrderToView]);
 
   const hasUnsavedChanges = useMemo(() => {
-    if (!orderToView || orderToView.status === 'completed') return false;
+    if (!orderToView && !purchaseOrderToView) return false;
+    if (orderToView?.status === 'completed' || purchaseOrderToView?.status === 'completed') return false;
+    
+    const itemsCountMatch = purchaseOrderToView ? purchaseOrderToView.items.length === initialPlanData.itemsCount : true;
+    
     return JSON.stringify(manualPurchaseQtys) !== JSON.stringify(initialPlanData.qtys) ||
            JSON.stringify(manualPurchasePrices) !== JSON.stringify(initialPlanData.prices) ||
            JSON.stringify(manualPurchaseCurrencies) !== JSON.stringify(initialPlanData.currencies) ||
            JSON.stringify(manualSuppliers) !== JSON.stringify(initialPlanData.sups) ||
            JSON.stringify(supplierStatuses) !== JSON.stringify(initialPlanData.statuses) ||
-           orderToView.quantity !== initialPlanData.qty;
-  }, [manualPurchaseQtys, manualPurchasePrices, manualPurchaseCurrencies, manualSuppliers, supplierStatuses, initialPlanData, orderToView]);
+           (orderToView ? orderToView.quantity !== initialPlanData.qty : false) ||
+           !itemsCountMatch;
+  }, [manualPurchaseQtys, manualPurchasePrices, manualPurchaseCurrencies, manualSuppliers, supplierStatuses, initialPlanData, orderToView, purchaseOrderToView]);
 
   const handleCloseOrderView = () => {
     if (hasUnsavedChanges) {
       setIsExitAlertOpen(true);
     } else {
       setOrderToView(null);
+      setPurchaseOrderToView(null);
     }
   };
 
@@ -490,7 +506,6 @@ export default function CatalogPage() {
     if (!items) return null;
 
     if (purchaseOrderToView) {
-      // Calculations for manual purchase order
       const itemsToBuy = purchaseOrderToView.items.map((item: any) => {
         const prod = items.find(i => i.id === item.productId);
         const manualQty = manualPurchaseQtys[item.productId] ?? item.quantity;
@@ -744,30 +759,106 @@ export default function CatalogPage() {
   }
 
   const handleUpdateOrderPlan = () => {
-    if (!orderToView) return;
-    const status = explosionSummary?.all.some(f => {
-      const stockAfterEntry = f.id in manualPurchaseQtys ? (f.available + (manualPurchaseQtys[f.id] || 0)) : f.available;
-      return (stockAfterEntry - f.required) < 0;
-    }) ? 'pending_purchase' : 'ready';
+    if (orderToView) {
+      const status = explosionSummary?.all.some(f => {
+        const stockAfterEntry = f.id in manualPurchaseQtys ? (f.available + (manualPurchaseQtys[f.id] || 0)) : f.available;
+        return (stockAfterEntry - f.required) < 0;
+      }) ? 'pending_purchase' : 'ready';
+      
+      updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
+        quantity: orderToView.quantity,
+        purchaseQtys: manualPurchaseQtys,
+        purchasePrices: manualPurchasePrices,
+        purchaseCurrencies: manualPurchaseCurrencies,
+        purchaseSuppliers: manualSuppliers,
+        supplierStatuses: supplierStatuses,
+        status
+      });
+      setInitialPlanData({ 
+        qtys: JSON.parse(JSON.stringify(manualPurchaseQtys)), 
+        prices: JSON.parse(JSON.stringify(manualPurchasePrices)),
+        currencies: JSON.parse(JSON.stringify(manualPurchaseCurrencies)),
+        sups: JSON.parse(JSON.stringify(manualSuppliers)),
+        statuses: JSON.parse(JSON.stringify(supplierStatuses)),
+        qty: orderToView.quantity,
+        itemsCount: 0
+      });
+      toast({ title: "Planificación guardada", description: "Se han actualizado los cambios en la orden." });
+    } else if (purchaseOrderToView) {
+      const updatedItems = purchaseOrderToView.items.map((item: any) => {
+        return {
+          ...item,
+          quantity: manualPurchaseQtys[item.productId] ?? item.quantity,
+          price: manualPurchasePrices[item.productId] ?? item.price,
+          currency: manualPurchaseCurrencies[item.productId] ?? item.currency,
+          supplier: manualSuppliers[item.productId] ?? item.supplier
+        };
+      });
+
+      updateDocumentNonBlocking(doc(db, 'purchase_orders', purchaseOrderToView.id), {
+        items: updatedItems,
+        supplierStatuses: supplierStatuses
+      });
+
+      setInitialPlanData(prev => ({
+        ...prev,
+        qtys: JSON.parse(JSON.stringify(manualPurchaseQtys)),
+        prices: JSON.parse(JSON.stringify(manualPurchasePrices)),
+        currencies: JSON.parse(JSON.stringify(manualPurchaseCurrencies)),
+        sups: JSON.parse(JSON.stringify(manualSuppliers)),
+        statuses: JSON.parse(JSON.stringify(supplierStatuses)),
+        itemsCount: updatedItems.length
+      }));
+      toast({ title: "Cambios guardados", description: "Se actualizó la orden de compra." });
+    }
+  }
+
+  const handleAddItemToPurchaseOrder = (productId: string) => {
+    if (!purchaseOrderToView || !items) return;
+    const prod = items.find(i => i.id === productId);
+    if (!prod) return;
+
+    if (purchaseOrderToView.items.some((i: any) => i.productId === productId)) {
+      toast({ title: "Producto ya en la lista", variant: "destructive" });
+      return;
+    }
+
+    const newItem = {
+      productId: prod.id,
+      productName: prod.name,
+      quantity: 1,
+      price: prod.costCurrency === 'USD' ? prod.costUSD : prod.costARS,
+      currency: prod.costCurrency || 'ARS',
+      supplier: prod.supplier || "Sin Proveedor",
+      received: false
+    };
+
+    const updatedItems = [...purchaseOrderToView.items, newItem];
+    setPurchaseOrderToView({ ...purchaseOrderToView, items: updatedItems });
+    setManualPurchaseQtys(prev => ({ ...prev, [productId]: 1 }));
+    setManualPurchasePrices(prev => ({ ...prev, [productId]: newItem.price }));
+    setManualPurchaseCurrencies(prev => ({ ...prev, [productId]: newItem.currency as 'ARS' | 'USD' }));
+    setManualSuppliers(prev => ({ ...prev, [productId]: newItem.supplier }));
     
-    updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
-      quantity: orderToView.quantity,
-      purchaseQtys: manualPurchaseQtys,
-      purchasePrices: manualPurchasePrices,
-      purchaseCurrencies: manualPurchaseCurrencies,
-      purchaseSuppliers: manualSuppliers,
-      supplierStatuses: supplierStatuses,
-      status
-    });
-    setInitialPlanData({ 
-      qtys: JSON.parse(JSON.stringify(manualPurchaseQtys)), 
-      prices: JSON.parse(JSON.stringify(manualPurchasePrices)),
-      currencies: JSON.parse(JSON.stringify(manualPurchaseCurrencies)),
-      sups: JSON.parse(JSON.stringify(manualSuppliers)),
-      statuses: JSON.parse(JSON.stringify(supplierStatuses)),
-      qty: orderToView.quantity
-    });
-    toast({ title: "Planificación guardada", description: "Se han actualizado los cambios en la orden." });
+    toast({ title: "Ítem agregado", description: "Recuerda guardar los cambios de la orden." });
+  }
+
+  const handleRemoveItemFromPurchaseOrder = (productId: string) => {
+    if (!purchaseOrderToView) return;
+    const updatedItems = purchaseOrderToView.items.filter((i: any) => i.productId !== productId);
+    setPurchaseOrderToView({ ...purchaseOrderToView, items: updatedItems });
+    
+    const newQtys = { ...manualPurchaseQtys }; delete newQtys[productId];
+    const newPrices = { ...manualPurchasePrices }; delete newPrices[productId];
+    const newCurrencies = { ...manualPurchaseCurrencies }; delete newCurrencies[productId];
+    const newSups = { ...manualSuppliers }; delete newSups[productId];
+    
+    setManualPurchaseQtys(newQtys);
+    setManualPurchasePrices(newPrices);
+    setManualPurchaseCurrencies(newCurrencies);
+    setManualSuppliers(newSups);
+    
+    toast({ title: "Ítem removido", description: "Recuerda guardar los cambios de la orden." });
   }
 
   const handleReceiveMaterials = (supplierName: string) => {
@@ -816,7 +907,6 @@ export default function CatalogPage() {
     });
 
     if (isPO) {
-      // Update Purchase Order Items
       const updatedItems = targetOrder.items.map((item: any) => {
         if (itemsToProcess.some(i => i.id === item.productId)) {
           return { ...item, received: true };
@@ -830,7 +920,6 @@ export default function CatalogPage() {
       });
       setPurchaseOrderToView({ ...targetOrder, items: updatedItems, status: allReceived ? 'completed' : 'pending' });
     } else {
-      // Update Production Order
       setManualPurchaseQtys(newPurchaseQtys);
       const status = explosionSummary?.all.some(f => {
         const stockAfterEntry = f.id in newPurchaseQtys ? (f.available + (newPurchaseQtys[f.id] || 0)) : f.available;
@@ -914,11 +1003,17 @@ export default function CatalogPage() {
         purchaseSuppliers: currentManualSups
       });
     }
+    if (purchaseOrderToView && purchaseOrderToView.status !== 'completed') {
+      const updatedItems = purchaseOrderToView.items.map((i: any) => 
+        i.productId === productId ? { ...i, supplier: newSupplier } : i
+      );
+      setPurchaseOrderToView({ ...purchaseOrderToView, items: updatedItems });
+    }
     toast({ 
       title: "Proveedor asignado permanentemente", 
       description: `El ítem ahora tiene a ${newSupplier} como su proveedor oficial.` 
     });
-  }, [db, orderToView, manualSuppliers, toast]);
+  }, [db, orderToView, purchaseOrderToView, manualSuppliers, toast]);
 
   const handleAssembleFinal = () => {
     if (!orderToView || !items) return;
@@ -1351,7 +1446,9 @@ export default function CatalogPage() {
                         <TableHead className="text-[9px] font-black uppercase">Material</TableHead>
                         <TableHead className="text-center font-black text-[9px] uppercase w-20">Cantidad</TableHead>
                         <TableHead className="text-center font-black text-[9px] uppercase w-48">Precio Compra</TableHead>
+                        <TableHead className="text-center font-black text-[9px] uppercase w-40">Proveedor</TableHead>
                         <TableHead className="text-right font-black text-[9px] uppercase w-28">Subtotal</TableHead>
+                        {!!purchaseOrderToView && <TableHead className="w-10"></TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1398,9 +1495,37 @@ export default function CatalogPage() {
                                 </Tabs>
                               </div>
                             </TableCell>
+                            <TableCell className="py-1">
+                              <Select 
+                                disabled={isOrdered}
+                                value={manualSuppliers[f.id] || "Sin Proveedor"} 
+                                onValueChange={(v) => handleUpdateItemSupplierGlobally(f.id, v)}
+                              >
+                                <SelectTrigger className="h-7 text-[10px] font-bold border-none bg-transparent">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
+                                  {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
                             <TableCell className="text-right py-1">
                               <p className="text-[10px] font-bold">{currentCurrency === 'USD' ? 'u$s' : '$'} {( (manualPurchaseQtys[f.id] ?? 0) * (manualPurchasePrices[f.id] ?? 0)).toLocaleString('es-AR')}</p>
                             </TableCell>
+                            {!!purchaseOrderToView && (
+                              <TableCell className="py-1">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-7 w-7 text-destructive" 
+                                  disabled={isOrdered}
+                                  onClick={() => handleRemoveItemFromPurchaseOrder(f.id)}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </TableCell>
+                            )}
                           </TableRow>
                         );
                       })}
@@ -1496,7 +1621,6 @@ export default function CatalogPage() {
                         const catName = categoryMap[item.categoryId] || "Sin Categoría"; 
                         const marginARS = getMarginInfo(item.priceARS, item.calculatedCostARS); 
                         const marginUSD = getMarginInfo(item.priceUSD, item.calculatedCostUSD); 
-                        const isCostInUSD = item.costCurrency === 'USD' || (!item.costCurrency && (item.costUSD > 0 && !item.costARS)); 
                         return (
                           <Card key={item.id} className={cn("glass-card hover:shadow-md transition-all group border-l-4", isLowStock ? "border-l-rose-500 bg-rose-50/30" : "border-l-primary")}>
                             <CardHeader className="pb-2">
@@ -1587,6 +1711,16 @@ export default function CatalogPage() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end bg-muted/20 p-4 rounded-xl border border-dashed">
               <div className="space-y-2">
+                <Label className="text-[10px] font-bold uppercase text-muted-foreground">Filtrar por Categoría</Label>
+                <Select value={newPOCatFilter} onValueChange={setNewPOCatFilter}>
+                  <SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    <SelectItem value="all">Todas las Categorías</SelectItem>
+                    {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label className="font-bold">Seleccionar Producto</Label>
                 <Select onValueChange={(id) => {
                   const item = items?.find(i => i.id === id);
@@ -1594,15 +1728,14 @@ export default function CatalogPage() {
                     setNewPurchaseOrderItems([...newPOItems, { ...item, qtyToAdd: 1 }]);
                   }
                 }}>
-                  <SelectTrigger className="bg-white"><SelectValue placeholder="Buscar ítem..." /></SelectTrigger>
+                  <SelectTrigger className="bg-white h-10"><SelectValue placeholder="Buscar ítem..." /></SelectTrigger>
                   <SelectContent className="max-h-60">
-                    {items?.filter(i => !i.isService).sort((a,b) => a.name.localeCompare(b.name)).map(i => (
+                    {items?.filter(i => !i.isService && (newPOCatFilter === 'all' || i.categoryId === newPOCatFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(i => (
                       <SelectItem key={i.id} value={i.id}>{i.name} (Stock: {i.stock || 0})</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <p className="text-[10px] text-muted-foreground font-bold italic">Agrega todos los productos que planeas comprar hoy.</p>
             </div>
 
             {newPOItems.length > 0 && (
@@ -1655,8 +1788,8 @@ export default function CatalogPage() {
       </Dialog>
 
       {/* Manual Purchase Order Detail View */}
-      <Dialog open={!!purchaseOrderToView} onOpenChange={() => setPurchaseOrderToView(null)}>
-        <DialogContent className="max-w-5xl h-[95vh] flex flex-col p-0 w-[95vw]">
+      <Dialog open={!!purchaseOrderToView} onOpenChange={handleCloseOrderView}>
+        <DialogContent className="max-w-6xl h-[95vh] flex flex-col p-0 w-[95vw]">
           <DialogHeader className="p-4 border-b shrink-0 bg-white">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center pr-8 gap-4">
               <div className="flex items-center gap-3">
@@ -1666,11 +1799,49 @@ export default function CatalogPage() {
                   <DialogDescription className="text-[10px] font-bold uppercase">Reposición manual de componentes</DialogDescription>
                 </div>
               </div>
-              <Badge className={cn("font-black uppercase text-[10px]", purchaseOrderToView?.status === 'completed' ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700")}>
-                {purchaseOrderToView?.status === 'completed' ? 'RECIBIDA COMPLETA' : 'PENDIENTE DE RECEPCIÓN'}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge className={cn("font-black uppercase text-[10px]", purchaseOrderToView?.status === 'completed' ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700")}>
+                  {purchaseOrderToView?.status === 'completed' ? 'RECIBIDA COMPLETA' : 'PENDIENTE DE RECEPCIÓN'}
+                </Badge>
+                {purchaseOrderToView?.status !== 'completed' && (
+                  <Button 
+                    variant={hasUnsavedChanges ? "default" : "outline"} 
+                    size="sm" 
+                    className={cn("h-8 gap-1.5 font-bold text-[10px] px-3", hasUnsavedChanges && "bg-primary animate-pulse")} 
+                    onClick={handleUpdateOrderPlan}
+                  >
+                    <Save className="h-3.5 w-3.5" /> GUARDAR {hasUnsavedChanges && "*"}
+                  </Button>
+                )}
+              </div>
             </div>
           </DialogHeader>
+          
+          {purchaseOrderToView?.status !== 'completed' && (
+            <div className="px-6 py-3 bg-muted/10 border-b flex flex-col md:flex-row gap-4 items-end">
+              <div className="space-y-1 flex-1">
+                <Label className="text-[10px] font-black uppercase text-muted-foreground">Agregar más productos a la orden</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <Select value={newPOCatFilter} onValueChange={setNewPOCatFilter}>
+                    <SelectTrigger className="bg-white h-9 text-xs"><SelectValue placeholder="Filtrar por categoría..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas las Categorías</SelectItem>
+                      {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Select onValueChange={handleAddItemToPurchaseOrder}>
+                    <SelectTrigger className="bg-white h-9 text-xs"><SelectValue placeholder="Buscar ítem..." /></SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      {items?.filter(i => !i.isService && (newPOCatFilter === 'all' || i.categoryId === newPOCatFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(i => (
+                        <SelectItem key={i.id} value={i.id}>{i.name} (Stock: {i.stock || 0})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex-1 overflow-y-auto p-6 space-y-8">
             <GroupedPurchaseList />
           </div>
@@ -1680,7 +1851,7 @@ export default function CatalogPage() {
                 <div><p className="text-[8px] font-black text-slate-400 uppercase">Proyectado ARS</p><p className="text-xl font-black text-blue-700">${purchaseCalculations?.totalARS.toLocaleString('es-AR')}</p></div>
                 <div><p className="text-[8px] font-black text-slate-400 uppercase">Proyectado USD</p><p className="text-xl font-black text-emerald-600">u$s {purchaseCalculations?.totalUSD.toLocaleString('es-AR')}</p></div>
               </div>
-              <Button onClick={() => setPurchaseOrderToView(null)} className="font-bold">Cerrar</Button>
+              <Button onClick={handleCloseOrderView} className="font-bold">Cerrar</Button>
             </div>
           </DialogFooter>
         </DialogContent>
@@ -1877,7 +2048,7 @@ export default function CatalogPage() {
       </Dialog>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-4xl h-[95vh] overflow-hidden w-[95vw] p-0 flex flex-col">
+        <DialogContent className="max-w-5xl h-[95vh] overflow-hidden w-[95vw] p-0 flex flex-col">
           <DialogHeader className="p-4 border-b shrink-0 bg-white z-10">
             <div className="flex justify-between items-center pr-8">
               <div className="flex items-center gap-4">
@@ -1899,7 +2070,22 @@ export default function CatalogPage() {
                   <div className="space-y-2"><Label className="font-bold">Proveedor Defecto</Label><Select value={formData.supplier} onValueChange={(v) => setFormData({...formData, supplier: v})}><SelectTrigger className="h-11"><SelectValue placeholder="Elegir..." /></SelectTrigger><SelectContent className="max-h-60"><SelectItem value="none">SIN PROVEEDOR</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+              
+              <div className="bg-slate-900 text-white p-6 rounded-3xl shadow-xl border-t-4 border-primary relative overflow-hidden">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                  <div>
+                    <p className="text-[10px] font-black text-primary uppercase tracking-[0.3em] mb-2">Costo Proyectado Final</p>
+                    <p className="text-5xl font-black text-white leading-none tracking-tighter font-mono">$ {currentEditingCosts.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</p>
+                    <p className="text-xl font-black text-emerald-400 font-mono mt-2">u$s {currentEditingCosts.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 border-l md:border-l-white/10 pl-0 md:pl-8">
+                    <div><p className="text-[8px] font-bold text-slate-400 uppercase">Mano de Obra (ARS)</p><p className="text-lg font-bold text-white">${totalLaborARS.toLocaleString()}</p></div>
+                    <div><p className="text-[8px] font-bold text-slate-400 uppercase">Materiales (ARS)</p><p className="text-lg font-bold text-white">${(currentEditingCosts.ars - totalLaborARS).toLocaleString()}</p></div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end pt-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2"><Label className="text-blue-700 font-black text-xs uppercase">Venta ARS ($)</Label><Input type="number" value={formData.priceARS} onChange={(e) => setFormData({...formData, priceARS: Number(e.target.value)})} className="h-11 border-blue-200 font-bold" /></div>
                   <div className="space-y-2"><Label className="text-emerald-700 font-black text-xs uppercase">Venta USD (u$s)</Label><Input type="number" value={formData.priceUSD} onChange={(e) => setFormData({...formData, priceUSD: Number(e.target.value)})} className="h-11 border-emerald-200 font-bold" /></div>
@@ -1927,42 +2113,49 @@ export default function CatalogPage() {
                 {!formData.isService && formData.trackStock && <div className="flex gap-4 flex-1 min-w-[200px]"><div className="space-y-1 flex-1"><Label className="font-bold text-xs uppercase text-muted-foreground">Stock Actual</Label><Input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} className="h-11 font-black" /></div><div className="space-y-1 flex-1"><Label className="font-bold text-rose-600 text-xs uppercase">Mínimo Crítico</Label><Input type="number" value={formData.minStock} onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} className="h-11 border-rose-200 font-black" /></div></div>}
               </div>
             </section>
+            
             {formData.isCompuesto && (
-              <>
-                <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-2xl border-t-8 border-amber-500 relative overflow-hidden">
-                  <div className="flex flex-col md:flex-row justify-between items-center gap-8">
-                    <div className="text-center md:text-left space-y-1">
-                      <p className="text-[10px] font-black text-amber-500 uppercase tracking-[0.3em] mb-2">Costo Total Proyectado</p>
-                      <p className="text-6xl font-black text-white leading-none tracking-tighter font-mono">$ {currentEditingCosts.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</p>
-                      <p className="text-2xl font-black text-emerald-400 font-mono mt-2">u$s {currentEditingCosts.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}</p>
-                    </div>
-                  </div>
+              <section className="space-y-6 pt-8 border-t-2">
+                <div className="flex items-center justify-between border-b-2 pb-2"><h3 className="font-black text-xs uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2"><Layers className="h-4 w-4" /> Estructura de Armado (BOM)</h3><Badge className="bg-amber-600 font-black px-3 py-1 shadow-lg">{formData.components.length} PIEZAS ACTIVAS</Badge></div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 bg-muted/10 rounded-2xl border border-dashed border-primary/20">
+                  <div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Filtrar por Categoría</Label><Select value={bomFilterCategory} onValueChange={setBomFilterCategory}><SelectTrigger className="h-11 bg-white shadow-sm"><SelectValue placeholder="Ver todas..." /></SelectTrigger><SelectContent className="max-h-60">{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}<SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem></SelectContent></Select></div>
+                  <div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-primary">Agregar Componente</Label><Select onValueChange={addComponent}><SelectTrigger className="h-11 bg-white border-primary/30 shadow-md ring-2 ring-primary/5"><SelectValue placeholder="Seleccionar parte para agregar..." /></SelectTrigger><SelectContent className="max-h-60">{items?.filter(i => i.id !== editingItemId && !i.isService && (bomFilterCategory === "all" || i.categoryId === bomFilterCategory)).map(i => (<SelectItem key={i.id} value={i.id} className="font-bold">{i.name}</SelectItem>))}</SelectContent></Select></div>
                 </div>
-                <section className="space-y-6">
-                  <div className="flex items-center justify-between border-b-2 pb-2"><h3 className="font-black text-xs uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2"><Layers className="h-4 w-4" /> Estructura de Armado (BOM)</h3><Badge className="bg-amber-600 font-black px-3 py-1 shadow-lg">{formData.components.length} PIEZAS ACTIVAS</Badge></div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 bg-muted/10 rounded-2xl border border-dashed border-primary/20">
-                    <div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Filtrar por Categoría</Label><Select value={bomFilterCategory} onValueChange={setBomFilterCategory}><SelectTrigger className="h-11 bg-white shadow-sm"><SelectValue placeholder="Ver todas..." /></SelectTrigger><SelectContent className="max-h-60">{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}<SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem></SelectContent></Select></div>
-                    <div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-primary">Agregar Componente</Label><Select onValueChange={addComponent}><SelectTrigger className="h-11 bg-white border-primary/30 shadow-md ring-2 ring-primary/5"><SelectValue placeholder="Seleccionar parte para agregar..." /></SelectTrigger><SelectContent className="max-h-60">{items?.filter(i => i.id !== editingItemId && !i.isService && (bomFilterCategory === "all" || i.categoryId === bomFilterCategory)).map(i => (<SelectItem key={i.id} value={i.id} className="font-bold">{i.name}</SelectItem>))}</SelectContent></Select></div>
-                  </div>
-                  <div className="grid grid-cols-1 gap-3 pb-24">
-                    {sortedAddedComponents.map((comp) => { 
-                      const product = items?.find(i => i.id === comp.productId); if (!product) return null;
-                      const costData = calculateCost(product, items!, currentRate);
-                      const isBaseUSD = product.costCurrency === 'USD' || (!product.costCurrency && (product.costUSD > 0 && !product.costARS));
-                      return (
-                        <div key={`${comp.productId}-${comp.originalIndex}`} className="flex flex-col md:flex-row items-center gap-6 p-5 rounded-2xl border bg-white hover:border-primary/40 transition-all shadow-sm hover:shadow-md group">
-                          <div className="min-w-0 flex-1"><p className="text-base font-black text-slate-800 leading-tight truncate">{product.name}</p><div className="flex items-center gap-4 mt-2"><div className={cn("px-3 py-1 rounded-full text-[10px] font-black border-2", isBaseUSD ? "text-emerald-700 bg-emerald-50 border-emerald-100" : "text-blue-700 bg-blue-50 border-blue-100")}>BASE: {isBaseUSD ? `u$s ${product.costUSD?.toLocaleString()}` : `$ ${product.costARS?.toLocaleString()}`}</div></div></div>
-                          <div className="flex items-center gap-8 w-full md:w-auto pt-4 md:pt-0 border-t md:border-t-0">
-                            <div className="flex items-center gap-3 bg-muted/20 p-2 rounded-xl border shadow-inner"><Label className="text-[10px] font-black uppercase text-muted-foreground px-1">Cant:</Label><input type="number" value={comp.quantity} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="w-14 text-lg font-black text-center bg-transparent focus:outline-none" /></div>
-                            <div className="text-right min-w-[140px]"><p className="text-[9px] font-black uppercase text-slate-400">Subtotal Línea</p><p className="text-lg font-black text-blue-700 leading-tight">$ {(costData.ars * comp.quantity).toLocaleString()}</p><p className="text-sm font-black text-emerald-700">u$s {(costData.usd * comp.quantity).toLocaleString()}</p></div>
-                            <div className="flex gap-1 shrink-0"><Button variant="ghost" size="icon" className="h-11 w-11 text-primary rounded-full" onClick={() => handleJumpToComponent(comp.productId)}><ChevronRight className="h-5 w-5" /></Button><Button variant="ghost" size="icon" className="h-11 w-11 text-destructive hover:bg-rose-50 rounded-full" onClick={() => removeComponent(comp.originalIndex)}><Trash2 className="h-5 w-5" /></Button></div>
+                <div className="grid grid-cols-1 gap-3 pb-24">
+                  {sortedAddedComponents.map((comp) => { 
+                    const product = items?.find(i => i.id === comp.productId); if (!product) return null;
+                    const costData = calculateCost(product, items!, currentRate);
+                    const isBaseUSD = product.costCurrency === 'USD' || (!product.costCurrency && (product.costUSD > 0 && !product.costARS));
+                    const baseSymbol = isBaseUSD ? 'u$s' : '$';
+                    const baseAmount = isBaseUSD ? product.costUSD : product.costARS;
+                    const convSymbol = isBaseUSD ? '$' : 'u$s';
+                    const convAmount = isBaseUSD ? (product.costUSD * currentRate) : (product.costARS / currentRate);
+
+                    return (
+                      <div key={`${comp.productId}-${comp.originalIndex}`} className="flex flex-col md:flex-row items-center gap-6 p-5 rounded-2xl border bg-white hover:border-primary/40 transition-all shadow-sm hover:shadow-md group">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-base font-black text-slate-800 leading-tight truncate">{product.name}</p>
+                          <div className="flex items-center gap-4 mt-2">
+                            <div className={cn("flex flex-col px-3 py-1 rounded-xl border-2", isBaseUSD ? "text-emerald-700 bg-emerald-50 border-emerald-100" : "text-blue-700 bg-blue-50 border-blue-100")}>
+                              <span className="text-[8px] font-black uppercase opacity-60">Costo Base</span>
+                              <span className="text-xs font-black">{baseSymbol} {baseAmount?.toLocaleString()}</span>
+                            </div>
+                            <div className="flex flex-col px-3 py-1 rounded-xl border-2 bg-slate-50 text-slate-600 border-slate-100">
+                              <span className="text-[8px] font-black uppercase opacity-60">Referencia</span>
+                              <span className="text-xs font-bold">{convSymbol} {convAmount?.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                            </div>
                           </div>
                         </div>
-                      ); 
-                    })}
-                  </div>
-                </section>
-              </>
+                        <div className="flex items-center gap-8 w-full md:w-auto pt-4 md:pt-0 border-t md:border-t-0">
+                          <div className="flex items-center gap-3 bg-muted/20 p-2 rounded-xl border shadow-inner"><Label className="text-[10px] font-black uppercase text-muted-foreground px-1">Cant:</Label><input type="number" value={comp.quantity} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="w-14 text-lg font-black text-center bg-transparent focus:outline-none" /></div>
+                          <div className="text-right min-w-[140px]"><p className="text-[9px] font-black uppercase text-slate-400">Subtotal Línea</p><p className="text-lg font-black text-blue-700 leading-tight">$ {(costData.ars * comp.quantity).toLocaleString()}</p><p className="text-sm font-black text-emerald-700">u$s {(costData.usd * comp.quantity).toLocaleString()}</p></div>
+                          <div className="flex gap-1 shrink-0"><Button variant="ghost" size="icon" className="h-11 w-11 text-primary rounded-full" onClick={() => handleJumpToComponent(comp.productId)}><ChevronRight className="h-5 w-5" /></Button><Button variant="ghost" size="icon" className="h-11 w-11 text-destructive hover:bg-rose-50 rounded-full" onClick={() => removeComponent(comp.originalIndex)}><Trash2 className="h-5 w-5" /></Button></div>
+                        </div>
+                      </div>
+                    ); 
+                  })}
+                </div>
+              </section>
             )}
           </div>
           <DialogFooter className="p-4 border-t bg-white shrink-0 z-10"><div className="flex gap-3 w-full justify-end"><Button variant="outline" onClick={() => setIsDialogOpen(false)} className="h-12 px-8 font-bold flex-1 md:flex-none">Cancelar</Button><Button onClick={handleSave} className="h-12 px-12 font-black shadow-2xl uppercase tracking-widest flex-1 md:flex-none"><CheckCircle2 className="mr-2 h-5 w-5" /> {editHistory.length > 0 ? 'GUARDAR Y VOLVER' : 'GUARDAR ÍTEM'}</Button></div></DialogFooter>
