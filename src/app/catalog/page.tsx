@@ -128,7 +128,7 @@ export default function CatalogPage() {
   
   // Exchange Rates Logic
   const [exchangeRates, setExchangeRates] = useState({ official: 1, blue: 1 })
-  const [rateType, setRateType] = useState<'official' | 'blue'>('official')
+  const [rateType, setOrderRateType] = useState<'official' | 'blue'>('official')
 
   useEffect(() => {
     const fetchRates = async () => {
@@ -1595,7 +1595,7 @@ export default function CatalogPage() {
                 <ArrowRightLeft className="h-4 w-4 text-primary" />
                 <div className="flex flex-col">
                   <span className="text-[8px] font-black uppercase text-muted-foreground leading-none">Dólar de Referencia</span>
-                  <Tabs value={rateType} onValueChange={(v: any) => setRateType(v)} className="h-7 mt-0.5">
+                  <Tabs value={rateType} onValueChange={(v: any) => setOrderRateType(v)} className="h-7 mt-0.5">
                     <TabsList className="bg-transparent h-7 p-0 gap-1">
                       <TabsTrigger value="official" className="h-6 text-[9px] font-black px-2 data-[state=active]:bg-primary data-[state=active]:text-white border border-transparent data-[state=active]:border-primary/20 transition-all">OFICIAL (${exchangeRates.official})</TabsTrigger>
                       <TabsTrigger value="blue" className="h-6 text-[9px] font-black px-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white border border-transparent data-[state=active]:border-emerald-600/20 transition-all">BLUE (${exchangeRates.blue})</TabsTrigger>
@@ -2360,7 +2360,7 @@ export default function CatalogPage() {
                 )}
               </div>
               <div className="flex flex-wrap gap-4">
-                <div className="flex items-center gap-3 p-4 border rounded-2xl bg-white shadow-sm flex-1 min-w-[200px]"><Switch checked={formData.isService} onCheckedChange={(v) => { setFormData({...formData, iService: v, trackStock: !v && formData.trackStock, isCompuesto: v ? false : formData.isCompuesto}); }} /><div><Label className="font-bold">Es un servicio</Label></div></div>
+                <div className="flex items-center gap-3 p-4 border rounded-2xl bg-white shadow-sm flex-1 min-w-[200px]"><Switch checked={formData.isService} onCheckedChange={(v) => { setFormData({...formData, isService: v, trackStock: !v && formData.trackStock, isCompuesto: v ? false : formData.isCompuesto}); }} /><div><Label className="font-bold">Es un servicio</Label></div></div>
                 {!formData.isService && <div className="flex items-center gap-3 p-4 border rounded-2xl bg-amber-50/50 border-amber-200 shadow-sm flex-1 min-w-[200px]"><Switch checked={formData.isCompuesto} onCheckedChange={(v) => { setFormData({...formData, isCompuesto: v, trackStock: v ? true : formData.trackStock}); }} /><div><Label className="font-bold text-amber-800">Producto compuesto</Label></div></div>}
                 {!formData.isService && formData.trackStock && <div className="flex gap-4 flex-1 min-w-[200px]"><div className="space-y-1 flex-1"><Label className="font-bold text-xs uppercase text-muted-foreground">Stock Actual</Label><Input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} className="h-11 font-black" /></div><div className="space-y-1 flex-1"><Label className="font-bold text-rose-600 text-xs uppercase">Mínimo Crítico</Label><Input type="number" value={formData.minStock} onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} className="h-11 border-rose-200 font-black" /></div></div>}
               </div>
@@ -2590,6 +2590,103 @@ export default function CatalogPage() {
 
           <div className="mt-12 pt-6 border-t border-slate-200 flex justify-between items-end italic text-[9px] text-slate-400">
             <p>Este documento es una ficha de costos internos generada por Dosimat Pro. Prohibida su difusión externa.</p>
+            <p>Página 1 de 1</p>
+          </div>
+        </div>
+      )}
+
+      {/* VISTA DE IMPRESIÓN (PDF) - ORDEN DE PRODUCCIÓN */}
+      {orderToPrint && (
+        <div className="print-only w-full p-8 bg-white text-slate-900 font-sans">
+          <div className="flex justify-between items-start border-b-4 border-amber-600 pb-4 mb-6">
+            <div className="space-y-1">
+              <h1 className="text-3xl font-black uppercase tracking-tighter">Plan de Producción / Armado</h1>
+              <p className="text-lg font-bold text-slate-600">ID Orden: #{orderToPrint.id.toUpperCase().slice(0, 8)}</p>
+              <Badge variant="outline" className="border-2 border-amber-600 text-amber-700 font-black uppercase text-[10px]">Estado: {orderToPrint.status}</Badge>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] font-black uppercase text-slate-400">Dosimat Pro System</p>
+              <p className="text-sm font-bold">Fecha de Emisión: {new Date().toLocaleDateString('es-AR')}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 mb-8">
+            <div className="p-6 border-4 border-slate-900 rounded-3xl bg-slate-50 space-y-2">
+              <h2 className="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-2">Producto a Fabricar</h2>
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div>
+                  <p className="text-3xl font-black text-slate-900 leading-tight">{orderToPrint.productName}</p>
+                  <p className="text-sm font-bold text-slate-500 mt-1">Fecha de creación del plan: {new Date(orderToPrint.createdAt).toLocaleDateString('es-AR')}</p>
+                </div>
+                <div className="bg-white border-2 border-slate-900 p-4 rounded-2xl flex flex-col items-center min-w-[140px] shadow-sm">
+                  <span className="text-[10px] font-black uppercase text-slate-400">Cant. a Armar</span>
+                  <span className="text-5xl font-black">{orderToPrint.quantity}</span>
+                  <span className="text-[8px] font-bold text-slate-400 uppercase mt-1">Unidades Finales</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <h2 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+              <Layers className="h-4 w-4" /> Explosión de Materiales e Insumos Necesarios
+            </h2>
+            <div className="border-2 border-slate-900 rounded-2xl overflow-hidden">
+              <table className="w-full text-[10px] border-collapse">
+                <thead>
+                  <tr className="bg-slate-900 text-white">
+                    <th className="p-2 text-left uppercase font-black">Insumo / Componente</th>
+                    <th className="p-2 text-center uppercase font-black w-24">Cant. Necesaria</th>
+                    <th className="p-2 text-center uppercase font-black w-24">En Stock</th>
+                    <th className="p-2 text-center uppercase font-black w-24">Check Picking</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const target = items?.find(i => i.id === orderToPrint.productId);
+                    if (!target || !items) return null;
+                    
+                    const requirements: Record<string, {name: string, qty: number, stock: number}> = {};
+                    
+                    // Simple flat requirements for the worker's checklist
+                    target.components?.forEach((c: any) => {
+                      const child = items.find(i => i.id === c.productId);
+                      if (child) {
+                        requirements[c.productId] = {
+                          name: child.name,
+                          qty: c.quantity * orderToPrint.quantity,
+                          stock: child.stock || 0
+                        };
+                      }
+                    });
+
+                    return Object.values(requirements).map((req, idx) => (
+                      <tr key={idx} className="border-b border-slate-200 h-12">
+                        <td className="p-2 font-bold text-sm">{req.name}</td>
+                        <td className="p-2 text-center font-black text-lg">{req.qty}</td>
+                        <td className="p-2 text-center font-bold text-slate-400">{req.stock}</td>
+                        <td className="p-2 text-center">
+                          <div className="w-6 h-6 border-2 border-slate-300 rounded-md mx-auto"></div>
+                        </td>
+                      </tr>
+                    ));
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="mt-12 grid grid-cols-2 gap-12">
+            <div className="border-t-2 border-slate-300 pt-2 h-20">
+              <p className="text-[8px] font-black uppercase text-slate-400">Operario Responsable (Firma)</p>
+            </div>
+            <div className="border-t-2 border-slate-300 pt-2 text-right h-20">
+              <p className="text-[8px] font-black uppercase text-slate-400">Control de Calidad Final (Firma y Sello)</p>
+            </div>
+          </div>
+
+          <div className="mt-12 pt-6 border-t border-slate-200 flex justify-between items-end italic text-[9px] text-slate-400">
+            <p>Este documento es una orden de trabajo interna generada por el sistema Dosimat Pro. Prohibida su difusión externa.</p>
             <p>Página 1 de 1</p>
           </div>
         </div>
