@@ -61,7 +61,8 @@ import {
   ArrowRightLeft,
   Droplet,
   ChevronLeft,
-  ExternalLink
+  ExternalLink,
+  ChevronDown
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -70,7 +71,8 @@ import {
   DropdownMenu as DropdownMenuUI,
   DropdownMenuContent as DropdownMenuContentUI,
   DropdownMenuItem as DropdownMenuItemUI,
-  DropdownMenuTrigger as DropdownMenuTriggerUI
+  DropdownMenuTrigger as DropdownMenuTriggerUI,
+  DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu"
 import {
   Dialog,
@@ -1280,12 +1282,6 @@ function CatalogContent() {
           </div>
         ))}
       </div>
-      {isAdmin && (
-        <div className="space-y-2 pt-4 border-t">
-          <Button variant="outline" className="w-full h-10 border-dashed gap-2 font-bold text-xs" onClick={() => setIsCategoryManagerOpen(true)}><Settings className="h-3 w-3" /> GESTIONAR CATEGORÍAS</Button>
-          <Button variant="outline" className="w-full h-10 border-dashed gap-2 font-bold text-xs" onClick={() => setIsSupplierManagerOpen(true)}><Briefcase className="h-3 w-3" /> GESTIONAR PROVEEDORES</Button>
-        </div>
-      )}
     </div>
   )
 
@@ -1621,7 +1617,30 @@ function CatalogContent() {
               </Tabs>
               <div className="flex gap-2">
                 <Button variant="outline" className="h-9 font-bold gap-2 text-xs" onClick={() => setIsAuditOpen(true)}><Calculator className="h-4 w-4" /> <span className="hidden sm:inline">AUDITORÍA</span></Button>
-                {isAdmin && activeView === 'inventory' && (<Button onClick={() => handleOpenDialog()} className="h-9 shadow-lg font-bold text-xs"><Plus className="mr-2 h-4 w-4" /> Nuevo</Button>)}
+                
+                {isAdmin && (
+                  <DropdownMenuUI>
+                    <DropdownMenuTriggerUI asChild>
+                      <Button variant="outline" className="h-9 font-bold gap-2 text-xs">
+                        <Settings className="h-4 w-4" />
+                        <span className="hidden sm:inline uppercase">Gestión</span>
+                        <ChevronDown className="h-3 w-3 opacity-50" />
+                      </Button>
+                    </DropdownMenuTriggerUI>
+                    <DropdownMenuContentUI align="end" className="w-56">
+                      <DropdownMenuItemUI onClick={() => setIsCategoryManagerOpen(true)}>
+                        <Tag className="mr-2 h-4 w-4" /> Gestionar Categorías
+                      </DropdownMenuItemUI>
+                      <DropdownMenuItemUI onClick={() => setIsSupplierManagerOpen(true)}>
+                        <Briefcase className="mr-2 h-4 w-4" /> Gestionar Proveedores
+                      </DropdownMenuItemUI>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItemUI className="font-bold text-primary" onClick={() => handleOpenDialog()}>
+                        <Plus className="mr-2 h-4 w-4" /> Nuevo Ítem
+                      </DropdownMenuItemUI>
+                    </DropdownMenuContentUI>
+                  </DropdownMenuUI>
+                )}
               </div>
             </div>
           </header>
@@ -2465,6 +2484,44 @@ function CatalogContent() {
                   </div>
                 ))}
               </div>
+            </ScrollArea>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Gestionar Categorías</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex gap-2">
+              <Input placeholder="Nueva categoría..." value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} />
+              <Button onClick={handleSaveCategory}><Plus className="h-4 w-4" /></Button>
+            </div>
+            <ScrollArea className="h-[300px] border rounded-md p-2">
+              {categories.map((cat: any) => (
+                <div key={cat.id} className="flex justify-between items-center p-2 border-b last:border-0 hover:bg-muted/5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{cat.name}</span>
+                    {cat.isFavorite && <Star className="h-3 w-3 fill-amber-400 text-amber-400" />}
+                  </div>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { 
+                      updateDocumentNonBlocking(doc(db, 'product_categories', cat.id), { isFavorite: !cat.isFavorite });
+                    }}>
+                      {cat.isFavorite ? <StarOff className="h-4 w-4 text-amber-500" /> : <Star className="h-4 w-4 text-slate-400" />}
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => {
+                      if (categoryCounts[cat.id] > 0) {
+                        toast({ title: "No se puede eliminar", description: "Esta categoría tiene productos asociados.", variant: "destructive" });
+                        return;
+                      }
+                      deleteDocumentNonBlocking(doc(db, 'product_categories', cat.id));
+                    }}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
             </ScrollArea>
           </div>
         </DialogContent>
