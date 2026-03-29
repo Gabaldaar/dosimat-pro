@@ -1,8 +1,8 @@
 
 "use client"
 
-import { useState, useMemo, useEffect, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useMemo, useEffect, useCallback, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -103,12 +103,23 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-export default function CatalogPage() {
+function CatalogContent() {
   const { toast } = useToast()
   const db = useFirestore()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { userData, isUserLoading } = useUser()
   const isAdmin = userData?.role === 'Admin'
+
+  const [activeView, setActiveTab] = useState("inventory")
+
+  // Sincronizar pestaña activa con parámetros de URL (Dashboard)
+  useEffect(() => {
+    const tab = searchParams.get('tab')
+    if (tab === 'orders') setActiveTab('orders')
+    else if (tab === 'purchases') setActiveTab('purchases')
+    else if (tab === 'inventory') setActiveTab('inventory')
+  }, [searchParams])
 
   // Redirecciones por Rol
   useEffect(() => {
@@ -124,7 +135,6 @@ export default function CatalogPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [hasInitializedFavorites, setHasInitializedFavorites] = useState(false)
-  const [activeView, setActiveTab] = useState("inventory")
   
   // Exchange Rates Logic
   const [exchangeRates, setExchangeRates] = useState({ official: 1, blue: 1 })
@@ -2542,7 +2552,7 @@ export default function CatalogPage() {
 
           {itemToPrint.isCompuesto && (
             <div className="space-y-4">
-              <h2 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+              <h2 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-gap-2">
                 <Layers className="h-4 w-4" /> Detalle de Componentes (BOM)
               </h2>
               <div className="border-2 border-slate-900 rounded-2xl overflow-hidden">
@@ -2722,4 +2732,16 @@ export default function CatalogPage() {
     setPurchaseOrderToDelete(null)
     toast({ title: "Orden de compra eliminada" })
   }
+}
+
+export default function CatalogPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    }>
+      <CatalogContent />
+    </Suspense>
+  )
 }
