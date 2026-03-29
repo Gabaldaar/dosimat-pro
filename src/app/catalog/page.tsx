@@ -289,11 +289,11 @@ export default function CatalogPage() {
       }
     }
     
-    const laborARS = Number(itemData.laborCostARS) || 0;
-    const laborUSD = Number(itemData.laborCostUSD) || 0;
+    const laborARS = (Number(itemData.laborCostARS) || 0) + (Number(itemData.laborCostUSD || 0) * currentExchangeRate);
+    const laborUSD = (Number(itemData.laborCostUSD) || 0) + (Number(itemData.laborCostARS || 0) / currentExchangeRate);
     
-    let totalARS = laborARS + (laborUSD * currentExchangeRate);
-    let totalUSD = laborUSD + (laborARS / currentExchangeRate);
+    let totalARS = laborARS;
+    let totalUSD = laborUSD;
 
     itemData.components?.forEach((comp: any) => {
       const child = allItems.find(i => i.id === comp.productId);
@@ -395,42 +395,23 @@ export default function CatalogPage() {
 
     return {
       all: flatList,
-      toBuySuggested: flatList.filter(f => f.suggestedToBuy > 0 || (orderToView?.purchaseQtys?.[f.id] > 0))
+      toBuySuggested: flatList.filter(f => f.suggestedToBuy > 0)
     };
   }, [selectedForAssembly, assemblyQty, items, orderToView]);
 
+  // Actualizar el estado de la Orden de Producción según el stock real
   useEffect(() => {
-    if (orderToView && explosionSummary) {
-      const newManualQtys: Record<string, number> = {};
-      const newManualPrices: Record<string, number> = {};
-      const newManualCurrencies: Record<string, 'ARS' | 'USD'> = {};
-      const newManualSups: Record<string, string> = {};
-      const newStatuses: Record<string, 'pending' | 'ordered'> = orderToView.supplierStatuses || {};
-      
-      explosionSummary.toBuySuggested.forEach(item => {
-        newManualQtys[item.id] = orderToView.purchaseQtys?.[item.id] ?? item.suggestedToBuy;
-        const defaultCurrency = item.costCurrency as 'ARS' | 'USD' || 'ARS';
-        newManualCurrencies[item.id] = orderToView.purchaseCurrencies?.[item.id] ?? defaultCurrency;
-        const baseCost = newManualCurrencies[item.id] === 'USD' ? item.costUSD : item.costARS;
-        newManualPrices[item.id] = orderToView.purchasePrices?.[item.id] ?? baseCost;
-        newManualSups[item.id] = orderToView.purchaseSuppliers?.[item.id] ?? (item.supplier || "Sin Proveedor");
-      });
-      
-      setManualPurchaseQtys(newManualQtys);
-      setManualPurchasePrices(newManualPrices);
-      setManualPurchaseCurrencies(newManualCurrencies);
-      setManualSuppliers(newManualSups);
-      setSupplierStatuses(newStatuses);
-      setInitialPlanData({ 
-        qtys: JSON.parse(JSON.stringify(newManualQtys)), 
-        prices: JSON.parse(JSON.stringify(newManualPrices)),
-        currencies: JSON.parse(JSON.stringify(newManualCurrencies)),
-        sups: JSON.parse(JSON.stringify(newManualSups)),
-        statuses: JSON.parse(JSON.stringify(newStatuses)),
-        qty: orderToView.quantity,
-        itemsCount: 0
-      });
-    } else if (purchaseOrderToView) {
+    if (orderToView && orderToView.status !== 'completed' && explosionSummary) {
+      const anyMissing = explosionSummary.all.some(f => (f.available - f.required) < 0);
+      const newStatus = anyMissing ? 'pending_purchase' : 'ready';
+      if (newStatus !== orderToView.status) {
+        updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), { status: newStatus });
+      }
+    }
+  }, [items, orderToView, explosionSummary]);
+
+  useEffect(() => {
+    if (purchaseOrderToView) {
       const newManualQtys: Record<string, number> = {};
       const newManualPrices: Record<string, number> = {};
       const newManualCurrencies: Record<string, 'ARS' | 'USD'> = {};
@@ -457,41 +438,22 @@ export default function CatalogPage() {
         qty: 0,
         itemsCount: purchaseOrderToView.items.length
       });
-    } else if (isAssemblyOpen && !orderToView && explosionSummary) {
-      const newManualQtys: Record<string, number> = {};
-      const newManualPrices: Record<string, number> = {};
-      const newManualCurrencies: Record<string, 'ARS' | 'USD'> = {};
-      const newManualSups: Record<string, string> = {};
-      explosionSummary.toBuySuggested.forEach(item => {
-        newManualQtys[item.id] = item.suggestedToBuy;
-        const defaultCurrency = item.costCurrency as 'ARS' | 'USD' || 'ARS';
-        newManualCurrencies[item.id] = defaultCurrency;
-        const baseCost = defaultCurrency === 'USD' ? item.costUSD : item.costARS;
-        newManualPrices[item.id] = baseCost;
-        newManualSups[item.id] = item.supplier || "Sin Proveedor";
-      });
-      setManualPurchaseQtys(newManualQtys);
-      setManualPurchasePrices(newManualPrices);
-      setManualPurchaseCurrencies(newManualCurrencies);
-      setManualSuppliers(newManualSups);
-      setSupplierStatuses({});
     }
-  }, [isAssemblyOpen, orderToView, explosionSummary, purchaseOrderToView]);
+  }, [purchaseOrderToView]);
 
   const hasUnsavedChanges = useMemo(() => {
-    if (!orderToView && !purchaseOrderToView) return false;
-    if (orderToView?.status === 'completed' || purchaseOrderToView?.status === 'completed') return false;
+    if (!purchaseOrderToView) return false;
+    if (purchaseOrderToView?.status === 'completed') return false;
     
-    const itemsCountMatch = purchaseOrderToView ? purchaseOrderToView.items.length === initialPlanData.itemsCount : true;
+    const itemsCountMatch = purchaseOrderToView.items.length === initialPlanData.itemsCount;
     
     return JSON.stringify(manualPurchaseQtys) !== JSON.stringify(initialPlanData.qtys) ||
            JSON.stringify(manualPurchasePrices) !== JSON.stringify(initialPlanData.prices) ||
            JSON.stringify(manualPurchaseCurrencies) !== JSON.stringify(initialPlanData.currencies) ||
            JSON.stringify(manualSuppliers) !== JSON.stringify(initialPlanData.sups) ||
            JSON.stringify(supplierStatuses) !== JSON.stringify(initialPlanData.statuses) ||
-           (orderToView ? orderToView.quantity !== initialPlanData.qty : false) ||
            !itemsCountMatch;
-  }, [manualPurchaseQtys, manualPurchasePrices, manualPurchaseCurrencies, manualSuppliers, supplierStatuses, initialPlanData, orderToView, purchaseOrderToView]);
+  }, [manualPurchaseQtys, manualPurchasePrices, manualPurchaseCurrencies, manualSuppliers, supplierStatuses, initialPlanData, purchaseOrderToView]);
 
   const handleCloseOrderView = () => {
     if (hasUnsavedChanges) {
@@ -503,66 +465,34 @@ export default function CatalogPage() {
   };
 
   const purchaseCalculations = useMemo(() => {
-    if (!items) return null;
+    if (!items || !purchaseOrderToView) return null;
 
-    if (purchaseOrderToView) {
-      const itemsToBuy = purchaseOrderToView.items.map((item: any) => {
-        const prod = items.find(i => i.id === item.productId);
-        const manualQty = manualPurchaseQtys[item.productId] ?? item.quantity;
-        const manualCurrency = manualPurchaseCurrencies[item.productId] ?? (item.currency || 'ARS');
-        const manualPrice = manualPurchasePrices[item.productId] ?? item.price;
-        const currentSup = manualSuppliers[item.productId] || (item.supplier || "Sin Proveedor");
-
-        return {
-          id: item.productId,
-          name: item.productName,
-          available: prod?.stock || 0,
-          required: 0,
-          manualQty,
-          manualPrice,
-          manualCurrency,
-          supplier: currentSup,
-          received: item.received || false
-        };
-      }).filter((i: any) => !i.received);
+    const itemsToBuy = purchaseOrderToView.items.map((item: any) => {
+      const prod = items.find(i => i.id === item.productId);
+      const manualQty = manualPurchaseQtys[item.productId] ?? item.quantity;
+      const manualCurrency = manualPurchaseCurrencies[item.productId] ?? (item.currency || 'ARS');
+      const manualPrice = manualPurchasePrices[item.productId] ?? item.price;
+      const currentSup = manualSuppliers[item.productId] || (item.supplier || "Sin Proveedor");
 
       return {
-        items: itemsToBuy,
-        totalARS: itemsToBuy.reduce((sum: number, item: any) => sum + (item.manualQty * (item.manualCurrency === 'ARS' ? item.manualPrice : 0)), 0),
-        totalUSD: itemsToBuy.reduce((sum: number, item: any) => sum + (item.manualQty * (item.manualCurrency === 'USD' ? item.manualPrice : 0)), 0)
-      };
-    }
-
-    if (!explosionSummary) return null;
-
-    const itemsToBuy = explosionSummary.toBuySuggested.map(item => {
-      const manualQty = manualPurchaseQtys[item.id] ?? item.suggestedToBuy;
-      const manualCurrency = manualPurchaseCurrencies[item.id] ?? (item.costCurrency as 'ARS' | 'USD' || 'ARS');
-      const baseCost = manualCurrency === 'USD' ? item.costUSD : item.costARS;
-      const manualPrice = manualPurchasePrices[item.id] ?? baseCost;
-      const futureStock = item.available + manualQty - item.required;
-      const isCritical = futureStock < item.minStock;
-      const isInsufficient = futureStock < 0;
-      const currentSupplier = manualSuppliers[item.id] || (item.supplier || "Sin Proveedor");
-
-      return {
-        ...item,
+        id: item.productId,
+        name: item.productName,
+        available: prod?.stock || 0,
+        required: 0,
         manualQty,
         manualPrice,
         manualCurrency,
-        futureStock,
-        isCritical,
-        isInsufficient,
-        supplier: currentSupplier
+        supplier: currentSup,
+        received: item.received || false
       };
-    });
+    }).filter((i: any) => !i.received);
 
     return {
       items: itemsToBuy,
-      totalARS: itemsToBuy.reduce((sum, item) => sum + (item.manualQty * (item.manualCurrency === 'ARS' ? item.manualPrice : 0)), 0),
-      totalUSD: itemsToBuy.reduce((sum, item) => sum + (item.manualQty * (item.manualCurrency === 'USD' ? item.manualPrice : 0)), 0)
+      totalARS: itemsToBuy.reduce((sum: number, item: any) => sum + (item.manualQty * (item.manualCurrency === 'ARS' ? item.manualPrice : 0)), 0),
+      totalUSD: itemsToBuy.reduce((sum: number, item: any) => sum + (item.manualQty * (item.manualCurrency === 'USD' ? item.manualPrice : 0)), 0)
     };
-  }, [explosionSummary, manualPurchaseQtys, manualPurchasePrices, manualPurchaseCurrencies, manualSuppliers, items, purchaseOrderToView]);
+  }, [manualPurchaseQtys, manualPurchasePrices, manualPurchaseCurrencies, manualSuppliers, items, purchaseOrderToView]);
 
   const currentEditingCosts = useMemo(() => {
     if (!items || !formData.isCompuesto) return { ars: 0, usd: 0 };
@@ -706,7 +636,10 @@ export default function CatalogPage() {
   const handleCreateOrder = () => {
     if (!selectedForAssembly) return;
     const id = Math.random().toString(36).substring(2, 11);
-    const status = explosionSummary?.all.some(f => (f.available - f.required) < 0) ? 'pending_purchase' : 'ready';
+    
+    // El estado depende de si hay faltantes en la explosión
+    const anyMissing = explosionSummary?.all.some(f => (f.available - f.required) < 0);
+    const status = anyMissing ? 'pending_purchase' : 'ready';
     
     const newOrder = {
       id,
@@ -714,19 +647,30 @@ export default function CatalogPage() {
       productName: selectedForAssembly.name,
       quantity: assemblyQty,
       status,
-      createdAt: new Date().toISOString(),
-      purchaseQtys: manualPurchaseQtys,
-      purchasePrices: manualPurchasePrices,
-      purchaseCurrencies: manualPurchaseCurrencies,
-      purchaseSuppliers: manualSuppliers,
-      supplierStatuses: supplierStatuses
+      createdAt: new Date().toISOString()
     };
 
     setDocumentNonBlocking(doc(db, 'production_orders', id), newOrder, { merge: true });
     setIsAssemblyOpen(false);
-    setManualSuppliers({});
     setActiveTab("orders");
-    toast({ title: "Orden de producción creada", description: `Estado: ${status === 'ready' ? 'Lista para armar' : 'Pendiente de compra'}` });
+    toast({ title: "Orden de producción creada", description: `Estado inicial: ${status === 'ready' ? 'Listo para armar' : 'Pendiente de compra'}` });
+  }
+
+  const handleGeneratePOFromProduction = () => {
+    if (!orderToView || !explosionSummary) return;
+    const missingItems = explosionSummary.all.filter(f => (f.required - f.available) > 0);
+    if (missingItems.length === 0) {
+      toast({ title: "Sin faltantes", description: "Todos los materiales están disponibles." });
+      return;
+    }
+
+    setNewPOTitle(`Faltantes para: ${orderToView.productName} (Plan #${orderToView.id.slice(0, 4)})`);
+    setNewPurchaseOrderItems(missingItems.map(m => ({
+      ...m,
+      qtyToAdd: Math.max(m.missing, m.suggestedToBuy)
+    })));
+    setOrderToView(null);
+    setIsNewPurchaseOrderOpen(true);
   }
 
   const handleCreatePurchaseOrder = () => {
@@ -755,36 +699,11 @@ export default function CatalogPage() {
     setNewPurchaseOrderItems([]);
     setNewPOTitle("");
     setActiveTab("purchases");
-    toast({ title: "Orden de compra creada", description: "Ahora puedes gestionar la recepción por proveedor." });
+    toast({ title: "Orden de compra creada", description: "Los ítems ingresarán al stock cuando confirmes la recepción por proveedor." });
   }
 
   const handleUpdateOrderPlan = () => {
-    if (orderToView) {
-      const status = explosionSummary?.all.some(f => {
-        const stockAfterEntry = f.id in manualPurchaseQtys ? (f.available + (manualPurchaseQtys[f.id] || 0)) : f.available;
-        return (stockAfterEntry - f.required) < 0;
-      }) ? 'pending_purchase' : 'ready';
-      
-      updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
-        quantity: orderToView.quantity,
-        purchaseQtys: manualPurchaseQtys,
-        purchasePrices: manualPurchasePrices,
-        purchaseCurrencies: manualPurchaseCurrencies,
-        purchaseSuppliers: manualSuppliers,
-        supplierStatuses: supplierStatuses,
-        status
-      });
-      setInitialPlanData({ 
-        qtys: JSON.parse(JSON.stringify(manualPurchaseQtys)), 
-        prices: JSON.parse(JSON.stringify(manualPurchasePrices)),
-        currencies: JSON.parse(JSON.stringify(manualPurchaseCurrencies)),
-        sups: JSON.parse(JSON.stringify(manualSuppliers)),
-        statuses: JSON.parse(JSON.stringify(supplierStatuses)),
-        qty: orderToView.quantity,
-        itemsCount: 0
-      });
-      toast({ title: "Planificación guardada", description: "Se han actualizado los cambios en la orden." });
-    } else if (purchaseOrderToView) {
+    if (purchaseOrderToView) {
       const updatedItems = purchaseOrderToView.items.map((item: any) => {
         return {
           ...item,
@@ -862,11 +781,8 @@ export default function CatalogPage() {
   }
 
   const handleReceiveMaterials = (supplierName: string) => {
-    const isPO = !!purchaseOrderToView;
-    const targetOrder = purchaseOrderToView || orderToView;
-    if (!targetOrder || !purchaseCalculations) return;
+    if (!purchaseOrderToView || !purchaseCalculations) return;
 
-    const newPurchaseQtys = { ...manualPurchaseQtys };
     const itemsToProcess = purchaseCalculations.items.filter(i => (i.supplier || "Sin Proveedor") === supplierName);
     
     itemsToProcess.forEach(item => {
@@ -882,7 +798,7 @@ export default function CatalogPage() {
           price: item.manualPrice,
           currency: manualCurrency,
           date: new Date().toISOString(),
-          orderId: targetOrder.id,
+          orderId: purchaseOrderToView.id,
           exchangeRate: currentRate,
           rateType: rateType
         };
@@ -901,45 +817,27 @@ export default function CatalogPage() {
             costCurrency: manualCurrency
           });
         }
-        
-        newPurchaseQtys[item.id] = 0;
       }
     });
 
-    if (isPO) {
-      const updatedItems = targetOrder.items.map((item: any) => {
-        if (itemsToProcess.some(i => i.id === item.productId)) {
-          return { ...item, received: true };
-        }
-        return item;
-      });
-      const allReceived = updatedItems.every((i: any) => i.received);
-      updateDocumentNonBlocking(doc(db, 'purchase_orders', targetOrder.id), {
-        items: updatedItems,
-        status: allReceived ? 'completed' : 'pending'
-      });
-      setPurchaseOrderToView({ ...targetOrder, items: updatedItems, status: allReceived ? 'completed' : 'pending' });
-    } else {
-      setManualPurchaseQtys(newPurchaseQtys);
-      const status = explosionSummary?.all.some(f => {
-        const stockAfterEntry = f.id in newPurchaseQtys ? (f.available + (newPurchaseQtys[f.id] || 0)) : f.available;
-        return (stockAfterEntry - f.required) < 0;
-      }) ? 'pending_purchase' : 'ready';
-      
-      updateDocumentNonBlocking(doc(db, 'production_orders', targetOrder.id), {
-        purchaseQtys: newPurchaseQtys,
-        status
-      });
-      setInitialPlanData(prev => ({ ...prev, qtys: JSON.parse(JSON.stringify(newPurchaseQtys)) }));
-    }
+    const updatedItems = purchaseOrderToView.items.map((item: any) => {
+      if (itemsToProcess.some(i => i.id === item.productId)) {
+        return { ...item, received: true };
+      }
+      return item;
+    });
+    const allReceived = updatedItems.every((i: any) => i.received);
+    updateDocumentNonBlocking(doc(db, 'purchase_orders', purchaseOrderToView.id), {
+      items: updatedItems,
+      status: allReceived ? 'completed' : 'pending'
+    });
+    setPurchaseOrderToView({ ...purchaseOrderToView, items: updatedItems, status: allReceived ? 'completed' : 'pending' });
 
-    toast({ title: `Materiales de ${supplierName} ingresados`, description: "Se actualizó el stock, los costos y el historial." });
+    toast({ title: `Materiales de ${supplierName} ingresados`, description: "Se actualizó el stock global." });
   }
 
   const handleToggleSupplierStatus = (supplierName: string) => {
-    const isPO = !!purchaseOrderToView;
-    const targetOrder = purchaseOrderToView || orderToView;
-    if (!targetOrder) return;
+    if (!purchaseOrderToView) return;
 
     const current = supplierStatuses[supplierName] || 'pending';
     const next = current === 'pending' ? 'ordered' : 'pending';
@@ -948,19 +846,14 @@ export default function CatalogPage() {
       const itemsInSupplier = purchaseCalculations?.items.filter(i => (i.supplier || "Sin Proveedor") === supplierName) || [];
       const hasZeroPrice = itemsInSupplier.some(i => i.manualPrice <= 0);
       if (hasZeroPrice) {
-        toast({ 
-          title: "Precios incompletos", 
-          description: "No puedes marcar como pedido si hay artículos con precio $0.", 
-          variant: "destructive" 
-        });
+        toast({ title: "Precios incompletos", description: "No puedes marcar como pedido si hay artículos con precio $0.", variant: "destructive" });
         return;
       }
     }
 
     const newStatuses = { ...supplierStatuses, [supplierName]: next };
     setSupplierStatuses(newStatuses);
-    const collectionName = isPO ? 'purchase_orders' : 'production_orders';
-    updateDocumentNonBlocking(doc(db, collectionName, targetOrder.id), {
+    updateDocumentNonBlocking(doc(db, 'purchase_orders', purchaseOrderToView.id), {
       supplierStatuses: newStatuses
     });
     
@@ -997,23 +890,14 @@ export default function CatalogPage() {
     updateDocumentNonBlocking(doc(db, 'products_services', productId), {
       supplier: cleanSupplier
     });
-    if (orderToView && orderToView.status !== 'completed') {
-      const currentManualSups = { ...manualSuppliers, [productId]: newSupplier };
-      updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
-        purchaseSuppliers: currentManualSups
-      });
-    }
     if (purchaseOrderToView && purchaseOrderToView.status !== 'completed') {
       const updatedItems = purchaseOrderToView.items.map((i: any) => 
         i.productId === productId ? { ...i, supplier: newSupplier } : i
       );
       setPurchaseOrderToView({ ...purchaseOrderToView, items: updatedItems });
     }
-    toast({ 
-      title: "Proveedor asignado permanentemente", 
-      description: `El ítem ahora tiene a ${newSupplier} como su proveedor oficial.` 
-    });
-  }, [db, orderToView, purchaseOrderToView, manualSuppliers, toast]);
+    toast({ title: "Proveedor asignado permanentemente", description: `El ítem ahora tiene a ${newSupplier} como su proveedor oficial.` });
+  }, [db, purchaseOrderToView, manualSuppliers, toast]);
 
   const handleAssembleFinal = () => {
     if (!orderToView || !items) return;
@@ -1175,9 +1059,7 @@ export default function CatalogPage() {
   const handleCopyShoppingList = (supplierFilter: string) => {
     if (!purchaseCalculations) return;
     const dateStr = new Date().toLocaleDateString('es-AR');
-    const targetOrder = purchaseOrderToView || orderToView || { description: selectedForAssembly?.name, quantity: assemblyQty };
     let text = `*LISTA DE COMPRAS - DOSIMAT PRO*\n`;
-    text += `Origen: ${targetOrder.productName || targetOrder.description}\n`;
     text += `PROVEEDOR: ${supplierFilter.toUpperCase()}\n`;
     const supObj = suppliers?.find(s => s.name === supplierFilter);
     if (supObj) {
@@ -1448,7 +1330,7 @@ export default function CatalogPage() {
                         <TableHead className="text-center font-black text-[9px] uppercase w-48">Precio Compra</TableHead>
                         <TableHead className="text-center font-black text-[9px] uppercase w-40">Proveedor</TableHead>
                         <TableHead className="text-right font-black text-[9px] uppercase w-28">Subtotal</TableHead>
-                        {!!purchaseOrderToView && <TableHead className="w-10"></TableHead>}
+                        <TableHead className="w-10"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1513,19 +1395,17 @@ export default function CatalogPage() {
                             <TableCell className="text-right py-1">
                               <p className="text-[10px] font-bold">{currentCurrency === 'USD' ? 'u$s' : '$'} {( (manualPurchaseQtys[f.id] ?? 0) * (manualPurchasePrices[f.id] ?? 0)).toLocaleString('es-AR')}</p>
                             </TableCell>
-                            {!!purchaseOrderToView && (
-                              <TableCell className="py-1">
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-7 w-7 text-destructive" 
-                                  disabled={isOrdered}
-                                  onClick={() => handleRemoveItemFromPurchaseOrder(f.id)}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </TableCell>
-                            )}
+                            <TableCell className="py-1">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-7 w-7 text-destructive" 
+                                disabled={isOrdered}
+                                onClick={() => handleRemoveItemFromPurchaseOrder(f.id)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
                           </TableRow>
                         );
                       })}
@@ -1640,7 +1520,7 @@ export default function CatalogPage() {
                                         <>
                                           <DropdownMenuItem onClick={() => handleOpenDialog(item)}><Edit className="mr-2 h-4 w-4" /> Editar parámetros</DropdownMenuItem>
                                           {item.isCompuesto && (
-                                            <DropdownMenuItem className="text-amber-600 font-bold" onClick={() => { setSelectedForAssembly(item); setAssemblyQty(1); setManualSuppliers({}); setIsAssemblyOpen(true); }}><Hammer className="mr-2 h-4 w-4" /> Orden de Armado</DropdownMenuItem>
+                                            <DropdownMenuItem className="text-amber-600 font-bold" onClick={() => { setSelectedForAssembly(item); setAssemblyQty(1); setIsAssemblyOpen(true); }}><Hammer className="mr-2 h-4 w-4" /> Orden de Armado</DropdownMenuItem>
                                           )}
                                           <DropdownMenuItem className="text-destructive" onClick={() => setItemToDelete(item)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem>
                                         </>
@@ -1820,23 +1700,28 @@ export default function CatalogPage() {
           {purchaseOrderToView?.status !== 'completed' && (
             <div className="px-6 py-3 bg-muted/10 border-b flex flex-col md:flex-row gap-4 items-end">
               <div className="space-y-1 flex-1">
-                <Label className="text-[10px] font-black uppercase text-muted-foreground">Agregar más productos a la orden</Label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <Select value={newPOCatFilter} onValueChange={setNewPOCatFilter}>
-                    <SelectTrigger className="bg-white h-9 text-xs"><SelectValue placeholder="Filtrar por categoría..." /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todas las Categorías</SelectItem>
-                      {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Select onValueChange={handleAddItemToPurchaseOrder}>
-                    <SelectTrigger className="bg-white h-9 text-xs"><SelectValue placeholder="Buscar ítem..." /></SelectTrigger>
-                    <SelectContent className="max-h-60">
-                      {items?.filter(i => !i.isService && (newPOCatFilter === 'all' || i.categoryId === newPOCatFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(i => (
-                        <SelectItem key={i.id} value={i.id}>{i.name} (Stock: {i.stock || 0})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground">Filtrar Categoría</Label>
+                    <Select value={newPOCatFilter} onValueChange={setNewPOCatFilter}>
+                      <SelectTrigger className="bg-white h-9 text-xs"><SelectValue placeholder="Ver todas..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas las Categorías</SelectItem>
+                        {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground">Añadir más productos</Label>
+                    <Select onValueChange={handleAddItemToPurchaseOrder}>
+                      <SelectTrigger className="bg-white h-9 text-xs"><SelectValue placeholder="Buscar ítem..." /></SelectTrigger>
+                      <SelectContent className="max-h-60">
+                        {items?.filter(i => !i.isService && (newPOCatFilter === 'all' || i.categoryId === newPOCatFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(i => (
+                          <SelectItem key={i.id} value={i.id}>{i.name} (Stock: {i.stock || 0})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1997,51 +1882,107 @@ export default function CatalogPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Production Order View - Simplified to Plan only */}
       <Dialog open={!!orderToView} onOpenChange={handleCloseOrderView}>
         <DialogContent className="max-w-6xl h-[95vh] flex flex-col p-0 w-[95vw]">
-          <DialogHeader className="p-3 pb-1 shrink-0">
-            <div className="flex flex-col md:flex-row justify-between items-start pr-8 gap-2">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2"><Factory className="h-4 w-4 text-primary" /><DialogTitle className="text-base font-black">Orden #{orderToView?.id.toUpperCase().slice(0, 6)}</DialogTitle></div>
+          <DialogHeader className="p-4 border-b shrink-0">
+            <div className="flex flex-col md:flex-row justify-between items-start pr-8 gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2"><Factory className="h-5 w-5 text-primary" /><DialogTitle className="text-xl font-black">Orden de Armado #{orderToView?.id.toUpperCase().slice(0, 6)}</DialogTitle></div>
                 <div className="flex items-center gap-3">
-                  <DialogDescription className="text-[11px]">Fabricar <b>{orderToView?.productName}</b></DialogDescription>
+                  <DialogDescription className="text-base">Fabricar <b>{orderToView?.productName}</b></DialogDescription>
                   {orderToView?.status !== 'completed' && (
-                    <div className="flex items-center gap-1.5 bg-primary/5 px-1.5 py-0.5 rounded-lg border">
-                      <Button variant="ghost" size="icon" className="h-5 w-5 text-primary" onClick={() => { const newQty = Math.max(1, orderToView.quantity - 1); setOrderToView({...orderToView, quantity: newQty}); }}><Minus className="h-3 w-3" /></Button>
-                      <span className="text-xs font-black text-primary tabular-nums">{orderToView?.quantity}</span>
-                      <Button variant="ghost" size="icon" className="h-5 w-5 text-primary" onClick={() => { const newQty = orderToView.quantity + 1; setOrderToView({...orderToView, quantity: newQty}); }}><Plus className="h-3 w-3" /></Button>
+                    <div className="flex items-center gap-2 bg-primary/5 px-2 py-1 rounded-xl border border-primary/20">
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-primary" onClick={() => { const newQty = Math.max(1, orderToView.quantity - 1); updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), { quantity: newQty }); }}><Minus className="h-4 w-4" /></Button>
+                      <span className="text-sm font-black text-primary tabular-nums">{orderToView?.quantity}</span>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-primary" onClick={() => { const newQty = orderToView.quantity + 1; updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), { quantity: newQty }); }}><Plus className="h-4 w-4" /></Button>
                     </div>
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" className="h-7 gap-1.5 font-bold text-[9px]" onClick={() => handlePrintProductionOrder(orderToView)}>
-                  <Printer className="h-3 w-3" /> IMPRIMIR PLAN
+              <div className="flex items-center gap-3">
+                <Button variant="outline" size="sm" className="h-9 gap-2 font-bold text-xs" onClick={() => handlePrintProductionOrder(orderToView)}>
+                  <Printer className="h-4 w-4" /> IMPRIMIR PLAN
                 </Button>
-                <Badge className={cn("font-black uppercase text-[8px] px-1.5 py-0.5", { draft: "bg-slate-100 text-slate-600", pending_purchase: "bg-amber-100 text-amber-700", ready: "bg-blue-100 text-blue-700", completed: "bg-emerald-100 text-emerald-700" }[orderToView?.status as string])}>{orderToView?.status === 'pending_purchase' ? 'FALTAN MATERIALES' : orderToView?.status === 'ready' ? 'LISTO' : orderToView?.status}</Badge>
-                {orderToView?.status !== 'completed' && (
-                  <Button variant={hasUnsavedChanges ? "default" : "outline"} size="sm" className={cn("h-6 gap-1 font-bold text-[9px] px-2", hasUnsavedChanges && "bg-primary animate-pulse")} onClick={handleUpdateOrderPlan}>
-                    <Save className="h-3 w-3" /> GUARDAR {hasUnsavedChanges && "*"}
-                  </Button>
-                )}
+                <Badge className={cn("font-black uppercase text-[10px] px-3 py-1", { draft: "bg-slate-100 text-slate-600", pending_purchase: "bg-amber-100 text-amber-700", ready: "bg-blue-100 text-blue-700", completed: "bg-emerald-100 text-emerald-700" }[orderToView?.status as string])}>
+                  {orderToView?.status === 'pending_purchase' ? 'FALTAN MATERIALES' : orderToView?.status === 'ready' ? 'LISTO PARA ARMAR' : orderToView?.status}
+                </Badge>
               </div>
             </div>
           </DialogHeader>
-          <div className="flex-1 min-h-0 overflow-y-auto p-3 pt-1 space-y-4">
-            <GroupedPurchaseList />
+          
+          <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
+            <div className="space-y-4">
+              <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                <Layers className="h-4 w-4" /> Necesidades de Insumos (Explosión)
+              </h3>
+              
+              <div className="border rounded-2xl bg-white shadow-md overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="text-[10px] font-black uppercase">Componente</TableHead>
+                      <TableHead className="text-center font-black text-[10px] uppercase">Necesario</TableHead>
+                      <TableHead className="text-center font-black text-[10px] uppercase">En Stock</TableHead>
+                      <TableHead className="text-center font-black text-[10px] uppercase">Faltante</TableHead>
+                      <TableHead className="text-[10px] font-black uppercase">Proveedor Sugerido</TableHead>
+                      <TableHead className="text-center font-black text-[10px] uppercase w-20">Estado</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {explosionSummary?.all.map(f => {
+                      const deficit = f.required - f.available;
+                      const hasMissing = deficit > 0;
+                      return (
+                        <TableRow key={f.id} className="h-14">
+                          <TableCell className="py-2">
+                            <p className="font-bold text-sm leading-tight">{f.name}</p>
+                            <p className="text-[9px] text-muted-foreground uppercase">{f.isCompuesto ? 'Parte Compuesta' : 'Insumo Directo'}</p>
+                          </TableCell>
+                          <TableCell className="text-center font-black text-slate-800">{f.required}</TableCell>
+                          <TableCell className="text-center font-bold text-slate-600">{f.available}</TableCell>
+                          <TableCell className="text-center">
+                            <span className={cn("font-black text-sm", hasMissing ? "text-rose-600" : "text-emerald-600")}>
+                              {hasMissing ? deficit : '-'}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-xs font-bold text-slate-500 uppercase">{f.supplier}</TableCell>
+                          <TableCell className="text-center">
+                            {hasMissing ? (
+                              <div className="flex justify-center"><AlertTriangle className="h-5 w-5 text-amber-500" /></div>
+                            ) : (
+                              <div className="flex justify-center"><CheckCircle2 className="h-5 w-5 text-emerald-500" /></div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+
+            {orderToView?.status === 'pending_purchase' && (
+              <Card className="bg-amber-50 border-amber-200 border-dashed p-6">
+                <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                  <div className="space-y-1">
+                    <h4 className="text-lg font-black text-amber-800">Faltan Materiales para Fabricar</h4>
+                    <p className="text-sm text-amber-700">Se han detectado {explosionSummary?.all.filter(f => (f.required - f.available) > 0).length} ítems sin stock suficiente.</p>
+                  </div>
+                  <Button onClick={handleGeneratePOFromProduction} className="bg-amber-600 hover:bg-amber-700 font-black h-12 px-8 shadow-lg shadow-amber-200 gap-2">
+                    <ShoppingCart className="h-5 w-5" /> GENERAR ORDEN DE COMPRA POR FALTANTES
+                  </Button>
+                </div>
+              </Card>
+            )}
           </div>
-          <DialogFooter className="p-3 border-t bg-slate-50 shrink-0">
-            <div className="flex flex-col md:flex-row items-center justify-between w-full gap-2">
-              <div className="flex gap-3">
-                <div className="text-left"><p className="text-[7px] font-black uppercase text-slate-400">Total ARS</p><p className="text-base font-black text-blue-700">${purchaseCalculations?.totalARS.toLocaleString('es-AR')}</p></div>
-                <div className="text-left border-l pl-3 border-slate-200"><p className="text-[7px] font-black uppercase text-slate-400">Total USD</p><p className="text-base font-black text-emerald-600">u$s {purchaseCalculations?.totalUSD.toLocaleString('es-AR')}</p></div>
-              </div>
-              <div className="flex gap-2 w-full md:w-auto">
-                <Button variant="ghost" onClick={handleCloseOrderView} className="font-bold text-[10px] h-8 flex-1 md:flex-none">Cerrar</Button>
-                {orderToView?.status === 'ready' && (
-                  <Button onClick={handleAssembleFinal} className="bg-blue-600 hover:bg-blue-700 px-4 font-black shadow-lg h-8 flex-1 md:flex-none text-[10px]"><Hammer className="mr-1.5 h-3 w-3" /> FINALIZAR ARMADO</Button>
-                )}
-              </div>
+
+          <DialogFooter className="p-4 border-t bg-slate-50 shrink-0">
+            <div className="flex justify-end gap-3 w-full">
+              <Button variant="ghost" onClick={handleCloseOrderView} className="font-bold">Cerrar</Button>
+              {orderToView?.status === 'ready' && (
+                <Button onClick={handleAssembleFinal} className="bg-blue-600 hover:bg-blue-700 px-8 font-black shadow-lg h-12 uppercase tracking-widest"><Hammer className="mr-2 h-5 w-5" /> FINALIZAR ARMADO</Button>
+              )}
             </div>
           </DialogFooter>
         </DialogContent>
@@ -2165,6 +2106,35 @@ export default function CatalogPage() {
       <AlertDialog open={!!orderToDelete} onOpenChange={(o) => { if(!o) setOrderToDelete(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Eliminar orden de producción?</AlertDialogTitle><AlertDialogDescription>Esta acción borrará la planificación de esta orden. No afectará el stock actual.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteOrder} className="bg-destructive text-white">Eliminar Orden</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
       
       <AlertDialog open={!!purchaseOrderToDelete} onOpenChange={(o) => { if(!o) setPurchaseOrderToDelete(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Eliminar orden de reposición?</AlertDialogTitle><AlertDialogDescription>Esta acción borrará la lista de compra manual.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={confirmDeletePurchaseOrder} className="bg-destructive text-white">Eliminar Orden</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+
+      <AlertDialog open={!!orderToFinalize} onOpenChange={(o) => !o && setOrderToFinalize(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Confirmar finalización de armado?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se descontarán los insumos inteligentemente del inventario y se sumarán {orderToFinalize?.quantity} unidades a "{orderToFinalize?.productName}".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmFinalize} className="bg-blue-600">Confirmar y Descontar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Exit confirmation alert for unsaved changes */}
+      <AlertDialog open={isExitAlertOpen} onOpenChange={setIsExitAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Cerrar sin guardar?</AlertDialogTitle>
+            <AlertDialogDescription>Tienes cambios en la planificación que no han sido guardados. Si cierras ahora, se perderán.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setIsExitAlertOpen(false)}>Seguir Editando</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setIsExitAlertOpen(false); setOrderToView(null); setPurchaseOrderToView(null); }} className="bg-destructive">Cerrar de todas formas</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <MobileNav />
     </div>
