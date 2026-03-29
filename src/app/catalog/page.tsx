@@ -60,7 +60,8 @@ import {
   Unlock,
   ArrowRightLeft,
   Droplet,
-  ChevronLeft
+  ChevronLeft,
+  ExternalLink
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -647,7 +648,8 @@ export default function CatalogPage() {
       productName: selectedForAssembly.name,
       quantity: assemblyQty,
       status,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      purchaseOrderId: null
     };
 
     setDocumentNonBlocking(doc(db, 'production_orders', id), newOrder, { merge: true });
@@ -658,48 +660,98 @@ export default function CatalogPage() {
 
   const handleGeneratePOFromProduction = () => {
     if (!orderToView || !explosionSummary) return;
+    
     const missingItems = explosionSummary.all.filter(f => (f.required - f.available) > 0);
-    if (missingItems.length === 0) {
-      toast({ title: "Sin faltantes", description: "Todos los materiales están disponibles." });
+    
+    if (missingItems.length === 0 && !orderToView.purchaseOrderId) {
+      toast({ title: "Sin faltantes", description: "No hay materiales faltantes para este armado." });
       return;
     }
 
-    setNewPOTitle(`Faltantes para: ${orderToView.productName} (Plan #${orderToView.id.slice(0, 4)})`);
-    setNewPurchaseOrderItems(missingItems.map(m => ({
-      ...m,
-      qtyToAdd: Math.max(m.missing, m.suggestedToBuy)
-    })));
-    setOrderToView(null);
-    setIsNewPurchaseOrderOpen(true);
-  }
+    const linkedPOId = orderToView.purchaseOrderId;
+    const existingPO = purchaseOrders?.find(po => po.id === linkedPOId);
 
-  const handleCreatePurchaseOrder = () => {
-    if (newPOItems.length === 0) return;
-    const id = Math.random().toString(36).substring(2, 11);
-    
-    const newPO = {
-      id,
-      description: newPOTitle || "Orden de Reposición Manual",
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-      items: newPOItems.map(item => ({
-        productId: item.id,
-        productName: item.name,
-        quantity: item.qtyToAdd || 1,
-        price: item.costCurrency === 'USD' ? item.costUSD : item.costARS,
-        currency: item.costCurrency || 'ARS',
-        supplier: item.supplier || "Sin Proveedor",
+    if (existingPO && existingPO.status !== 'completed') {
+      // Lógica de Sincronización (Delta)
+      const updatedItems = [...existingPO.items];
+      let itemsAdded = 0;
+
+      missingItems.forEach(missing => {
+        const totalRequired = missing.required;
+        const currentInStock = missing.available;
+        const totalAlreadyInPO = existingPO.items
+          .filter((i: any) => i.productId === missing.id)
+          .reduce((sum: number, i: any) => sum + i.quantity, 0);
+        
+        const netMissing = totalRequired - (currentInStock + totalAlreadyInPO);
+        
+        if (netMissing > 0) {
+          itemsAdded++;
+          // Si hay una linea pendiente (no pedida) del mismo proveedor, sumamos ahí
+          const pendingLineIdx = updatedItems.findIndex((i: any) => 
+            i.productId === missing.id && 
+            (existingPO.supplierStatuses?.[i.supplier || "Sin Proveedor"] !== 'ordered') &&
+            !i.received
+          );
+
+          if (pendingLineIdx > -1) {
+            updatedItems[pendingLineIdx].quantity += netMissing;
+          } else {
+            // Creamos línea nueva (porque ya se pidió o es proveedor distinto)
+            updatedItems.push({
+              productId: missing.id,
+              productName: missing.name,
+              quantity: netMissing,
+              price: missing.costCurrency === 'USD' ? missing.costUSD : missing.costARS,
+              currency: missing.costCurrency || 'ARS',
+              supplier: missing.supplier || "Sin Proveedor",
+              received: false
+            });
+          }
+        }
+      });
+
+      if (itemsAdded > 0) {
+        updateDocumentNonBlocking(doc(db, 'purchase_orders', existingPO.id), { items: updatedItems });
+        toast({ title: "Orden de Compra sincronizada", description: `Se agregaron ${itemsAdded} ajustes de cantidad.` });
+      } else {
+        toast({ title: "Orden al día", description: "La orden de compra vinculada ya cubre los materiales necesarios." });
+      }
+      
+      setPurchaseOrderToView(existingPO);
+      setOrderToView(null);
+      setActiveTab("purchases");
+    } else {
+      // Lógica de Creación Nueva
+      const newPOId = Math.random().toString(36).substring(2, 11);
+      const newPOItems = missingItems.map(m => ({
+        productId: m.id,
+        productName: m.name,
+        quantity: Math.max(m.missing, m.suggestedToBuy),
+        price: m.costCurrency === 'USD' ? m.costUSD : m.costARS,
+        currency: m.costCurrency || 'ARS',
+        supplier: m.supplier || "Sin Proveedor",
         received: false
-      })),
-      supplierStatuses: {}
-    };
+      }));
 
-    setDocumentNonBlocking(doc(db, 'purchase_orders', id), newPO, { merge: true });
-    setIsNewPurchaseOrderOpen(false);
-    setNewPurchaseOrderItems([]);
-    setNewPOTitle("");
-    setActiveTab("purchases");
-    toast({ title: "Orden de compra creada", description: "Los ítems ingresarán al stock cuando confirmes la recepción por proveedor." });
+      const newPO = {
+        id: newPOId,
+        description: `Faltantes: ${orderToView.productName} (#${orderToView.id.slice(0, 4)})`,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        items: newPOItems,
+        supplierStatuses: {},
+        productionOrderId: orderToView.id
+      };
+
+      setDocumentNonBlocking(doc(db, 'purchase_orders', newPOId), newPO, { merge: true });
+      updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), { purchaseOrderId: newPOId });
+      
+      setPurchaseOrderToView(newPO);
+      setOrderToView(null);
+      setActiveTab("purchases");
+      toast({ title: "Orden de Compra generada", description: "Vinculada a este plan de producción." });
+    }
   }
 
   const handleUpdateOrderPlan = () => {
@@ -1188,7 +1240,17 @@ export default function CatalogPage() {
                     <CardTitle className="text-lg mt-2 font-bold leading-tight">{order.productName}</CardTitle>
                     <CardDescription className="text-[10px] font-bold uppercase tracking-tighter">Creada el {new Date(order.createdAt).toLocaleDateString('es-AR')}</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4"><div className="bg-white/50 border rounded-lg p-3 flex items-center justify-between shadow-inner"><span className="text-[10px] font-black text-muted-foreground uppercase">Unidades a Fabricar</span><span className="text-2xl font-black text-primary">{order.quantity}</span></div></CardContent>
+                  <CardContent className="space-y-4">
+                    <div className="bg-white/50 border rounded-lg p-3 flex items-center justify-between shadow-inner">
+                      <span className="text-[10px] font-black text-muted-foreground uppercase">Unidades a Fabricar</span>
+                      <span className="text-2xl font-black text-primary">{order.quantity}</span>
+                    </div>
+                    {order.purchaseOrderId && (
+                      <div className="flex items-center gap-2 text-[9px] font-bold text-emerald-700 bg-emerald-50 p-1.5 rounded border border-emerald-100">
+                        <ShoppingCart className="h-3 w-3" /> COMPRA ASOCIADA: #{order.purchaseOrderId.slice(0,4).toUpperCase()}
+                      </div>
+                    )}
+                  </CardContent>
                   <CardFooter className="pt-0 border-t bg-muted/5 flex justify-between py-3"><Button variant="ghost" size="sm" className="h-8 text-[10px] font-bold uppercase p-0 px-2">VER DETALLE <ChevronRight className="h-3 w-3 ml-1" /></Button>{order.status === 'ready' && <Badge className="bg-blue-600 animate-pulse text-[8px] font-black">PRODUCCIÓN HABILITADA</Badge>}</CardFooter>
                 </Card>
               );
@@ -1235,11 +1297,16 @@ export default function CatalogPage() {
                     <CardTitle className="text-lg mt-2 font-bold leading-tight">{po.description || "Orden de Reposición"}</CardTitle>
                     <CardDescription className="text-[10px] font-bold uppercase">Creada el {new Date(po.createdAt).toLocaleDateString('es-AR')}</CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="space-y-3">
                     <div className="bg-emerald-50/50 border border-emerald-100 rounded-lg p-3 flex items-center justify-between">
                       <span className="text-[10px] font-black text-muted-foreground uppercase">Ítems Totales</span>
                       <span className="text-2xl font-black text-emerald-700">{po.items.length}</span>
                     </div>
+                    {po.productionOrderId && (
+                      <div className="flex items-center gap-2 text-[9px] font-bold text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-100">
+                        <Hammer className="h-3 w-3" /> ARMADO ASOCIADO: #{po.productionOrderId.slice(0,4).toUpperCase()}
+                      </div>
+                    )}
                   </CardContent>
                   <CardFooter className="pt-0 border-t bg-muted/5 flex justify-between py-3">
                     <Button variant="ghost" size="sm" className="h-8 text-[10px] font-bold uppercase p-0 px-2">GESTIONAR RECEPCIÓN <ChevronRight className="h-3 w-3 ml-1" /></Button>
@@ -1985,9 +2052,16 @@ export default function CatalogPage() {
           
           <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
             <div className="space-y-4">
-              <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                <Layers className="h-4 w-4" /> Necesidades de Insumos (Explosión)
-              </h3>
+              <div className="flex justify-between items-center">
+                <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                  <Layers className="h-4 w-4" /> Necesidades de Insumos (Explosión)
+                </h3>
+                {orderToView?.purchaseOrderId && (
+                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 font-black text-[9px] gap-1.5 px-3">
+                    <Check className="h-3 w-3" /> COMPRA VINCULADA: #{orderToView.purchaseOrderId.slice(0,4).toUpperCase()}
+                  </Badge>
+                )}
+              </div>
               
               <div className="border rounded-2xl bg-white shadow-md overflow-hidden">
                 <Table>
@@ -2038,11 +2112,18 @@ export default function CatalogPage() {
               <Card className="bg-amber-50 border-amber-200 border-dashed p-6">
                 <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                   <div className="space-y-1">
-                    <h4 className="text-lg font-black text-amber-800">Faltan Materiales para Fabricar</h4>
-                    <p className="text-sm text-amber-700">Se han detectado {explosionSummary?.all.filter(f => (f.required - f.available) > 0).length} ítems sin stock suficiente.</p>
+                    <h4 className="text-lg font-black text-amber-800">
+                      {orderToView.purchaseOrderId ? 'Sincronizar Pedido de Compra' : 'Faltan Materiales para Fabricar'}
+                    </h4>
+                    <p className="text-sm text-amber-700">
+                      {orderToView.purchaseOrderId 
+                        ? 'Ya existe una compra vinculada. Haz clic para agregar los faltantes adicionales según la nueva cantidad.'
+                        : `Se han detectado ${explosionSummary?.all.filter(f => (f.required - f.available) > 0).length} ítems sin stock suficiente.`}
+                    </p>
                   </div>
                   <Button onClick={handleGeneratePOFromProduction} className="bg-amber-600 hover:bg-amber-700 font-black h-12 px-8 shadow-lg shadow-amber-200 gap-2">
-                    <ShoppingCart className="h-5 w-5" /> GENERAR ORDEN DE COMPRA POR FALTANTES
+                    {orderToView.purchaseOrderId ? <RefreshCw className="h-5 w-5" /> : <ShoppingCart className="h-5 w-5" />}
+                    {orderToView.purchaseOrderId ? 'ACTUALIZAR COMPRA ASOCIADA' : 'GENERAR ORDEN DE COMPRA POR FALTANTES'}
                   </Button>
                 </div>
               </Card>
@@ -2050,11 +2131,23 @@ export default function CatalogPage() {
           </div>
 
           <DialogFooter className="p-4 border-t bg-slate-50 shrink-0">
-            <div className="flex justify-end gap-3 w-full">
-              <Button variant="ghost" onClick={handleCloseOrderView} className="font-bold">Cerrar</Button>
-              {orderToView?.status === 'ready' && (
-                <Button onClick={handleAssembleFinal} className="bg-blue-600 hover:bg-blue-700 px-8 font-black shadow-lg h-12 uppercase tracking-widest"><Hammer className="mr-2 h-5 w-5" /> FINALIZAR ARMADO</Button>
-              )}
+            <div className="flex justify-between items-center w-full">
+              <div>
+                {orderToView?.purchaseOrderId && (
+                  <Button variant="link" className="text-xs font-black text-emerald-700 gap-1.5 p-0 h-auto" onClick={() => { 
+                    const po = purchaseOrders?.find(p => p.id === orderToView.purchaseOrderId);
+                    if (po) { setPurchaseOrderToView(po); setOrderToView(null); setActiveTab("purchases"); }
+                  }}>
+                    <ExternalLink className="h-3 w-3" /> VER ORDEN DE COMPRA #{orderToView.purchaseOrderId.slice(0,4).toUpperCase()}
+                  </Button>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <Button variant="ghost" onClick={handleCloseOrderView} className="font-bold">Cerrar</Button>
+                {orderToView?.status === 'ready' && (
+                  <Button onClick={handleAssembleFinal} className="bg-blue-600 hover:bg-blue-700 px-8 font-black shadow-lg h-12 uppercase tracking-widest"><Hammer className="mr-2 h-5 w-5" /> FINALIZAR ARMADO</Button>
+                )}
+              </div>
             </div>
           </DialogFooter>
         </DialogContent>
