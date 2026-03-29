@@ -290,6 +290,7 @@ export default function CatalogPage() {
       }
     }
     
+    // El cálculo de mano de obra ahora considera ambas monedas convertidas
     const laborARS = (Number(itemData.laborCostARS) || 0) + (Number(itemData.laborCostUSD || 0) * currentExchangeRate);
     const laborUSD = (Number(itemData.laborCostUSD) || 0) + (Number(itemData.laborCostARS || 0) / currentExchangeRate);
     
@@ -638,7 +639,6 @@ export default function CatalogPage() {
     if (!selectedForAssembly) return;
     const id = Math.random().toString(36).substring(2, 11);
     
-    // El estado depende de si hay faltantes en la explosión
     const anyMissing = explosionSummary?.all.some(f => (f.available - f.required) < 0);
     const status = anyMissing ? 'pending_purchase' : 'ready';
     
@@ -658,6 +658,39 @@ export default function CatalogPage() {
     toast({ title: "Orden de producción creada", description: `Estado inicial: ${status === 'ready' ? 'Listo para armar' : 'Pendiente de compra'}` });
   }
 
+  const handleCreatePurchaseOrder = () => {
+    if (newPOItems.length === 0) return;
+    const id = Math.random().toString(36).substring(2, 11);
+    
+    const itemsToSave = newPOItems.map(item => ({
+      productId: item.id,
+      productName: item.name,
+      quantity: Number(item.qtyToAdd) || 1,
+      price: item.costCurrency === 'USD' ? item.costUSD : item.costARS,
+      currency: item.costCurrency || 'ARS',
+      supplier: item.supplier || "Sin Proveedor",
+      received: false
+    }));
+
+    const newPO = {
+      id,
+      description: newPOTitle || "Orden de Reposición Manual",
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      items: itemsToSave,
+      supplierStatuses: {},
+      productionOrderId: null
+    };
+
+    setDocumentNonBlocking(doc(db, 'purchase_orders', id), newPO, { merge: true });
+    
+    setIsNewPurchaseOrderOpen(false);
+    setNewPurchaseOrderItems([]);
+    setNewPOTitle("");
+    setActiveTab("purchases");
+    toast({ title: "Orden de compra creada", description: "Ya puedes gestionarla en la pestaña de Compras." });
+  }
+
   const handleGeneratePOFromProduction = () => {
     if (!orderToView || !explosionSummary) return;
     
@@ -672,7 +705,6 @@ export default function CatalogPage() {
     const existingPO = purchaseOrders?.find(po => po.id === linkedPOId);
 
     if (existingPO && existingPO.status !== 'completed') {
-      // Lógica de Sincronización (Delta)
       const updatedItems = [...existingPO.items];
       let itemsAdded = 0;
 
@@ -687,7 +719,6 @@ export default function CatalogPage() {
         
         if (netMissing > 0) {
           itemsAdded++;
-          // Si hay una linea pendiente (no pedida) del mismo proveedor, sumamos ahí
           const pendingLineIdx = updatedItems.findIndex((i: any) => 
             i.productId === missing.id && 
             (existingPO.supplierStatuses?.[i.supplier || "Sin Proveedor"] !== 'ordered') &&
@@ -697,7 +728,6 @@ export default function CatalogPage() {
           if (pendingLineIdx > -1) {
             updatedItems[pendingLineIdx].quantity += netMissing;
           } else {
-            // Creamos línea nueva (porque ya se pidió o es proveedor distinto)
             updatedItems.push({
               productId: missing.id,
               productName: missing.name,
@@ -722,7 +752,6 @@ export default function CatalogPage() {
       setOrderToView(null);
       setActiveTab("purchases");
     } else {
-      // Lógica de Creación Nueva
       const newPOId = Math.random().toString(36).substring(2, 11);
       const newPOItems = missingItems.map(m => ({
         productId: m.id,
@@ -2302,6 +2331,124 @@ export default function CatalogPage() {
       </AlertDialog>
 
       <MobileNav />
+
+      {/* VISTA DE IMPRESIÓN (PDF) - FICHA TÉCNICA A4 */}
+      {itemToPrint && (
+        <div className="print-only w-full p-8 bg-white text-slate-900 font-sans">
+          <div className="flex justify-between items-start border-b-4 border-slate-900 pb-4 mb-6">
+            <div className="space-y-1">
+              <h1 className="text-3xl font-black uppercase tracking-tighter">Ficha Técnica de Producto</h1>
+              <p className="text-lg font-bold text-slate-600">{itemToPrint.name}</p>
+              <Badge variant="outline" className="border-2 border-slate-900 font-black uppercase text-[10px]">{categoryMap[itemToPrint.categoryId] || 'Sin Categoría'}</Badge>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] font-black uppercase text-slate-400">Dosimat Pro System</p>
+              <p className="text-sm font-bold">{new Date().toLocaleDateString('es-AR')}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            {/* Panel de Costos */}
+            <div className="p-6 border-4 border-slate-900 rounded-3xl bg-slate-50 space-y-4">
+              <h2 className="text-xs font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 pb-2">Estructura de Costo Final</h2>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-[8px] font-black uppercase text-slate-400">Total Producción (ARS)</p>
+                  <p className="text-3xl font-black text-slate-900">$ {Math.round(itemToPrint.calculatedCostARS).toLocaleString('es-AR')}</p>
+                </div>
+                <div>
+                  <p className="text-[8px] font-black uppercase text-slate-400">Total Producción (USD)</p>
+                  <p className="text-3xl font-black text-emerald-700">u$s {itemToPrint.calculatedCostUSD.toFixed(2).toLocaleString()}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-200">
+                <div>
+                  <p className="text-[8px] font-black uppercase text-slate-400">Materiales (ARS)</p>
+                  <p className="text-sm font-bold">$ {Math.round(itemToPrint.calculatedCostARS - ((itemToPrint.laborCostARS || 0) + (itemToPrint.laborCostUSD || 0) * currentRate)).toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-[8px] font-black uppercase text-slate-400">Mano de Obra (ARS)</p>
+                  <p className="text-sm font-bold">$ {Math.round((itemToPrint.laborCostARS || 0) + (itemToPrint.laborCostUSD || 0) * currentRate).toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Panel de Venta */}
+            <div className="p-6 border-4 border-primary rounded-3xl bg-primary/5 space-y-4">
+              <h2 className="text-xs font-black uppercase tracking-widest text-primary border-b border-primary/20 pb-2">Precios de Venta Sugeridos</h2>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-[8px] font-black uppercase text-primary/60">PVP Pesos (ARS)</p>
+                  <p className="text-3xl font-black text-primary">$ {(itemToPrint.priceARS || 0).toLocaleString('es-AR')}</p>
+                </div>
+                <div>
+                  <p className="text-[8px] font-black uppercase text-primary/60">PVP Dólares (USD)</p>
+                  <p className="text-3xl font-black text-primary">u$s {(itemToPrint.priceUSD || 0).toLocaleString('es-AR')}</p>
+                </div>
+              </div>
+              {itemToPrint.priceARS > 0 && (
+                <div className="pt-2 border-t border-primary/20">
+                  <p className="text-[10px] font-black text-primary">MARGEN BRUTO PROYECTADO: {Math.round(((itemToPrint.priceARS - itemToPrint.calculatedCostARS) / itemToPrint.priceARS) * 100)}%</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* BOM List */}
+          {itemToPrint.isCompuesto && (
+            <div className="space-y-4">
+              <h2 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                <Layers className="h-4 w-4" /> Detalle de Componentes (BOM)
+              </h2>
+              <div className="border-2 border-slate-900 rounded-2xl overflow-hidden">
+                <table className="w-full text-[10px] border-collapse">
+                  <thead>
+                    <tr className="bg-slate-900 text-white">
+                      <th className="p-2 text-left uppercase font-black">Material / Componente</th>
+                      <th className="p-2 text-center uppercase font-black w-16">Cant.</th>
+                      <th className="p-2 text-right uppercase font-black">Costo Unit. Base</th>
+                      <th className="p-2 text-right uppercase font-black">Costo Unit. Ref</th>
+                      <th className="p-2 text-right uppercase font-black">Subtotal Línea</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(itemToPrint.components || []).map((comp: any, idx: number) => {
+                      const prod = items?.find(i => i.id === comp.productId);
+                      if (!prod) return null;
+                      const isUSD = prod.costCurrency === 'USD' || (!prod.costCurrency && prod.costUSD > 0);
+                      const basePrice = isUSD ? prod.costUSD : prod.costARS;
+                      const refPrice = isUSD ? (prod.costUSD * currentRate) : (prod.costARS / currentRate);
+                      const subtotal = basePrice * comp.quantity;
+                      
+                      return (
+                        <tr key={idx} className="border-b border-slate-200 h-8">
+                          <td className="p-2 font-bold">{prod.name}</td>
+                          <td className="p-2 text-center font-black">{comp.quantity}</td>
+                          <td className="p-2 text-right">{isUSD ? 'u$s' : '$'} {basePrice.toLocaleString()}</td>
+                          <td className="p-2 text-right text-slate-400 italic">{!isUSD ? 'u$s' : '$'} {refPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                          <td className="p-2 text-right font-black">{isUSD ? 'u$s' : '$'} {subtotal.toLocaleString()}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {itemToPrint.description && (
+            <div className="mt-8 p-4 bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl italic text-xs">
+              <p className="font-black uppercase text-[8px] text-slate-400 mb-1">Notas Técnicas</p>
+              "{itemToPrint.description}"
+            </div>
+          )}
+
+          <div className="mt-12 pt-6 border-t border-slate-200 flex justify-between items-end italic text-[9px] text-slate-400">
+            <p>Este documento es una ficha de costos internos generada por Dosimat Pro. Prohibida su difusión externa.</p>
+            <p>Página 1 de 1</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 
