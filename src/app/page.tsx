@@ -16,7 +16,11 @@ import {
   Calendar,
   Droplets,
   ArrowRight,
-  Calculator
+  Calculator,
+  Truck,
+  Factory,
+  ShoppingCart,
+  ChevronRight
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
@@ -48,11 +52,17 @@ export default function Dashboard() {
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
   const txQuery = useMemoFirebase(() => query(collection(db, 'transactions'), orderBy('date', 'desc'), limit(50)), [db])
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
+  const routesQuery = useMemoFirebase(() => collection(db, 'route_sheets'), [db])
+  const prodOrdersQuery = useMemoFirebase(() => collection(db, 'production_orders'), [db])
+  const purchOrdersQuery = useMemoFirebase(() => collection(db, 'purchase_orders'), [db])
   
   // Real-time Data
   const { data: accounts, isLoading: loadingAccounts } = useCollection(accountsQuery)
   const { data: transactions, isLoading: loadingTx } = useCollection(txQuery)
   const { data: clients, isLoading: loadingClients } = useCollection(clientsQuery)
+  const { data: routes } = useCollection(routesQuery)
+  const { data: prodOrders } = useCollection(prodOrdersQuery)
+  const { data: purchOrders } = useCollection(purchOrdersQuery)
 
   const totals = useMemo(() => {
     if (!accounts) return { ARS: 0, USD: 0 }
@@ -72,6 +82,12 @@ export default function Dashboard() {
       return acc
     }, { ARS: 0, USD: 0 })
   }, [clients])
+
+  const activeOps = useMemo(() => ({
+    routes: routes?.filter(r => r.status === 'active').length || 0,
+    production: prodOrders?.filter(o => o.status !== 'completed').length || 0,
+    purchases: purchOrders?.filter(o => o.status !== 'completed').length || 0
+  }), [routes, prodOrders, purchOrders])
 
   const chartData = useMemo(() => {
     if (!transactions) return []
@@ -156,7 +172,7 @@ export default function Dashboard() {
           <>
             <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <Card className="glass-card">
-                <CardContent className="pt-6">
+                <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Saldo Total ARS</p>
@@ -175,7 +191,7 @@ export default function Dashboard() {
               </Card>
               
               <Card className="glass-card">
-                <CardContent className="pt-6">
+                <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Saldo Total USD</p>
@@ -194,7 +210,7 @@ export default function Dashboard() {
               </Card>
 
               <Card className="glass-card">
-                <CardContent className="pt-6">
+                <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Clientes Registrados</p>
@@ -208,7 +224,7 @@ export default function Dashboard() {
               </Card>
 
               <Card className="glass-card border-l-4 border-l-accent">
-                <CardContent className="pt-6">
+                <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Clientes Reposición</p>
@@ -224,13 +240,69 @@ export default function Dashboard() {
               </Card>
             </section>
 
+            {/* Monitor de Actividad */}
+            <section className="space-y-4">
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
+                <AlertCircle className="h-4 w-4" /> Monitor de Actividad en Curso
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card 
+                  className="glass-card border-l-4 border-l-blue-500 cursor-pointer hover:shadow-md transition-all group"
+                  onClick={() => router.push('/routes')}
+                >
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="bg-blue-100 p-3 rounded-xl text-blue-600 group-hover:scale-110 transition-transform"><Truck className="h-6 w-6" /></div>
+                      <div>
+                        <p className="text-[10px] font-black uppercase text-muted-foreground">Rutas en Camino</p>
+                        <h4 className="text-2xl font-black text-blue-700">{activeOps.routes}</h4>
+                      </div>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground opacity-30 group-hover:opacity-100" />
+                  </CardContent>
+                </Card>
+
+                <Card 
+                  className="glass-card border-l-4 border-l-amber-500 cursor-pointer hover:shadow-md transition-all group"
+                  onClick={() => router.push('/catalog?tab=orders')}
+                >
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="bg-amber-100 p-3 rounded-xl text-amber-600 group-hover:scale-110 transition-transform"><Factory className="h-6 w-6" /></div>
+                      <div>
+                        <p className="text-[10px] font-black uppercase text-muted-foreground">Armados Activos</p>
+                        <h4 className="text-2xl font-black text-amber-700">{activeOps.production}</h4>
+                      </div>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground opacity-30 group-hover:opacity-100" />
+                  </CardContent>
+                </Card>
+
+                <Card 
+                  className="glass-card border-l-4 border-l-emerald-500 cursor-pointer hover:shadow-md transition-all group"
+                  onClick={() => router.push('/catalog?tab=purchases')}
+                >
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="bg-emerald-100 p-3 rounded-xl text-emerald-600 group-hover:scale-110 transition-transform"><ShoppingCart className="h-6 w-6" /></div>
+                      <div>
+                        <p className="text-[10px] font-black uppercase text-muted-foreground">Compras Pendientes</p>
+                        <h4 className="text-2xl font-black text-emerald-700">{activeOps.purchases}</h4>
+                      </div>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground opacity-30 group-hover:opacity-100" />
+                  </CardContent>
+                </Card>
+              </div>
+            </section>
+
             <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
                <Card 
                 className="glass-card bg-rose-50 border-l-4 border-l-rose-500 cursor-pointer hover:bg-rose-100/80 transition-all group overflow-hidden relative"
                 onClick={() => router.push('/customers?filterBalance=debt')}
                >
                  <Calculator className="absolute right-4 top-1/2 -translate-y-1/2 h-16 w-16 text-rose-500/10 -rotate-12 group-hover:rotate-0 transition-transform" />
-                 <CardContent className="pt-6">
+                 <CardContent className="p-6">
                    <div className="flex justify-between items-center">
                      <div>
                        <p className="text-[10px] font-black uppercase tracking-widest text-rose-700">Deudas a Cobrar (ARS)</p>
@@ -250,7 +322,7 @@ export default function Dashboard() {
                 onClick={() => router.push('/customers?filterBalance=debt')}
                >
                  <TrendingUp className="absolute right-4 top-1/2 -translate-y-1/2 h-16 w-16 text-rose-500/10 -rotate-12 group-hover:rotate-0 transition-transform" />
-                 <CardContent className="pt-6">
+                 <CardContent className="p-6">
                    <div className="flex justify-between items-center">
                      <div>
                        <p className="text-[10px] font-black uppercase tracking-widest text-rose-700">Deudas a Cobrar (USD)</p>

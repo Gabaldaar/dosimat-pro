@@ -66,12 +66,6 @@ import {
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
-} from "react-day-picker" // Placeholder for shadcn imports if needed elsewhere
 import {
   DropdownMenu as DropdownMenuUI,
   DropdownMenuContent as DropdownMenuContentUI,
@@ -2032,6 +2026,70 @@ export default function CatalogPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={isSupplierHistoryOpen} onOpenChange={setIsSupplierHistoryOpen}>
+        <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <History className="h-5 w-5 text-emerald-600" />
+              <DialogTitle className="text-xl font-black">Historial Comercial: {selectedSupplierForHistory}</DialogTitle>
+            </div>
+            <DialogDescription className="font-bold">Resumen de todas las compras ingresadas a este proveedor.</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {!allPurchases ? (
+              <div className="flex justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+            ) : (
+              <div className="border rounded-2xl bg-white overflow-hidden shadow-md">
+                <Table>
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="text-[10px] font-black uppercase">Fecha</TableHead>
+                      <TableHead className="text-[10px] font-black uppercase">Producto</TableHead>
+                      <TableHead className="text-center text-[10px] font-black uppercase w-20">Cant.</TableHead>
+                      <TableHead className="text-right text-[10px] font-black uppercase">Precio Unit.</TableHead>
+                      <TableHead className="text-center text-[10px] font-black uppercase w-24">Dólar Ref.</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allPurchases
+                      .filter(p => p.supplierName === selectedSupplierForHistory)
+                      .map((p: any) => (
+                        <TableRow key={p.id} className="h-14 hover:bg-emerald-50/30 transition-colors">
+                          <TableCell className="text-xs font-bold text-slate-600">
+                            {new Date(p.date).toLocaleDateString('es-AR')}
+                          </TableCell>
+                          <TableCell className="text-xs font-black text-slate-800">{p.productName}</TableCell>
+                          <TableCell className="text-center font-black text-sm">{p.quantity}</TableCell>
+                          <TableCell className="text-right font-black">
+                            <span className={p.currency === 'USD' ? 'text-emerald-700' : 'text-blue-700'}>
+                              {p.currency === 'USD' ? 'u$s' : '$'} {Number(p.price).toLocaleString('es-AR')}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="secondary" className="text-[8px] font-bold uppercase">
+                              {p.rateType} ${p.exchangeRate}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    {allPurchases.filter(p => p.supplierName === selectedSupplierForHistory).length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-16 text-muted-foreground italic text-xs">
+                          No hay registros de compras para este proveedor.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setIsSupplierHistoryOpen(false)} className="w-full font-bold h-12">Cerrar Historial</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={isAuditOpen} onOpenChange={setIsAuditOpen}>
         <DialogContent className="max-w-6xl h-[95vh] flex flex-col p-0 w-[95vw]">
           <DialogHeader className="p-3 pb-1 shrink-0 flex-row items-center justify-between">
@@ -2302,7 +2360,7 @@ export default function CatalogPage() {
                 )}
               </div>
               <div className="flex flex-wrap gap-4">
-                <div className="flex items-center gap-3 p-4 border rounded-2xl bg-white shadow-sm flex-1 min-w-[200px]"><Switch checked={formData.isService} onCheckedChange={(v) => { setFormData({...formData, isService: v, trackStock: !v && formData.trackStock, isCompuesto: v ? false : formData.isCompuesto}); }} /><div><Label className="font-bold">Es un servicio</Label></div></div>
+                <div className="flex items-center gap-3 p-4 border rounded-2xl bg-white shadow-sm flex-1 min-w-[200px]"><Switch checked={formData.isService} onCheckedChange={(v) => { setFormData({...formData, iService: v, trackStock: !v && formData.trackStock, isCompuesto: v ? false : formData.isCompuesto}); }} /><div><Label className="font-bold">Es un servicio</Label></div></div>
                 {!formData.isService && <div className="flex items-center gap-3 p-4 border rounded-2xl bg-amber-50/50 border-amber-200 shadow-sm flex-1 min-w-[200px]"><Switch checked={formData.isCompuesto} onCheckedChange={(v) => { setFormData({...formData, isCompuesto: v, trackStock: v ? true : formData.trackStock}); }} /><div><Label className="font-bold text-amber-800">Producto compuesto</Label></div></div>}
                 {!formData.isService && formData.trackStock && <div className="flex gap-4 flex-1 min-w-[200px]"><div className="space-y-1 flex-1"><Label className="font-bold text-xs uppercase text-muted-foreground">Stock Actual</Label><Input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} className="h-11 font-black" /></div><div className="space-y-1 flex-1"><Label className="font-bold text-rose-600 text-xs uppercase">Mínimo Crítico</Label><Input type="number" value={formData.minStock} onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} className="h-11 border-rose-200 font-black" /></div></div>}
               </div>
@@ -2356,6 +2414,38 @@ export default function CatalogPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={isSupplierManagerOpen} onOpenChange={setIsSupplierManagerOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader><DialogTitle>Gestionar Proveedores</DialogTitle></DialogHeader>
+          <div className="space-y-6 py-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-muted/20 rounded-xl border border-dashed">
+              <div className="space-y-1"><Label className="text-[10px] font-black uppercase">Nombre</Label><Input value={newSupplierName} onChange={(e) => setNewSupplierName(e.target.value)} placeholder="Ej: Aceros S.A." className="h-10 bg-white" /></div>
+              <div className="space-y-1"><Label className="text-[10px] font-black uppercase">Teléfono</Label><Input value={newSupplierPhone} onChange={(e) => setNewSupplierPhone(e.target.value)} placeholder="Ej: 11 5555-5555" className="h-10 bg-white" /></div>
+              <div className="space-y-1"><Label className="text-[10px] font-black uppercase">Dirección</Label><div className="flex gap-2"><Input value={newSupplierAddress} onChange={(e) => setNewSupplierAddress(e.target.value)} placeholder="Ej: Av. Rivadavia 123" className="h-10 bg-white" /><Button onClick={handleSaveSupplier} className="h-10 px-3"><Plus className="h-4 w-4" /></Button></div></div>
+            </div>
+            <ScrollArea className="h-[350px] border rounded-2xl p-4 bg-white shadow-inner">
+              <div className="space-y-2">
+                {sortedSuppliers.map((sup: any) => (
+                  <div key={sup.id} className="flex justify-between items-center p-3 rounded-xl border hover:bg-muted/5 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-primary/10 text-primary rounded-lg"><Briefcase className="h-4 w-4" /></div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-800 leading-none">{sup.name}</p>
+                        {sup.phone && <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1"><Phone className="h-2.5 w-2.5" /> {sup.phone}</p>}
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/5" onClick={() => { setSelectedSupplierForHistory(sup.name); setIsSupplierHistoryOpen(true); }} title="Ver Historial de Compras"><History className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-rose-50" onClick={() => handleDeleteSupplier(sup.id)}><Trash2 className="h-4 w-4" /></Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <AlertDialog open={!!orderToDelete} onOpenChange={(o) => { if(!o) setOrderToDelete(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Eliminar orden de producción?</AlertDialogTitle><AlertDialogDescription>Esta acción borrará la planificación de esta orden. No afectará el stock actual.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteOrder} className="bg-destructive text-white">Eliminar Orden</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
       
       <AlertDialog open={!!purchaseOrderToDelete} onOpenChange={(o) => { if(!o) setPurchaseOrderToDelete(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Eliminar orden de reposición?</AlertDialogTitle><AlertDialogDescription>Esta acción borrará la lista de compra manual.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={confirmDeletePurchaseOrder} className="bg-destructive text-white">Eliminar Orden</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
@@ -2375,7 +2465,6 @@ export default function CatalogPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Exit confirmation alert for unsaved changes */}
       <AlertDialog open={isExitAlertOpen} onOpenChange={setIsExitAlertOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -2407,7 +2496,6 @@ export default function CatalogPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            {/* Panel de Costos */}
             <div className="p-6 border-4 border-slate-900 rounded-3xl bg-slate-50 space-y-4">
               <h2 className="text-xs font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 pb-2">Estructura de Costo Final</h2>
               <div className="grid grid-cols-2 gap-4">
@@ -2432,7 +2520,6 @@ export default function CatalogPage() {
               </div>
             </div>
 
-            {/* Panel de Venta */}
             <div className="p-6 border-4 border-primary rounded-3xl bg-primary/5 space-y-4">
               <h2 className="text-xs font-black uppercase tracking-widest text-primary border-b border-primary/20 pb-2">Precios de Venta Sugeridos</h2>
               <div className="grid grid-cols-2 gap-4">
@@ -2453,7 +2540,6 @@ export default function CatalogPage() {
             </div>
           </div>
 
-          {/* BOM List */}
           {itemToPrint.isCompuesto && (
             <div className="space-y-4">
               <h2 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
