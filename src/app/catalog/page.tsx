@@ -178,8 +178,6 @@ function CatalogContent() {
   const categories = useMemo(() => {
     if (!rawCategories) return []
     return [...rawCategories].sort((a: any, b: any) => {
-      if (a.isFavorite && !b.isFavorite) return -1;
-      if (!a.isFavorite && b.isFavorite) return 1;
       return (a.name || "").localeCompare(b.name || "")
     })
   }, [rawCategories])

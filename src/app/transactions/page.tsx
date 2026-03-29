@@ -186,8 +186,6 @@ function TransactionsContent() {
   const sortedProductCategories = useMemo(() => {
     if (!productCategories) return []
     return [...productCategories].sort((a: any, b: any) => {
-      if (a.isFavorite && !b.isFavorite) return -1;
-      if (!a.isFavorite && b.isFavorite) return 1;
       return (a.name || "").localeCompare(b.name || "");
     });
   }, [productCategories]);
@@ -264,9 +262,6 @@ function TransactionsContent() {
       const tx = editingTx;
       if (tx.clientId) {
         const field = tx.currency === 'USD' ? 'saldoUSD' : 'saldoActual';
-        // REVERSIÓN DE SALDO CLIENTE:
-        // Si es cobro/ajuste, revertimos el 'amount' (que fue positivo o negativo directo)
-        // Si es venta/repo, lo que afectó al saldo fue el 'debtAmount' (que se restó del saldo)
         const amountToRevert = ['cobro', 'adjustment', 'Expense'].includes(tx.type) 
           ? -Number(tx.amount || 0) 
           : Number(tx.debtAmount || 0);
@@ -377,9 +372,6 @@ function TransactionsContent() {
 
     if (tx.clientId) {
       const field = tx.currency === 'USD' ? 'saldoUSD' : 'saldoActual';
-      // REVERSIÓN DE SALDO AL ELIMINAR:
-      // Si es cobro/ajuste, quitamos el efecto del 'amount'
-      // Si es venta/repo, devolvemos el 'debtAmount' al saldo (porque se había restado)
       const amountToRevert = ['cobro', 'adjustment', 'Expense'].includes(tx.type) 
         ? -Number(tx.amount || 0) 
         : Number(tx.debtAmount || 0);
@@ -498,7 +490,6 @@ function TransactionsContent() {
     const content = activeTemplate.body + (activeTemplate.subject || "");
     const matches = content.match(/\{\{\?([^}]+)\}\}/g);
     if (!matches) return [];
-    // Deduplicate keys
     return Array.from(new Set(matches.map(m => m.replace(/\{\{\?|\}\}/g, ''))));
   }, [activeTemplate]);
 
