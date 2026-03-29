@@ -100,7 +100,7 @@ function CustomersContent() {
   const [searchTerm, setSearchTerm] = useState("")
   const [filterBalance, setFilterBalance] = useState("all") 
   const [filterComodato, setFilterComodato] = useState("all")
-  const [filterReposicion, setFilterReposicion] = useState("all")
+  const [filterReposicion, setFilterReposicion] = useState("yes") // Default to YES per user request
   const [filterZone, setFilterZone] = useState("all")
   
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -452,15 +452,70 @@ function CustomersContent() {
             <div className="flex flex-col gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-                <input placeholder="Buscar por nombre, apellido o CUIT/DNI..." className="w-full pl-10 h-11 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                <input 
+                  placeholder="Buscar por nombre, apellido o CUIT/DNI..." 
+                  className={cn(
+                    "w-full pl-10 h-11 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm transition-all",
+                    searchTerm && "border-primary ring-2 ring-primary/10"
+                  )}
+                  value={searchTerm} 
+                  onChange={(e) => setSearchTerm(e.target.value)} 
+                />
               </div>
               <div className="flex flex-wrap gap-3 items-end p-4 bg-muted/20 rounded-xl border border-dashed">
-                <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Saldo</Label><Select value={filterBalance} onValueChange={setFilterBalance}><SelectTrigger className="w-[140px] h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem><SelectItem value="debt" className="text-rose-600 font-bold">Sólo deuda</SelectItem><SelectItem value="credit" className="text-emerald-600 font-bold">Sólo a favor</SelectItem></SelectContent></Select></div>
-                <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Comodato</Label><Select value={filterComodato} onValueChange={setFilterComodato}><SelectTrigger className="w-[110px] h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem><SelectItem value="yes">Sí</SelectItem><SelectItem value="no">No</SelectItem></SelectContent></Select></div>
-                <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Reposición</Label><Select value={filterReposicion} onValueChange={setFilterReposicion}><SelectTrigger className="w-[110px] h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem><SelectItem value="yes">Sí</SelectItem><SelectItem value="no">No</SelectItem></SelectContent></Select></div>
-                <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Zona</Label><Select value={filterZone} onValueChange={setFilterZone}><SelectTrigger className="w-[140px] h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{zones?.map((z: any) => (<SelectItem key={z.id} value={z.id} className="text-xs">{z.name}</SelectItem>))}</SelectContent></Select></div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Saldo</Label>
+                  <Select value={filterBalance} onValueChange={setFilterBalance}>
+                    <SelectTrigger className={cn("w-[140px] h-9 text-xs transition-all", filterBalance !== 'all' && "border-primary bg-primary/5 text-primary ring-2 ring-primary/10 font-bold")}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="debt" className="text-rose-600 font-bold">Sólo deuda</SelectItem>
+                      <SelectItem value="credit" className="text-emerald-600 font-bold">Sólo a favor</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Comodato</Label>
+                  <Select value={filterComodato} onValueChange={setFilterComodato}>
+                    <SelectTrigger className={cn("w-[110px] h-9 text-xs transition-all", filterComodato !== 'all' && "border-primary bg-primary/5 text-primary ring-2 ring-primary/10 font-bold")}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="yes">Sí</SelectItem>
+                      <SelectItem value="no">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Reposición</Label>
+                  <Select value={filterReposicion} onValueChange={setFilterReposicion}>
+                    <SelectTrigger className={cn("w-[110px] h-9 text-xs transition-all", filterReposicion !== 'all' && "border-primary bg-primary/5 text-primary ring-2 ring-primary/10 font-bold")}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="yes">Sí</SelectItem>
+                      <SelectItem value="no">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground px-1">Zona</Label>
+                  <Select value={filterZone} onValueChange={setFilterZone}>
+                    <SelectTrigger className={cn("w-[140px] h-9 text-xs transition-all", filterZone !== 'all' && "border-primary bg-primary/5 text-primary ring-2 ring-primary/10 font-bold")}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas</SelectItem>
+                      {zones?.map((z: any) => (<SelectItem key={z.id} value={z.id} className="text-xs">{z.name}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => { setSearchTerm(""); setFilterBalance("all"); setFilterComodato("all"); setFilterReposicion("all"); setFilterZone("all"); }}><FilterX className="h-4 w-4" /></Button>
+                  <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => { setSearchTerm(""); setFilterBalance("all"); setFilterComodato("all"); setFilterReposicion("all"); setFilterZone("all"); }} title="Limpiar todos los filtros"><FilterX className="h-4 w-4" /></Button>
                   <Button variant="outline" size="icon" className="h-9 w-9 border-emerald-200 text-emerald-700 bg-emerald-50" onClick={handlePrintPDF} title="Generar reporte PDF de clientes"><Printer className="h-4 w-4" /></Button>
                 </div>
               </div>
