@@ -1515,14 +1515,14 @@ export default function CatalogPage() {
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
-                                      <DropdownMenuItem onClick={() => handleExportBOM(item)}><Printer className="mr-2 h-4 w-4" /> Exportar Ficha (PDF)</DropdownMenuItem>
+                                      <DropdownMenuItem onSelect={() => handleExportBOM(item)}><Printer className="mr-2 h-4 w-4" /> Exportar Ficha (PDF)</DropdownMenuItem>
                                       {isAdmin && (
                                         <>
-                                          <DropdownMenuItem onClick={() => handleOpenDialog(item)}><Edit className="mr-2 h-4 w-4" /> Editar parámetros</DropdownMenuItem>
+                                          <DropdownMenuItem onSelect={() => handleOpenDialog(item)}><Edit className="mr-2 h-4 w-4" /> Editar parámetros</DropdownMenuItem>
                                           {item.isCompuesto && (
-                                            <DropdownMenuItem className="text-amber-600 font-bold" onClick={() => { setSelectedForAssembly(item); setAssemblyQty(1); setIsAssemblyOpen(true); }}><Hammer className="mr-2 h-4 w-4" /> Orden de Armado</DropdownMenuItem>
+                                            <DropdownMenuItem className="text-amber-600 font-bold" onSelect={() => { setSelectedForAssembly(item); setAssemblyQty(1); setIsAssemblyOpen(true); }}><Hammer className="mr-2 h-4 w-4" /> Orden de Armado</DropdownMenuItem>
                                           )}
-                                          <DropdownMenuItem className="text-destructive" onClick={() => setItemToDelete(item)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem>
+                                          <DropdownMenuItem className="text-destructive" onSelect={() => setItemToDelete(item)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem>
                                         </>
                                       )}
                                     </DropdownMenuContent>
@@ -1663,6 +1663,78 @@ export default function CatalogPage() {
           <DialogFooter className="p-4 border-t bg-slate-50">
             <Button variant="outline" onClick={() => setIsNewPurchaseOrderOpen(false)} className="font-bold">Cancelar</Button>
             <Button disabled={newPOItems.length === 0} onClick={handleCreatePurchaseOrder} className="bg-emerald-600 hover:bg-emerald-700 font-black px-8">CREAR ORDEN</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog para configurar nueva orden de armado */}
+      <Dialog open={isAssemblyOpen} onOpenChange={setIsAssemblyOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 border-b shrink-0 bg-white">
+            <div className="flex items-center gap-2">
+              <Hammer className="h-6 w-6 text-amber-600" />
+              <DialogTitle className="text-xl font-black">Planificar Armado</DialogTitle>
+            </div>
+            <DialogDescription>
+              Configura la cantidad a fabricar de <b>{selectedForAssembly?.name}</b>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="flex items-center gap-6 p-6 bg-amber-50 border border-amber-200 rounded-2xl shadow-inner">
+              <div className="space-y-1 flex-1">
+                <Label className="text-xs font-black text-amber-800 uppercase tracking-widest">Unidades a fabricar</Label>
+                <div className="flex items-center gap-4">
+                  <Button variant="outline" size="icon" className="h-12 w-12 border-amber-300 text-amber-700 bg-white" onClick={() => setAssemblyQty(Math.max(1, assemblyQty - 1))}><Minus className="h-6 w-6" /></Button>
+                  <span className="text-4xl font-black text-amber-900 min-w-[60px] text-center">{assemblyQty}</span>
+                  <Button variant="outline" size="icon" className="h-12 w-12 border-amber-300 text-amber-700 bg-white" onClick={() => setAssemblyQty(assemblyQty + 1)}><Plus className="h-6 w-6" /></Button>
+                </div>
+              </div>
+              <div className="hidden md:block h-16 w-px bg-amber-200" />
+              <div className="hidden md:block flex-1 text-right">
+                <p className="text-[10px] font-black text-amber-700 uppercase">Stock Actual</p>
+                <p className="text-2xl font-black text-amber-900">{selectedForAssembly?.stock || 0}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                <Layers className="h-4 w-4" /> Explosión de Insumos requeridos
+              </h3>
+              <div className="border rounded-2xl bg-white shadow-sm overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="text-[10px] font-black uppercase">Componente</TableHead>
+                      <TableHead className="text-center font-black text-[10px] uppercase">Necesario</TableHead>
+                      <TableHead className="text-center font-black text-[10px] uppercase">Disponible</TableHead>
+                      <TableHead className="text-center font-black text-[10px] uppercase">Faltante</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {explosionSummary?.all.map(f => {
+                      const deficit = f.required - f.available;
+                      const hasMissing = deficit > 0;
+                      return (
+                        <TableRow key={f.id} className="h-12">
+                          <TableCell className="text-xs font-bold">{f.name}</TableCell>
+                          <TableCell className="text-center font-black">{f.required}</TableCell>
+                          <TableCell className="text-center font-bold text-slate-500">{f.available}</TableCell>
+                          <TableCell className="text-center">
+                            <span className={cn("font-black", hasMissing ? "text-rose-600" : "text-emerald-600")}>
+                              {hasMissing ? deficit : "OK"}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="p-4 border-t bg-slate-50">
+            <Button variant="outline" onClick={() => setIsAssemblyOpen(false)} className="font-bold">Cancelar</Button>
+            <Button onClick={handleCreateOrder} className="bg-amber-600 hover:bg-amber-700 font-black px-8">CONFIRMAR PLAN DE PRODUCCIÓN</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
