@@ -420,10 +420,11 @@ export default function CatalogPage() {
       const newManualSups: Record<string, string> = {};
       
       purchaseOrderToView.items.forEach((item: any) => {
-        newManualQtys[item.productId] = item.quantity;
-        newManualCurrencies[item.productId] = item.currency || 'ARS';
-        newManualPrices[item.productId] = item.price || 0;
-        newManualSups[item.productId] = item.supplier || "Sin Proveedor";
+        const lineId = item.id || item.productId;
+        newManualQtys[lineId] = item.quantity;
+        newManualCurrencies[lineId] = item.currency || 'ARS';
+        newManualPrices[lineId] = item.price || 0;
+        newManualSups[lineId] = item.supplier || "Sin Proveedor";
       });
       
       setManualPurchaseQtys(newManualQtys);
@@ -471,13 +472,15 @@ export default function CatalogPage() {
 
     const itemsToBuy = purchaseOrderToView.items.map((item: any) => {
       const prod = items.find(i => i.id === item.productId);
-      const manualQty = manualPurchaseQtys[item.productId] ?? item.quantity;
-      const manualCurrency = manualPurchaseCurrencies[item.productId] ?? (item.currency || 'ARS');
-      const manualPrice = manualPurchasePrices[item.productId] ?? item.price;
-      const currentSup = manualSuppliers[item.productId] || (item.supplier || "Sin Proveedor");
+      const lineId = item.id || item.productId;
+      const manualQty = manualPurchaseQtys[lineId] ?? item.quantity;
+      const manualCurrency = manualPurchaseCurrencies[lineId] ?? (item.currency || 'ARS');
+      const manualPrice = manualPurchasePrices[lineId] ?? item.price;
+      const currentSup = manualSuppliers[lineId] || (item.supplier || "Sin Proveedor");
 
       return {
-        id: item.productId,
+        id: lineId,
+        productId: item.productId,
         name: item.productName,
         available: prod?.stock || 0,
         required: 0,
@@ -663,6 +666,7 @@ export default function CatalogPage() {
     const id = Math.random().toString(36).substring(2, 11);
     
     const itemsToSave = newPOItems.map(item => ({
+      id: Math.random().toString(36).substring(2, 11),
       productId: item.id,
       productName: item.name,
       quantity: Number(item.qtyToAdd) || 1,
@@ -729,6 +733,7 @@ export default function CatalogPage() {
             updatedItems[pendingLineIdx].quantity += netMissing;
           } else {
             updatedItems.push({
+              id: Math.random().toString(36).substring(2, 11),
               productId: missing.id,
               productName: missing.name,
               quantity: netMissing,
@@ -754,6 +759,7 @@ export default function CatalogPage() {
     } else {
       const newPOId = Math.random().toString(36).substring(2, 11);
       const newPOItems = missingItems.map(m => ({
+        id: Math.random().toString(36).substring(2, 11),
         productId: m.id,
         productName: m.name,
         quantity: Math.max(m.missing, m.suggestedToBuy),
@@ -786,12 +792,14 @@ export default function CatalogPage() {
   const handleUpdateOrderPlan = () => {
     if (purchaseOrderToView) {
       const updatedItems = purchaseOrderToView.items.map((item: any) => {
+        const lineId = item.id || item.productId;
         return {
           ...item,
-          quantity: manualPurchaseQtys[item.productId] ?? item.quantity,
-          price: manualPurchasePrices[item.productId] ?? item.price,
-          currency: manualPurchaseCurrencies[item.productId] ?? item.currency,
-          supplier: manualSuppliers[item.productId] ?? item.supplier
+          id: lineId,
+          quantity: manualPurchaseQtys[lineId] ?? item.quantity,
+          price: manualPurchasePrices[lineId] ?? item.price,
+          currency: manualPurchaseCurrencies[lineId] ?? item.currency,
+          supplier: manualSuppliers[lineId] ?? item.supplier
         };
       });
 
@@ -818,12 +826,9 @@ export default function CatalogPage() {
     const prod = items.find(i => i.id === productId);
     if (!prod) return;
 
-    if (purchaseOrderToView.items.some((i: any) => i.productId === productId)) {
-      toast({ title: "Producto ya en la lista", variant: "destructive" });
-      return;
-    }
-
+    const lineId = Math.random().toString(36).substring(2, 11);
     const newItem = {
+      id: lineId,
       productId: prod.id,
       productName: prod.name,
       quantity: 1,
@@ -835,23 +840,23 @@ export default function CatalogPage() {
 
     const updatedItems = [...purchaseOrderToView.items, newItem];
     setPurchaseOrderToView({ ...purchaseOrderToView, items: updatedItems });
-    setManualPurchaseQtys(prev => ({ ...prev, [productId]: 1 }));
-    setManualPurchasePrices(prev => ({ ...prev, [productId]: newItem.price }));
-    setManualPurchaseCurrencies(prev => ({ ...prev, [productId]: newItem.currency as 'ARS' | 'USD' }));
-    setManualSuppliers(prev => ({ ...prev, [productId]: newItem.supplier }));
+    setManualPurchaseQtys(prev => ({ ...prev, [lineId]: 1 }));
+    setManualPurchasePrices(prev => ({ ...prev, [lineId]: newItem.price }));
+    setManualPurchaseCurrencies(prev => ({ ...prev, [lineId]: newItem.currency as 'ARS' | 'USD' }));
+    setManualSuppliers(prev => ({ ...prev, [lineId]: newItem.supplier }));
     
     toast({ title: "Ítem agregado", description: "Recuerda guardar los cambios de la orden." });
   }
 
-  const handleRemoveItemFromPurchaseOrder = (productId: string) => {
+  const handleRemoveItemFromPurchaseOrder = (lineId: string) => {
     if (!purchaseOrderToView) return;
-    const updatedItems = purchaseOrderToView.items.filter((i: any) => i.productId !== productId);
+    const updatedItems = purchaseOrderToView.items.filter((i: any) => (i.id || i.productId) !== lineId);
     setPurchaseOrderToView({ ...purchaseOrderToView, items: updatedItems });
     
-    const newQtys = { ...manualPurchaseQtys }; delete newQtys[productId];
-    const newPrices = { ...manualPurchasePrices }; delete newPrices[productId];
-    const newCurrencies = { ...manualPurchaseCurrencies }; delete newCurrencies[productId];
-    const newSups = { ...manualSuppliers }; delete newSups[productId];
+    const newQtys = { ...manualPurchaseQtys }; delete newQtys[lineId];
+    const newPrices = { ...manualPurchasePrices }; delete newPrices[lineId];
+    const newCurrencies = { ...manualPurchaseCurrencies }; delete newCurrencies[lineId];
+    const newSups = { ...manualSuppliers }; delete newSups[lineId];
     
     setManualPurchaseQtys(newQtys);
     setManualPurchasePrices(newPrices);
@@ -872,7 +877,7 @@ export default function CatalogPage() {
         const purchaseId = Math.random().toString(36).substring(2, 11);
         const purchaseRecord = {
           id: purchaseId,
-          productId: item.id,
+          productId: item.productId,
           productName: item.name,
           supplierName: supplierName,
           quantity: item.manualQty,
@@ -885,14 +890,14 @@ export default function CatalogPage() {
         };
         setDocumentNonBlocking(doc(db, 'purchases', purchaseId), purchaseRecord, { merge: true });
 
-        updateDocumentNonBlocking(doc(db, 'products_services', item.id), {
+        updateDocumentNonBlocking(doc(db, 'products_services', item.productId), {
           stock: increment(item.manualQty)
         });
         
         if (item.manualPrice > 0) {
           const costField = manualCurrency === 'USD' ? 'costUSD' : 'costARS';
           const otherCostField = manualCurrency === 'USD' ? 'costARS' : 'costUSD';
-          updateDocumentNonBlocking(doc(db, 'products_services', item.id), {
+          updateDocumentNonBlocking(doc(db, 'products_services', item.productId), {
             [costField]: item.manualPrice,
             [otherCostField]: 0,
             costCurrency: manualCurrency
@@ -902,7 +907,8 @@ export default function CatalogPage() {
     });
 
     const updatedItems = purchaseOrderToView.items.map((item: any) => {
-      if (itemsToProcess.some(i => i.id === item.productId)) {
+      const lineId = item.id || item.productId;
+      if (itemsToProcess.some(i => i.id === lineId)) {
         return { ...item, received: true };
       }
       return item;
@@ -965,15 +971,15 @@ export default function CatalogPage() {
     toast({ title: "Proveedor actualizado" });
   }
 
-  const handleUpdateItemSupplierGlobally = useCallback((productId: string, newSupplier: string) => {
+  const handleUpdateItemSupplierGlobally = useCallback((lineId: string, productId: string, newSupplier: string) => {
     const cleanSupplier = newSupplier === "Sin Proveedor" ? "" : newSupplier;
-    setManualSuppliers(prev => ({ ...prev, [productId]: newSupplier }));
+    setManualSuppliers(prev => ({ ...prev, [lineId]: newSupplier }));
     updateDocumentNonBlocking(doc(db, 'products_services', productId), {
       supplier: cleanSupplier
     });
     if (purchaseOrderToView && purchaseOrderToView.status !== 'completed') {
       const updatedItems = purchaseOrderToView.items.map((i: any) => 
-        i.productId === productId ? { ...i, supplier: newSupplier } : i
+        (i.id || i.productId) === lineId ? { ...i, supplier: newSupplier } : i
       );
       setPurchaseOrderToView({ ...purchaseOrderToView, items: updatedItems });
     }
@@ -1155,7 +1161,8 @@ export default function CatalogPage() {
     }
     const sortedItemsToInclude = [...itemsToInclude].sort((a, b) => a.name.localeCompare(b.name));
     sortedItemsToInclude.forEach(f => {
-      const currency = manualPurchaseCurrencies[f.id] || (f.manualCurrency || 'ARS');
+      const lineId = f.id;
+      const currency = manualPurchaseCurrencies[lineId] || (f.manualCurrency || 'ARS');
       text += `- *${f.name}*: ${f.manualQty} unidades. (Precio Ref: ${currency === 'USD' ? 'u$s' : '$'}${f.manualPrice.toLocaleString('es-AR')})\n`;
     });
     const ars = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * (manualPurchaseCurrencies[i.id] === 'ARS' ? manualPurchasePrices[i.id] : 0)), 0);
@@ -1431,11 +1438,12 @@ export default function CatalogPage() {
                     </TableHeader>
                     <TableBody>
                       {itemsInGroup.map(f => {
-                        const isZero = manualPurchasePrices[f.id] <= 0;
-                        const currentCurrency = manualPurchaseCurrencies[f.id] || (f.manualCurrency || 'ARS');
+                        const lineId = f.id;
+                        const isZero = manualPurchasePrices[lineId] <= 0;
+                        const currentCurrency = manualPurchaseCurrencies[lineId] || (f.manualCurrency || 'ARS');
                         
                         return (
-                          <TableRow key={f.id} className="hover:bg-muted/5 h-10">
+                          <TableRow key={lineId} className="hover:bg-muted/5 h-10">
                             <TableCell className="py-1">
                               <p className="font-bold text-xs">{f.name}</p>
                               <p className="text-[8px] text-muted-foreground uppercase">Stock Actual: {f.available}</p>
@@ -1444,8 +1452,8 @@ export default function CatalogPage() {
                               <input 
                                 type="number" 
                                 disabled={isOrdered} 
-                                value={manualPurchaseQtys[f.id] ?? 0} 
-                                onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [f.id]: Number(e.target.value) }))} 
+                                value={manualPurchaseQtys[lineId] ?? 0} 
+                                onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: Number(e.target.value) }))} 
                                 className="w-full text-center font-black text-xs bg-muted/30 border-none rounded h-7 focus:ring-2 focus:ring-primary/20 focus:outline-none" 
                               />
                             </TableCell>
@@ -1454,8 +1462,8 @@ export default function CatalogPage() {
                                 <input 
                                   type="number" 
                                   disabled={isOrdered} 
-                                  value={manualPurchasePrices[f.id] ?? 0} 
-                                  onChange={(e) => setManualPurchasePrices(prev => ({ ...prev, [f.id]: Number(e.target.value) }))} 
+                                  value={manualPurchasePrices[lineId] ?? 0} 
+                                  onChange={(e) => setManualPurchasePrices(prev => ({ ...prev, [lineId]: Number(e.target.value) }))} 
                                   className={cn(
                                     "w-full text-center font-black text-xs h-7 border rounded transition-all focus:outline-none focus:ring-2",
                                     isZero ? "bg-rose-50 border-rose-300 text-rose-600 animate-pulse" : "bg-white border-emerald-100 text-emerald-700"
@@ -1463,7 +1471,7 @@ export default function CatalogPage() {
                                 />
                                 <Tabs 
                                   value={currentCurrency} 
-                                  onValueChange={(v: any) => setManualPurchaseCurrencies(prev => ({ ...prev, [f.id]: v }))}
+                                  onValueChange={(v: any) => setManualPurchaseCurrencies(prev => ({ ...prev, [lineId]: v }))}
                                   className={cn("shrink-0 h-7", isOrdered && "pointer-events-none opacity-50")}
                                 >
                                   <TabsList className="h-7 p-0 gap-0 border">
@@ -1476,8 +1484,8 @@ export default function CatalogPage() {
                             <TableCell className="py-1">
                               <Select 
                                 disabled={isOrdered}
-                                value={manualSuppliers[f.id] || "Sin Proveedor"} 
-                                onValueChange={(v) => handleUpdateItemSupplierGlobally(f.id, v)}
+                                value={manualSuppliers[lineId] || "Sin Proveedor"} 
+                                onValueChange={(v) => handleUpdateItemSupplierGlobally(lineId, f.productId, v)}
                               >
                                 <SelectTrigger className="h-7 text-[10px] font-bold border-none bg-transparent">
                                   <SelectValue />
@@ -1489,7 +1497,7 @@ export default function CatalogPage() {
                               </Select>
                             </TableCell>
                             <TableCell className="text-right py-1">
-                              <p className="text-[10px] font-bold">{currentCurrency === 'USD' ? 'u$s' : '$'} {( (manualPurchaseQtys[f.id] ?? 0) * (manualPurchasePrices[f.id] ?? 0)).toLocaleString('es-AR')}</p>
+                              <p className="text-[10px] font-bold">{currentCurrency === 'USD' ? 'u$s' : '$'} {( (manualPurchaseQtys[lineId] ?? 0) * (manualPurchasePrices[lineId] ?? 0)).toLocaleString('es-AR')}</p>
                             </TableCell>
                             <TableCell className="py-1">
                               <Button 
@@ -1497,7 +1505,7 @@ export default function CatalogPage() {
                                 size="icon" 
                                 className="h-7 w-7 text-destructive" 
                                 disabled={isOrdered}
-                                onClick={() => handleRemoveItemFromPurchaseOrder(f.id)}
+                                onClick={() => handleRemoveItemFromPurchaseOrder(lineId)}
                               >
                                 <X className="h-4 w-4" />
                               </Button>
@@ -1700,8 +1708,8 @@ export default function CatalogPage() {
                 <Label className="font-bold">Seleccionar Producto</Label>
                 <Select onValueChange={(id) => {
                   const item = items?.find(i => i.id === id);
-                  if (item && !newPOItems.find(i => i.id === id)) {
-                    setNewPurchaseOrderItems([...newPOItems, { ...item, qtyToAdd: 1 }]);
+                  if (item) {
+                    setNewPurchaseOrderItems([...newPOItems, { ...item, qtyToAdd: 1, lineId: Math.random().toString(36).substring(2, 9) }]);
                   }
                 }}>
                   <SelectTrigger className="bg-white h-10"><SelectValue placeholder="Buscar ítem..." /></SelectTrigger>
@@ -1727,7 +1735,7 @@ export default function CatalogPage() {
                   </TableHeader>
                   <TableBody>
                     {newPOItems.map((item, idx) => (
-                      <TableRow key={item.id}>
+                      <TableRow key={item.lineId || idx}>
                         <TableCell className="text-xs font-bold">{item.name}</TableCell>
                         <TableCell>
                           <Input 
@@ -2477,7 +2485,7 @@ export default function CatalogPage() {
   function confirmDeletePurchaseOrder() {
     if (!purchaseOrderToDelete) return
     deleteDocumentNonBlocking(doc(db, 'purchase_orders', purchaseOrderToDelete.id))
-    setPurchaseOrderToDelete(null)
+    purchaseOrderToDelete(null)
     toast({ title: "Orden de compra eliminada" })
   }
 }
