@@ -93,6 +93,32 @@
         "supplierStatuses": { "type": "object", "description": "Statuses of the purchase orders for each supplier." }
       }
     },
+    "PurchaseOrder": {
+      "title": "PurchaseOrder",
+      "type": "object",
+      "description": "A manual order for restocking individual items.",
+      "properties": {
+        "id": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "completed"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string" },
+              "productName": { "type": "string" },
+              "quantity": { "type": "number" },
+              "price": { "type": "number" },
+              "currency": { "type": "string" },
+              "supplier": { "type": "string" },
+              "received": { "type": "boolean" }
+            }
+          }
+        },
+        "supplierStatuses": { "type": "object", "description": "Statuses of the groups per supplier." }
+      }
+    },
     "Purchase": {
       "title": "Purchase",
       "type": "object",
@@ -147,6 +173,10 @@
       {
         "path": "/production_orders/{orderId}",
         "definition": { "entityName": "ProductionOrder", "description": "Production tracking." }
+      },
+      {
+        "path": "/purchase_orders/{orderId}",
+        "definition": { "entityName": "PurchaseOrder", "description": "Restock orders." }
       },
       {
         "path": "/purchases/{purchaseId}",

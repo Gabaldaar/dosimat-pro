@@ -154,12 +154,14 @@ export default function CatalogPage() {
   const categoriesQuery = useMemoFirebase(() => collection(db, 'product_categories'), [db])
   const suppliersQuery = useMemoFirebase(() => collection(db, 'suppliers'), [db])
   const ordersQuery = useMemoFirebase(() => query(collection(db, 'production_orders'), orderBy('createdAt', 'desc')), [db])
+  const purchaseOrdersQuery = useMemoFirebase(() => query(collection(db, 'purchase_orders'), orderBy('createdAt', 'desc')), [db])
   const allPurchasesQuery = useMemoFirebase(() => query(collection(db, 'purchases'), orderBy('date', 'desc')), [db])
   
   const { data: items, isLoading } = useCollection(catalogQuery)
   const { data: rawCategories, isLoading: loadingCats } = useCollection(categoriesQuery)
   const { data: suppliers } = useCollection(suppliersQuery)
   const { data: orders, isLoading: loadingOrders } = useCollection(ordersQuery)
+  const { data: purchaseOrders, isLoading: loadingPO } = useCollection(purchaseOrdersQuery)
   const { data: allPurchases } = useCollection(allPurchasesQuery)
   
   const categories = useMemo(() => {
@@ -194,6 +196,7 @@ export default function CatalogPage() {
 
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isAssemblyOpen, setIsAssemblyOpen] = useState(false)
+  const [isNewPurchaseOrderOpen, setIsNewPurchaseOrderOpen] = useState(false)
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false)
   const [isSupplierManagerOpen, setIsSupplierManagerOpen] = useState(false)
   const [isAuditOpen, setIsAuditOpen] = useState(false)
@@ -219,11 +222,17 @@ export default function CatalogPage() {
   const [itemToPrint, setItemToPrint] = useState<any | null>(null)
   const [orderToPrint, setOrderToPrint] = useState<any | null>(null)
   const [orderToView, setOrderToView] = useState<any | null>(null)
+  const [purchaseOrderToView, setPurchaseOrderToView] = useState<any | null>(null)
   const [orderToDelete, setOrderToDelete] = useState<any | null>(null)
+  const [purchaseOrderToDelete, setPurchaseOrderToDelete] = useState<any | null>(null)
   const [orderToFinalize, setOrderToFinalize] = useState<any | null>(null)
   const [isExitAlertOpen, setIsExitAlertOpen] = useState(false)
   
   const [bomFilterCategory, setBomFilterCategory] = useState("all")
+
+  // States for Purchase Orders creation
+  const [newPOItems, setNewPurchaseOrderItems] = useState<any[]>([])
+  const [newPOTitle, setNewPOTitle] = useState("")
 
   const [manualPurchaseQtys, setManualPurchaseQtys] = useState<Record<string, number>>({})
   const [manualPurchasePrices, setManualPurchasePrices] = useState<Record<string, number>>({})
@@ -257,7 +266,7 @@ export default function CatalogPage() {
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        const anyOpen = isDialogOpen || !!itemToDelete || isAssemblyOpen || isCategoryManagerOpen || isSupplierManagerOpen || !!orderToView || !!orderToDelete || isAuditOpen || isExitAlertOpen || !!orderToFinalize || isPurchaseHistoryOpen || isSupplierHistoryOpen;
+        const anyOpen = isDialogOpen || !!itemToDelete || isAssemblyOpen || isNewPurchaseOrderOpen || isCategoryManagerOpen || isSupplierManagerOpen || !!orderToView || !!purchaseOrderToView || !!orderToDelete || !!purchaseOrderToDelete || isAuditOpen || isExitAlertOpen || !!orderToFinalize || isPurchaseHistoryOpen || isSupplierHistoryOpen;
         if (!anyOpen) {
           document.body.style.pointerEvents = 'auto';
         }
@@ -265,7 +274,7 @@ export default function CatalogPage() {
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isDialogOpen, itemToDelete, isAssemblyOpen, isCategoryManagerOpen, isSupplierManagerOpen, orderToView, orderToDelete, isAuditOpen, isExitAlertOpen, orderToFinalize, isPurchaseHistoryOpen, isSupplierHistoryOpen]);
+  }, [isDialogOpen, itemToDelete, isAssemblyOpen, isNewPurchaseOrderOpen, isCategoryManagerOpen, isSupplierManagerOpen, orderToView, purchaseOrderToView, orderToDelete, purchaseOrderToDelete, isAuditOpen, isExitAlertOpen, orderToFinalize, isPurchaseHistoryOpen, isSupplierHistoryOpen]);
 
   const calculateCost = useCallback((itemData: any, allItems: any[], currentExchangeRate: number): { ars: number, usd: number } => {
     if (!itemData.isCompuesto) {
@@ -279,7 +288,6 @@ export default function CatalogPage() {
       }
     }
     
-    // Para productos compuestos, sumamos la mano de obra convertida a ambas monedas
     const laborARS = Number(itemData.laborCostARS) || 0;
     const laborUSD = Number(itemData.laborCostUSD) || 0;
     
@@ -420,6 +428,25 @@ export default function CatalogPage() {
         statuses: JSON.parse(JSON.stringify(newStatuses)),
         qty: orderToView.quantity
       });
+    } else if (purchaseOrderToView) {
+      // Logic for Manual Purchase Order View
+      const newManualQtys: Record<string, number> = {};
+      const newManualPrices: Record<string, number> = {};
+      const newManualCurrencies: Record<string, 'ARS' | 'USD'> = {};
+      const newManualSups: Record<string, string> = {};
+      
+      purchaseOrderToView.items.forEach((item: any) => {
+        newManualQtys[item.productId] = item.quantity;
+        newManualCurrencies[item.productId] = item.currency || 'ARS';
+        newManualPrices[item.productId] = item.price || 0;
+        newManualSups[item.productId] = item.supplier || "Sin Proveedor";
+      });
+      
+      setManualPurchaseQtys(newManualQtys);
+      setManualPurchasePrices(newManualPrices);
+      setManualPurchaseCurrencies(newManualCurrencies);
+      setManualSuppliers(newManualSups);
+      setSupplierStatuses(purchaseOrderToView.supplierStatuses || {});
     } else if (isAssemblyOpen && !orderToView && explosionSummary) {
       const newManualQtys: Record<string, number> = {};
       const newManualPrices: Record<string, number> = {};
@@ -439,7 +466,7 @@ export default function CatalogPage() {
       setManualSuppliers(newManualSups);
       setSupplierStatuses({});
     }
-  }, [isAssemblyOpen, orderToView, explosionSummary]);
+  }, [isAssemblyOpen, orderToView, explosionSummary, purchaseOrderToView]);
 
   const hasUnsavedChanges = useMemo(() => {
     if (!orderToView || orderToView.status === 'completed') return false;
@@ -460,7 +487,38 @@ export default function CatalogPage() {
   };
 
   const purchaseCalculations = useMemo(() => {
-    if (!explosionSummary || !items) return null;
+    if (!items) return null;
+
+    if (purchaseOrderToView) {
+      // Calculations for manual purchase order
+      const itemsToBuy = purchaseOrderToView.items.map((item: any) => {
+        const prod = items.find(i => i.id === item.productId);
+        const manualQty = manualPurchaseQtys[item.productId] ?? item.quantity;
+        const manualCurrency = manualPurchaseCurrencies[item.productId] ?? (item.currency || 'ARS');
+        const manualPrice = manualPurchasePrices[item.productId] ?? item.price;
+        const currentSup = manualSuppliers[item.productId] || (item.supplier || "Sin Proveedor");
+
+        return {
+          id: item.productId,
+          name: item.productName,
+          available: prod?.stock || 0,
+          required: 0,
+          manualQty,
+          manualPrice,
+          manualCurrency,
+          supplier: currentSup,
+          received: item.received || false
+        };
+      }).filter((i: any) => !i.received);
+
+      return {
+        items: itemsToBuy,
+        totalARS: itemsToBuy.reduce((sum: number, item: any) => sum + (item.manualQty * (item.manualCurrency === 'ARS' ? item.manualPrice : 0)), 0),
+        totalUSD: itemsToBuy.reduce((sum: number, item: any) => sum + (item.manualQty * (item.manualCurrency === 'USD' ? item.manualPrice : 0)), 0)
+      };
+    }
+
+    if (!explosionSummary) return null;
 
     const itemsToBuy = explosionSummary.toBuySuggested.map(item => {
       const manualQty = manualPurchaseQtys[item.id] ?? item.suggestedToBuy;
@@ -489,7 +547,7 @@ export default function CatalogPage() {
       totalARS: itemsToBuy.reduce((sum, item) => sum + (item.manualQty * (item.manualCurrency === 'ARS' ? item.manualPrice : 0)), 0),
       totalUSD: itemsToBuy.reduce((sum, item) => sum + (item.manualQty * (item.manualCurrency === 'USD' ? item.manualPrice : 0)), 0)
     };
-  }, [explosionSummary, manualPurchaseQtys, manualPurchasePrices, manualPurchaseCurrencies, manualSuppliers, items]);
+  }, [explosionSummary, manualPurchaseQtys, manualPurchasePrices, manualPurchaseCurrencies, manualSuppliers, items, purchaseOrderToView]);
 
   const currentEditingCosts = useMemo(() => {
     if (!items || !formData.isCompuesto) return { ars: 0, usd: 0 };
@@ -556,7 +614,7 @@ export default function CatalogPage() {
   }, []);
 
   const handleOpenDialog = (item?: any) => {
-    setEditHistory([]); // Reset history when opening a fresh dialog
+    setEditHistory([]); 
     if (item) {
       loadItemIntoForm(item);
     } else {
@@ -573,14 +631,8 @@ export default function CatalogPage() {
   const handleJumpToComponent = (componentId: string) => {
     const component = items?.find(i => i.id === componentId);
     if (!component) return;
-
-    // Save current state to history stack
     setEditHistory(prev => [...prev, { id: editingItemId, data: JSON.parse(JSON.stringify(formData)) }]);
-    
-    // Load new component into form
     loadItemIntoForm(component);
-    
-    // Scroll to top
     const scrollContainer = document.getElementById('config-item-scroll');
     if (scrollContainer) scrollContainer.scrollTop = 0;
   }
@@ -589,12 +641,9 @@ export default function CatalogPage() {
     const newHistory = [...editHistory];
     const previousState = newHistory.pop();
     if (!previousState) return;
-
     setEditHistory(newHistory);
     setEditingItemId(previousState.id);
     setFormData(previousState.data);
-    
-    // Scroll to top
     const scrollContainer = document.getElementById('config-item-scroll');
     if (scrollContainer) scrollContainer.scrollTop = 0;
   }
@@ -665,6 +714,35 @@ export default function CatalogPage() {
     toast({ title: "Orden de producción creada", description: `Estado: ${status === 'ready' ? 'Lista para armar' : 'Pendiente de compra'}` });
   }
 
+  const handleCreatePurchaseOrder = () => {
+    if (newPOItems.length === 0) return;
+    const id = Math.random().toString(36).substring(2, 11);
+    
+    const newPO = {
+      id,
+      description: newPOTitle || "Orden de Reposición Manual",
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      items: newPOItems.map(item => ({
+        productId: item.id,
+        productName: item.name,
+        quantity: item.qtyToAdd || 1,
+        price: item.costCurrency === 'USD' ? item.costUSD : item.costARS,
+        currency: item.costCurrency || 'ARS',
+        supplier: item.supplier || "Sin Proveedor",
+        received: false
+      })),
+      supplierStatuses: {}
+    };
+
+    setDocumentNonBlocking(doc(db, 'purchase_orders', id), newPO, { merge: true });
+    setIsNewPurchaseOrderOpen(false);
+    setNewPurchaseOrderItems([]);
+    setNewPOTitle("");
+    setActiveTab("purchases");
+    toast({ title: "Orden de compra creada", description: "Ahora puedes gestionar la recepción por proveedor." });
+  }
+
   const handleUpdateOrderPlan = () => {
     if (!orderToView) return;
     const status = explosionSummary?.all.some(f => {
@@ -693,14 +771,16 @@ export default function CatalogPage() {
   }
 
   const handleReceiveMaterials = (supplierName: string) => {
-    if (!orderToView || !purchaseCalculations) return;
+    const isPO = !!purchaseOrderToView;
+    const targetOrder = purchaseOrderToView || orderToView;
+    if (!targetOrder || !purchaseCalculations) return;
+
     const newPurchaseQtys = { ...manualPurchaseQtys };
     const itemsToProcess = purchaseCalculations.items.filter(i => (i.supplier || "Sin Proveedor") === supplierName);
     
     itemsToProcess.forEach(item => {
       if (item.manualQty > 0) {
-        // 1. Guardar en Historial de Compras (Nueva colección)
-        const manualCurrency = manualPurchaseCurrencies[item.id] || (item.costCurrency as 'ARS' | 'USD' || 'ARS');
+        const manualCurrency = manualPurchaseCurrencies[item.id] || (item.manualCurrency || 'ARS');
         const purchaseId = Math.random().toString(36).substring(2, 11);
         const purchaseRecord = {
           id: purchaseId,
@@ -711,18 +791,16 @@ export default function CatalogPage() {
           price: item.manualPrice,
           currency: manualCurrency,
           date: new Date().toISOString(),
-          orderId: orderToView.id,
+          orderId: targetOrder.id,
           exchangeRate: currentRate,
           rateType: rateType
         };
         setDocumentNonBlocking(doc(db, 'purchases', purchaseId), purchaseRecord, { merge: true });
 
-        // 2. Actualizar Stock
         updateDocumentNonBlocking(doc(db, 'products_services', item.id), {
           stock: increment(item.manualQty)
         });
         
-        // 3. Actualizar Costo Real en el catálogo y Moneda
         if (item.manualPrice > 0) {
           const costField = manualCurrency === 'USD' ? 'costUSD' : 'costARS';
           const otherCostField = manualCurrency === 'USD' ? 'costARS' : 'costUSD';
@@ -737,21 +815,43 @@ export default function CatalogPage() {
       }
     });
 
-    setManualPurchaseQtys(newPurchaseQtys);
-    const status = explosionSummary?.all.some(f => {
-      const stockAfterEntry = f.id in newPurchaseQtys ? (f.available + (newPurchaseQtys[f.id] || 0)) : f.available;
-      return (stockAfterEntry - f.required) < 0;
-    }) ? 'pending_purchase' : 'ready';
-    
-    updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
-      purchaseQtys: newPurchaseQtys,
-      status
-    });
-    setInitialPlanData(prev => ({ ...prev, qtys: JSON.parse(JSON.stringify(newPurchaseQtys)) }));
+    if (isPO) {
+      // Update Purchase Order Items
+      const updatedItems = targetOrder.items.map((item: any) => {
+        if (itemsToProcess.some(i => i.id === item.productId)) {
+          return { ...item, received: true };
+        }
+        return item;
+      });
+      const allReceived = updatedItems.every((i: any) => i.received);
+      updateDocumentNonBlocking(doc(db, 'purchase_orders', targetOrder.id), {
+        items: updatedItems,
+        status: allReceived ? 'completed' : 'pending'
+      });
+      setPurchaseOrderToView({ ...targetOrder, items: updatedItems, status: allReceived ? 'completed' : 'pending' });
+    } else {
+      // Update Production Order
+      setManualPurchaseQtys(newPurchaseQtys);
+      const status = explosionSummary?.all.some(f => {
+        const stockAfterEntry = f.id in newPurchaseQtys ? (f.available + (newPurchaseQtys[f.id] || 0)) : f.available;
+        return (stockAfterEntry - f.required) < 0;
+      }) ? 'pending_purchase' : 'ready';
+      
+      updateDocumentNonBlocking(doc(db, 'production_orders', targetOrder.id), {
+        purchaseQtys: newPurchaseQtys,
+        status
+      });
+      setInitialPlanData(prev => ({ ...prev, qtys: JSON.parse(JSON.stringify(newPurchaseQtys)) }));
+    }
+
     toast({ title: `Materiales de ${supplierName} ingresados`, description: "Se actualizó el stock, los costos y el historial." });
   }
 
   const handleToggleSupplierStatus = (supplierName: string) => {
+    const isPO = !!purchaseOrderToView;
+    const targetOrder = purchaseOrderToView || orderToView;
+    if (!targetOrder) return;
+
     const current = supplierStatuses[supplierName] || 'pending';
     const next = current === 'pending' ? 'ordered' : 'pending';
     
@@ -770,30 +870,26 @@ export default function CatalogPage() {
 
     const newStatuses = { ...supplierStatuses, [supplierName]: next };
     setSupplierStatuses(newStatuses);
-    if (orderToView) {
-      updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), {
-        supplierStatuses: newStatuses
-      });
-    }
+    const collectionName = isPO ? 'purchase_orders' : 'production_orders';
+    updateDocumentNonBlocking(doc(db, collectionName, targetOrder.id), {
+      supplierStatuses: newStatuses
+    });
+    
     toast({ title: next === 'ordered' ? "Pedido confirmado" : "Pedido desbloqueado para edición" });
   }
 
   const handleUpdateItemAudit = (id: string, updates: any) => {
     const item = items?.find(i => i.id === id);
     if (!item) return;
-
     const finalUpdates = { ...updates };
-    
     if ('costAmount' in updates || 'costCurrency' in updates) {
       const amount = updates.costAmount ?? (item.costCurrency === 'USD' ? item.costUSD : item.costARS);
       const currency = updates.costCurrency ?? item.costCurrency;
-      
       finalUpdates.costARS = currency === 'ARS' ? amount : 0;
       finalUpdates.costUSD = currency === 'USD' ? amount : 0;
       finalUpdates.costCurrency = currency;
       delete finalUpdates.costAmount;
     }
-
     updateDocumentNonBlocking(doc(db, 'products_services', id), finalUpdates);
     toast({ title: "Item actualizado", description: "Cambios guardados en auditoría." });
   }
@@ -867,7 +963,6 @@ export default function CatalogPage() {
     }
 
     try {
-      // Capturar snapshots históricos antes de modificar el stock
       const currentExplosionSnapshot = JSON.parse(JSON.stringify(explosionSummary));
       const currentSmartExplosionSnapshot = JSON.parse(JSON.stringify(getSmartExplosion(orderToFinalize.productId, orderToFinalize.quantity, 0)));
 
@@ -985,9 +1080,9 @@ export default function CatalogPage() {
   const handleCopyShoppingList = (supplierFilter: string) => {
     if (!purchaseCalculations) return;
     const dateStr = new Date().toLocaleDateString('es-AR');
-    const targetOrder = orderToView || { productName: selectedForAssembly?.name, quantity: assemblyQty };
+    const targetOrder = purchaseOrderToView || orderToView || { description: selectedForAssembly?.name, quantity: assemblyQty };
     let text = `*LISTA DE COMPRAS - DOSIMAT PRO*\n`;
-    text += `Para: ${targetOrder.quantity} x ${targetOrder.productName}\n`;
+    text += `Origen: ${targetOrder.productName || targetOrder.description}\n`;
     text += `PROVEEDOR: ${supplierFilter.toUpperCase()}\n`;
     const supObj = suppliers?.find(s => s.name === supplierFilter);
     if (supObj) {
@@ -995,14 +1090,14 @@ export default function CatalogPage() {
       if (supObj.address) text += `Dir: ${supObj.address}\n`;
     }
     text += `Fecha: ${dateStr}\n\n`;
-    const itemsToInclude = purchaseCalculations.items.filter(i => (i.supplier || "Sin Proveedor") === supplierFilter);
+    const itemsToInclude = purchaseCalculations.items.filter((i: any) => (i.supplier || "Sin Proveedor") === supplierFilter);
     if (itemsToInclude.length === 0) {
       toast({ title: "Sin ítems", description: "No hay faltantes para este proveedor." });
       return;
     }
     const sortedItemsToInclude = [...itemsToInclude].sort((a, b) => a.name.localeCompare(b.name));
     sortedItemsToInclude.forEach(f => {
-      const currency = manualPurchaseCurrencies[f.id] || (f.costCurrency as 'ARS' | 'USD' || 'ARS');
+      const currency = manualPurchaseCurrencies[f.id] || (f.manualCurrency || 'ARS');
       text += `- *${f.name}*: ${f.manualQty} unidades. (Precio Ref: ${currency === 'USD' ? 'u$s' : '$'}${f.manualPrice.toLocaleString('es-AR')})\n`;
     });
     const ars = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * (manualPurchaseCurrencies[i.id] === 'ARS' ? manualPurchasePrices[i.id] : 0)), 0);
@@ -1079,16 +1174,6 @@ export default function CatalogPage() {
   )
 
   const OrdersList = () => {
-    const supplierPurchasesCount = useMemo(() => {
-      const counts: Record<string, number> = {};
-      allPurchases?.forEach(p => {
-        if (p.supplierName) {
-          counts[p.supplierName] = (counts[p.supplierName] || 0) + 1;
-        }
-      });
-      return counts;
-    }, [allPurchases]);
-
     return (
       <div className="space-y-8">
         {loadingOrders ? (
@@ -1103,56 +1188,88 @@ export default function CatalogPage() {
             <p className="text-muted-foreground max-w-md mx-auto mt-2">Crea una orden desde el catálogo para planificar la fabricación de productos compuestos.</p>
           </Card>
         ) : (
-          <div className="space-y-8">
-            <section className="space-y-4">
-              <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2 px-1">
-                <Truck className="h-4 w-4" /> Análisis de Proveedores (Compras Realizadas)
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                {Object.entries(supplierPurchasesCount).sort((a,b) => b[1] - a[1]).slice(0, 12).map(([sup, count]) => (
-                  <Card 
-                    key={sup} 
-                    className="p-3 bg-white border-primary/10 flex flex-col items-center justify-center text-center group hover:border-primary/30 transition-all cursor-pointer relative"
-                    onClick={() => { setSelectedSupplierForHistory(sup); setIsSupplierHistoryOpen(true); }}
-                  >
-                    <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"><Eye className="h-3 w-3 text-primary" /></div>
-                    <p className="text-[10px] font-black uppercase text-slate-400 group-hover:text-primary transition-colors">{sup}</p>
-                    <p className="text-2xl font-black text-slate-800">{count}</p>
-                    <p className="text-[8px] font-bold text-muted-foreground uppercase">OPERACIONES</p>
-                  </Card>
-                ))}
-              </div>
-            </section>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {orders.map((order: any) => {
-                const statusInfo = {
-                  draft: { label: "Borrador", icon: ClipboardList, color: "text-slate-600 bg-slate-100 border-slate-200" },
-                  pending_purchase: { label: "Faltan Materiales", icon: ShoppingCart, color: "text-amber-700 bg-amber-50 border-amber-200" },
-                  ready: { label: "Listo para Armar", icon: Hammer, color: "text-blue-700 bg-blue-50 border-blue-200" },
-                  completed: { label: "Completado", icon: CheckCircle, color: "text-emerald-700 bg-emerald-50 border-emerald-200" }
-                }[order.status as keyof typeof statusInfo] || { label: order.status, icon: Factory, color: "bg-muted" };
-                const StatusIcon = statusInfo.icon;
-                return (
-                  <Card key={order.id} className={cn("glass-card hover:shadow-lg transition-all cursor-pointer border-l-4 group", order.status === 'completed' ? 'border-l-emerald-500 opacity-70' : 'border-l-primary')} onClick={() => setOrderToView(order)}>
-                    <CardHeader className="pb-3">
-                      <div className="flex justify-between items-start">
-                        <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5", statusInfo.color)}>
-                          <StatusIcon className="h-2.5 w-2.5 mr-1" /> {statusInfo.label}
-                        </Badge>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={(e) => { e.stopPropagation(); setOrderToDelete(order); }}><Trash2 className="h-4 w-4" /></Button>
-                        </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {orders.map((order: any) => {
+              const statusInfo = {
+                draft: { label: "Borrador", icon: ClipboardList, color: "text-slate-600 bg-slate-100 border-slate-200" },
+                pending_purchase: { label: "Faltan Materiales", icon: ShoppingCart, color: "text-amber-700 bg-amber-50 border-amber-200" },
+                ready: { label: "Listo para Armar", icon: Hammer, color: "text-blue-700 bg-blue-50 border-blue-200" },
+                completed: { label: "Completado", icon: CheckCircle, color: "text-emerald-700 bg-emerald-50 border-emerald-200" }
+              }[order.status as keyof typeof statusInfo] || { label: order.status, icon: Factory, color: "bg-muted" };
+              const StatusIcon = statusInfo.icon;
+              return (
+                <Card key={order.id} className={cn("glass-card hover:shadow-lg transition-all cursor-pointer border-l-4 group", order.status === 'completed' ? 'border-l-emerald-500 opacity-70' : 'border-l-primary')} onClick={() => setOrderToView(order)}>
+                  <CardHeader className="pb-3">
+                    <div className="flex justify-between items-start">
+                      <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5", statusInfo.color)}>
+                        <StatusIcon className="h-2.5 w-2.5 mr-1" /> {statusInfo.label}
+                      </Badge>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={(e) => { e.stopPropagation(); setOrderToDelete(order); }}><Trash2 className="h-4 w-4" /></Button>
                       </div>
-                      <CardTitle className="text-lg mt-2 font-bold leading-tight">{order.productName}</CardTitle>
-                      <CardDescription className="text-[10px] font-bold uppercase tracking-tighter">Creada el {new Date(order.createdAt).toLocaleDateString('es-AR')}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4"><div className="bg-white/50 border rounded-lg p-3 flex items-center justify-between shadow-inner"><span className="text-[10px] font-black text-muted-foreground uppercase">Unidades a Fabricar</span><span className="text-2xl font-black text-primary">{order.quantity}</span></div></CardContent>
-                    <CardFooter className="pt-0 border-t bg-muted/5 flex justify-between py-3"><Button variant="ghost" size="sm" className="h-8 text-[10px] font-bold uppercase p-0 px-2">VER DETALLE <ChevronRight className="h-3 w-3 ml-1" /></Button>{order.status === 'ready' && <Badge className="bg-blue-600 animate-pulse text-[8px] font-black">PRODUCCIÓN HABILITADA</Badge>}</CardFooter>
-                  </Card>
-                );
-              })}
-            </div>
+                    </div>
+                    <CardTitle className="text-lg mt-2 font-bold leading-tight">{order.productName}</CardTitle>
+                    <CardDescription className="text-[10px] font-bold uppercase tracking-tighter">Creada el {new Date(order.createdAt).toLocaleDateString('es-AR')}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4"><div className="bg-white/50 border rounded-lg p-3 flex items-center justify-between shadow-inner"><span className="text-[10px] font-black text-muted-foreground uppercase">Unidades a Fabricar</span><span className="text-2xl font-black text-primary">{order.quantity}</span></div></CardContent>
+                  <CardFooter className="pt-0 border-t bg-muted/5 flex justify-between py-3"><Button variant="ghost" size="sm" className="h-8 text-[10px] font-bold uppercase p-0 px-2">VER DETALLE <ChevronRight className="h-3 w-3 ml-1" /></Button>{order.status === 'ready' && <Badge className="bg-blue-600 animate-pulse text-[8px] font-black">PRODUCCIÓN HABILITADA</Badge>}</CardFooter>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const PurchaseOrdersList = () => {
+    return (
+      <div className="space-y-8">
+        <div className="flex justify-end">
+          <Button onClick={() => setIsNewPurchaseOrderOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 font-bold gap-2">
+            <Plus className="h-4 w-4" /> Nueva Orden de Compra
+          </Button>
+        </div>
+        {loadingPO ? (
+          <div className="py-20 flex flex-col items-center justify-center gap-3">
+            <RefreshCw className="h-8 w-8 animate-spin text-emerald-600" />
+            <p className="text-sm text-muted-foreground italic">Cargando órdenes de compra...</p>
+          </div>
+        ) : !purchaseOrders || purchaseOrders.length === 0 ? (
+          <Card className="p-20 text-center border-dashed border-2 bg-muted/5">
+            <ShoppingCart className="h-16 w-16 mx-auto text-muted-foreground opacity-20 mb-4" />
+            <h3 className="text-xl font-bold text-slate-800">No hay órdenes de compra manuales</h3>
+            <p className="text-muted-foreground max-w-md mx-auto mt-2">Crea una orden para reponer stock de componentes sueltos o insumos específicos.</p>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {purchaseOrders.map((po: any) => {
+              const allReceived = po.items.every((i: any) => i.received);
+              return (
+                <Card key={po.id} className={cn("glass-card hover:shadow-lg transition-all cursor-pointer border-l-4 group", allReceived ? 'border-l-emerald-500 opacity-70' : 'border-l-emerald-600')} onClick={() => setPurchaseOrderToView(po)}>
+                  <CardHeader className="pb-3">
+                    <div className="flex justify-between items-start">
+                      <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5", allReceived ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-blue-50 text-blue-700 border-blue-200")}>
+                        {allReceived ? <CheckCircle className="h-2.5 w-2.5 mr-1" /> : <Clock className="h-2.5 w-2.5 mr-1" />}
+                        {allReceived ? 'COMPLETADA' : 'PENDIENTE'}
+                      </Badge>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); setPurchaseOrderToDelete(po); }}><Trash2 className="h-4 w-4" /></Button>
+                    </div>
+                    <CardTitle className="text-lg mt-2 font-bold leading-tight">{po.description || "Orden de Reposición"}</CardTitle>
+                    <CardDescription className="text-[10px] font-bold uppercase">Creada el {new Date(po.createdAt).toLocaleDateString('es-AR')}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="bg-emerald-50/50 border border-emerald-100 rounded-lg p-3 flex items-center justify-between">
+                      <span className="text-[10px] font-black text-muted-foreground uppercase">Ítems Totales</span>
+                      <span className="text-2xl font-black text-emerald-700">{po.items.length}</span>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="pt-0 border-t bg-muted/5 flex justify-between py-3">
+                    <Button variant="ghost" size="sm" className="h-8 text-[10px] font-bold uppercase p-0 px-2">GESTIONAR RECEPCIÓN <ChevronRight className="h-3 w-3 ml-1" /></Button>
+                  </CardFooter>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
@@ -1177,7 +1294,7 @@ export default function CatalogPage() {
       <div className="space-y-10">
         {supplierNames.length === 0 ? (
           <div className="p-12 text-center text-emerald-600 bg-white border rounded-xl space-y-2">
-            <CheckCircle2 className="h-12 w-12 mx-auto" /><p className="font-black">MATERIALES LISTOS</p><p className="text-xs text-muted-foreground italic">Tienes todo lo necesario para empezar el armado.</p>
+            <CheckCircle2 className="h-12 w-12 mx-auto" /><p className="font-black">PEDIDO COMPLETADO</p><p className="text-xs text-muted-foreground italic">Ya se recibieron todos los materiales de esta orden.</p>
           </div>
         ) : (
           supplierNames.map(sup => {
@@ -1206,95 +1323,73 @@ export default function CatalogPage() {
                       <Copy className="h-3.5 w-3.5" /> COPIAR
                     </Button>
                     
-                    {orderToView?.status !== 'completed' && (
-                      <>
-                        <Button 
-                          variant={isOrdered ? "ghost" : "outline"} 
-                          size="sm" 
-                          className={cn("h-8 gap-2 font-bold text-xs flex-1 md:flex-none", isOrdered ? "text-amber-600 hover:bg-amber-50" : "border-emerald-600 text-emerald-700")}
-                          onClick={() => handleToggleSupplierStatus(sup)}
-                        >
-                          {isOrdered ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-                          {isOrdered ? "DESBLOQUEAR" : "MARCAR COMO PEDIDO"}
-                        </Button>
-                        
-                        <Button 
-                          size="sm" 
-                          className="h-8 gap-2 bg-emerald-600 hover:bg-emerald-700 font-bold text-xs flex-1 md:flex-none" 
-                          onClick={() => handleReceiveMaterials(sup)} 
-                          disabled={itemsInGroup.every(i => i.manualQty <= 0)}
-                        >
-                          <Save className="h-3.5 w-3.5" /> INGRESAR COMPRA
-                        </Button>
-                      </>
-                    )}
+                    <Button 
+                      variant={isOrdered ? "ghost" : "outline"} 
+                      size="sm" 
+                      className={cn("h-8 gap-2 font-bold text-xs flex-1 md:flex-none", isOrdered ? "text-amber-600 hover:bg-amber-50" : "border-emerald-600 text-emerald-700")}
+                      onClick={() => handleToggleSupplierStatus(sup)}
+                    >
+                      {isOrdered ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                      {isOrdered ? "DESBLOQUEAR" : "MARCAR COMO PEDIDO"}
+                    </Button>
+                    
+                    <Button 
+                      size="sm" 
+                      className="h-8 gap-2 bg-emerald-600 hover:bg-emerald-700 font-bold text-xs flex-1 md:flex-none" 
+                      onClick={() => handleReceiveMaterials(sup)} 
+                      disabled={itemsInGroup.every(i => i.manualQty <= 0)}
+                    >
+                      <Save className="h-3.5 w-3.5" /> INGRESAR COMPRA
+                    </Button>
                   </div>
                 </div>
 
-                <div className="hidden md:block border-2 rounded-xl bg-white shadow-md overflow-hidden">
+                <div className="border-2 rounded-xl bg-white shadow-md overflow-hidden">
                   <Table className="min-w-[600px]">
                     <TableHeader className="bg-slate-50">
                       <TableRow>
                         <TableHead className="text-[9px] font-black uppercase">Material</TableHead>
                         <TableHead className="text-center font-black text-[9px] uppercase w-20">Cantidad</TableHead>
-                        <TableHead className="text-center font-black text-[9px] uppercase w-28">Precio Ref.</TableHead>
                         <TableHead className="text-center font-black text-[9px] uppercase w-48">Precio Compra</TableHead>
-                        <TableHead className="text-center font-black text-[9px] uppercase w-20">Stock Post</TableHead>
                         <TableHead className="text-right font-black text-[9px] uppercase w-28">Subtotal</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {itemsInGroup.map(f => {
                         const isZero = manualPurchasePrices[f.id] <= 0;
-                        const originalCost = f.costCurrency === 'USD' ? f.costUSD : f.costARS;
-                        const currentCurrency = manualPurchaseCurrencies[f.id] || (f.costCurrency as 'ARS' | 'USD' || 'ARS');
+                        const currentCurrency = manualPurchaseCurrencies[f.id] || (f.manualCurrency || 'ARS');
                         
-                        const lastPurchase = allPurchases?.find(p => p.productId === f.id);
-                        const refPrice = lastPurchase ? lastPurchase.price : originalCost;
-                        const refCurrency = lastPurchase ? lastPurchase.currency : f.costCurrency;
-
                         return (
                           <TableRow key={f.id} className="hover:bg-muted/5 h-10">
                             <TableCell className="py-1">
                               <p className="font-bold text-xs">{f.name}</p>
-                              <p className="text-[8px] text-muted-foreground uppercase">Disp: {f.available} / Req: {f.required}</p>
+                              <p className="text-[8px] text-muted-foreground uppercase">Stock Actual: {f.available}</p>
                             </TableCell>
                             <TableCell className="py-1">
                               <input 
                                 type="number" 
-                                disabled={orderToView?.status === 'completed' || isOrdered} 
-                                value={manualPurchaseQtys[f.id] ?? f.suggestedToBuy} 
+                                disabled={isOrdered} 
+                                value={manualPurchaseQtys[f.id] ?? 0} 
                                 onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [f.id]: Number(e.target.value) }))} 
                                 className="w-full text-center font-black text-xs bg-muted/30 border-none rounded h-7 focus:ring-2 focus:ring-primary/20 focus:outline-none" 
                               />
                             </TableCell>
-                            <TableCell className="text-center py-1">
-                              <div className="flex flex-col items-center">
-                                <span className="text-[9px] font-bold text-slate-400">
-                                  {refCurrency === 'USD' ? 'u$s' : '$'} {refPrice.toLocaleString('es-AR')}
-                                </span>
-                                {lastPurchase && <span className="text-[7px] text-slate-300 font-bold uppercase">Últ. Compra</span>}
-                              </div>
-                            </TableCell>
                             <TableCell className="py-1">
                               <div className="flex items-center gap-1.5">
-                                <div className="relative group flex-1">
-                                  <input 
-                                    type="number" 
-                                    disabled={orderToView?.status === 'completed' || isOrdered} 
-                                    value={manualPurchasePrices[f.id] ?? refPrice} 
-                                    onChange={(e) => setManualPurchasePrices(prev => ({ ...prev, [f.id]: Number(e.target.value) }))} 
-                                    className={cn(
-                                      "w-full text-center font-black text-xs h-7 border rounded transition-all focus:outline-none focus:ring-2",
-                                      isZero ? "bg-rose-50 border-rose-300 text-rose-600 animate-pulse" : "bg-white border-emerald-100 text-emerald-700"
-                                    )} 
-                                  />
-                                  {isZero && !isOrdered && <span className="absolute -top-4 left-1/2 -translate-x-1/2 bg-rose-600 text-white text-[7px] font-black px-1 py-0.5 rounded opacity-0 group-hover:opacity-100">PRECIO REQUERIDO</span>}
-                                </div>
+                                <input 
+                                  type="number" 
+                                  disabled={isOrdered} 
+                                  value={manualPurchasePrices[f.id] ?? 0} 
+                                  onChange={(e) => setManualPurchasePrices(prev => ({ ...prev, [f.id]: Number(e.target.value) }))} 
+                                  className={cn(
+                                    "w-full text-center font-black text-xs h-7 border rounded transition-all focus:outline-none focus:ring-2",
+                                    isZero ? "bg-rose-50 border-rose-300 text-rose-600 animate-pulse" : "bg-white border-emerald-100 text-emerald-700"
+                                  )} 
+                                />
                                 <Tabs 
                                   value={currentCurrency} 
                                   onValueChange={(v: any) => setManualPurchaseCurrencies(prev => ({ ...prev, [f.id]: v }))}
-                                  className={cn("shrink-0 h-7", (orderToView?.status === 'completed' || isOrdered) && "pointer-events-none opacity-50")}
+                                  className={cn("shrink-0 h-7", isOrdered && "pointer-events-none opacity-50")}
                                 >
                                   <TabsList className="h-7 p-0 gap-0 border">
                                     <TabsTrigger value="ARS" className="h-6 text-[8px] font-black px-1.5 data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
@@ -1303,11 +1398,8 @@ export default function CatalogPage() {
                                 </Tabs>
                               </div>
                             </TableCell>
-                            <TableCell className="text-center py-1">
-                              <span className={cn("font-black text-[9px] px-1.5 py-0.5 rounded", f.isInsufficient ? "bg-rose-600 text-white" : f.isCritical ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700")}>{f.futureStock}</span>
-                            </TableCell>
                             <TableCell className="text-right py-1">
-                              <p className="text-[10px] font-bold">{currentCurrency === 'USD' ? 'u$s' : '$'} {( (manualPurchaseQtys[f.id] ?? f.suggestedToBuy) * (manualPurchasePrices[f.id] ?? refPrice)).toLocaleString('es-AR')}</p>
+                              <p className="text-[10px] font-bold">{currentCurrency === 'USD' ? 'u$s' : '$'} {( (manualPurchaseQtys[f.id] ?? 0) * (manualPurchasePrices[f.id] ?? 0)).toLocaleString('es-AR')}</p>
                             </TableCell>
                           </TableRow>
                         );
@@ -1317,71 +1409,6 @@ export default function CatalogPage() {
                   <div className="bg-slate-50 border-t p-3 grid grid-cols-2 gap-4">
                     <div className="flex items-center gap-2"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} ARS:</span><span className="font-black text-xs text-primary">${groupARS.toLocaleString('es-AR')}</span></div>
                     <div className="flex items-center gap-2 justify-end"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} USD:</span><span className="font-black text-xs text-emerald-700">u$s {groupUSD.toLocaleString('es-AR')}</span></div>
-                  </div>
-                </div>
-
-                <div className="md:hidden space-y-2">
-                  {itemsInGroup.map(f => {
-                    const isZero = manualPurchasePrices[f.id] <= 0;
-                    const originalCost = f.costCurrency === 'USD' ? f.costUSD : f.costARS;
-                    const currentCurrency = manualPurchaseCurrencies[f.id] || (f.costCurrency as 'ARS' | 'USD' || 'ARS');
-                    
-                    const lastPurchase = allPurchases?.find(p => p.productId === f.id);
-                    const refPrice = lastPurchase ? lastPurchase.price : originalCost;
-
-                    return (
-                      <Card key={f.id} className="p-2.5 bg-white border shadow-sm space-y-2.5">
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1 min-w-0"><p className="font-bold text-xs truncate">{f.name}</p></div>
-                          <span className={cn("font-black text-[8px] px-1.5 py-0.5 rounded uppercase", f.isInsufficient ? "bg-rose-600 text-white" : f.isCritical ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700")}>Post: {f.futureStock}</span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3 pt-2 border-t">
-                          <div className="space-y-1">
-                            <Label className="text-[8px] font-black uppercase text-muted-foreground">Cant. Compra</Label>
-                            <input 
-                              type="number" 
-                              disabled={orderToView?.status === 'completed' || isOrdered} 
-                              value={manualPurchaseQtys[f.id] ?? f.suggestedToBuy} 
-                              onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [f.id]: Number(e.target.value) }))} 
-                              className="w-full text-center font-black text-xs bg-muted/30 border rounded h-8 focus:ring-2 focus:ring-primary/20 focus:outline-none" 
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[8px] font-black uppercase text-emerald-700">Precio Compra</Label>
-                            <div className="flex flex-col gap-1">
-                              <input 
-                                type="number" 
-                                disabled={orderToView?.status === 'completed' || isOrdered} 
-                                value={manualPurchasePrices[f.id] ?? refPrice} 
-                                onChange={(e) => setManualPurchasePrices(prev => ({ ...prev, [f.id]: Number(e.target.value) }))} 
-                                className={cn(
-                                  "w-full text-center font-black text-xs border rounded h-8 transition-all focus:outline-none focus:ring-2",
-                                  isZero ? "bg-rose-50 border-rose-300 text-rose-600 animate-pulse" : "bg-white border-emerald-100 text-emerald-700"
-                                )} 
-                              />
-                              <Tabs 
-                                value={currentCurrency} 
-                                onValueChange={(v: any) => setManualPurchaseCurrencies(prev => ({ ...prev, [f.id]: v }))}
-                                className={cn("h-6 w-full", (orderToView?.status === 'completed' || isOrdered) && "pointer-events-none opacity-50")}
-                              >
-                                <TabsList className="h-6 w-full p-0 grid grid-cols-2 border">
-                                  <TabsTrigger value="ARS" className="h-5 text-[7px] font-black data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
-                                  <TabsTrigger value="USD" className="h-5 text-[7px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
-                                </TabsList>
-                              </Tabs>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex justify-between items-center text-[8px] italic text-slate-400 px-1">
-                          <span>Ref: {currentCurrency === 'USD' ? 'u$s' : '$'} {refPrice.toLocaleString('es-AR')}</span>
-                          <span className="not-italic font-black text-slate-600">Sub: {currentCurrency === 'USD' ? 'u$s' : '$'} {( (manualPurchaseQtys[f.id] ?? f.suggestedToBuy) * (manualPurchasePrices[f.id] ?? refPrice)).toLocaleString('es-AR')}$</span>
-                        </div>
-                      </Card>
-                    );
-                  })}
-                  <div className="p-2.5 bg-slate-900 rounded-xl text-white space-y-1">
-                    <div className="flex justify-between items-center"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} ARS</span><span className="font-black text-xs text-primary">${groupARS.toLocaleString('es-AR')}</span></div>
-                    <div className="flex justify-between items-center border-t border-white/10 pt-1"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} USD</span><span className="font-black text-xs text-emerald-400">u$s {groupUSD.toLocaleString('es-AR')}</span></div>
                   </div>
                 </div>
               </div>
@@ -1427,12 +1454,9 @@ export default function CatalogPage() {
               </div>
               <Tabs value={activeView} onValueChange={setActiveTab} className="bg-transparent">
                 <TabsList className="bg-muted/40 h-10 p-1 rounded-xl shadow-inner border overflow-hidden">
-                  <TabsTrigger value="inventory" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-md transition-all uppercase">
-                    STOCK
-                  </TabsTrigger>
-                  <TabsTrigger value="orders" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-amber-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all uppercase">
-                    PRODUCCIÓN
-                  </TabsTrigger>
+                  <TabsTrigger value="inventory" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-md transition-all uppercase">STOCK</TabsTrigger>
+                  <TabsTrigger value="orders" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-amber-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all uppercase">PRODUCCIÓN</TabsTrigger>
+                  <TabsTrigger value="purchases" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all uppercase">COMPRAS</TabsTrigger>
                 </TabsList>
               </Tabs>
               <div className="flex gap-2">
@@ -1441,6 +1465,7 @@ export default function CatalogPage() {
               </div>
             </div>
           </header>
+
           <Tabs value={activeView} className="w-full">
             <TabsContent value="inventory" className="m-0 space-y-6">
               <div className="flex flex-col md:flex-row gap-8 items-start">
@@ -1448,26 +1473,9 @@ export default function CatalogPage() {
                   <FilterPanel />
                 </Card>
                 <div className="flex-1 space-y-6 w-full">
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <input placeholder="Buscar por nombre..." className="w-full pl-10 h-11 bg-white/50 backdrop-blur-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-                    </div>
-                    <Sheet>
-                      <SheetTrigger asChild>
-                        <Button variant="outline" size="icon" className="md:hidden h-11 w-11 shrink-0">
-                          <ListFilter className="h-5 w-5" />
-                        </Button>
-                      </SheetTrigger>
-                      <SheetContent side="left" className="w-[280px] p-0">
-                        <SheetHeader className="p-4 border-b">
-                          <SheetTitle>Filtrar Catálogo</SheetTitle>
-                        </SheetHeader>
-                        <div className="p-4">
-                          <FilterPanel />
-                        </div>
-                      </SheetContent>
-                    </Sheet>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <input placeholder="Buscar por nombre..." className="w-full pl-10 h-11 bg-white/50 backdrop-blur-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                   </div>
                   
                   {isLoading ? (
@@ -1479,9 +1487,6 @@ export default function CatalogPage() {
                     <div className="text-center py-20 border-2 border-dashed rounded-2xl bg-muted/5">
                       <Package className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
                       <p className="text-muted-foreground font-medium">No se encontraron productos o servicios.</p>
-                      {selectedCategories.length > 0 && (
-                        <Button variant="link" onClick={clearFilters} className="text-primary font-bold mt-2">Limpiar filtros para ver todo</Button>
-                      )}
                     </div>
                   ) : (
                     <section className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6">
@@ -1499,12 +1504,10 @@ export default function CatalogPage() {
                                 <div className="flex flex-wrap gap-1">
                                   <Badge variant={item.isService ? "secondary" : "default"} className="text-[9px] font-black uppercase">{item.isService ? 'SERVICIO' : 'PRODUCTO'}</Badge>
                                   {item.isCompuesto && <Badge className="text-[9px] font-black uppercase bg-amber-500 hover:bg-amber-600"><Layers className="h-2 w-2 mr-1" /> COMPUESTO</Badge>}
-                                  {!tracksStock && <Badge variant="outline" className="text-[9px] font-black uppercase text-blue-600 border-blue-200 bg-blue-50">ENTREGA DIRECTA</Badge>}
                                   <Badge variant="outline" className="text-[9px] font-bold bg-white text-muted-foreground border-muted-foreground/20">{catName}</Badge>
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 group-hover:text-primary transition-colors" onClick={() => { setSelectedProductForHistory(item); setIsPurchaseHistoryOpen(true); }} title="Ver Historial de Compras"><History className="h-4 w-4" /></Button>
-                                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-primary opacity-40 group-hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); handleExportBOM(item); }} title="Ver Ficha / Exportar"><Printer className="h-4 w-4" /></Button>
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
@@ -1550,24 +1553,6 @@ export default function CatalogPage() {
                                   )}
                                 </div>
                               </div>
-                              {isAdmin && (
-                                <div className="pt-2 border-t border-dashed">
-                                  <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground mb-1.5">
-                                    <div className="flex items-center gap-1 uppercase tracking-widest">Costo Normalizado {isCostInUSD ? <Badge className="h-3 text-[7px] bg-emerald-600 font-black">BASE USD</Badge> : <Badge className="h-3 text-[7px] bg-blue-600 font-black">BASE ARS</Badge>}</div>
-                                    <Badge variant="outline" className="h-4 text-[8px] font-black bg-white uppercase">Costo real</Badge>
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-3 text-xs font-bold italic opacity-80">
-                                    <div className="flex flex-col">
-                                      <span className="text-[9px] not-italic text-muted-foreground uppercase">Costo ARS</span>
-                                      <span className="text-blue-700">${(item.calculatedCostARS || 0).toLocaleString('es-AR')}</span>
-                                    </div>
-                                    <div className="flex flex-col text-right">
-                                      <span className="text-[9px] not-italic text-muted-foreground uppercase">Costo USD</span>
-                                      <span className="text-emerald-700">u$s {(item.calculatedCostUSD || 0).toLocaleString('es-AR')}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
                             </CardContent>
                           </Card>
                         ); 
@@ -1578,9 +1563,128 @@ export default function CatalogPage() {
               </div>
             </TabsContent>
             <TabsContent value="orders" className="m-0"><OrdersList /></TabsContent>
+            <TabsContent value="purchases" className="m-0"><PurchaseOrdersList /></TabsContent>
           </Tabs>
         </SidebarInset>
       </div>
+
+      {/* DIALOGS */}
+      
+      {/* Create Manual Purchase Order Dialog */}
+      <Dialog open={isNewPurchaseOrderOpen} onOpenChange={setIsNewPurchaseOrderOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 border-b shrink-0 bg-white">
+            <div className="flex items-center gap-2">
+              <ShoppingCart className="h-6 w-6 text-emerald-600" />
+              <DialogTitle className="text-xl font-black">Plan de Reposición Manual</DialogTitle>
+            </div>
+            <DialogDescription>Agrega ítems del catálogo para armar una orden de compra agrupada por proveedor.</DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="space-y-2">
+              <Label className="font-bold">Título / Identificador de la Orden</Label>
+              <Input value={newPOTitle} onChange={(e) => setNewPOTitle(e.target.value)} placeholder="Ej: Reposición de Ferretería, Insumos de Verano..." />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end bg-muted/20 p-4 rounded-xl border border-dashed">
+              <div className="space-y-2">
+                <Label className="font-bold">Seleccionar Producto</Label>
+                <Select onValueChange={(id) => {
+                  const item = items?.find(i => i.id === id);
+                  if (item && !newPOItems.find(i => i.id === id)) {
+                    setNewPurchaseOrderItems([...newPOItems, { ...item, qtyToAdd: 1 }]);
+                  }
+                }}>
+                  <SelectTrigger className="bg-white"><SelectValue placeholder="Buscar ítem..." /></SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    {items?.filter(i => !i.isService).sort((a,b) => a.name.localeCompare(b.name)).map(i => (
+                      <SelectItem key={i.id} value={i.id}>{i.name} (Stock: {i.stock || 0})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-[10px] text-muted-foreground font-bold italic">Agrega todos los productos que planeas comprar hoy.</p>
+            </div>
+
+            {newPOItems.length > 0 && (
+              <div className="border rounded-xl bg-white shadow-sm overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="text-[10px] font-black uppercase">Producto</TableHead>
+                      <TableHead className="text-center text-[10px] font-black uppercase w-24">Cantidad</TableHead>
+                      <TableHead className="text-[10px] font-black uppercase w-48">Proveedor</TableHead>
+                      <TableHead className="w-10"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {newPOItems.map((item, idx) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="text-xs font-bold">{item.name}</TableCell>
+                        <TableCell>
+                          <Input 
+                            type="number" 
+                            className="h-8 text-center font-black" 
+                            value={item.qtyToAdd} 
+                            onChange={(e) => {
+                              const newList = [...newPOItems];
+                              newList[idx].qtyToAdd = Number(e.target.value);
+                              setNewPurchaseOrderItems(newList);
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-[9px] font-bold bg-muted/30">{item.supplier || "Sin Proveedor"}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setNewPurchaseOrderItems(newPOItems.filter((_, i) => i !== idx))}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="p-4 border-t bg-slate-50">
+            <Button variant="outline" onClick={() => setIsNewPurchaseOrderOpen(false)} className="font-bold">Cancelar</Button>
+            <Button disabled={newPOItems.length === 0} onClick={handleCreatePurchaseOrder} className="bg-emerald-600 hover:bg-emerald-700 font-black px-8">CREAR ORDEN</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual Purchase Order Detail View */}
+      <Dialog open={!!purchaseOrderToView} onOpenChange={() => setPurchaseOrderToView(null)}>
+        <DialogContent className="max-w-5xl h-[95vh] flex flex-col p-0 w-[95vw]">
+          <DialogHeader className="p-4 border-b shrink-0 bg-white">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center pr-8 gap-4">
+              <div className="flex items-center gap-3">
+                <ShoppingCart className="h-6 w-6 text-emerald-600" />
+                <div>
+                  <DialogTitle className="text-xl font-black">{purchaseOrderToView?.description || "Orden de Reposición"}</DialogTitle>
+                  <DialogDescription className="text-[10px] font-bold uppercase">Reposición manual de componentes</DialogDescription>
+                </div>
+              </div>
+              <Badge className={cn("font-black uppercase text-[10px]", purchaseOrderToView?.status === 'completed' ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700")}>
+                {purchaseOrderToView?.status === 'completed' ? 'RECIBIDA COMPLETA' : 'PENDIENTE DE RECEPCIÓN'}
+              </Badge>
+            </div>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto p-6 space-y-8">
+            <GroupedPurchaseList />
+          </div>
+          <DialogFooter className="p-4 border-t bg-slate-50 shrink-0">
+            <div className="flex justify-between items-center w-full">
+              <div className="flex gap-4">
+                <div><p className="text-[8px] font-black text-slate-400 uppercase">Proyectado ARS</p><p className="text-xl font-black text-blue-700">${purchaseCalculations?.totalARS.toLocaleString('es-AR')}</p></div>
+                <div><p className="text-[8px] font-black text-slate-400 uppercase">Proyectado USD</p><p className="text-xl font-black text-emerald-600">u$s {purchaseCalculations?.totalUSD.toLocaleString('es-AR')}</p></div>
+              </div>
+              <Button onClick={() => setPurchaseOrderToView(null)} className="font-bold">Cerrar</Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isPurchaseHistoryOpen} onOpenChange={setIsPurchaseHistoryOpen}>
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
@@ -1648,78 +1752,12 @@ export default function CatalogPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isSupplierHistoryOpen} onOpenChange={setIsSupplierHistoryOpen}>
-        <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <div className="flex items-center gap-2">
-              <Truck className="h-5 w-5 text-primary" />
-              <DialogTitle className="text-xl font-black">Historial de Suministros: {selectedSupplierForHistory}</DialogTitle>
-            </div>
-            <DialogDescription className="text-xs">
-              Listado completo de productos adquiridos a este proveedor.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            {!allPurchases ? (
-              <div className="flex justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-            ) : (
-              <div className="border rounded-xl bg-white overflow-hidden shadow-sm">
-                <Table>
-                  <TableHeader className="bg-slate-50">
-                    <TableRow>
-                      <TableHead className="text-[10px] font-black uppercase">Fecha</TableHead>
-                      <TableHead className="text-[10px] font-black uppercase">Producto</TableHead>
-                      <TableHead className="text-center text-[10px] font-black uppercase w-20">Cant.</TableHead>
-                      <TableHead className="text-right text-[10px] font-black uppercase">P. Unitario</TableHead>
-                      <TableHead className="text-right text-[10px] font-black uppercase">Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {allPurchases
-                      .filter(p => p.supplierName === selectedSupplierForHistory)
-                      .map((p: any) => (
-                        <TableRow key={p.id} className="h-12 hover:bg-muted/5">
-                          <TableCell className="text-xs font-medium">
-                            {new Date(p.date).toLocaleDateString('es-AR')}
-                          </TableCell>
-                          <TableCell className="text-xs font-bold text-slate-700">{p.productName}</TableCell>
-                          <TableCell className="text-center font-black text-xs">{p.quantity}</TableCell>
-                          <TableCell className="text-right font-black text-xs">
-                            <span className={p.currency === 'USD' ? 'text-emerald-700' : 'text-blue-700'}>
-                              {p.currency === 'USD' ? 'u$s' : '$'} {Number(p.price).toLocaleString('es-AR')}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right font-black text-xs">
-                            <span className={p.currency === 'USD' ? 'text-emerald-700' : 'text-blue-700'}>
-                              {p.currency === 'USD' ? 'u$s' : '$'} {(Number(p.price) * Number(p.quantity)).toLocaleString('es-AR')}
-                            </span>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    {allPurchases.filter(p => p.supplierName === selectedSupplierForHistory).length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-10 text-muted-foreground italic text-xs">
-                          No se registran compras para este proveedor.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setIsSupplierHistoryOpen(false)} className="font-bold">Cerrar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={isAuditOpen} onOpenChange={setIsAuditOpen}>
         <DialogContent className="max-w-6xl h-[95vh] flex flex-col p-0 w-[95vw]">
           <DialogHeader className="p-3 pb-1 shrink-0 flex-row items-center justify-between">
             <div className="flex items-center gap-2">
               <Calculator className="h-5 w-5 text-primary" />
-              <DialogTitle className="text-lg font-black text-slate-800">Panel de Auditoría y Actualización Masiva</DialogTitle>
+              <DialogTitle className="text-lg font-black text-slate-800">Panel de Auditoría</DialogTitle>
             </div>
           </DialogHeader>
           <div className="px-4 py-2 shrink-0 border-b bg-muted/10">
@@ -1729,9 +1767,7 @@ export default function CatalogPage() {
                 <Input placeholder="Filtrar artículos..." className="pl-10 h-10" value={auditSearch} onChange={(e) => setAuditSearch(e.target.value)} />
               </div>
               <Select value={auditCategoryFilter} onValueChange={setAuditCategoryFilter}>
-                <SelectTrigger className="h-10">
-                  <SelectValue placeholder="Todas las categorías" />
-                </SelectTrigger>
+                <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
                 <SelectContent className="max-h-[60vh]">
                   <SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem>
                   {categories.map(c => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
@@ -1740,61 +1776,7 @@ export default function CatalogPage() {
             </div>
           </div>
           <div className="flex-1 min-h-0 px-4 py-2 overflow-y-auto">
-            <div className="space-y-3 md:hidden">
-              {items?.filter(i => !i.isService && i.trackStock !== false && i.name.toLowerCase().includes(auditSearch.toLowerCase()) && (auditCategoryFilter === "all" || i.categoryId === auditCategoryFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(item => (
-                <Card key={item.id} className="p-3 bg-white border shadow-sm flex flex-col gap-3">
-                  <div className="flex justify-between items-start gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-sm truncate leading-tight">{item.name}</p>
-                      <p className="text-[10px] text-muted-foreground uppercase mt-1">Disp Actual: <span className="font-black text-primary">{item.stock || 0}</span></p>
-                    </div>
-                    <div className="shrink-0 flex items-center gap-2">
-                      <Label className="text-[10px] font-bold uppercase">STOCK:</Label>
-                      <Input type="number" className="w-16 h-8 text-right font-black" defaultValue={item.stock || 0} onBlur={(e) => { const val = Number(e.target.value); if (val !== item.stock) handleUpdateItemAudit(item.id, { stock: val }); }} />
-                    </div>
-                  </div>
-                  <div className="pt-2 border-t grid grid-cols-1 gap-3">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase">Costo Reposición</Label>
-                        <Input 
-                          type="number" 
-                          className="h-8 font-black" 
-                          defaultValue={item.costCurrency === 'USD' ? item.costUSD : item.costARS} 
-                          onBlur={(e) => handleUpdateItemAudit(item.id, { costAmount: Number(e.target.value) })}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase">Moneda Base</Label>
-                        <Tabs 
-                          defaultValue={item.costCurrency || (item.costUSD > 0 && !item.costARS ? 'USD' : 'ARS')} 
-                          onValueChange={(v: any) => handleUpdateItemAudit(item.id, { costCurrency: v })}
-                          className="h-8"
-                        >
-                          <TabsList className="grid grid-cols-2 h-8 p-0.5 border shadow-inner">
-                            <TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
-                            <TabsTrigger value="USD" className="text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
-                          </TabsList>
-                        </Tabs>
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <Label className="text-[10px] font-bold uppercase">Proveedor Asignado</Label>
-                      <Select defaultValue={item.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateGlobalSupplier(item.id, v)}>
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
-                          {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-            <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-hidden">
+            <div className="border rounded-xl bg-white shadow-sm overflow-hidden">
               <Table>
                 <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                   <TableRow>
@@ -1808,31 +1790,15 @@ export default function CatalogPage() {
                 <TableBody>
                   {items?.filter(i => !i.isService && i.trackStock !== false && i.name.toLowerCase().includes(auditSearch.toLowerCase()) && (auditCategoryFilter === "all" || i.categoryId === auditCategoryFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(item => (
                     <TableRow key={item.id} className="h-12 hover:bg-muted/5 transition-colors">
-                      <TableCell className="py-1">
-                        <p className="font-bold text-xs">{item.name}</p>
+                      <TableCell className="py-1"><p className="font-bold text-xs">{item.name}</p></TableCell>
+                      <TableCell className="text-center py-1">
+                        <Input type="number" className="w-20 mx-auto text-center font-black h-8 text-xs" defaultValue={item.stock || 0} onBlur={(e) => { const val = Number(e.target.value); if (val !== item.stock) handleUpdateItemAudit(item.id, { stock: val }); }} />
                       </TableCell>
                       <TableCell className="text-center py-1">
-                        <Input 
-                          type="number" 
-                          className="w-20 mx-auto text-center font-black h-8 text-xs" 
-                          defaultValue={item.stock || 0} 
-                          onBlur={(e) => { const val = Number(e.target.value); if (val !== item.stock) handleUpdateItemAudit(item.id, { stock: val }); }} 
-                        />
+                        <Input type="number" className="w-24 mx-auto text-center font-black h-8 text-xs border-primary/20" defaultValue={item.costCurrency === 'USD' ? item.costUSD : item.costARS} onBlur={(e) => handleUpdateItemAudit(item.id, { costAmount: Number(e.target.value) })} />
                       </TableCell>
                       <TableCell className="text-center py-1">
-                        <Input 
-                          type="number" 
-                          className="w-24 mx-auto text-center font-black h-8 text-xs border-primary/20" 
-                          defaultValue={item.costCurrency === 'USD' ? item.costUSD : item.costARS} 
-                          onBlur={(e) => handleUpdateItemAudit(item.id, { costAmount: Number(e.target.value) })} 
-                        />
-                      </TableCell>
-                      <TableCell className="text-center py-1">
-                        <Tabs 
-                          defaultValue={item.costCurrency || (item.costUSD > 0 && !item.costARS ? 'USD' : 'ARS')} 
-                          onValueChange={(v: any) => handleUpdateItemAudit(item.id, { costCurrency: v })}
-                          className="w-28 mx-auto"
-                        >
+                        <Tabs defaultValue={item.costCurrency || (item.costUSD > 0 && !item.costARS ? 'USD' : 'ARS')} onValueChange={(v: any) => handleUpdateItemAudit(item.id, { costCurrency: v })} className="w-28 mx-auto">
                           <TabsList className="grid grid-cols-2 h-8 p-0.5 border shadow-inner">
                             <TabsTrigger value="ARS" className="text-[9px] font-black h-7 data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
                             <TabsTrigger value="USD" className="text-[9px] font-black h-7 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
@@ -1841,9 +1807,7 @@ export default function CatalogPage() {
                       </TableCell>
                       <TableCell className="text-center py-1">
                         <Select defaultValue={item.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateGlobalSupplier(item.id, v)}>
-                          <SelectTrigger className="h-8 text-[10px] bg-transparent border-none focus:ring-0">
-                            <SelectValue />
-                          </SelectTrigger>
+                          <SelectTrigger className="h-8 text-[10px] bg-transparent border-none focus:ring-0"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
                             {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
@@ -1880,14 +1844,10 @@ export default function CatalogPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {orderToView && (
-                  <>
-                    <Button variant="outline" size="sm" className="h-7 gap-1.5 font-bold text-[9px]" onClick={() => handlePrintProductionOrder(orderToView)}>
-                      <Printer className="h-3 w-3" /> IMPRIMIR PLAN
-                    </Button>
-                    <Badge className={cn("font-black uppercase text-[8px] px-1.5 py-0.5", { draft: "bg-slate-100 text-slate-600", pending_purchase: "bg-amber-100 text-amber-700", ready: "bg-blue-100 text-blue-700", completed: "bg-emerald-100 text-emerald-700" }[orderToView.status as string])}>{orderToView.status === 'pending_purchase' ? 'FALTAN MATERIALES' : orderToView.status === 'ready' ? 'LISTO' : orderToView.status}</Badge>
-                  </>
-                )}
+                <Button variant="outline" size="sm" className="h-7 gap-1.5 font-bold text-[9px]" onClick={() => handlePrintProductionOrder(orderToView)}>
+                  <Printer className="h-3 w-3" /> IMPRIMIR PLAN
+                </Button>
+                <Badge className={cn("font-black uppercase text-[8px] px-1.5 py-0.5", { draft: "bg-slate-100 text-slate-600", pending_purchase: "bg-amber-100 text-amber-700", ready: "bg-blue-100 text-blue-700", completed: "bg-emerald-100 text-emerald-700" }[orderToView?.status as string])}>{orderToView?.status === 'pending_purchase' ? 'FALTAN MATERIALES' : orderToView?.status === 'ready' ? 'LISTO' : orderToView?.status}</Badge>
                 {orderToView?.status !== 'completed' && (
                   <Button variant={hasUnsavedChanges ? "default" : "outline"} size="sm" className={cn("h-6 gap-1 font-bold text-[9px] px-2", hasUnsavedChanges && "bg-primary animate-pulse")} onClick={handleUpdateOrderPlan}>
                     <Save className="h-3 w-3" /> GUARDAR {hasUnsavedChanges && "*"}
@@ -1897,670 +1857,121 @@ export default function CatalogPage() {
             </div>
           </DialogHeader>
           <div className="flex-1 min-h-0 overflow-y-auto p-3 pt-1 space-y-4">
-            {orderToView && (
-              <div className="space-y-4">
-                <section className="space-y-2">
-                  <div>
-                    <h3 className="text-[9px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><Layers className="h-3 w-3" /> Explosión de Insumos</h3>
-                    <div className="grid grid-cols-1 gap-1 md:hidden">
-                      {explosionSummary?.all.sort((a,b) => a.name.localeCompare(b.name)).map(req => { 
-                        const stockRestante = req.available - req.required; 
-                        const faltaDirecto = stockRestante < 0; 
-                        return (
-                          <Card key={req.id} className="p-2 bg-white border flex flex-col gap-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <p className="font-bold text-[10px] truncate">{req.name}</p>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <div className="text-center px-1 py-0.5 bg-muted/30 rounded border"><p className="text-[9px] font-black">{req.required}/{req.available}</p></div>
-                                {faltaDirecto ? <Badge className="bg-rose-600 text-[7px] h-4 leading-none uppercase font-black px-1">FALTA</Badge> : <CheckCircle className="h-3 w-3 text-emerald-500" />}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 border-t pt-1.5">
-                              <span className="text-[8px] font-bold uppercase text-muted-foreground">PROV:</span>
-                              <Select disabled={orderToView.status === 'completed'} defaultValue={manualSuppliers[req.id] || req.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateItemSupplierGlobally(req.id, v)}>
-                                <SelectTrigger className="h-6 text-[9px] bg-muted/20 border-none p-1 flex-1">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent className="max-h-40">
-                                  <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
-                                  {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </Card>
-                        ) 
-                      })}
-                    </div>
-                    <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-x-auto">
-                      <Table className="min-w-[600px]">
-                        <TableHeader className="bg-slate-50">
-                          <TableRow>
-                            <TableHead className="text-[8px] font-black uppercase h-7">Pieza</TableHead>
-                            <TableHead className="text-center text-[8px] font-black uppercase h-7 w-12">Req.</TableHead>
-                            <TableHead className="text-center text-[8px] font-black uppercase h-7 w-12">Stock</TableHead>
-                            <TableHead className="text-center text-[8px] font-black uppercase h-7 w-48">Proveedor Asignado</TableHead>
-                            <TableHead className="text-right text-[8px] font-black uppercase h-7 w-20">Estado</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {explosionSummary?.all.sort((a,b) => a.name.localeCompare(b.name)).map(req => { 
-                            const stockRestante = req.available - req.required; 
-                            const faltaDirecto = stockRestante < 0; 
-                            return (
-                              <TableRow key={req.id} className="h-10">
-                                <TableCell className="py-0.5">
-                                  <span className="font-bold text-xs">{req.name}</span>
-                                </TableCell>
-                                <TableCell className="text-center font-black text-primary text-[10px]">{req.required}</TableCell>
-                                <TableCell className="text-center text-[10px]">{req.available}</TableCell>
-                                <TableCell className="text-center py-0.5">
-                                  <Select disabled={orderToView.status === 'completed'} defaultValue={manualSuppliers[req.id] || req.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateItemSupplierGlobally(req.id, v)}>
-                                    <SelectTrigger className="h-7 text-[9px] bg-transparent border-none focus:ring-0">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
-                                      {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                                    </SelectContent>
-                                  </Select>
-                                </TableCell>
-                                <TableCell className="text-right py-0.5">
-                                  {orderToView.status === 'completed' ? (
-                                    <CheckCircle className="h-3.5 w-3.5 text-emerald-500 ml-auto" />
-                                  ) : faltaDirecto ? (
-                                    <Badge className="bg-rose-600 text-[7px] h-4 leading-none py-0 px-1">FALTA</Badge>
-                                  ) : (
-                                    <CheckCircle className="h-3.5 w-3.5 text-emerald-500 ml-auto" />
-                                  )}
-                                </TableCell>
-                              </TableRow>
-                            ) 
-                          })}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <h3 className="text-[9px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><ShoppingCart className="h-3 w-3" /> Compras por Proveedor</h3>
-                    <GroupedPurchaseList />
-                  </div>
-                </section>
-              </div>
-            )}
+            <GroupedPurchaseList />
           </div>
           <DialogFooter className="p-3 border-t bg-slate-50 shrink-0">
             <div className="flex flex-col md:flex-row items-center justify-between w-full gap-2">
               <div className="flex gap-3">
-                <div className="text-left">
-                  <p className="text-[7px] font-black uppercase text-slate-400">Total ARS</p>
-                  <p className="text-base font-black text-blue-700">${purchaseCalculations?.totalARS.toLocaleString('es-AR')}</p>
-                </div>
-                <div className="text-left border-l pl-3 border-slate-200">
-                  <p className="text-[7px] font-black uppercase text-slate-400">Total USD</p>
-                  <p className="text-base font-black text-emerald-600">u$s {purchaseCalculations?.totalUSD.toLocaleString('es-AR')}</p>
-                </div>
+                <div className="text-left"><p className="text-[7px] font-black uppercase text-slate-400">Total ARS</p><p className="text-base font-black text-blue-700">${purchaseCalculations?.totalARS.toLocaleString('es-AR')}</p></div>
+                <div className="text-left border-l pl-3 border-slate-200"><p className="text-[7px] font-black uppercase text-slate-400">Total USD</p><p className="text-base font-black text-emerald-600">u$s {purchaseCalculations?.totalUSD.toLocaleString('es-AR')}</p></div>
               </div>
               <div className="flex gap-2 w-full md:w-auto">
                 <Button variant="ghost" onClick={handleCloseOrderView} className="font-bold text-[10px] h-8 flex-1 md:flex-none">Cerrar</Button>
                 {orderToView?.status === 'ready' && (
-                  <Button 
-                    onClick={handleAssembleFinal} 
-                    className="bg-blue-600 hover:bg-blue-700 px-4 font-black shadow-lg h-8 flex-1 md:flex-none text-[10px]"
-                  >
-                    <Hammer className="mr-1.5 h-3 w-3" /> FINALIZAR ARMADO
-                  </Button>
+                  <Button onClick={handleAssembleFinal} className="bg-blue-600 hover:bg-blue-700 px-4 font-black shadow-lg h-8 flex-1 md:flex-none text-[10px]"><Hammer className="mr-1.5 h-3 w-3" /> FINALIZAR ARMADO</Button>
                 )}
               </div>
             </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <AlertDialog open={isExitAlertOpen} onOpenChange={setIsExitAlertOpen}>
-        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Guardar cambios?</AlertDialogTitle><AlertDialogDescription>Modificaste la planificación. ¿Deseas guardarla?</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel onClick={() => { setIsExitAlertOpen(false); setOrderToView(null); }}>Descartar</AlertDialogCancel><AlertDialogAction onClick={() => { handleUpdateOrderPlan(); setIsExitAlertOpen(false); setOrderToView(null); }}>Guardar y Salir</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
-      </AlertDialog>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-4xl h-[95vh] overflow-hidden w-[95vw] p-0 flex flex-col">
           <DialogHeader className="p-4 border-b shrink-0 bg-white z-10">
             <div className="flex justify-between items-center pr-8">
               <div className="flex items-center gap-4">
-                {editHistory.length > 0 && (
-                  <Button variant="ghost" size="icon" onClick={handleGoBackInHistory} className="h-10 w-10 text-primary">
-                    <ChevronLeft className="h-6 w-6" />
-                  </Button>
-                )}
+                {editHistory.length > 0 && <Button variant="ghost" size="icon" onClick={handleGoBackInHistory} className="h-10 w-10 text-primary"><ChevronLeft className="h-6 w-6" /></Button>}
                 <div>
-                  <DialogTitle className="text-2xl font-black font-headline text-primary flex items-center gap-2">
-                    {editingItemId ? 'Configurar Ítem' : 'Nuevo Ítem'}
-                    {editHistory.length > 0 && <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-bold">Sub-ítem</Badge>}
-                  </DialogTitle>
-                  <DialogDescription>
-                    {editHistory.length > 0 ? 'Editando componente del producto anterior.' : 'Gestión unificada de precios y estructura de armado.'}
-                  </DialogDescription>
+                  <DialogTitle className="text-2xl font-black font-headline text-primary flex items-center gap-2">{editingItemId ? 'Configurar Ítem' : 'Nuevo Ítem'}</DialogTitle>
+                  <DialogDescription>Gestión unificada de precios y estructura de armado.</DialogDescription>
                 </div>
               </div>
-              {editingItemId && (
-                <Button variant="outline" size="icon" onClick={() => handleExportBOM(items?.find(i => i.id === editingItemId))} className="text-primary border-primary/20">
-                  <Printer className="h-4 w-4" />
-                </Button>
-              )}
             </div>
           </DialogHeader>
-          
           <div id="config-item-scroll" className="flex-1 overflow-y-auto p-6 space-y-8">
-            {/* SECCIÓN 1: DATOS BÁSICOS */}
             <section className="space-y-6">
-              <div className="flex items-center gap-2 border-b-2 pb-2">
-                <Tag className="h-4 w-4 text-primary" />
-                <h3 className="font-black text-xs uppercase tracking-[0.2em] text-muted-foreground">Datos Básicos</h3>
-              </div>
-              
+              <div className="flex items-center gap-2 border-b-2 pb-2"><Tag className="h-4 w-4 text-primary" /><h3 className="font-black text-xs uppercase tracking-[0.2em] text-muted-foreground">Datos Básicos</h3></div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label className="font-bold">Nombre del Producto / Servicio</Label>
-                  <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Dosificador G4" className="h-11" />
-                </div>
+                <div className="space-y-2"><Label className="font-bold">Nombre del Producto / Servicio</Label><Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ej: Dosificador G4" className="h-11" /></div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="font-bold">Categoría</Label>
-                    <Select value={formData.categoryId} onValueChange={(v) => setFormData({...formData, categoryId: v})}>
-                      <SelectTrigger className="h-11"><SelectValue placeholder="Elegir..." /></SelectTrigger>
-                      <SelectContent className="max-h-60">{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="font-bold">Proveedor Defecto</Label>
-                    <Select value={formData.supplier} onValueChange={(v) => setFormData({...formData, supplier: v})}>
-                      <SelectTrigger className="h-11"><SelectValue placeholder="Elegir..." /></SelectTrigger>
-                      <SelectContent className="max-h-60">
-                        <SelectItem value="none">SIN PROVEEDOR</SelectItem>
-                        {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <div className="space-y-2"><Label className="font-bold">Categoría</Label><Select value={formData.categoryId} onValueChange={(v) => setFormData({...formData, categoryId: v})}><SelectTrigger className="h-11"><SelectValue placeholder="Elegir..." /></SelectTrigger><SelectContent className="max-h-60">{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
+                  <div className="space-y-2"><Label className="font-bold">Proveedor Defecto</Label><Select value={formData.supplier} onValueChange={(v) => setFormData({...formData, supplier: v})}><SelectTrigger className="h-11"><SelectValue placeholder="Elegir..." /></SelectTrigger><SelectContent className="max-h-60"><SelectItem value="none">SIN PROVEEDOR</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
                 </div>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-blue-700 font-black text-xs uppercase">Venta ARS ($)</Label>
-                    <Input type="number" value={formData.priceARS} onChange={(e) => setFormData({...formData, priceARS: Number(e.target.value)})} className="h-11 border-blue-200 font-bold" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-emerald-700 font-black text-xs uppercase">Venta USD (u$s)</Label>
-                    <Input type="number" value={formData.priceUSD} onChange={(e) => setFormData({...formData, priceUSD: Number(e.target.value)})} className="h-11 border-emerald-200 font-bold" />
-                  </div>
+                  <div className="space-y-2"><Label className="text-blue-700 font-black text-xs uppercase">Venta ARS ($)</Label><Input type="number" value={formData.priceARS} onChange={(e) => setFormData({...formData, priceARS: Number(e.target.value)})} className="h-11 border-blue-200 font-bold" /></div>
+                  <div className="space-y-2"><Label className="text-emerald-700 font-black text-xs uppercase">Venta USD (u$s)</Label><Input type="number" value={formData.priceUSD} onChange={(e) => setFormData({...formData, priceUSD: Number(e.target.value)})} className="h-11 border-emerald-200 font-bold" /></div>
                 </div>
                 {!formData.isCompuesto ? (
                   <div className="p-4 bg-muted/20 rounded-2xl border border-dashed flex items-center gap-4 shadow-inner">
                     <div className="flex-1 space-y-1">
                       <Label className="text-[10px] font-black text-muted-foreground uppercase">Costo Reposición</Label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">{formData.costCurrency === 'USD' ? 'u$s' : '$'}</span>
-                        <Input type="number" value={formData.costAmount} onChange={(e) => setFormData({...formData, costAmount: Number(e.target.value)})} className="pl-8 font-black h-11" />
-                      </div>
+                      <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">{formData.costCurrency === 'USD' ? 'u$s' : '$'}</span><Input type="number" value={formData.costAmount} onChange={(e) => setFormData({...formData, costAmount: Number(e.target.value)})} className="pl-8 font-black h-11" /></div>
                     </div>
                     <Tabs value={formData.costCurrency} onValueChange={(v: any) => setFormData({...formData, costCurrency: v})} className="shrink-0 pt-4">
-                      <TabsList className="grid grid-cols-2 w-28 h-11 p-1 border">
-                        <TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
-                        <TabsTrigger value="USD" className="text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
-                      </TabsList>
+                      <TabsList className="grid grid-cols-2 w-28 h-11 p-1 border"><TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger><TabsTrigger value="USD" className="text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger></TabsList>
                     </Tabs>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-4 p-4 bg-amber-50 rounded-2xl border border-amber-200 shadow-inner">
-                    <div className="space-y-2">
-                      <Label className="text-[10px] font-black text-amber-800 uppercase">Mano Obra ARS</Label>
-                      <Input type="number" value={formData.laborCostARS} onChange={(e) => setFormData({...formData, laborCostARS: Number(e.target.value)})} className="h-11 border-amber-200 font-bold" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-[10px] font-black text-amber-800 uppercase">Mano Obra USD</Label>
-                      <Input type="number" value={formData.laborCostUSD} onChange={(e) => setFormData({...formData, laborCostUSD: Number(e.target.value)})} className="h-11 border-amber-200 font-bold" />
-                    </div>
+                    <div className="space-y-2"><Label className="text-[10px] font-black text-amber-800 uppercase">Mano Obra ARS</Label><Input type="number" value={formData.laborCostARS} onChange={(e) => setFormData({...formData, laborCostARS: Number(e.target.value)})} className="h-11 border-amber-200 font-bold" /></div>
+                    <div className="space-y-2"><Label className="text-[10px] font-black text-amber-800 uppercase">Mano Obra USD</Label><Input type="number" value={formData.laborCostUSD} onChange={(e) => setFormData({...formData, laborCostUSD: Number(e.target.value)})} className="h-11 border-amber-200 font-bold" /></div>
                   </div>
                 )}
               </div>
-
               <div className="flex flex-wrap gap-4">
-                <div className="flex items-center gap-3 p-4 border rounded-2xl bg-white shadow-sm flex-1 min-w-[200px]">
-                  <Switch checked={formData.isService} onCheckedChange={(v) => { setFormData({...formData, isService: v, trackStock: !v && formData.trackStock, isCompuesto: v ? false : formData.isCompuesto}); }} />
-                  <div><Label className="font-bold">Es un servicio</Label><p className="text-[10px] text-muted-foreground">Sin stock ni armado.</p></div>
-                </div>
-                {!formData.isService && (
-                  <div className="flex items-center gap-3 p-4 border rounded-2xl bg-amber-50/50 border-amber-200 shadow-sm flex-1 min-w-[200px]">
-                    <Switch checked={formData.isCompuesto} onCheckedChange={(v) => { setFormData({...formData, isCompuesto: v, trackStock: v ? true : formData.trackStock}); }} />
-                    <div><Label className="font-bold text-amber-800">Producto compuesto</Label><p className="text-[10px] text-amber-600">Requiere estructura BOM.</p></div>
-                  </div>
-                )}
-                {!formData.isService && formData.trackStock && (
-                  <div className="flex gap-4 flex-1 min-w-[200px]">
-                    <div className="space-y-1 flex-1"><Label className="font-bold text-xs uppercase text-muted-foreground">Stock Actual</Label><Input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} className="h-11 font-black" /></div>
-                    <div className="space-y-1 flex-1"><Label className="font-bold text-rose-600 text-xs uppercase">Mínimo Crítico</Label><Input type="number" value={formData.minStock} onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} className="h-11 border-rose-200 font-black" /></div>
-                  </div>
-                )}
+                <div className="flex items-center gap-3 p-4 border rounded-2xl bg-white shadow-sm flex-1 min-w-[200px]"><Switch checked={formData.isService} onCheckedChange={(v) => { setFormData({...formData, isService: v, trackStock: !v && formData.trackStock, isCompuesto: v ? false : formData.isCompuesto}); }} /><div><Label className="font-bold">Es un servicio</Label></div></div>
+                {!formData.isService && <div className="flex items-center gap-3 p-4 border rounded-2xl bg-amber-50/50 border-amber-200 shadow-sm flex-1 min-w-[200px]"><Switch checked={formData.isCompuesto} onCheckedChange={(v) => { setFormData({...formData, isCompuesto: v, trackStock: v ? true : formData.trackStock}); }} /><div><Label className="font-bold text-amber-800">Producto compuesto</Label></div></div>}
+                {!formData.isService && formData.trackStock && <div className="flex gap-4 flex-1 min-w-[200px]"><div className="space-y-1 flex-1"><Label className="font-bold text-xs uppercase text-muted-foreground">Stock Actual</Label><Input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} className="h-11 font-black" /></div><div className="space-y-1 flex-1"><Label className="font-bold text-rose-600 text-xs uppercase">Mínimo Crítico</Label><Input type="number" value={formData.minStock} onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} className="h-11 border-rose-200 font-black" /></div></div>}
               </div>
             </section>
-
-            {/* SECCIÓN 2: RESUMEN FINANCIERO */}
             {formData.isCompuesto && (
-              <section className="animate-in fade-in zoom-in-95 duration-500">
+              <>
                 <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-2xl border-t-8 border-amber-500 relative overflow-hidden">
-                  <div className="absolute right-0 top-0 p-4 opacity-5"><Calculator className="h-32 w-32" /></div>
                   <div className="flex flex-col md:flex-row justify-between items-center gap-8">
                     <div className="text-center md:text-left space-y-1">
                       <p className="text-[10px] font-black text-amber-500 uppercase tracking-[0.3em] mb-2">Costo Total Proyectado</p>
                       <p className="text-6xl font-black text-white leading-none tracking-tighter font-mono">$ {currentEditingCosts.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</p>
                       <p className="text-2xl font-black text-emerald-400 font-mono mt-2">u$s {currentEditingCosts.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}</p>
                     </div>
-                    <div className="flex gap-12 border-t md:border-t-0 md:border-l border-white/10 pt-6 md:pt-0 md:pl-12 w-full md:w-auto">
-                      <div className="flex-1 text-center md:text-right space-y-1">
-                        <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Insumos (BOM)</p>
-                        <p className="text-2xl font-bold text-blue-400">$ {(currentEditingCosts.ars - totalLaborARS).toLocaleString()}</p>
-                      </div>
-                      <div className="flex-1 text-center md:text-right space-y-1">
-                        <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Mano de Obra</p>
-                        <p className="text-2xl font-bold text-amber-400">$ {totalLaborARS.toLocaleString()}</p>
-                      </div>
-                    </div>
                   </div>
                 </div>
-              </section>
-            )}
-
-            {/* SECCIÓN 3: ESTRUCTURA BOM O DESCRIPCIÓN */}
-            {formData.isCompuesto ? (
-              <section className="space-y-6">
-                <div className="flex items-center justify-between border-b-2 pb-2">
-                  <h3 className="font-black text-xs uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2"><Layers className="h-4 w-4" /> Estructura de Armado (BOM)</h3>
-                  <Badge className="bg-amber-600 font-black px-3 py-1 shadow-lg">{formData.components.length} PIEZAS ACTIVAS</Badge>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 bg-muted/10 rounded-2xl border border-dashed border-primary/20">
-                  <div className="space-y-1">
-                    <Label className="text-[10px] font-bold uppercase text-muted-foreground">Filtrar por Categoría</Label>
-                    <Select value={bomFilterCategory} onValueChange={setBomFilterCategory}>
-                      <SelectTrigger className="h-11 bg-white shadow-sm"><SelectValue placeholder="Ver todas..." /></SelectTrigger>
-                      <SelectContent className="max-h-60">{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}<SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem></SelectContent>
-                    </Select>
+                <section className="space-y-6">
+                  <div className="flex items-center justify-between border-b-2 pb-2"><h3 className="font-black text-xs uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2"><Layers className="h-4 w-4" /> Estructura de Armado (BOM)</h3><Badge className="bg-amber-600 font-black px-3 py-1 shadow-lg">{formData.components.length} PIEZAS ACTIVAS</Badge></div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 bg-muted/10 rounded-2xl border border-dashed border-primary/20">
+                    <div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Filtrar por Categoría</Label><Select value={bomFilterCategory} onValueChange={setBomFilterCategory}><SelectTrigger className="h-11 bg-white shadow-sm"><SelectValue placeholder="Ver todas..." /></SelectTrigger><SelectContent className="max-h-60">{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}<SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem></SelectContent></Select></div>
+                    <div className="space-y-1"><Label className="text-[10px] font-bold uppercase text-primary">Agregar Componente</Label><Select onValueChange={addComponent}><SelectTrigger className="h-11 bg-white border-primary/30 shadow-md ring-2 ring-primary/5"><SelectValue placeholder="Seleccionar parte para agregar..." /></SelectTrigger><SelectContent className="max-h-60">{items?.filter(i => i.id !== editingItemId && !i.isService && (bomFilterCategory === "all" || i.categoryId === bomFilterCategory)).map(i => (<SelectItem key={i.id} value={i.id} className="font-bold">{i.name}</SelectItem>))}</SelectContent></Select></div>
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] font-bold uppercase text-primary">Agregar Componente</Label>
-                    <Select onValueChange={addComponent}>
-                      <SelectTrigger className="h-11 bg-white border-primary/30 shadow-md ring-2 ring-primary/5"><SelectValue placeholder="Seleccionar parte para agregar..." /></SelectTrigger>
-                      <SelectContent className="max-h-60">
-                        {items?.filter(i => i.id !== editingItemId && !i.isService && (bomFilterCategory === "all" || i.categoryId === bomFilterCategory)).map(i => (
-                          <SelectItem key={i.id} value={i.id} className="font-bold">{i.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 pb-24">
-                  {sortedAddedComponents.map((comp) => { 
-                    const product = items?.find(i => i.id === comp.productId); 
-                    if (!product) return null;
-                    const costData = calculateCost(product, items!, currentRate);
-                    const isBaseUSD = product.costCurrency === 'USD' || (!product.costCurrency && (product.costUSD > 0 && !product.costARS));
-                    
-                    return (
-                      <div key={`${comp.productId}-${comp.originalIndex}`} className="flex flex-col md:flex-row items-center gap-6 p-5 rounded-2xl border bg-white hover:border-primary/40 transition-all shadow-sm hover:shadow-md group">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-base font-black text-slate-800 leading-tight truncate">{product.name}</p>
-                          <div className="flex items-center gap-4 mt-2">
-                            <div className={cn("px-3 py-1 rounded-full text-[10px] font-black border-2", isBaseUSD ? "text-emerald-700 bg-emerald-50 border-emerald-100" : "text-blue-700 bg-blue-50 border-blue-100")}>
-                              BASE: {isBaseUSD ? `u$s ${product.costUSD?.toLocaleString()}` : `$ ${product.costARS?.toLocaleString()}`}
-                            </div>
-                            <span className="text-[10px] font-bold text-muted-foreground flex items-center gap-1">
-                              <ArrowRight className="h-3 w-3" /> {!isBaseUSD ? `u$s ${costData.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}` : `$ ${costData.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`}
-                            </span>
+                  <div className="grid grid-cols-1 gap-3 pb-24">
+                    {sortedAddedComponents.map((comp) => { 
+                      const product = items?.find(i => i.id === comp.productId); if (!product) return null;
+                      const costData = calculateCost(product, items!, currentRate);
+                      const isBaseUSD = product.costCurrency === 'USD' || (!product.costCurrency && (product.costUSD > 0 && !product.costARS));
+                      return (
+                        <div key={`${comp.productId}-${comp.originalIndex}`} className="flex flex-col md:flex-row items-center gap-6 p-5 rounded-2xl border bg-white hover:border-primary/40 transition-all shadow-sm hover:shadow-md group">
+                          <div className="min-w-0 flex-1"><p className="text-base font-black text-slate-800 leading-tight truncate">{product.name}</p><div className="flex items-center gap-4 mt-2"><div className={cn("px-3 py-1 rounded-full text-[10px] font-black border-2", isBaseUSD ? "text-emerald-700 bg-emerald-50 border-emerald-100" : "text-blue-700 bg-blue-50 border-blue-100")}>BASE: {isBaseUSD ? `u$s ${product.costUSD?.toLocaleString()}` : `$ ${product.costARS?.toLocaleString()}`}</div></div></div>
+                          <div className="flex items-center gap-8 w-full md:w-auto pt-4 md:pt-0 border-t md:border-t-0">
+                            <div className="flex items-center gap-3 bg-muted/20 p-2 rounded-xl border shadow-inner"><Label className="text-[10px] font-black uppercase text-muted-foreground px-1">Cant:</Label><input type="number" value={comp.quantity} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="w-14 text-lg font-black text-center bg-transparent focus:outline-none" /></div>
+                            <div className="text-right min-w-[140px]"><p className="text-[9px] font-black uppercase text-slate-400">Subtotal Línea</p><p className="text-lg font-black text-blue-700 leading-tight">$ {(costData.ars * comp.quantity).toLocaleString()}</p><p className="text-sm font-black text-emerald-700">u$s {(costData.usd * comp.quantity).toLocaleString()}</p></div>
+                            <div className="flex gap-1 shrink-0"><Button variant="ghost" size="icon" className="h-11 w-11 text-primary rounded-full" onClick={() => handleJumpToComponent(comp.productId)}><ChevronRight className="h-5 w-5" /></Button><Button variant="ghost" size="icon" className="h-11 w-11 text-destructive hover:bg-rose-50 rounded-full" onClick={() => removeComponent(comp.originalIndex)}><Trash2 className="h-5 w-5" /></Button></div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-8 w-full md:w-auto pt-4 md:pt-0 border-t md:border-t-0">
-                          <div className="flex items-center gap-3 bg-muted/20 p-2 rounded-xl border shadow-inner">
-                            <Label className="text-[10px] font-black uppercase text-muted-foreground px-1">Cant:</Label>
-                            <input type="number" value={comp.quantity} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="w-14 text-lg font-black text-center bg-transparent focus:outline-none" />
-                          </div>
-                          <div className="text-right min-w-[140px]">
-                            <p className="text-[9px] font-black uppercase text-slate-400">Subtotal Línea</p>
-                            <p className="text-lg font-black text-blue-700 leading-tight">$ {(costData.ars * comp.quantity).toLocaleString()}</p>
-                            <p className="text-sm font-black text-emerald-700">u$s {(costData.usd * comp.quantity).toLocaleString()}</p>
-                          </div>
-                          <div className="flex gap-1 shrink-0">
-                            <Button variant="ghost" size="icon" className="h-11 w-11 text-primary hover:bg-primary/5 rounded-full" onClick={() => handleJumpToComponent(comp.productId)} title="Editar este componente">
-                              <ChevronRight className="h-5 w-5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-11 w-11 text-destructive shrink-0 hover:bg-rose-50 rounded-full" onClick={() => removeComponent(comp.originalIndex)}>
-                              <Trash2 className="h-5 w-5" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ); 
-                  })}
-                </div>
-              </section>
-            ) : (
-              <section className="space-y-4">
-                <Label className="font-black text-xs uppercase tracking-widest flex items-center gap-2 text-muted-foreground"><FileText className="h-4 w-4 text-primary" /> Descripción Técnica</Label>
-                <Textarea value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="min-h-[300px] bg-muted/5 font-sans leading-relaxed p-6 text-base rounded-3xl" placeholder="Escribe detalles técnicos, notas de montaje o información comercial relevante..." />
-              </section>
+                      ); 
+                    })}
+                  </div>
+                </section>
+              </>
             )}
           </div>
-
-          <DialogFooter className="p-4 border-t bg-white shrink-0 z-10">
-            <div className="flex gap-3 w-full justify-end">
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="h-12 px-8 font-bold text-base flex-1 md:flex-none">Cancelar</Button>
-              <Button onClick={handleSave} className="h-12 px-12 font-black shadow-2xl uppercase tracking-widest flex-1 md:flex-none">
-                <CheckCircle2 className="mr-2 h-5 w-5" /> {editHistory.length > 0 ? 'GUARDAR Y VOLVER' : 'GUARDAR ÍTEM'}
-              </Button>
-            </div>
-          </DialogFooter>
+          <DialogFooter className="p-4 border-t bg-white shrink-0 z-10"><div className="flex gap-3 w-full justify-end"><Button variant="outline" onClick={() => setIsDialogOpen(false)} className="h-12 px-8 font-bold flex-1 md:flex-none">Cancelar</Button><Button onClick={handleSave} className="h-12 px-12 font-black shadow-2xl uppercase tracking-widest flex-1 md:flex-none"><CheckCircle2 className="mr-2 h-5 w-5" /> {editHistory.length > 0 ? 'GUARDAR Y VOLVER' : 'GUARDAR ÍTEM'}</Button></div></DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto w-[95vw]"><DialogHeader><DialogTitle>Categorías de Productos</DialogTitle></DialogHeader><div className="space-y-4 py-4"><div className="flex gap-2"><Input placeholder="Nueva categoría..." value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} /><Button onClick={handleSaveCategory}>{editingCategoryId ? "Actualizar" : "Agregar"}</Button>{editingCategoryId && <Button variant="ghost" onClick={cancelEditCategory}>Cancelar</Button>}</div><ScrollArea className="h-[300px] border rounded-md p-2">{categories.map((cat: any) => (<div key={cat.id} className="flex justify-between items-center p-2 border-b last:border-0 hover:bg-muted/50 transition-colors"><div className="flex items-center gap-2"><Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => toggleFavoriteCategory(cat)}><Star className={cn("h-4 w-4", cat.isFavorite ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30")} /></Button><span className="text-sm font-medium">{cat.name}</span></div><div className="flex gap-1"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEditCategory(cat)}><Edit className="h-4 w-4" /></Button><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteDocumentNonBlocking(doc(db, 'product_categories', cat.id))}><Trash2 className="h-4 w-4" /></Button></div></div>))}</ScrollArea></div></DialogContent>
-      </Dialog>
-
-      <Dialog open={isSupplierManagerOpen} onOpenChange={setIsSupplierManagerOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto w-[95vw]"><DialogHeader><DialogTitle>Gestionar Proveedores</DialogTitle></DialogHeader><div className="space-y-6 py-4"><div className="p-4 bg-muted/20 rounded-xl border border-dashed space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="space-y-2"><Label className="text-xs font-black uppercase">Nombre del Proveedor</Label><Input placeholder="Ferretería Central..." value={newSupplierName} onChange={(e) => setNewSupplierName(e.target.value)} /></div><div className="space-y-2"><Label className="text-xs font-black uppercase">Teléfono / WhatsApp</Label><Input placeholder="+54 9 11..." value={newSupplierPhone} onChange={(e) => setNewSupplierPhone(e.target.value)} /></div></div><div className="space-y-2"><Label className="text-xs font-black uppercase">Dirección</Label><Input placeholder="Av. Principal 123, Pilar..." value={newSupplierAddress} onChange={(e) => setNewSupplierAddress(e.target.value)} /></div><Button onClick={handleSaveSupplier} className="w-full font-bold"><Plus className="h-4 w-4 mr-2" /> Guardar Proveedor</Button></div><ScrollArea className="h-[300px] border rounded-xl p-2 bg-white">{sortedSuppliers.length === 0 ? (<p className="text-center py-10 text-xs text-muted-foreground italic">No hay proveedores registrados.</p>) : (<div className="space-y-2">{sortedSuppliers.map((sup: any) => (<div key={sup.id} className="flex flex-col md:flex-row md:items-center justify-between p-3 border rounded-lg hover:bg-muted/20 transition-colors group"><div className="space-y-1"><div className="flex items-center gap-2"><span className="text-sm font-black text-slate-800">{sup.name}</span>{sup.phone && <Badge variant="outline" className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border-emerald-100">{sup.phone}</Badge>}</div>{sup.address && (<div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><MapPin className="h-3 w-3" /> {sup.address}</div>)}</div><div className="flex gap-1 mt-2 md:mt-0 md:opacity-0 group-hover:opacity-100 transition-opacity"><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setNewSupplierName(sup.name || ""); setNewSupplierPhone(sup.phone || ""); setNewSupplierAddress(sup.address || ""); deleteDocumentNonBlocking(doc(db, 'suppliers', sup.id)); }}><Edit className="h-4 w-4" /></Button><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeleteSupplier(sup.id)}><Trash2 className="h-4 w-4" /></Button></div></div>))}</div>)}</ScrollArea></div></DialogContent>
-      </Dialog>
-
-      <Dialog open={isAssemblyOpen} onOpenChange={setIsAssemblyOpen}>
-        <DialogContent className="max-w-5xl h-[95vh] flex flex-col p-0 w-[95vw]">
-          <DialogHeader className="p-3 pb-1 shrink-0"><div className="flex items-center gap-2"><Hammer className="h-4 w-4 text-amber-600" /><DialogTitle className="text-base font-black">Nuevo Armado</DialogTitle></div><DialogDescription className="text-[10px]">Planificar fabricación para <b>{selectedForAssembly?.name}</b></DialogDescription></DialogHeader>
-          <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-4">
-            <section className="bg-amber-50 border border-amber-100 p-3 rounded-2xl flex items-center justify-between gap-4">
-              <div><Label className="font-black text-amber-800 uppercase tracking-widest text-[9px]">Unidades a fabricar</Label></div>
-              <div className="flex items-center gap-2 bg-white p-1 rounded-xl border shadow-inner"><Button variant="ghost" size="icon" onClick={() => setAssemblyQty(Math.max(1, assemblyQty - 1))} className="h-7 w-7 text-amber-600"><Minus className="h-3 w-3" /></Button><input type="number" value={assemblyQty} onChange={(e) => setAssemblyQty(Number(e.target.value))} className="w-10 text-lg font-black text-center text-amber-900 focus:outline-none" /><Button variant="ghost" size="icon" onClick={() => setAssemblyQty(assemblyQty + 1)} className="h-7 w-7 text-amber-600"><Plus className="h-3 w-3" /></Button></div>
-            </section>
-            {explosionSummary && (<div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
-              <section className="space-y-2">
-                <div className="flex items-center justify-between"><h3 className="text-[9px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><Layers className="h-3 w-3" /> Simulación de Insumos</h3><Badge variant="outline" className="font-bold border-amber-200 text-amber-700 bg-amber-50 text-[8px]">{explosionSummary.all.length} PIEZAS</Badge></div>
-                <div className="grid grid-cols-1 gap-1 md:hidden">{explosionSummary.all.sort((a,b) => a.name.localeCompare(b.name)).map((req) => { const stockRestante = req.available - req.required; const faltaDirecto = stockRestante < 0; return (
-                  <Card key={req.id} className="p-1.5 border shadow-sm flex flex-col gap-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-[10px] truncate">{req.name}</p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <div className="text-center px-1 py-0.5 bg-muted/20 rounded"><p className="text-[10px] font-black text-primary">{req.required}/{req.available}</p></div>
-                        {faltaDirecto ? <Badge className="bg-rose-600 text-[7px] px-1">FALTA</Badge> : <CheckCircle className="h-3 w-3 text-emerald-500" />}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 border-t pt-1">
-                      <span className="text-[8px] font-bold text-muted-foreground uppercase">PROV:</span>
-                      <Select defaultValue={manualSuppliers[req.id] || req.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateItemSupplierGlobally(req.id, v)}>
-                        <SelectTrigger className="h-6 text-[9px] bg-muted/20 border-none p-1 flex-1">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-40">
-                          <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
-                          {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </Card>
-                ); })}</div>
-                <div className="hidden md:block border rounded-xl bg-white shadow-sm overflow-x-auto"><Table className="min-w-[500px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="font-black text-[8px] uppercase h-7">Componente</TableHead><TableHead className="text-center font-black text-[8px] uppercase h-7 w-12">Req.</TableHead><TableHead className="text-center text-[8px] font-black uppercase h-7 w-12">Stock</TableHead><TableHead className="text-center font-black text-[8px] uppercase h-7 w-40">Proveedor</TableHead><TableHead className="text-right font-black text-[8px] uppercase h-7 w-20">Estado</TableHead></TableRow></TableHeader><TableBody>{explosionSummary.all.sort((a,b) => a.name.localeCompare(b.name)).map((req) => { const stockRestante = req.available - req.required; const faltaDirecto = stockRestante < 0; return (<TableRow key={req.id} className="h-10"><TableCell className="py-0.5"><span className="font-bold text-[11px]">{req.name}</span></TableCell><TableCell className="text-center font-black text-primary text-[10px]">{req.required}</TableCell><TableCell className="text-center text-slate-500 text-[10px]">{req.available}</TableCell><TableCell className="text-center py-0.5"><Select defaultValue={manualSuppliers[req.id] || req.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateItemSupplierGlobally(req.id, v)}><SelectTrigger className="h-7 text-[9px] bg-transparent border-none focus:ring-0"><SelectValue /></SelectTrigger><SelectContent className="max-h-60"><SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></TableCell><TableCell className="text-right py-0.5">{faltaDirecto ? <Badge className="bg-rose-600 font-bold text-[7px] h-4">FALTA</Badge> : <CheckCircle className="h-3 w-3 text-emerald-500 ml-auto" />}</TableCell></TableRow>); })}</TableBody></Table></div>
-              </section>
-              <section className="space-y-2">
-                <div className="flex items-center justify-between"><h3 className="text-[9px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2"><ShoppingCart className="h-3 w-3" /> Carrito de Compras</h3><Button variant="outline" size="sm" className="h-6 gap-1 font-bold text-[8px]" onClick={() => { setManualPurchaseQtys({}); setManualPurchasePrices({}); setManualSuppliers({}); setManualPurchaseCurrencies({}); }}><RefreshCw className="h-2 w-2" /> REINICIAR</Button></div>
-                <GroupedPurchaseList />
-              </section>
-            </div>)}
-          </div>
-          <DialogFooter className="p-3 border-t bg-slate-50 shrink-0"><Button variant="ghost" onClick={() => setIsAssemblyOpen(false)} className="font-bold text-[10px] h-8">Cancelar</Button><Button onClick={handleCreateOrder} className="px-4 font-black shadow-xl h-8 bg-primary text-white text-[10px]"><ClipboardList className="mr-1.5 h-3 w-3" /> GUARDAR COMO ORDEN</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={!!itemToDelete} onOpenChange={(o) => { if(!o) setItemToDelete(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle><AlertDialogDescription>Se borrará permanentemente "{itemToDelete?.name}" y no podrá utilizarse en nuevas operaciones ni armados.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground">Eliminar definitivamente</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+      <AlertDialog open={!!orderToDelete} onOpenChange={(o) => { if(!o) setOrderToDelete(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Eliminar orden de producción?</AlertDialogTitle><AlertDialogDescription>Esta acción borrará la planificación de esta orden. No afectará el stock actual.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteOrder} className="bg-destructive text-white">Eliminar Orden</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
       
-      <AlertDialog open={!!orderToDelete} onOpenChange={(o) => { if(!o) setOrderToDelete(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar orden de producción?</AlertDialogTitle>
-            <AlertDialogDescription>Esta acción borrará la planificación de esta orden. No afectará el stock actual.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeleteOrder} className="bg-destructive text-white">Eliminar Orden</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={!!orderToFinalize} onOpenChange={(o) => { if(!o) setOrderToFinalize(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2"><CheckCircle className="h-5 w-5 text-emerald-600" /> Finalizar Armado</AlertDialogTitle>
-            <AlertDialogDescription>
-              ¿Confirmar la finalización de <b>{orderToFinalize?.quantity} unidades</b> de <b>{orderToFinalize?.productName}</b>?<br /><br />
-              Se descontarán inteligentemente los insumos disponibles del inventario.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmFinalize} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
-              Confirmar y Descontar Stock
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* FICHA TÉCNICA DE PRODUCTO (PDF) */}
-      {itemToPrint && (
-        <div className="print-only w-full p-8 font-sans text-slate-900 bg-white">
-          <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
-            <div>
-              <h1 className="text-2xl font-black uppercase tracking-tight">{itemToPrint.name}</h1>
-              <p className="text-sm font-bold text-slate-600">Categoría: {categoryMap[itemToPrint.categoryId] || 'S/D'}</p>
-              <p className="text-[10px] text-slate-400 uppercase mt-1">Ficha Generada por Dosimat Pro</p>
-            </div>
-            <div className="text-right">
-              <p className="text-[10px] font-black uppercase text-slate-400">Fecha de Emisión</p>
-              <p className="text-xs font-bold">{new Date().toLocaleDateString('es-AR')}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-6 mb-8">
-            <div className="p-4 border-2 border-slate-900 rounded-xl bg-slate-50">
-              <h2 className="text-[10px] font-black uppercase mb-3 border-b border-slate-200 pb-1">Precios de Venta Vigentes</h2>
-              <div className="flex flex-col gap-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold">PESOS (ARS):</span>
-                  <span className="text-lg font-black text-blue-700">${(itemToPrint.priceARS || 0).toLocaleString('es-AR')}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold">DÓLARES (USD):</span>
-                  <span className="text-lg font-black text-emerald-700">u$s {(itemToPrint.priceUSD || 0).toLocaleString('es-AR')}</span>
-                </div>
-              </div>
-            </div>
-
-            {isAdmin && (
-              <div className="p-4 border-2 border-slate-900 rounded-xl bg-slate-900 text-white shadow-xl">
-                <h2 className="text-[10px] font-black uppercase mb-3 border-b border-white/20 pb-1 text-amber-500">Resumen de Costos de Producción</h2>
-                <div className="flex flex-col gap-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-bold opacity-70">MATERIALES:</span>
-                    <span className="text-xs font-bold text-blue-400">${(itemToPrint.calculatedCostARS - ((Number(itemToPrint.laborCostARS) || 0) + (Number(itemToPrint.laborCostUSD) || 0) * currentRate)).toLocaleString('es-AR')}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-bold opacity-70">MANO DE OBRA:</span>
-                    <span className="text-xs font-bold text-amber-400">${((Number(itemToPrint.laborCostARS) || 0) + (Number(itemToPrint.laborCostUSD) || 0) * currentRate).toLocaleString('es-AR')}</span>
-                  </div>
-                  <div className="flex justify-between items-center mt-1 pt-1 border-t border-white/10">
-                    <span className="text-xs font-black">COSTO TOTAL FINAL:</span>
-                    <div className="text-right">
-                      <p className="text-sm font-black text-white">${(itemToPrint.calculatedCostARS || 0).toLocaleString('es-AR')}</p>
-                      <p className="text-[10px] font-black text-emerald-400">u$s {(itemToPrint.calculatedCostUSD || 0).toLocaleString('es-AR')}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {itemToPrint.isCompuesto && (
-            <div className="space-y-4">
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
-                <Layers className="h-4 w-4" /> Estructura Detallada de Insumos (BOM)
-              </h3>
-              <table className="w-full border-collapse border-2 border-slate-900 text-[10px]">
-                <thead>
-                  <tr className="bg-slate-900 text-white">
-                    <th className="border border-slate-900 p-2 text-left uppercase font-black">Componente / Pieza</th>
-                    <th className="border border-slate-900 p-2 text-center uppercase font-black w-16">Cant.</th>
-                    <th className="border border-slate-900 p-2 text-right uppercase font-black w-28">Costo Unit. Base</th>
-                    <th className="border border-slate-900 p-2 text-right uppercase font-black w-28">Costo Unit. Ref.</th>
-                    <th className="border border-slate-900 p-2 text-right uppercase font-black w-28">Subtotal (Base)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {itemToPrint.components?.map((comp: any, idx: number) => {
-                    const product = items?.find(i => i.id === comp.productId);
-                    if (!product) return null;
-                    const costData = calculateCost(product, items!, currentRate);
-                    const isBaseUSD = product.costCurrency === 'USD' || (!product.costCurrency && (product.costUSD > 0 && !product.costARS));
-                    return (
-                      <tr key={idx} className="border-b border-slate-300">
-                        <td className="border border-slate-900 p-2">
-                          <p className="font-black text-xs leading-tight">{product.name}</p>
-                          <p className="text-[8px] text-slate-500 uppercase mt-0.5">{categoryMap[product.categoryId] || 'S/D'}</p>
-                        </td>
-                        <td className="border border-slate-900 p-2 text-center font-black text-sm">{comp.quantity}</td>
-                        <td className="border border-slate-900 p-2 text-right font-bold text-slate-600 bg-slate-50">
-                          {isBaseUSD ? `u$s ${product.costUSD?.toLocaleString()}` : `$ ${product.costARS?.toLocaleString()}`}
-                        </td>
-                        <td className="border border-slate-900 p-2 text-right font-medium italic text-slate-400">
-                          {!isBaseUSD ? `u$s ${costData.usd.toLocaleString('es-AR', { maximumFractionDigits: 2 })}` : `$ ${costData.ars.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`}
-                        </td>
-                        <td className="border border-slate-900 p-2 text-right font-black text-xs">
-                          {isBaseUSD ? `u$s ${(product.costUSD * comp.quantity).toLocaleString()}` : `$ ${(product.costARS * comp.quantity).toLocaleString()}`}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {!itemToPrint.isCompuesto && itemToPrint.description && (
-            <div className="mt-8">
-              <h3 className="text-[10px] font-black uppercase mb-2 text-slate-500 tracking-widest">Descripción Técnica y Notas</h3>
-              <div className="p-6 border border-dashed border-slate-400 rounded-2xl text-sm italic leading-relaxed text-slate-700 bg-slate-50">
-                {itemToPrint.description}
-              </div>
-            </div>
-          )}
-
-          <div className="mt-12 pt-6 border-t-2 border-slate-900 flex justify-between items-end italic text-[9px] text-slate-400">
-            <p>Ficha técnica oficial emitida para control interno y comercial de Dosimat Pro.</p>
-            <p>Página 1 de 1</p>
-          </div>
-        </div>
-      )}
-
-      {/* PLAN DE ARMADO DE ORDEN DE PRODUCCIÓN (PDF) */}
-      {orderToPrint && (
-        <div className="print-only w-full p-8 font-sans text-slate-900 bg-white">
-          <div className="flex justify-between items-center border-b-2 border-slate-900 pb-4 mb-6">
-            <div>
-              <h1 className="text-2xl font-black uppercase tracking-tight">Plan de Armado / Producción</h1>
-              <p className="text-sm font-bold text-slate-600">Orden #{orderToPrint.id.toUpperCase().slice(0, 6)}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-lg font-black text-primary">CANTIDAD: {orderToPrint.quantity}</p>
-              <p className="text-xs font-bold text-slate-400">{new Date().toLocaleDateString('es-AR')}</p>
-            </div>
-          </div>
-
-          <div className="mb-8 p-4 border-2 border-slate-900 rounded-2xl bg-slate-50">
-            <h2 className="text-[10px] font-black uppercase text-slate-500 mb-1">Producto a Fabricar</h2>
-            <h3 className="text-3xl font-black uppercase">{orderToPrint.productName}</h3>
-          </div>
-
-          <div className="space-y-6">
-            <div className="flex items-center gap-2">
-              <Layers className="h-5 w-5" />
-              <h3 className="text-sm font-black uppercase tracking-widest">Explosión de Materiales Inteligente</h3>
-            </div>
-            
-            <p className="text-[10px] text-slate-500 italic mb-4">
-              * Nota: Los componentes con stock suficiente aparecen como "Retirar de Stock". 
-              Aquellos sin stock se han expandido en sus partes componentes para su fabricación.
-            </p>
-
-            <table className="w-full border-collapse border-2 border-slate-900 text-xs">
-              <thead>
-                <tr className="bg-slate-900 text-white">
-                  <th className="border border-slate-900 p-2 text-left uppercase font-black">Componente / Insumo</th>
-                  <th className="border border-slate-900 p-2 text-center uppercase font-black w-24">Cantidad</th>
-                  <th className="border border-slate-900 p-2 text-left uppercase font-black w-48">Instrucción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(orderToPrint.status === 'completed' && orderToPrint.smartExplosionSnapshot 
-                  ? orderToPrint.smartExplosionSnapshot 
-                  : getSmartExplosion(orderToPrint.productId, orderToPrint.quantity, 0)
-                ).map((row: any, idx: number) => {
-                  if (row.level === 0) return null;
-                  return (
-                    <tr key={idx} className={cn("border-b border-slate-300", row.level > 1 && "bg-slate-50/50")}>
-                      <td className="border border-slate-900 p-2">
-                        <div style={{ paddingLeft: `${(row.level - 1) * 20}px` }} className="flex items-center gap-2">
-                          {row.level > 1 && <ArrowRight className="h-3 w-3 text-slate-400" />}
-                          <span className={cn("font-bold", row.level === 1 && "text-sm font-black")}>{row.name}</span>
-                        </div>
-                      </td>
-                      <td className="border border-slate-900 p-2 text-center font-black text-lg">
-                        {row.requested}
-                      </td>
-                      <td className="border border-slate-900 p-2">
-                        {orderToPrint.status === 'completed' ? (
-                          <div className="flex items-center gap-1.5 text-emerald-700 font-bold">
-                            <CheckCircle className="h-3 w-3" />
-                            <span>COMPLETADO</span>
-                          </div>
-                        ) : row.fromStock > 0 ? (
-                          <div className="flex items-center gap-1.5 text-emerald-700 font-bold">
-                            <CheckCircle className="h-3 w-3" />
-                            <span>Retirar {row.fromStock} de STOCK</span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5 text-rose-700 font-bold">
-                            <AlertTriangle className="h-3 w-3" />
-                            <span>FABRICAR / COMPRAR</span>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mt-12 grid grid-cols-2 gap-12">
-            <div className="border-t-2 border-slate-900 pt-2">
-              <p className="text-[10px] font-black uppercase text-slate-400">Salida de Materiales (Firma)</p>
-            </div>
-            <div className="border-t-2 border-slate-900 pt-2 text-right">
-              <p className="text-[10px] font-black uppercase text-slate-400">Recepción de Producto (Firma)</p>
-            </div>
-          </div>
-
-          <div className="mt-12 pt-6 border-t border-dashed border-slate-300 italic text-[9px] text-slate-400 text-center">
-            Este documento es una orden de producción interna generada por Dosimat Pro.
-          </div>
-        </div>
-      )}
+      <AlertDialog open={!!purchaseOrderToDelete} onOpenChange={(o) => { if(!o) setPurchaseOrderToDelete(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Eliminar orden de reposición?</AlertDialogTitle><AlertDialogDescription>Esta acción borrará la lista de compra manual.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={confirmDeletePurchaseOrder} className="bg-destructive text-white">Eliminar Orden</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
 
       <MobileNav />
     </div>
@@ -2568,39 +1979,17 @@ export default function CatalogPage() {
 
   function addComponent(productId: string) {
     if (formData.components.some(c => c.productId === productId)) return;
-    setFormData(prev => ({
-      ...prev,
-      components: [...prev.components, { productId, quantity: 1 }]
-    }));
+    setFormData(prev => ({ ...prev, components: [...prev.components, { productId, quantity: 1 }] }));
   }
 
   function removeComponent(idx: number) {
-    setFormData(prev => ({
-      ...prev,
-      components: prev.components.filter((_, i) => i !== idx)
-    }));
+    setFormData(prev => ({ ...prev, components: prev.components.filter((_, i) => i !== idx) }));
   }
 
   function updateComponentQty(idx: number, qty: number) {
     const newComps = [...formData.components];
     newComps[idx].quantity = qty;
     setFormData(prev => ({ ...prev, components: newComps }));
-  }
-
-  function toggleFavoriteCategory(cat: any) {
-    updateDocumentNonBlocking(doc(db, 'product_categories', cat.id), {
-      isFavorite: !cat.isFavorite
-    });
-  }
-
-  function handleEditCategory(cat: any) {
-    setEditingCategoryId(cat.id)
-    setNewCategoryName(cat.name)
-  }
-
-  function cancelEditCategory() {
-    setEditingCategoryId(null)
-    setNewCategoryName("")
   }
 
   function confirmDeleteOrder() {
@@ -2610,10 +1999,10 @@ export default function CatalogPage() {
     toast({ title: "Orden eliminada" })
   }
 
-  function confirmDelete() {
-    if (!itemToDelete) return
-    deleteDocumentNonBlocking(doc(db, 'products_services', itemToDelete.id))
-    setItemToDelete(null)
-    toast({ title: "Item eliminado" })
+  function confirmDeletePurchaseOrder() {
+    if (!purchaseOrderToDelete) return
+    deleteDocumentNonBlocking(doc(db, 'purchase_orders', purchaseOrderToDelete.id))
+    setPurchaseOrderToDelete(null)
+    toast({ title: "Orden de compra eliminada" })
   }
 }
