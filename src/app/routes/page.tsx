@@ -36,7 +36,8 @@ import {
   MessageSquare,
   RefreshCw,
   Beaker,
-  Copy
+  Copy,
+  Coins
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -114,10 +115,23 @@ function RoutesContent() {
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const zonesQuery = useMemoFirebase(() => collection(db, 'zones'), [db])
   const routesQuery = useMemoFirebase(() => query(collection(db, 'route_sheets'), orderBy('date', 'desc')), [db])
+  const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
 
   const { data: clients } = useCollection(clientsQuery)
   const { data: zones } = useCollection(zonesQuery)
   const { data: rawRouteSheets, isLoading: loadingSheets } = useCollection(routesQuery)
+  const { data: catalog } = useCollection(catalogQuery)
+
+  // Obtener precios de referencia para cloro y ácido (Efectivo)
+  const referencePrices = useMemo(() => {
+    if (!catalog) return { cloro: 0, acido: 0 }
+    const cloroItem = catalog.find((i: any) => i.name === "Bidón CL (Pago Ef.)")
+    const acidoItem = catalog.find((i: any) => i.name === "Bidón Ácido (Pago Ef.)")
+    return {
+      cloro: Number(cloroItem?.priceARS || 0),
+      acido: Number(acidoItem?.priceARS || 0)
+    }
+  }, [catalog])
 
   useEffect(() => {
     const sheetId = searchParams.get('sheetId')
@@ -539,6 +553,11 @@ function RoutesContent() {
                           if (!client) return null
                           const zone = zones?.find(z => z.id === client.zonaId);
 
+                          // Cálculos de cobro sugerido en tiempo real
+                          const cloroSub = Number(item.realChlorine || 0) * referencePrices.cloro;
+                          const acidoSub = Number(item.realAcid || 0) * referencePrices.acido;
+                          const totalSugerido = cloroSub + acidoSub;
+
                           return (
                             <Card key={idx} className={cn(
                               "glass-card border-l-4 transition-all",
@@ -674,6 +693,7 @@ function RoutesContent() {
                                               onChange={(e) => updateItemField(item.clientId, 'realChlorine', Number(e.target.value))} 
                                               className="h-10 font-black text-center border-blue-300"
                                             />
+                                            {cloroSub > 0 && <p className="text-[9px] font-black text-emerald-600 text-center animate-in fade-in">${cloroSub.toLocaleString()}</p>}
                                           </div>
                                           <div className="space-y-1">
                                             <Label className="text-[10px] font-bold text-rose-700">Entregó Ácido</Label>
@@ -684,25 +704,34 @@ function RoutesContent() {
                                               onChange={(e) => updateItemField(item.clientId, 'realAcid', Number(e.target.value))} 
                                               className="h-10 font-black text-center border-rose-300"
                                             />
+                                            {acidoSub > 0 && <p className="text-[9px] font-black text-emerald-600 text-center animate-in fade-in">${acidoSub.toLocaleString()}</p>}
                                           </div>
                                         </div>
-                                        <div className="flex gap-2 items-end">
-                                          <div className="flex-1 space-y-1">
-                                            <Label className="text-[9px] font-bold uppercase">Cobró ($)</Label>
-                                            <Input 
-                                              type="number" 
-                                              disabled={item.processed || (!isAdmin && !isReplenisher)}
-                                              placeholder="0" 
-                                              value={item.cashCollected} 
-                                              onChange={(e) => updateItemField(item.clientId, 'cashCollected', Number(e.target.value))} 
-                                              className="h-10 bg-white border-emerald-400 text-center font-black text-emerald-700 text-lg shadow-inner"
-                                            />
+                                        
+                                        <div className="flex flex-col gap-1 mt-1">
+                                          <div className="flex items-center justify-between px-2">
+                                            <Label className="text-[9px] font-black uppercase text-muted-foreground flex items-center gap-1">
+                                              <Calculator className="h-2.5 w-2.5" /> SUGERIDO A COBRAR
+                                            </Label>
+                                            <span className="text-[11px] font-black text-emerald-700">${totalSugerido.toLocaleString('es-AR')}</span>
                                           </div>
-                                          {!item.isDelivered && (isAdmin || isReplenisher) && (
-                                            <Button className="h-10 w-10 bg-emerald-600 shrink-0 shadow-lg" onClick={() => loadPlannedToReal(item.clientId)}>
-                                              <Check className="h-5 w-5" />
-                                            </Button>
-                                          )}
+                                          <div className="flex gap-2 items-end">
+                                            <div className="flex-1 space-y-1">
+                                              <Input 
+                                                type="number" 
+                                                disabled={item.processed || (!isAdmin && !isReplenisher)}
+                                                placeholder="Cobró ($)" 
+                                                value={item.cashCollected || ""} 
+                                                onChange={(e) => updateItemField(item.clientId, 'cashCollected', Number(e.target.value))} 
+                                                className="h-10 bg-white border-emerald-400 text-center font-black text-emerald-700 text-lg shadow-inner"
+                                              />
+                                            </div>
+                                            {!item.isDelivered && (isAdmin || isReplenisher) && (
+                                              <Button className="h-10 w-10 bg-emerald-600 shrink-0 shadow-lg" onClick={() => loadPlannedToReal(item.clientId)}>
+                                                <Check className="h-5 w-5" />
+                                              </Button>
+                                            )}
+                                          </div>
                                         </div>
                                         <input 
                                           placeholder="Nota entrega..." 
