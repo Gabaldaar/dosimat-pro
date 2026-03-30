@@ -38,7 +38,8 @@ import {
   RefreshCw,
   Beaker,
   Copy,
-  Coins
+  Coins,
+  Mail
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -99,27 +100,35 @@ function RoutesContent() {
   const [isNewSheetOpen, setIsNewSheetOpen] = useState(false)
   const [sheetToDelete, setSheetToDelete] = useState<any | null>(null)
 
+  // Estados para envío de Mail
+  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false)
+  const [selectedCommCustomer, setSelectedCommCustomer] = useState<any>(null)
+  const [selectedTemplateId, setSelectedTemplateId] = useState("")
+  const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({})
+
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        if (!isNewSheetOpen && !sheetToDelete) {
+        if (!isNewSheetOpen && !sheetToDelete && !isEmailDialogOpen) {
           document.body.style.pointerEvents = 'auto';
         }
       }
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isNewSheetOpen, sheetToDelete]);
+  }, [isNewSheetOpen, sheetToDelete, isEmailDialogOpen]);
 
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const zonesQuery = useMemoFirebase(() => collection(db, 'zones'), [db])
   const routesQuery = useMemoFirebase(() => query(collection(db, 'route_sheets'), orderBy('date', 'desc')), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
+  const emailTemplatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
 
   const { data: clients } = useCollection(clientsQuery)
   const { data: zones } = useCollection(zonesQuery)
   const { data: rawRouteSheets, isLoading: loadingSheets } = useCollection(routesQuery)
   const { data: catalog } = useCollection(catalogQuery)
+  const { data: emailTemplates } = useCollection(emailTemplatesQuery)
 
   const referencePrices = useMemo(() => {
     if (!catalog) return { cloro: 0, acido: 0 }
@@ -218,13 +227,12 @@ function RoutesContent() {
       return
     }
 
-    // Buscar el cliente para obtener su cantidad de bidones por defecto
     const client = clients?.find(c => c.id === clientId)
     const defaultChlorine = client?.equipoInstalado?.cantBidones || 0
 
     const newItem = {
       clientId,
-      plannedChlorine: defaultChlorine, // Se carga el valor de la ficha del cliente
+      plannedChlorine: defaultChlorine,
       realChlorine: 0,
       plannedAcid: 0,
       realAcid: 0,
@@ -359,10 +367,69 @@ function RoutesContent() {
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   }
 
+  // Lógica de Mail
+  const handleOpenEmailDialog = (customer: any) => {
+    if (!customer.mail) {
+      toast({ title: "Sin Mail", description: "Este cliente no tiene correo registrado.", variant: "destructive" });
+      return;
+    }
+    setSelectedCommCustomer(customer)
+    setSelectedTemplateId("")
+    setDynamicValues({})
+    setIsEmailDialogOpen(true)
+  }
+
+  const activeTemplate = useMemo(() => {
+    return emailTemplates?.find(t => t.id === selectedTemplateId);
+  }, [selectedTemplateId, emailTemplates]);
+
+  const dynamicKeys = useMemo(() => {
+    if (!activeTemplate) return [];
+    const content = activeTemplate.body + (activeTemplate.subject || "");
+    const matches = content.match(/\{\{\?([^}]+)\}\}/g);
+    if (!matches) return [];
+    return Array.from(new Set(matches.map(m => m.replace(/\{\{\?|\}\}/g, ''))));
+  }, [activeTemplate]);
+
+  const replaceMarkers = (text: string, client?: any, dynamicVals?: Record<string, string>) => {
+    let result = text;
+    if (client) {
+      result = result.replace(/\{\{Nombre\}\}/g, client.nombre || "");
+      result = result.replace(/\{\{Apellido\}\}/g, client.apellido || "");
+      result = result.replace(/\{\{Direccion\}\}/g, client.direccion || "");
+      result = result.replace(/\{\{Localidad\}\}/g, client.localidad || "");
+      result = result.replace(/\{\{Saldo_ARS\}\}/g, `$ ${Number(client.saldoActual || 0).toLocaleString('es-AR')}`);
+      result = result.replace(/\{\{Saldo_USD\}\}/g, `u$s ${Number(client.saldoUSD || 0).toLocaleString('es-AR')}`);
+    }
+    
+    if (catalog) {
+      catalog.forEach(item => {
+        result = result.replace(new RegExp(`\\{\\{PrecioARS_${item.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\}\\}`, 'g'), `$ ${Number(item.priceARS || 0).toLocaleString('es-AR')}`);
+        result = result.replace(new RegExp(`\\{\\{PrecioUSD_${item.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\}\\}`, 'g'), `u$s ${Number(item.priceUSD || 0).toLocaleString('es-AR')}`);
+      });
+    }
+
+    if (dynamicVals) {
+      Object.entries(dynamicVals).forEach(([key, val]) => {
+        result = result.replace(new RegExp(`\\{\\{\\?${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\}\\}`, 'g'), val);
+      });
+    }
+    return result;
+  };
+
+  const handleSendEmail = () => {
+    const template = emailTemplates?.find(t => t.id === selectedTemplateId);
+    if (!template || !selectedCommCustomer) return;
+    const body = replaceMarkers(template.body, selectedCommCustomer, dynamicValues);
+    const subject = replaceMarkers(template.subject || "", selectedCommCustomer, dynamicValues);
+    const mailtoUrl = `mailto:${selectedCommCustomer.mail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body).replace(/%0A/g, '%0D%0A')}`;
+    window.open(mailtoUrl, '_blank');
+    setIsEmailDialogOpen(false);
+  };
+
   if (isUserLoading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
 
   const isEditingAllowed = selectedSheet && selectedSheet.status === 'planned' && (isAdmin || isCommunicator)
-
   const showProgressLayout = selectedSheet && (selectedSheet.status === 'active' || selectedSheet.status === 'completed')
 
   return (
@@ -598,6 +665,14 @@ function RoutesContent() {
                                         <MessageCircle className="h-3 w-3 mr-1" /> WHATSAPP
                                       </Button>
                                       <Button 
+                                        variant="outline" 
+                                        size="sm" 
+                                        className="h-7 px-2 text-[10px] text-primary border-primary/20" 
+                                        onClick={() => handleOpenEmailDialog(client)}
+                                      >
+                                        <Mail className="h-3 w-3 mr-1" /> MAIL
+                                      </Button>
+                                      <Button 
                                         variant="secondary" 
                                         size="sm" 
                                         className="h-7 px-2 text-[10px]" 
@@ -782,6 +857,22 @@ function RoutesContent() {
                 <Button variant="outline" onClick={() => setIsNewSheetOpen(false)}>Cancelar</Button>
                 <Button onClick={handleCreateSheet}>Crear Planilla</Button>
               </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isEmailDialogOpen} onOpenChange={setIsEmailDialogOpen}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader><DialogTitle>Enviar Email a {selectedCommCustomer?.nombre}</DialogTitle></DialogHeader>
+              <div className="space-y-4 py-4">
+                <Card className="bg-amber-50 border-amber-100 p-4"><p className="text-xs font-bold text-amber-800 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Verificar Remitente (DOSIMAT)</p></Card>
+                <div className="space-y-2"><Label>Plantilla</Label><Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                  <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                  <SelectContent>{emailTemplates?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+                </Select></div>
+                {dynamicKeys.length > 0 && (<div className="p-4 border border-dashed rounded-xl space-y-4 bg-muted/5"><p className="text-[10px] font-black uppercase text-primary">Datos Manuales</p><div className="grid grid-cols-1 gap-4">{dynamicKeys.map(key => (<div key={key} className="space-y-1"><Label className="text-xs font-bold">{key}</Label><Input value={dynamicValues[key] || ""} onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})} className="bg-white h-9" /></div>))}</div></div>)}
+                {activeTemplate && (<div className="space-y-2"><Label className="text-[10px] font-black uppercase text-muted-foreground">Vista Previa</Label><ScrollArea className="h-48 border rounded-xl bg-white p-4 italic text-sm text-slate-700 shadow-inner"><p className="font-bold mb-2">Asunto: {replaceMarkers(activeTemplate.subject || "", selectedCommCustomer, dynamicValues)}</p><div className="whitespace-pre-wrap">{replaceMarkers(activeTemplate.body, selectedCommCustomer, dynamicValues)}</div></ScrollArea></div>)}
+              </div>
+              <DialogFooter><Button variant="outline" onClick={() => setIsEmailDialogOpen(false)}>Cancelar</Button><Button disabled={!selectedTemplateId || dynamicKeys.some(k => !dynamicValues[k])} onClick={handleSendEmail} className="bg-primary font-bold">Abrir Mail App</Button></DialogFooter>
             </DialogContent>
           </Dialog>
 
