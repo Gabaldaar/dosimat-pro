@@ -494,6 +494,12 @@ function RoutesContent() {
                   }[sheet.status as keyof typeof statusInfo] || { label: sheet.status, color: "bg-muted", icon: Clock }
                   const Icon = statusInfo.icon
 
+                  const sheetPlannedTotals = sheet.items?.reduce((acc: any, curr: any) => {
+                    acc.cloro += Number(curr.plannedChlorine || 0);
+                    acc.acido += Number(curr.plannedAcid || 0);
+                    return acc;
+                  }, { cloro: 0, acido: 0 }) || { cloro: 0, acido: 0 };
+
                   return (
                     <Card key={sheet.id} className="glass-card hover:shadow-md transition-all cursor-pointer group" onClick={() => { setSelectedSheetId(sheet.id); setMainView("detail"); }}>
                       <CardHeader className="pb-3">
@@ -509,10 +515,20 @@ function RoutesContent() {
                         </div>
                         <CardTitle className="text-xl mt-2">{new Date(sheet.date + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}</CardTitle>
                       </CardHeader>
-                      <CardContent className="space-y-2">
+                      <CardContent className="space-y-3">
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">Clientes:</span>
                           <span className="font-bold">{sheet.items?.length || 0}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 px-2 py-1.5 rounded-lg shadow-sm">
+                            <Droplet className="h-3.5 w-3.5 text-blue-600" />
+                            <span className="text-xs font-black text-blue-700 tracking-tighter">{sheetPlannedTotals.cloro} CLORO</span>
+                          </div>
+                          <div className="flex items-center gap-2 bg-rose-50 border border-rose-100 px-2 py-1.5 rounded-lg shadow-sm">
+                            <Beaker className="h-3.5 w-3.5 text-rose-600" />
+                            <span className="text-xs font-black text-rose-700 tracking-tighter">{sheetPlannedTotals.acido} ÁCIDO</span>
+                          </div>
                         </div>
                       </CardContent>
                       <CardFooter className="pt-0">
