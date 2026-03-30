@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect, Suspense, useCallback } from "react"
@@ -144,7 +143,7 @@ function RoutesContent() {
   const showRestrictedToast = useCallback(() => {
     toast({
       title: "Acceso restringido",
-      description: "No tienes permiso para ingresar porque esta ruta aún se está planificando.",
+      description: "Todavía no estás autorizado a ingresar porque esta ruta aún se está planificando.",
       variant: "destructive"
     });
   }, [toast]);
