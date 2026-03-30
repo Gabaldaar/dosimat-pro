@@ -83,6 +83,7 @@ function CustomersContent() {
   const searchParams = useSearchParams()
   const { user, userData, isUserLoading } = useUser()
   const isAdmin = userData?.role === 'Admin'
+  const isCommunicator = userData?.role === 'Communicator'
   
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const zonesQuery = useMemoFirebase(() => collection(db, 'zones'), [db])
@@ -259,7 +260,7 @@ function CustomersContent() {
     
     text += `*RESUMEN DE SALDOS:*\n`;
     text += `ARS: $${Number(selectedCustomerForStatement.saldoActual || 0).toLocaleString('es-AR')} ${selectedCustomerForStatement.saldoActual < 0 ? '(Deuda)' : '(A favor)'}\n`;
-    text += `USD: u$s ${Number(selectedCustomerForStatement.saldoUSD || 0).toLocaleString('es-AR')} ${selectedCustomerForStatement.saldoUSD < 0 ? '(Deuda)' : '(A favor)'}\n\n`;
+    text += `USD: u$s {Number(selectedCustomerForStatement.saldoUSD || 0).toLocaleString('es-AR')} ${selectedCustomerForStatement.saldoUSD < 0 ? '(Deuda)' : '(A favor)'}\n\n`;
     
     if (pendingOperations.length > 0) {
       text += `*DETALLE DE COMPROBANTES PENDIENTES:* \n`;
@@ -592,7 +593,11 @@ function CustomersContent() {
                         <span className="truncate">{customer.direccion}, {customer.localidad}</span>
                       </div>
                       <div className="flex flex-wrap gap-1.5">
-                        <Button variant="default" size="sm" className="h-8 gap-1.5 font-bold px-4" asChild><Link href={`/transactions?clientId=${customer.id}&mode=new`}><PlusCircle className="h-3.5 w-3.5" /> OPERAR</Link></Button>
+                        {!isCommunicator && (
+                          <Button variant="default" size="sm" className="h-8 gap-1.5 font-bold px-4" asChild>
+                            <Link href={`/transactions?clientId=${customer.id}&mode=new`}><PlusCircle className="h-3.5 w-3.5" /> OPERAR</Link>
+                          </Button>
+                        )}
                         <Button variant="outline" size="icon" className="h-8 w-8 text-rose-600 border-rose-200 bg-rose-50 hover:bg-rose-100" onClick={() => handleOpenStatement(customer)} title="Estado de Cuenta"><Receipt className="h-3.5 w-3.5" /></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenMaps(customer.direccion, customer.localidad)} title="Mapa"><MapPinned className="h-3.5 w-3.5" /></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8 text-blue-700 border-blue-200 bg-blue-50" asChild title="Llamar"><a href={`tel:${customer.telefono}`}><Phone className="h-3.5 w-3.5" /></a></Button>

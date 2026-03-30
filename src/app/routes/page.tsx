@@ -217,9 +217,14 @@ function RoutesContent() {
       toast({ title: "Cliente ya agregado", variant: "destructive" })
       return
     }
+
+    // Buscar el cliente para obtener su cantidad de bidones por defecto
+    const client = clients?.find(c => c.id === clientId)
+    const defaultChlorine = client?.equipoInstalado?.cantBidones || 0
+
     const newItem = {
       clientId,
-      plannedChlorine: 0,
+      plannedChlorine: defaultChlorine, // Se carga el valor de la ficha del cliente
       realChlorine: 0,
       plannedAcid: 0,
       realAcid: 0,
