@@ -142,19 +142,26 @@ function RoutesContent() {
 
   useEffect(() => {
     const sheetId = searchParams.get('sheetId')
-    if (sheetId) {
+    if (sheetId && rawRouteSheets) {
+      const sheet = rawRouteSheets.find(s => s.id === sheetId);
+      if (isReplenisher && sheet?.status === 'planned') {
+        toast({
+          title: "Acceso restringido",
+          description: "No tienes permiso para ingresar porque esta ruta aún se está planificando.",
+          variant: "destructive"
+        });
+        return;
+      }
       setSelectedSheetId(sheetId)
       setMainView("detail")
     }
-  }, [searchParams])
+  }, [searchParams, rawRouteSheets, isReplenisher, toast])
 
   const routeSheets = useMemo(() => {
     if (!rawRouteSheets) return []
-    if (isReplenisher) {
-      return rawRouteSheets.filter(s => s.status === 'active' || s.status === 'completed')
-    }
+    // El repositor ahora ve todas (incluyendo planned), pero el bloqueo se hace al intentar entrar
     return rawRouteSheets
-  }, [rawRouteSheets, isReplenisher])
+  }, [rawRouteSheets])
 
   const refillClients = useMemo(() => {
     if (!clients) return []
@@ -501,7 +508,22 @@ function RoutesContent() {
                   }, { cloro: 0, acido: 0 }) || { cloro: 0, acido: 0 };
 
                   return (
-                    <Card key={sheet.id} className="glass-card hover:shadow-md transition-all cursor-pointer group" onClick={() => { setSelectedSheetId(sheet.id); setMainView("detail"); }}>
+                    <Card 
+                      key={sheet.id} 
+                      className="glass-card hover:shadow-md transition-all cursor-pointer group" 
+                      onClick={() => { 
+                        if (isReplenisher && sheet.status === 'planned') {
+                          toast({
+                            title: "Ruta en preparación",
+                            description: "Todavía no estás autorizado a ingresar porque aún se está planificando.",
+                            variant: "destructive"
+                          });
+                          return;
+                        }
+                        setSelectedSheetId(sheet.id); 
+                        setMainView("detail"); 
+                      }}
+                    >
                       <CardHeader className="pb-3">
                         <div className="flex justify-between items-start">
                           <Badge variant="outline" className={cn("text-[10px] font-black uppercase tracking-wider", statusInfo.color)}>
