@@ -156,6 +156,9 @@ function TransactionsContent() {
   const { data: emailTemplates } = useCollection(emailTemplatesQuery)
   const { data: productCategories } = useCollection(productCatsQuery)
 
+  const [hasAutoPopulated, setHasAutoPopulated] = useState(false)
+
+  // Sincronizar parámetros de URL
   useEffect(() => {
     const mode = searchParams.get('mode')
     const clientId = searchParams.get('clientId')
@@ -163,10 +166,73 @@ function TransactionsContent() {
     const accountId = searchParams.get('accountId')
 
     if (mode === 'new') setMainView("register")
-    if (clientId) { setSelectedCustomerId(clientId); setFilterCustomer(clientId); }
-    if (type) setActiveTab(type)
+    if (clientId && clientId !== 'none') { 
+      setSelectedCustomerId(clientId); 
+      setFilterCustomer(clientId); 
+    }
+    if (type) setActiveTab(type === 'refill' ? 'refill' : type)
     if (accountId) setFilterAccount(accountId)
   }, [searchParams])
+
+  // Lógica de auto-población desde Hojas de Ruta
+  useEffect(() => {
+    if (!catalog || hasAutoPopulated || searchParams.get('fromRoute') !== 'true') return;
+
+    const cloroQty = Number(searchParams.get('cloro') || 0);
+    const acidoQty = Number(searchParams.get('acido') || 0);
+    const cash = Number(searchParams.get('cash') || 0);
+    const notes = searchParams.get('notes') || '';
+
+    const newItems: any[] = [];
+
+    if (cloroQty > 0) {
+      const prod = catalog.find((i: any) => 
+        i.name.toLowerCase().includes('cloro') && !i.isService
+      );
+      if (prod) {
+        const curr = (prod.priceARS || 0) > 0 ? 'ARS' : 'USD';
+        newItems.push({
+          itemId: prod.id,
+          name: prod.name,
+          qty: cloroQty,
+          price: curr === 'ARS' ? prod.priceARS : prod.priceUSD,
+          currency: curr,
+          discount: 0
+        });
+      }
+    }
+
+    if (acidoQty > 0) {
+      const prod = catalog.find((i: any) => 
+        (i.name.toLowerCase().includes('acido') || i.name.toLowerCase().includes('ácido')) && !i.isService
+      );
+      if (prod) {
+        const curr = (prod.priceARS || 0) > 0 ? 'ARS' : 'USD';
+        newItems.push({
+          itemId: prod.id,
+          name: prod.name,
+          qty: acidoQty,
+          price: curr === 'ARS' ? prod.priceARS : prod.priceUSD,
+          currency: curr,
+          discount: 0
+        });
+      }
+    }
+
+    if (newItems.length > 0) {
+      setSelectedItems(newItems);
+    }
+    
+    if (cash > 0) {
+      setPaidAmounts(prev => ({ ...prev, ARS: cash }));
+    }
+    
+    if (notes) {
+      setTxDescription(notes);
+    }
+
+    setHasAutoPopulated(true);
+  }, [catalog, searchParams, hasAutoPopulated]);
 
   const sortedCustomers = useMemo(() => {
     if (!customers) return [];
@@ -185,7 +251,7 @@ function TransactionsContent() {
 
   const sortedProductCategories = useMemo(() => {
     if (!productCategories) return []
-    return [...productCategories].sort((a: any, b: any) => {
+    return [...productCategories].sort((a, b) => {
       if (a.isFavorite && !b.isFavorite) return -1;
       if (!a.isFavorite && b.isFavorite) return 1;
       return (a.name || "").localeCompare(b.name || "");
@@ -366,6 +432,7 @@ function TransactionsContent() {
     setDestinationAccounts({ ARS: "pending", USD: "pending" }); 
     setImputations({});
     setOperationDate(getLocalDateString());
+    setHasAutoPopulated(false);
   }
 
   const handleDeleteTx = () => {
@@ -1293,7 +1360,7 @@ function TransactionsContent() {
                 )}
                 {activeTemplate && (
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Vista Previa</Label>
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Vista Previa</Label>
                     <ScrollArea className="h-48 border rounded-2xl bg-white p-4 italic text-sm text-slate-700 shadow-inner">
                       {isMailDialogOpen && <p className="font-black mb-2 text-primary">Asunto: {replaceMarkers(activeTemplate.subject || "", selectedTxForComm, dynamicValues)}</p>}
                       <div className="whitespace-pre-wrap leading-relaxed">{replaceMarkers(activeTemplate.body, selectedTxForComm, dynamicValues)}</div>
