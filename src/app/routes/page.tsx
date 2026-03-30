@@ -662,9 +662,9 @@ function RoutesContent() {
                                     
                                     {selectedSheet.status === 'completed' && isAdmin ? (
                                       <div className="flex flex-col gap-2">
-                                        <div className="flex justify-between items-center px-2 py-1 bg-emerald-50 border border-emerald-100 rounded text-[10px] font-bold text-emerald-700">
+                                        <div className="flex justify-between items-center px-2 py-1 bg-emerald-50 border border-emerald-100 rounded text-xs font-bold text-emerald-700">
                                           <span>Cobró:</span>
-                                          <span>${item.cashCollected?.toLocaleString('es-AR')}</span>
+                                          <span className="text-sm">${item.cashCollected?.toLocaleString('es-AR')}</span>
                                         </div>
                                         <div className="flex gap-2">
                                           <Button 
@@ -693,7 +693,7 @@ function RoutesContent() {
                                               onChange={(e) => updateItemField(item.clientId, 'realChlorine', Number(e.target.value))} 
                                               className="h-10 font-black text-center border-blue-300"
                                             />
-                                            {cloroSub > 0 && <p className="text-[9px] font-black text-emerald-600 text-center animate-in fade-in">${cloroSub.toLocaleString()}</p>}
+                                            {cloroSub > 0 && <p className="text-sm font-black text-emerald-600 text-center animate-in fade-in">${cloroSub.toLocaleString()}</p>}
                                           </div>
                                           <div className="space-y-1">
                                             <Label className="text-[10px] font-bold text-rose-700">Entregó Ácido</Label>
@@ -704,16 +704,16 @@ function RoutesContent() {
                                               onChange={(e) => updateItemField(item.clientId, 'realAcid', Number(e.target.value))} 
                                               className="h-10 font-black text-center border-rose-300"
                                             />
-                                            {acidoSub > 0 && <p className="text-[9px] font-black text-emerald-600 text-center animate-in fade-in">${acidoSub.toLocaleString()}</p>}
+                                            {acidoSub > 0 && <p className="text-sm font-black text-emerald-600 text-center animate-in fade-in">${acidoSub.toLocaleString()}</p>}
                                           </div>
                                         </div>
                                         
                                         <div className="flex flex-col gap-1 mt-1">
-                                          <div className="flex items-center justify-between px-2">
-                                            <Label className="text-[9px] font-black uppercase text-muted-foreground flex items-center gap-1">
-                                              <Calculator className="h-2.5 w-2.5" /> SUGERIDO A COBRAR
+                                          <div className="flex items-center justify-between px-2 bg-emerald-50/50 rounded-t-lg py-1 border-x border-t border-emerald-100">
+                                            <Label className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-1">
+                                              <Calculator className="h-3 w-3" /> SUGERIDO
                                             </Label>
-                                            <span className="text-[11px] font-black text-emerald-700">${totalSugerido.toLocaleString('es-AR')}</span>
+                                            <span className="text-base font-black text-emerald-700">${totalSugerido.toLocaleString('es-AR')}</span>
                                           </div>
                                           <div className="flex gap-2 items-end">
                                             <div className="flex-1 space-y-1">
@@ -723,12 +723,12 @@ function RoutesContent() {
                                                 placeholder="Cobró ($)" 
                                                 value={item.cashCollected || ""} 
                                                 onChange={(e) => updateItemField(item.clientId, 'cashCollected', Number(e.target.value))} 
-                                                className="h-10 bg-white border-emerald-400 text-center font-black text-emerald-700 text-lg shadow-inner"
+                                                className="h-12 bg-white border-emerald-400 text-center font-black text-emerald-700 text-xl shadow-inner rounded-t-none"
                                               />
                                             </div>
                                             {!item.isDelivered && (isAdmin || isReplenisher) && (
-                                              <Button className="h-10 w-10 bg-emerald-600 shrink-0 shadow-lg" onClick={() => loadPlannedToReal(item.clientId)}>
-                                                <Check className="h-5 w-5" />
+                                              <Button className="h-12 w-12 bg-emerald-600 shrink-0 shadow-lg" onClick={() => loadPlannedToReal(item.clientId)}>
+                                                <Check className="h-6 w-6" />
                                               </Button>
                                             )}
                                           </div>
