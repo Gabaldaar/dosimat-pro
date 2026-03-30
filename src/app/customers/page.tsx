@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { 
   Search, 
   MapPin, 
-  PhoneCall, 
+  Phone, 
   User, 
   Trash2, 
   FilterX,
@@ -23,12 +23,12 @@ import {
   PlusCircle,
   MapPinned,
   MessageSquare,
+  MessageCircle,
   History,
   Receipt,
   Send,
   Loader2,
   Edit,
-  Phone,
   AlertTriangle,
   Info,
   Plus,
@@ -104,7 +104,6 @@ function CustomersContent() {
   const [filterReposicion, setFilterReposicion] = useState("yes") 
   const [filterZone, setFilterZone] = useState("all")
 
-  // Sincronizar filtros con parámetros de URL (Dashboard)
   useEffect(() => {
     const balance = searchParams.get('filterBalance')
     if (balance) setFilterBalance(balance)
@@ -131,7 +130,6 @@ function CustomersContent() {
   const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({})
   const [bulkStep, setBulkStep] = useState(0)
 
-  // Desbloqueador global de puntero (Evita congelamientos de Radix UI)
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -299,6 +297,35 @@ function CustomersContent() {
     toast({ title: "Cliente eliminado" })
   }
 
+  const formatWhatsAppNumber = (phone: string) => {
+    if (!phone) return "";
+    let cleaned = phone.replace(/\D/g, "");
+    if (cleaned.startsWith("00")) cleaned = cleaned.substring(2);
+    if (cleaned.startsWith("0")) cleaned = cleaned.substring(1);
+    if (!cleaned.startsWith("54") && cleaned.length >= 10) {
+      cleaned = "54" + cleaned;
+    }
+    return cleaned;
+  };
+
+  const handleWhatsApp = (phone: string, message: string = "") => {
+    const formatted = formatWhatsAppNumber(phone);
+    if (!formatted) {
+      toast({ title: "Sin teléfono", description: "El cliente no tiene un número válido.", variant: "destructive" });
+      return;
+    }
+    window.open(`https://wa.me/${formatted}?text=${encodeURIComponent(message)}`, '_blank');
+  };
+
+  const handleOpenMaps = (address: string, locality: string) => {
+    if (!address) {
+      toast({ title: "Sin dirección", description: "El cliente no tiene domicilio registrado.", variant: "destructive" });
+      return;
+    }
+    const query = encodeURIComponent(`${address}, ${locality}, Argentina`);
+    window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
+  };
+
   const handleBulkEmail = () => {
     const uniqueEmails = new Set<string>();
     filteredCustomers.forEach(c => {
@@ -361,8 +388,7 @@ function CustomersContent() {
     const template = wsTemplates?.find(t => t.id === selectedTemplateId);
     if (!template || !selectedCommCustomer) return;
     const message = replaceMarkers(template.body, selectedCommCustomer, dynamicValues);
-    const phone = selectedCommCustomer.telefono?.replace(/\D/g, "");
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+    handleWhatsApp(selectedCommCustomer.telefono, message);
     setIsSingleWsOpen(false);
   };
 
@@ -398,8 +424,7 @@ function CustomersContent() {
     const template = wsTemplates?.find(t => t.id === selectedTemplateId);
     if (template && client) {
       const message = replaceMarkers(template.body, client, dynamicValues);
-      const phone = client.telefono?.replace(/\D/g, "");
-      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+      handleWhatsApp(client.telefono, message);
     }
     setBulkStep(prev => prev + 1);
   };
@@ -440,7 +465,7 @@ function CustomersContent() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={handleBulkEmail} className="h-9 gap-2 font-bold"><Mail className="h-4 w-4" /> Mail Masivo</Button>
-                <Button variant="outline" size="sm" onClick={() => { setBulkStep(0); setDynamicValues({}); setSelectedTemplateId(""); setIsBulkWsOpen(true); }} className="h-9 gap-2 font-bold border-emerald-200 text-emerald-700 bg-emerald-50"><MessageSquare className="h-4 w-4" /> WhatsApp Masivo</Button>
+                <Button variant="outline" size="sm" onClick={() => { setBulkStep(0); setDynamicValues({}); setSelectedTemplateId(""); setIsBulkWsOpen(true); }} className="h-9 gap-2 font-bold border-emerald-200 text-emerald-700 bg-emerald-50"><MessageCircle className="h-4 w-4" /> WhatsApp Masivo</Button>
                 {isAdmin && <Button onClick={() => handleOpenDialog()} className="shadow-lg font-bold bg-primary h-9"><Plus className="mr-2 h-5 w-5" /> Nuevo Cliente</Button>}
               </div>
             </div>
@@ -568,8 +593,9 @@ function CustomersContent() {
                       <div className="flex flex-wrap gap-1.5">
                         <Button variant="default" size="sm" className="h-8 gap-1.5 font-bold px-4" asChild><Link href={`/transactions?clientId=${customer.id}&mode=new`}><PlusCircle className="h-3.5 w-3.5" /> OPERAR</Link></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8 text-rose-600 border-rose-200 bg-rose-50 hover:bg-rose-100" onClick={() => handleOpenStatement(customer)} title="Estado de Cuenta"><Receipt className="h-3.5 w-3.5" /></Button>
-                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => window.open(`https://google.com/maps/search/?api=1&query=${encodeURIComponent(customer.direccion + ", " + customer.localidad)}`, '_blank')} title="Mapa"><MapPinned className="h-3.5 w-3.5" /></Button>
-                        <Button variant="outline" size="icon" className="h-8 w-8 text-emerald-700 border-emerald-200 bg-emerald-50" onClick={() => window.open(`https://wa.me/${customer.telefono?.replace(/\D/g, '')}`, '_blank')} title="WhatsApp"><PhoneCall className="h-3.5 w-3.5" /></Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenMaps(customer.direccion, customer.localidad)} title="Mapa"><MapPinned className="h-3.5 w-3.5" /></Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8 text-blue-700 border-blue-200 bg-blue-50" asChild title="Llamar"><a href={`tel:${customer.telefono}`}><Phone className="h-3.5 w-3.5" /></a></Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8 text-emerald-700 border-emerald-200 bg-emerald-50" onClick={() => handleWhatsApp(customer.telefono)} title="WhatsApp"><MessageCircle className="h-3.5 w-3.5" /></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8 text-blue-700 border-blue-200 bg-blue-50" asChild title="Historial"><Link href={`/transactions?clientId=${customer.id}`}><History className="h-3.5 w-3.5" /></Link></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenDialog(customer)} title="Editar"><Edit className="h-3.5 w-3.5" /></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => { if(customer.mail) { setSelectedCommCustomer(customer); setDynamicValues({}); setSelectedTemplateId(""); setIsSingleEmailOpen(true); } }} title="Mail"><Mail className="h-3.5 w-3.5" /></Button>
@@ -723,7 +749,6 @@ function CustomersContent() {
         </SidebarInset>
       </div>
 
-      {/* VISTA DE IMPRESIÓN (PDF) */}
       <div className="print-only w-full p-8 bg-white text-slate-900 font-sans">
         <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
           <div>

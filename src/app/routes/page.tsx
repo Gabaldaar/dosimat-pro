@@ -34,6 +34,7 @@ import {
   Package,
   Link as LinkIcon,
   MessageSquare,
+  MessageCircle,
   RefreshCw,
   Beaker,
   Copy,
@@ -98,7 +99,6 @@ function RoutesContent() {
   const [isNewSheetOpen, setIsNewSheetOpen] = useState(false)
   const [sheetToDelete, setSheetToDelete] = useState<any | null>(null)
 
-  // Fix for pointer-events stuck in 'none' after dialog closures
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -111,7 +111,6 @@ function RoutesContent() {
     return () => observer.disconnect();
   }, [isNewSheetOpen, sheetToDelete]);
 
-  // Queries
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const zonesQuery = useMemoFirebase(() => collection(db, 'zones'), [db])
   const routesQuery = useMemoFirebase(() => query(collection(db, 'route_sheets'), orderBy('date', 'desc')), [db])
@@ -122,7 +121,6 @@ function RoutesContent() {
   const { data: rawRouteSheets, isLoading: loadingSheets } = useCollection(routesQuery)
   const { data: catalog } = useCollection(catalogQuery)
 
-  // Obtener precios de referencia para cloro y ácido (Efectivo)
   const referencePrices = useMemo(() => {
     if (!catalog) return { cloro: 0, acido: 0 }
     const cloroItem = catalog.find((i: any) => i.name === "Bidón CL (Pago Ef.)")
@@ -302,13 +300,24 @@ function RoutesContent() {
 
   const handleOpenMaps = (address: string, city: string) => {
     const query = encodeURIComponent(`${address}, ${city}, Argentina`)
-    window.open(`https://google.com/maps/search/?api=1&query=${query}`, '_blank')
+    window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank')
   }
 
+  const formatWhatsAppNumber = (phone: string) => {
+    if (!phone) return "";
+    let cleaned = phone.replace(/\D/g, "");
+    if (cleaned.startsWith("00")) cleaned = cleaned.substring(2);
+    if (cleaned.startsWith("0")) cleaned = cleaned.substring(1);
+    if (!cleaned.startsWith("54") && cleaned.length >= 10) {
+      cleaned = "54" + cleaned;
+    }
+    return cleaned;
+  };
+
   const handleWhatsApp = (phone: string) => {
-    if (!phone) return
-    const num = phone.replace(/\D/g, '')
-    window.open(`https://wa.me/${num}`, '_blank')
+    const formatted = formatWhatsAppNumber(phone);
+    if (!formatted) return;
+    window.open(`https://wa.me/${formatted}`, '_blank');
   }
 
   const handlePrint = useCallback(() => {
@@ -553,7 +562,6 @@ function RoutesContent() {
                           if (!client) return null
                           const zone = zones?.find(z => z.id === client.zonaId);
 
-                          // Cálculos de cobro sugerido en tiempo real
                           const cloroSub = Number(item.realChlorine || 0) * referencePrices.cloro;
                           const acidoSub = Number(item.realAcid || 0) * referencePrices.acido;
                           const totalSugerido = cloroSub + acidoSub;
@@ -582,7 +590,7 @@ function RoutesContent() {
                                         className="h-7 px-2 text-[10px] text-emerald-700 border-emerald-200 bg-emerald-50 hover:bg-emerald-100" 
                                         onClick={() => handleWhatsApp(client.telefono)}
                                       >
-                                        <MessageSquare className="h-3 w-3 mr-1" /> WHATSAPP
+                                        <MessageCircle className="h-3 w-3 mr-1" /> WHATSAPP
                                       </Button>
                                       <Button 
                                         variant="secondary" 
@@ -791,7 +799,6 @@ function RoutesContent() {
         <MobileNav />
       </div>
 
-      {/* VISTA DE IMPRESIÓN / PDF */}
       {selectedSheet && (
         <div className="print-only w-full p-4 font-sans text-slate-900 bg-white">
           <div className="flex justify-between items-start border-b border-slate-900 pb-2 mb-4">
