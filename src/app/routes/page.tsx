@@ -39,7 +39,8 @@ import {
   Beaker,
   Copy,
   Coins,
-  Mail
+  Mail,
+  Lock
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -140,26 +141,40 @@ function RoutesContent() {
     }
   }, [catalog])
 
+  const showRestrictedToast = useCallback(() => {
+    toast({
+      title: "Acceso restringido",
+      description: "No tienes permiso para ingresar porque esta ruta aún se está planificando.",
+      variant: "destructive"
+    });
+  }, [toast]);
+
   useEffect(() => {
     const sheetId = searchParams.get('sheetId')
     if (sheetId && rawRouteSheets) {
       const sheet = rawRouteSheets.find(s => s.id === sheetId);
       if (isReplenisher && sheet?.status === 'planned') {
-        toast({
-          title: "Acceso restringido",
-          description: "No tienes permiso para ingresar porque esta ruta aún se está planificando.",
-          variant: "destructive"
-        });
+        showRestrictedToast();
         return;
       }
       setSelectedSheetId(sheetId)
       setMainView("detail")
     }
-  }, [searchParams, rawRouteSheets, isReplenisher, toast])
+  }, [searchParams, rawRouteSheets, isReplenisher, showRestrictedToast])
+
+  // Seguridad extra: Si un repositor intenta ver el detalle de una planned
+  const selectedSheet = useMemo(() => rawRouteSheets?.find(s => s.id === selectedSheetId), [rawRouteSheets, selectedSheetId])
+  
+  useEffect(() => {
+    if (isReplenisher && selectedSheet?.status === 'planned' && view === 'detail') {
+      setMainView("list");
+      setSelectedSheetId(null);
+      showRestrictedToast();
+    }
+  }, [selectedSheet, isReplenisher, view, showRestrictedToast]);
 
   const routeSheets = useMemo(() => {
     if (!rawRouteSheets) return []
-    // El repositor ahora ve todas (incluyendo planned), pero el bloqueo se hace al intentar entrar
     return rawRouteSheets
   }, [rawRouteSheets])
 
@@ -179,8 +194,6 @@ function RoutesContent() {
         return 0;
       })
   }, [clients])
-
-  const selectedSheet = useMemo(() => rawRouteSheets?.find(s => s.id === selectedSheetId), [rawRouteSheets, selectedSheetId])
 
   const [newSheetDate, setNewSheetDate] = useState(new Date().toISOString().split('T')[0])
 
@@ -475,7 +488,7 @@ function RoutesContent() {
                     <Trash2 className="h-5 w-5" />
                   </Button>
                 )}
-                <Button variant="outline" onClick={() => setMainView("list")} className="font-bold">
+                <Button variant="outline" onClick={() => { setMainView("list"); setSelectedSheetId(null); }} className="font-bold">
                   Volver
                 </Button>
               </div>
@@ -494,8 +507,9 @@ function RoutesContent() {
                     {isReplenisher && <p className="text-sm text-muted-foreground mt-2">Aún no se han habilitado rutas para entrega hoy.</p>}
                   </Card>
                 ) : routeSheets?.map((sheet: any) => {
+                  const isLockedForReplenisher = isReplenisher && (sheet.status || "").toLowerCase() === 'planned';
                   const statusInfo = {
-                    planned: { label: "Planificada", color: "bg-blue-100 text-blue-700", icon: Clock },
+                    planned: { label: "Planificada", color: "bg-blue-100 text-blue-700", icon: isLockedForReplenisher ? Lock : Clock },
                     active: { label: "En Camino", color: "bg-amber-100 text-amber-700", icon: Truck },
                     completed: { label: "Finalizada", color: "bg-emerald-100 text-emerald-700", icon: CheckCircle2 }
                   }[sheet.status as keyof typeof statusInfo] || { label: sheet.status, color: "bg-muted", icon: Clock }
@@ -510,14 +524,13 @@ function RoutesContent() {
                   return (
                     <Card 
                       key={sheet.id} 
-                      className="glass-card hover:shadow-md transition-all cursor-pointer group" 
+                      className={cn(
+                        "glass-card hover:shadow-md transition-all cursor-pointer group",
+                        isLockedForReplenisher && "opacity-60 cursor-not-allowed border-dashed"
+                      )}
                       onClick={() => { 
-                        if (isReplenisher && sheet.status === 'planned') {
-                          toast({
-                            title: "Ruta en preparación",
-                            description: "Todavía no estás autorizado a ingresar porque aún se está planificando.",
-                            variant: "destructive"
-                          });
+                        if (isLockedForReplenisher) {
+                          showRestrictedToast();
                           return;
                         }
                         setSelectedSheetId(sheet.id); 
@@ -554,7 +567,9 @@ function RoutesContent() {
                         </div>
                       </CardContent>
                       <CardFooter className="pt-0">
-                        <Button variant="link" className="p-0 h-auto text-xs font-bold text-primary">VER DETALLE <ChevronRight className="h-3 w-3 ml-1" /></Button>
+                        <Button variant="link" className={cn("p-0 h-auto text-xs font-bold", isLockedForReplenisher ? "text-muted-foreground" : "text-primary")}>
+                          {isLockedForReplenisher ? 'SOLO LECTURA' : 'VER DETALLE'} <ChevronRight className="h-3 w-3 ml-1" />
+                        </Button>
                       </CardFooter>
                     </Card>
                   )
