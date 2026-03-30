@@ -4,7 +4,7 @@
 import { useState, useMemo, useEffect, Suspense, useCallback } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
@@ -186,7 +186,6 @@ function TransactionsContent() {
   const sortedProductCategories = useMemo(() => {
     if (!productCategories) return []
     return [...productCategories].sort((a: any, b: any) => {
-      // Priorizar favoritos en el selector de operaciones también
       if (a.isFavorite && !b.isFavorite) return -1;
       if (!a.isFavorite && b.isFavorite) return 1;
       return (a.name || "").localeCompare(b.name || "");
@@ -655,46 +654,86 @@ function TransactionsContent() {
                       {customerPendingTxs.length > 0 && (
                         <div className="space-y-3">
                           <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Imputar a Facturas Pendientes ({manualCurrency})</Label>
-                          <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
-                            <Table>
-                              <TableHeader className="bg-muted/30">
-                                <TableRow>
-                                  <TableHead className="text-[9px] font-black uppercase">Fecha</TableHead>
-                                  <TableHead className="text-[9px] font-black uppercase">Tipo</TableHead>
-                                  <TableHead className="text-right text-[9px] font-black uppercase">Pendiente</TableHead>
-                                  <TableHead className="w-40 text-right text-[9px] font-black uppercase">Asignar</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {customerPendingTxs.filter(tx => tx.currency === manualCurrency).map(tx => (
-                                  <TableRow key={tx.id}>
-                                    <TableCell className="text-xs font-bold">{formatLocalDate(tx.date)}</TableCell>
-                                    <TableCell><Badge variant="outline" className={cn("text-[9px] uppercase font-black", txTypeMap[tx.type]?.color)}>{txTypeMap[tx.type]?.label || tx.type}</Badge></TableCell>
-                                    <TableCell className="text-right font-black text-rose-600">{manualCurrency==='USD'?'u$s':'$'} {Math.abs(tx.pendingAmount || 0).toLocaleString()}</TableCell>
-                                    <TableCell>
+                          <div className="space-y-3 md:space-y-0">
+                            {/* Mobile View for Imputations */}
+                            <div className="md:hidden space-y-3">
+                              {customerPendingTxs.filter(tx => tx.currency === manualCurrency).map(tx => (
+                                <Card key={tx.id} className="p-4 border-emerald-100 shadow-sm">
+                                  <div className="flex justify-between items-center mb-3">
+                                    <Badge variant="outline" className={cn("text-[9px] uppercase font-black", txTypeMap[tx.type]?.color)}>{txTypeMap[tx.type]?.label || tx.type}</Badge>
+                                    <span className="text-[10px] font-bold text-slate-400">{formatLocalDate(tx.date)}</span>
+                                  </div>
+                                  <div className="flex justify-between items-end gap-4">
+                                    <div className="space-y-1">
+                                      <p className="text-[10px] font-black uppercase text-rose-600">Deuda Pendiente</p>
+                                      <p className="text-xl font-black text-rose-700">{manualCurrency==='USD'?'u$s':'$'} {Math.abs(tx.pendingAmount || 0).toLocaleString()}</p>
+                                    </div>
+                                    <div className="flex-1 space-y-1">
+                                      <Label className="text-[10px] font-black uppercase text-emerald-700">Asignar Pago</Label>
                                       <div className="flex items-center gap-2">
                                         <Button 
-                                          variant="ghost" 
+                                          variant="outline" 
                                           size="icon" 
-                                          className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 shrink-0"
+                                          className="h-11 w-11 shrink-0 border-emerald-200 text-emerald-600"
                                           onClick={() => setImputations({...imputations, [tx.id]: Math.abs(tx.pendingAmount)})}
-                                          title="Saldar factura completa"
                                         >
-                                          <CheckCircle2 className="h-4 w-4" />
+                                          <CheckCircle2 className="h-5 w-5" />
                                         </Button>
                                         <Input 
                                           type="number" 
-                                          className="h-8 text-right font-black border-emerald-200" 
+                                          className="h-11 text-right font-black border-emerald-300 text-lg bg-emerald-50/30" 
                                           value={imputations[tx.id] || ""} 
                                           onChange={(e) => setImputations({...imputations, [tx.id]: Number(e.target.value)})}
                                           placeholder="0"
                                         />
                                       </div>
-                                    </TableCell>
+                                    </div>
+                                  </div>
+                                </Card>
+                              ))}
+                            </div>
+                            {/* Desktop View for Imputations */}
+                            <div className="hidden md:block border rounded-xl overflow-hidden bg-white shadow-sm">
+                              <Table>
+                                <TableHeader className="bg-muted/30">
+                                  <TableRow>
+                                    <TableHead className="text-[9px] font-black uppercase">Fecha</TableHead>
+                                    <TableHead className="text-[9px] font-black uppercase">Tipo</TableHead>
+                                    <TableHead className="text-right text-[9px] font-black uppercase">Pendiente</TableHead>
+                                    <TableHead className="w-40 text-right text-[9px] font-black uppercase">Asignar</TableHead>
                                   </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
+                                </TableHeader>
+                                <TableBody>
+                                  {customerPendingTxs.filter(tx => tx.currency === manualCurrency).map(tx => (
+                                    <TableRow key={tx.id}>
+                                      <TableCell className="text-xs font-bold">{formatLocalDate(tx.date)}</TableCell>
+                                      <TableCell><Badge variant="outline" className={cn("text-[9px] uppercase font-black", txTypeMap[tx.type]?.color)}>{txTypeMap[tx.type]?.label || tx.type}</Badge></TableCell>
+                                      <TableCell className="text-right font-black text-rose-600">{manualCurrency==='USD'?'u$s':'$'} {Math.abs(tx.pendingAmount || 0).toLocaleString()}</TableCell>
+                                      <TableCell>
+                                        <div className="flex items-center gap-2">
+                                          <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 shrink-0"
+                                            onClick={() => setImputations({...imputations, [tx.id]: Math.abs(tx.pendingAmount)})}
+                                            title="Saldar factura completa"
+                                          >
+                                            <CheckCircle2 className="h-4 w-4" />
+                                          </Button>
+                                          <Input 
+                                            type="number" 
+                                            className="h-8 text-right font-black border-emerald-200" 
+                                            value={imputations[tx.id] || ""} 
+                                            onChange={(e) => setImputations({...imputations, [tx.id]: Number(e.target.value)})}
+                                            placeholder="0"
+                                          />
+                                        </div>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -726,63 +765,142 @@ function TransactionsContent() {
                   </div>
                   ) : (
                     <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <Select value={itemFilterCategory} onValueChange={setItemFilterCategory}>
-                          <SelectTrigger><SelectValue placeholder="Filtrar categoría..." /></SelectTrigger>
-                          <SelectContent className="max-h-60">
-                            <SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem>
-                            {sortedProductCategories.map(c => (
-                              <SelectItem key={c.id} value={c.id}>{c.name} {c.isFavorite && "⭐"}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Select onValueChange={handleAddItem}>
-                          <SelectTrigger><SelectValue placeholder="Añadir producto..." /></SelectTrigger>
-                          <SelectContent className="max-h-60">
-                            {filteredCatalogItems.map(i => (<SelectItem key={i.id} value={i.id}>{i.name} (${i.priceARS} / u$s {i.priceUSD})</SelectItem>))}
-                          </SelectContent>
-                        </Select>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground">Filtrar por Categoría</Label>
+                          <Select value={itemFilterCategory} onValueChange={setItemFilterCategory}>
+                            <SelectTrigger className="h-11 bg-white shadow-sm"><SelectValue placeholder="Filtrar categoría..." /></SelectTrigger>
+                            <SelectContent className="max-h-60">
+                              <SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem>
+                              {sortedProductCategories.map(c => (
+                                <SelectItem key={c.id} value={c.id}>{c.name} {c.isFavorite && "⭐"}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-black uppercase text-primary">Añadir Producto</Label>
+                          <Select onValueChange={handleAddItem}>
+                            <SelectTrigger className="h-11 bg-white border-primary/30 ring-2 ring-primary/5"><SelectValue placeholder="Añadir ítem..." /></SelectTrigger>
+                            <SelectContent className="max-h-60">
+                              {filteredCatalogItems.map(i => (<SelectItem key={i.id} value={i.id}>{i.name} (${i.priceARS} / u$s {i.priceUSD})</SelectItem>))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
-                      <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
-                        <Table>
-                          <TableHeader className="bg-muted/30">
-                            <TableRow>
-                              <TableHead className="text-[9px] font-black uppercase">Ítem</TableHead>
-                              <TableHead className="w-28 text-center text-[9px] font-black uppercase">Cant.</TableHead>
-                              <TableHead className="w-32 text-center text-[9px] font-black uppercase">Precio</TableHead>
-                              <TableHead className="w-28 text-center text-[9px] font-black uppercase">Desc %</TableHead>
-                              <TableHead className="w-32 text-center text-[9px] font-black uppercase">Moneda</TableHead>
-                              <TableHead className="text-right text-[9px] font-black uppercase">Subtotal</TableHead>
-                              <TableHead className="w-10"></TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {selectedItems.map((item, i) => (
-                              <TableRow key={i}>
-                                <TableCell className="font-bold text-xs">{item.name}</TableCell>
-                                <TableCell><Input type="number" value={item.qty} className="h-8 text-center font-black px-1" onChange={(e) => { const n = [...selectedItems]; n[i].qty = Number(e.target.value); setSelectedItems(n); }} /></TableCell>
-                                <TableCell><Input type="number" value={item.price} className="h-8 text-center font-black px-1" onChange={(e) => { const n = [...selectedItems]; n[i].price = Number(e.target.value); setSelectedItems(n); }} /></TableCell>
-                                <TableCell><Input type="number" value={item.discount} className="h-8 text-center font-bold px-1" onChange={(e) => { const n = [...selectedItems]; n[i].discount = Number(e.target.value); setSelectedItems(n); }} /></TableCell>
-                                <TableCell>
+
+                      <div className="space-y-3">
+                        {/* Desktop View for selected items */}
+                        <div className="hidden md:block border rounded-xl overflow-hidden bg-white shadow-sm">
+                          <Table>
+                            <TableHeader className="bg-muted/30">
+                              <TableRow>
+                                <TableHead className="text-[9px] font-black uppercase">Ítem</TableHead>
+                                <TableHead className="w-28 text-center text-[9px] font-black uppercase">Cant.</TableHead>
+                                <TableHead className="w-32 text-center text-[9px] font-black uppercase">Precio</TableHead>
+                                <TableHead className="w-28 text-center text-[9px] font-black uppercase">Desc %</TableHead>
+                                <TableHead className="w-32 text-center text-[9px] font-black uppercase">Moneda</TableHead>
+                                <TableHead className="text-right text-[9px] font-black uppercase">Subtotal</TableHead>
+                                <TableHead className="w-10"></TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {selectedItems.map((item, i) => (
+                                <TableRow key={i}>
+                                  <TableCell className="font-bold text-xs">{item.name}</TableCell>
+                                  <TableCell><Input type="number" value={item.qty} className="h-8 text-center font-black px-1" onChange={(e) => { const n = [...selectedItems]; n[i].qty = Number(e.target.value); setSelectedItems(n); }} /></TableCell>
+                                  <TableCell><Input type="number" value={item.price} className="h-8 text-center font-black px-1" onChange={(e) => { const n = [...selectedItems]; n[i].price = Number(e.target.value); setSelectedItems(n); }} /></TableCell>
+                                  <TableCell><Input type="number" value={item.discount} className="h-8 text-center font-bold px-1" onChange={(e) => { const n = [...selectedItems]; n[i].discount = Number(e.target.value); setSelectedItems(n); }} /></TableCell>
+                                  <TableCell>
+                                    <Tabs value={item.currency} onValueChange={(v) => { const n = [...selectedItems]; n[i].currency = v; setSelectedItems(n); }} className="w-full">
+                                      <TabsList className="grid grid-cols-2 h-7 p-0.5 border">
+                                        <TabsTrigger value="ARS" className="text-[7px] font-black data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
+                                        <TabsTrigger value="USD" className="text-[7px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
+                                      </TabsList>
+                                    </Tabs>
+                                  </TableCell>
+                                  <TableCell className="text-right font-black text-xs">{(item.price * item.qty * (1 - item.discount/100)).toLocaleString()}</TableCell>
+                                  <TableCell><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setSelectedItems(selectedItems.filter((_, idx) => idx !== i))}><Trash2 className="h-3 w-3" /></Button></TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+
+                        {/* Mobile View for selected items: Large Cards */}
+                        <div className="md:hidden space-y-4">
+                          {selectedItems.map((item, i) => (
+                            <Card key={i} className="p-4 border-primary/10 shadow-md bg-white">
+                              <div className="flex justify-between items-start mb-4">
+                                <h4 className="font-black text-sm text-slate-800 uppercase tracking-tight truncate flex-1 pr-4">{item.name}</h4>
+                                <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive bg-rose-50 -mt-1 -mr-1" onClick={() => setSelectedItems(selectedItems.filter((_, idx) => idx !== i))}>
+                                  <Trash2 className="h-5 w-5" />
+                                </Button>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 gap-4 mb-4">
+                                <div className="space-y-1.5">
+                                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1 tracking-widest">Cantidad</Label>
+                                  <Input 
+                                    type="number" 
+                                    value={item.qty} 
+                                    className="h-12 text-center font-black text-xl bg-slate-50 border-slate-200" 
+                                    onChange={(e) => { const n = [...selectedItems]; n[i].qty = Number(e.target.value); setSelectedItems(n); }} 
+                                  />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1 tracking-widest">Precio Unit.</Label>
+                                  <Input 
+                                    type="number" 
+                                    value={item.price} 
+                                    className="h-12 text-center font-black text-xl bg-slate-50 border-slate-200" 
+                                    onChange={(e) => { const n = [...selectedItems]; n[i].price = Number(e.target.value); setSelectedItems(n); }} 
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-4 items-end mb-4">
+                                <div className="space-y-1.5">
+                                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1 tracking-widest">Descuento (%)</Label>
+                                  <Input 
+                                    type="number" 
+                                    value={item.discount} 
+                                    className="h-11 text-center font-bold bg-white border-slate-200" 
+                                    onChange={(e) => { const n = [...selectedItems]; n[i].discount = Number(e.target.value); setSelectedItems(n); }} 
+                                  />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1 tracking-widest">Moneda</Label>
                                   <Tabs value={item.currency} onValueChange={(v) => { const n = [...selectedItems]; n[i].currency = v; setSelectedItems(n); }} className="w-full">
-                                    <TabsList className="grid grid-cols-2 h-7 p-0.5 border">
-                                      <TabsTrigger value="ARS" className="text-[7px] font-black data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
-                                      <TabsTrigger value="USD" className="text-[7px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
+                                    <TabsList className="grid grid-cols-2 h-11 p-1 border bg-muted/20">
+                                      <TabsTrigger value="ARS" className="text-[9px] font-black data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
+                                      <TabsTrigger value="USD" className="text-[9px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
                                     </TabsList>
                                   </Tabs>
-                                </TableCell>
-                                <TableCell className="text-right font-black text-xs">{(item.price * item.qty * (1 - item.discount/100)).toLocaleString()}</TableCell>
-                                <TableCell><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setSelectedItems(selectedItems.filter((_, idx) => idx !== i))}><Trash2 className="h-3 w-3" /></Button></TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
+                                </div>
+                              </div>
+
+                              <div className="pt-3 border-t border-dashed flex justify-between items-center bg-slate-50/50 -mx-4 px-4 pb-1 mt-2">
+                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Subtotal Ítem:</span>
+                                <span className="font-black text-primary text-xl">
+                                  {item.currency === 'USD' ? 'u$s' : '$'} {(item.price * item.qty * (1 - item.discount/100)).toLocaleString()}
+                                </span>
+                              </div>
+                            </Card>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   )}
-                  <div className="space-y-2"><Label className="font-bold uppercase text-[10px] tracking-widest">Notas / Concepto</Label><Input value={txDescription} onChange={(e) => setTxDescription(e.target.value)} className="bg-white h-11 italic" /></div>
+                  <div className="space-y-2 pt-4 border-t border-dashed">
+                    <Label className="font-bold uppercase text-[10px] tracking-[0.2em] text-muted-foreground flex items-center gap-2">
+                      <Receipt className="h-3 w-3" /> Notas / Concepto de Operación
+                    </Label>
+                    <Input value={txDescription} onChange={(e) => setTxDescription(e.target.value)} placeholder="Ej: Pago de factura #123, Reposición zona norte..." className="bg-white h-12 italic border-primary/10 shadow-inner" />
+                  </div>
                 </CardContent>
               </Card>
+              
               <Card className="glass-card h-fit sticky top-8 border-primary/20 shadow-2xl">
                 <CardHeader className="bg-primary/5 border-b"><CardTitle className="text-xs uppercase font-black tracking-widest text-primary">Resumen de Operación</CardTitle></CardHeader>
                 <CardContent className="space-y-6 pt-6">
