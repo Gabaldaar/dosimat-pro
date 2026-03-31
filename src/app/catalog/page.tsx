@@ -1249,6 +1249,35 @@ function CatalogContent() {
     }, 300);
   };
 
+  const confirmDeleteOrder = () => {
+    if (!orderToDelete) return
+    deleteDocumentNonBlocking(doc(db, 'production_orders', orderToDelete.id))
+    setOrderToDelete(null)
+    toast({ title: "Orden eliminada" })
+  }
+
+  const confirmDeletePurchaseOrder = () => {
+    if (!purchaseOrderToDelete) return
+    deleteDocumentNonBlocking(doc(db, 'purchase_orders', purchaseOrderToDelete.id))
+    setPurchaseOrderToDelete(null)
+    toast({ title: "Orden de compra eliminada" })
+  }
+
+  const addComponent = (productId: string) => {
+    if (formData.components.some(c => c.productId === productId)) return;
+    setFormData(prev => ({ ...prev, components: [...prev.components, { productId, quantity: 1 }] }));
+  }
+
+  const removeComponent = (idx: number) => {
+    setFormData(prev => ({ ...prev, components: prev.components.filter((_, i) => i !== idx) }));
+  }
+
+  const updateComponentQty = (idx: number, qty: number) => {
+    const newComps = [...formData.components];
+    newComps[idx].quantity = qty;
+    setFormData(prev => ({ ...prev, components: newComps }));
+  }
+
   const FilterPanel = () => (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -1287,303 +1316,17 @@ function CatalogContent() {
     </div>
   )
 
-  const OrdersList = () => {
-    return (
-      <div className="space-y-8">
-        {loadingOrders ? (
-          <div className="py-20 flex flex-col items-center justify-center gap-3">
-            <RefreshCw className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground italic">Cargando órdenes de producción...</p>
-          </div>
-        ) : !orders || orders.length === 0 ? (
-          <Card className="p-20 text-center border-dashed border-2 bg-muted/5">
-            <Factory className="h-16 w-16 mx-auto text-muted-foreground opacity-20 mb-4" />
-            <h3 className="text-xl font-bold text-slate-800">No hay órdenes de producción</h3>
-            <p className="text-muted-foreground max-w-md mx-auto mt-2">Crea una orden desde el catálogo para planificar la fabricación de productos compuestos.</p>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {orders.map((order: any) => {
-              const statusInfo = {
-                draft: { label: "Borrador", icon: ClipboardList, color: "text-slate-600 bg-slate-100 border-slate-200" },
-                pending_purchase: { label: "Faltan Materiales", icon: ShoppingCart, color: "text-amber-700 bg-amber-50 border-amber-200" },
-                ready: { label: "Listo para Armar", icon: Hammer, color: "text-blue-700 bg-blue-50 border-blue-200" },
-                completed: { label: "Completado", icon: CheckCircle, color: "text-emerald-700 bg-emerald-50 border-emerald-200" }
-              }[order.status as keyof typeof statusInfo] || { label: order.status, icon: Factory, color: "bg-muted" };
-              const StatusIcon = statusInfo.icon;
-              return (
-                <Card key={order.id} className={cn("glass-card hover:shadow-lg transition-all cursor-pointer border-l-4 group", order.status === 'completed' ? 'border-l-emerald-500 opacity-70' : 'border-l-amber-500')} onClick={() => setOrderToView(order)}>
-                  <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start">
-                      <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5", statusInfo.color)}>
-                        <StatusIcon className="h-2.5 w-2.5 mr-1" /> {statusInfo.label}
-                      </Badge>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={(e) => { e.stopPropagation(); setOrderToDelete(order); }}><Trash2 className="h-4 w-4" /></Button>
-                      </div>
-                    </div>
-                    <CardTitle className="text-lg mt-2 font-bold leading-tight">{order.productName}</CardTitle>
-                    <CardDescription className="text-[10px] font-bold uppercase tracking-tighter">Creada el {new Date(order.createdAt).toLocaleDateString('es-AR')}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="bg-white/50 border rounded-lg p-3 flex items-center justify-between shadow-inner">
-                      <span className="text-[10px] font-black text-muted-foreground uppercase">Unidades a Fabricar</span>
-                      <span className="text-2xl font-black text-amber-600">{order.quantity}</span>
-                    </div>
-                    {order.purchaseOrderId && (
-                      <div className="flex items-center gap-2 text-[9px] font-bold text-emerald-700 bg-emerald-50 p-1.5 rounded border border-emerald-100">
-                        <ShoppingCart className="h-3 w-3" /> COMPRA ASOCIADA: #{order.purchaseOrderId.slice(0,4).toUpperCase()}
-                      </div>
-                    )}
-                  </CardContent>
-                  <CardFooter className="pt-0 border-t bg-muted/5 flex justify-between py-3"><Button variant="ghost" size="sm" className="h-8 text-[10px] font-bold uppercase p-0 px-2">VER DETALLE <ChevronRight className="h-3 w-3 ml-1" /></Button>{order.status === 'ready' && <Badge className="bg-blue-600 animate-pulse text-[8px] font-black">PRODUCCIÓN HABILITADA</Badge>}</CardFooter>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  const PurchaseOrdersList = () => {
-    return (
-      <div className="space-y-8">
-        <div className="flex justify-end">
-          <Button onClick={() => setIsNewPurchaseOrderOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 font-bold gap-2">
-            <Plus className="h-4 w-4" /> Nueva Orden de Compra
-          </Button>
-        </div>
-        {loadingPO ? (
-          <div className="py-20 flex flex-col items-center justify-center gap-3">
-            <RefreshCw className="h-8 w-8 animate-spin text-emerald-600" />
-            <p className="text-sm text-muted-foreground italic">Cargando órdenes de compra...</p>
-          </div>
-        ) : !purchaseOrders || purchaseOrders.length === 0 ? (
-          <Card className="p-20 text-center border-dashed border-2 bg-muted/5">
-            <ShoppingCart className="h-16 w-16 mx-auto text-muted-foreground opacity-20 mb-4" />
-            <h3 className="text-xl font-bold text-slate-800">No hay órdenes de compra manuales</h3>
-            <p className="text-muted-foreground max-w-md mx-auto mt-2">Crea una orden para reponer stock de componentes sueltos o insumos específicos.</p>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {purchaseOrders.map((po: any) => {
-              const allReceived = po.items.every((i: any) => i.received);
-              return (
-                <Card key={po.id} className={cn("glass-card hover:shadow-lg transition-all cursor-pointer border-l-4 group", allReceived ? 'border-l-emerald-500 opacity-70' : 'border-l-emerald-600')} onClick={() => setPurchaseOrderToView(po)}>
-                  <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start">
-                      <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5", allReceived ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-blue-50 text-blue-700 border-blue-200")}>
-                        {allReceived ? <CheckCircle className="h-2.5 w-2.5 mr-1" /> : <Clock className="h-2.5 w-2.5 mr-1" />}
-                        {allReceived ? 'COMPLETADA' : 'PENDIENTE'}
-                      </Badge>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); setPurchaseOrderToDelete(po); }}><Trash2 className="h-4 w-4" /></Button>
-                    </div>
-                    <CardTitle className="text-lg mt-2 font-bold leading-tight">{po.description || "Orden de Reposición"}</CardTitle>
-                    <CardDescription className="text-[10px] font-bold uppercase">Creada el {new Date(po.createdAt).toLocaleDateString('es-AR')}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="bg-emerald-50/50 border border-emerald-100 rounded-lg p-3 flex items-center justify-between">
-                      <span className="text-[10px] font-black text-muted-foreground uppercase">Ítems Totales</span>
-                      <span className="text-2xl font-black text-emerald-700">{po.items.length}</span>
-                    </div>
-                    {po.productionOrderId && (
-                      <div className="flex items-center gap-2 text-[9px] font-bold text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-100">
-                        <Hammer className="h-3 w-3" /> ARMADO ASOCIADO: #{po.productionOrderId.slice(0,4).toUpperCase()}
-                      </div>
-                    )}
-                  </CardContent>
-                  <CardFooter className="pt-0 border-t bg-muted/5 flex justify-between py-3">
-                    <Button variant="ghost" size="sm" className="h-8 text-[10px] font-bold uppercase p-0 px-2">GESTIONAR RECEPCIÓN <ChevronRight className="h-3 w-3 ml-1" /></Button>
-                  </CardFooter>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  const GroupedPurchaseList = () => {
-    if (!purchaseCalculations) return null;
-    const itemsBySupplier = useMemo(() => {
-      const groups: Record<string, typeof purchaseCalculations.items> = {};
-      purchaseCalculations.items.forEach(item => {
-        const sup = item.supplier || "Sin Proveedor";
-        if (!groups[sup]) groups[sup] = [];
-        groups[sup].push(item);
-      });
-      Object.keys(groups).forEach(sup => groups[sup].sort((a, b) => (a.name || "").localeCompare(b.name || "")));
-      return groups;
-    }, [purchaseCalculations.items]);
-    const supplierNames = Object.keys(itemsBySupplier).sort();
-    
-    return (
-      <div className="space-y-10">
-        {supplierNames.length === 0 ? (
-          <div className="p-12 text-center text-emerald-600 bg-white border rounded-xl space-y-2">
-            <CheckCircle2 className="h-12 w-12 mx-auto" /><p className="font-black">PEDIDO COMPLETADO</p><p className="text-xs text-muted-foreground italic">Ya se recibieron todos los materiales de esta orden.</p>
-          </div>
-        ) : (
-          supplierNames.map(sup => {
-            const itemsInGroup = itemsBySupplier[sup];
-            const isOrdered = supplierStatuses[sup] === 'ordered';
-            const groupARS = itemsInGroup.reduce((sum, i) => sum + (i.manualQty * (manualPurchaseCurrencies[i.id] === 'ARS' ? manualPurchasePrices[i.id] : 0)), 0);
-            const groupUSD = itemsInGroup.reduce((sum, i) => sum + (i.manualQty * (manualPurchaseCurrencies[i.id] === 'USD' ? manualPurchasePrices[i.id] : 0)), 0);
-            
-            return (
-              <div key={sup} className={cn("space-y-4 p-4 rounded-2xl border transition-all", isOrdered ? "bg-slate-50 border-slate-200" : "bg-white border-primary/10 shadow-sm")}>
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className={cn("p-2 rounded-lg text-white", isOrdered ? "bg-slate-400" : "bg-emerald-600")}>
-                      {isOrdered ? <Lock className="h-4 w-4" /> : <Truck className="h-4 w-4" />}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-black uppercase tracking-widest text-slate-900">{sup}</h4>
-                        {isOrdered && <Badge className="bg-slate-600 text-[8px] font-black uppercase">PEDIDO CONFIRMADO</Badge>}
-                      </div>
-                      <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">{itemsInGroup.length} ÍTEMS • {isOrdered ? 'VALORES BLOQUEADOS' : 'VALORES EDITABLES'}</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs flex-1 md:flex-none" onClick={() => handleCopyShoppingList(sup)}>
-                      <Copy className="h-3.5 w-3.5" /> COPIAR
-                    </Button>
-                    
-                    <Button 
-                      variant={isOrdered ? "ghost" : "outline"} 
-                      size="sm" 
-                      className={cn("h-8 gap-2 font-bold text-xs flex-1 md:flex-none", isOrdered ? "text-amber-600 hover:bg-amber-50" : "border-emerald-600 text-emerald-700")}
-                      onClick={() => handleToggleSupplierStatus(sup)}
-                    >
-                      {isOrdered ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-                      {isOrdered ? "DESBLOQUEAR" : "MARCAR COMO PEDIDO"}
-                    </Button>
-                    
-                    <Button 
-                      size="sm" 
-                      className="h-8 gap-2 bg-emerald-600 hover:bg-emerald-700 font-bold text-xs flex-1 md:flex-none" 
-                      onClick={() => handleReceiveMaterials(sup)} 
-                      disabled={itemsInGroup.every(i => i.manualQty <= 0)}
-                    >
-                      <Save className="h-3.5 w-3.5" /> INGRESAR COMPRA
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="border-2 rounded-xl bg-white shadow-md overflow-hidden">
-                  <Table className="min-w-[600px]">
-                    <TableHeader className="bg-slate-50">
-                      <TableRow>
-                        <TableHead className="text-[9px] font-black uppercase">Material</TableHead>
-                        <TableHead className="text-center font-black text-[9px] uppercase w-20">Cantidad</TableHead>
-                        <TableHead className="text-center font-black text-[9px] uppercase w-48">Precio Compra</TableHead>
-                        <TableHead className="text-center font-black text-[9px] uppercase w-40">Proveedor</TableHead>
-                        <TableHead className="text-right font-black text-[9px] uppercase w-28">Subtotal</TableHead>
-                        <TableHead className="w-10"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {itemsInGroup.map(f => {
-                        const lineId = f.id;
-                        const isZero = manualPurchasePrices[lineId] <= 0;
-                        const currentCurrency = manualPurchaseCurrencies[lineId] || (f.manualCurrency || 'ARS');
-                        
-                        return (
-                          <TableRow key={lineId} className="hover:bg-muted/5 h-10">
-                            <TableCell className="py-1">
-                              <p className="font-bold text-xs">{f.name}</p>
-                              <p className="text-[8px] text-muted-foreground uppercase">Stock Actual: {f.available}</p>
-                            </TableCell>
-                            <TableCell className="py-1">
-                              <input 
-                                type="number" 
-                                disabled={isOrdered} 
-                                value={manualPurchaseQtys[lineId] ?? 0} 
-                                onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: Number(e.target.value) }))} 
-                                className="w-full text-center font-black text-xs bg-muted/30 border-none rounded h-7 focus:ring-2 focus:ring-primary/20 focus:outline-none" 
-                              />
-                            </TableCell>
-                            <TableCell className="py-1">
-                              <div className="flex items-center gap-1.5">
-                                <input 
-                                  type="number" 
-                                  disabled={isOrdered} 
-                                  value={manualPurchasePrices[lineId] ?? 0} 
-                                  onChange={(e) => setManualPurchasePrices(prev => ({ ...prev, [lineId]: Number(e.target.value) }))} 
-                                  className={cn(
-                                    "w-full text-center font-black text-xs h-7 border rounded transition-all focus:outline-none focus:ring-2",
-                                    isZero ? "bg-rose-50 border-rose-300 text-rose-600 animate-pulse" : "bg-white border-emerald-100 text-emerald-700"
-                                  )} 
-                                />
-                                <Tabs 
-                                  value={currentCurrency} 
-                                  onValueChange={(v: any) => setManualPurchaseCurrencies(prev => ({ ...prev, [lineId]: v }))}
-                                  className={cn("shrink-0 h-7", isOrdered && "pointer-events-none opacity-50")}
-                                >
-                                  <TabsList className="h-7 p-0 gap-0 border">
-                                    <TabsTrigger value="ARS" className="h-6 text-[8px] font-black px-1.5 data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
-                                    <TabsTrigger value="USD" className="h-6 text-[8px] font-black px-1.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
-                                  </TabsList>
-                                </Tabs>
-                              </div>
-                            </TableCell>
-                            <TableCell className="py-1">
-                              <Select 
-                                disabled={isOrdered}
-                                value={manualSuppliers[lineId] || "Sin Proveedor"} 
-                                onValueChange={(v) => handleUpdateItemSupplierGlobally(lineId, f.productId, v)}
-                              >
-                                <SelectTrigger className="h-7 text-[10px] font-bold border-none bg-transparent">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
-                                  {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-                            <TableCell className="text-right py-1">
-                              <p className="text-[10px] font-bold">{currentCurrency === 'USD' ? 'u$s' : '$'} {( (manualPurchaseQtys[lineId] ?? 0) * (manualPurchasePrices[lineId] ?? 0)).toLocaleString('es-AR')}</p>
-                            </TableCell>
-                            <TableCell className="py-1">
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-7 w-7 text-destructive" 
-                                disabled={isOrdered}
-                                onClick={() => handleRemoveItemFromPurchaseOrder(lineId)}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                  <div className="bg-slate-50 border-t p-3 grid grid-cols-2 gap-4">
-                    <div className="flex items-center gap-2"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} ARS:</span><span className="font-black text-xs text-primary">${groupARS.toLocaleString('es-AR')}</span></div>
-                    <div className="flex items-center gap-2 justify-end"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} USD:</span><span className="font-black text-xs text-emerald-700">u$s {groupUSD.toLocaleString('es-AR')}</span></div>
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-    );
-  };
-
-  if (isUserLoading || userData?.role === 'Replenisher' || userData?.role === 'Communicator') {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="mt-4 text-sm text-muted-foreground font-medium">{userData?.role === 'Replenisher' ? 'Redirigiendo a Rutas...' : userData?.role === 'Communicator' ? 'Redirigiendo a Clientes...' : 'Accediendo...'}</p>
-      </div>
-    )
-  }
+  const itemsBySupplier = useMemo(() => {
+    if (!purchaseCalculations) return {};
+    const groups: Record<string, typeof purchaseCalculations.items> = {};
+    purchaseCalculations.items.forEach(item => {
+      const sup = item.supplier || "Sin Proveedor";
+      if (!groups[sup]) groups[sup] = [];
+      groups[sup].push(item);
+    });
+    Object.keys(groups).forEach(sup => groups[sup].sort((a, b) => (a.name || "").localeCompare(b.name || "")));
+    return groups;
+  }, [purchaseCalculations]);
 
   return (
     <div className="flex min-h-screen w-full bg-background relative">
@@ -1763,8 +1506,114 @@ function CatalogContent() {
                 </div>
               </div>
             </TabsContent>
-            <TabsContent value="orders" className="m-0"><OrdersList /></TabsContent>
-            <TabsContent value="purchases" className="m-0"><PurchaseOrdersList /></TabsContent>
+            <TabsContent value="orders" className="m-0 space-y-8">
+              {loadingOrders ? (
+                <div className="py-20 flex flex-col items-center justify-center gap-3">
+                  <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+                  <p className="text-sm text-muted-foreground italic">Cargando órdenes de producción...</p>
+                </div>
+              ) : !orders || orders.length === 0 ? (
+                <Card className="p-20 text-center border-dashed border-2 bg-muted/5">
+                  <Factory className="h-16 w-16 mx-auto text-muted-foreground opacity-20 mb-4" />
+                  <h3 className="text-xl font-bold text-slate-800">No hay órdenes de producción</h3>
+                  <p className="text-muted-foreground max-w-md mx-auto mt-2">Crea una orden desde el catálogo para planificar la fabricación de productos compuestos.</p>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {orders.map((order: any) => {
+                    const statusInfo = {
+                      draft: { label: "Borrador", icon: ClipboardList, color: "text-slate-600 bg-slate-100 border-slate-200" },
+                      pending_purchase: { label: "Faltan Materiales", icon: ShoppingCart, color: "text-amber-700 bg-amber-50 border-amber-200" },
+                      ready: { label: "Listo para Armar", icon: Hammer, color: "text-blue-700 bg-blue-50 border-blue-200" },
+                      completed: { label: "Completado", icon: CheckCircle, color: "text-emerald-700 bg-emerald-50 border-emerald-200" }
+                    }[order.status as keyof typeof statusInfo] || { label: order.status, icon: Factory, color: "bg-muted" };
+                    const StatusIcon = statusInfo.icon;
+                    return (
+                      <Card key={order.id} className={cn("glass-card hover:shadow-lg transition-all cursor-pointer border-l-4 group", order.status === 'completed' ? 'border-l-emerald-500 opacity-70' : 'border-l-amber-500')} onClick={() => setOrderToView(order)}>
+                        <CardHeader className="pb-3">
+                          <div className="flex justify-between items-start">
+                            <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5", statusInfo.color)}>
+                              <StatusIcon className="h-2.5 w-2.5 mr-1" /> {statusInfo.label}
+                            </Badge>
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={(e) => { e.stopPropagation(); setOrderToDelete(order); }}><Trash2 className="h-4 w-4" /></Button>
+                            </div>
+                          </div>
+                          <CardTitle className="text-lg mt-2 font-bold leading-tight">{order.productName}</CardTitle>
+                          <CardDescription className="text-[10px] font-bold uppercase tracking-tighter">Creada el {new Date(order.createdAt).toLocaleDateString('es-AR')}</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          <div className="bg-white/50 border rounded-lg p-3 flex items-center justify-between shadow-inner">
+                            <span className="text-[10px] font-black text-muted-foreground uppercase">Unidades a Fabricar</span>
+                            <span className="text-2xl font-black text-amber-600">{order.quantity}</span>
+                          </div>
+                          {order.purchaseOrderId && (
+                            <div className="flex items-center gap-2 text-[9px] font-bold text-emerald-700 bg-emerald-50 p-1.5 rounded border border-emerald-100">
+                              <ShoppingCart className="h-3 w-3" /> COMPRA ASOCIADA: #{order.purchaseOrderId.slice(0,4).toUpperCase()}
+                            </div>
+                          )}
+                        </CardContent>
+                        <CardFooter className="pt-0 border-t bg-muted/5 flex justify-between py-3"><Button variant="ghost" size="sm" className="h-8 text-[10px] font-bold uppercase p-0 px-2">VER DETALLE <ChevronRight className="h-3 w-3 ml-1" /></Button>{order.status === 'ready' && <Badge className="bg-blue-600 animate-pulse text-[8px] font-black">PRODUCCIÓN HABILITADA</Badge>}</CardFooter>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </TabsContent>
+            <TabsContent value="purchases" className="m-0 space-y-8">
+              <div className="flex justify-end">
+                <Button onClick={() => setIsNewPurchaseOrderOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 font-bold gap-2">
+                  <Plus className="h-4 w-4" /> Nueva Orden de Compra
+                </Button>
+              </div>
+              {loadingPO ? (
+                <div className="py-20 flex flex-col items-center justify-center gap-3">
+                  <RefreshCw className="h-8 w-8 animate-spin text-emerald-600" />
+                  <p className="text-sm text-muted-foreground italic">Cargando órdenes de compra...</p>
+                </div>
+              ) : !purchaseOrders || purchaseOrders.length === 0 ? (
+                <Card className="p-20 text-center border-dashed border-2 bg-muted/5">
+                  <ShoppingCart className="h-16 w-16 mx-auto text-muted-foreground opacity-20 mb-4" />
+                  <h3 className="text-xl font-bold text-slate-800">No hay órdenes de compra manuales</h3>
+                  <p className="text-muted-foreground max-w-md mx-auto mt-2">Crea una orden para reponer stock de componentes sueltos o insumos específicos.</p>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {purchaseOrders.map((po: any) => {
+                    const allReceived = po.items.every((i: any) => i.received);
+                    return (
+                      <Card key={po.id} className={cn("glass-card hover:shadow-lg transition-all cursor-pointer border-l-4 group", allReceived ? 'border-l-emerald-500 opacity-70' : 'border-l-emerald-600')} onClick={() => setPurchaseOrderToView(po)}>
+                        <CardHeader className="pb-3">
+                          <div className="flex justify-between items-start">
+                            <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5", allReceived ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-blue-50 text-blue-700 border-blue-200")}>
+                              {allReceived ? <CheckCircle className="h-2.5 w-2.5 mr-1" /> : <Clock className="h-2.5 w-2.5 mr-1" />}
+                              {allReceived ? 'COMPLETADA' : 'PENDIENTE'}
+                            </Badge>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); setPurchaseOrderToDelete(po); }}><Trash2 className="h-4 w-4" /></Button>
+                          </div>
+                          <CardTitle className="text-lg mt-2 font-bold leading-tight">{po.description || "Orden de Reposición"}</CardTitle>
+                          <CardDescription className="text-[10px] font-bold uppercase">Creada el {new Date(po.createdAt).toLocaleDateString('es-AR')}</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div className="bg-emerald-50/50 border border-emerald-100 rounded-lg p-3 flex items-center justify-between">
+                            <span className="text-[10px] font-black text-muted-foreground uppercase">Ítems Totales</span>
+                            <span className="text-2xl font-black text-emerald-700">{po.items.length}</span>
+                          </div>
+                          {po.productionOrderId && (
+                            <div className="flex items-center gap-2 text-[9px] font-bold text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-100">
+                              <Hammer className="h-3 w-3" /> ARMADO ASOCIADO: #{po.productionOrderId.slice(0,4).toUpperCase()}
+                            </div>
+                          )}
+                        </CardContent>
+                        <CardFooter className="pt-0 border-t bg-muted/5 flex justify-between py-3">
+                          <Button variant="ghost" size="sm" className="h-8 text-[10px] font-bold uppercase p-0 px-2">GESTIONAR RECEPCIÓN <ChevronRight className="h-3 w-3 ml-1" /></Button>
+                        </CardFooter>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </TabsContent>
           </Tabs>
         </SidebarInset>
       </div>
@@ -1992,7 +1841,243 @@ function CatalogContent() {
           )}
 
           <div className="flex-1 overflow-y-auto p-6 space-y-8">
-            <GroupedPurchaseList />
+            <div className="space-y-10">
+              {Object.keys(itemsBySupplier).length === 0 ? (
+                <div className="p-12 text-center text-emerald-600 bg-white border rounded-xl space-y-2">
+                  <CheckCircle2 className="h-12 w-12 mx-auto" /><p className="font-black">PEDIDO COMPLETADO</p><p className="text-xs text-muted-foreground italic">Ya se recibieron todos los materiales de esta orden.</p>
+                </div>
+              ) : (
+                Object.keys(itemsBySupplier).sort().map(sup => {
+                  const itemsInGroup = itemsBySupplier[sup];
+                  const isOrdered = supplierStatuses[sup] === 'ordered';
+                  const groupARS = itemsInGroup.reduce((sum, i) => sum + (i.manualQty * (manualPurchaseCurrencies[i.id] === 'ARS' ? manualPurchasePrices[i.id] : 0)), 0);
+                  const groupUSD = itemsInGroup.reduce((sum, i) => sum + (i.manualQty * (manualPurchaseCurrencies[i.id] === 'USD' ? manualPurchasePrices[i.id] : 0)), 0);
+                  
+                  return (
+                    <div key={sup} className={cn("space-y-4 p-4 rounded-2xl border transition-all", isOrdered ? "bg-slate-50 border-slate-200" : "bg-white border-primary/10 shadow-sm")}>
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className={cn("p-2 rounded-lg text-white", isOrdered ? "bg-slate-400" : "bg-emerald-600")}>
+                            {isOrdered ? <Lock className="h-4 w-4" /> : <Truck className="h-4 w-4" />}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-sm font-black uppercase tracking-widest text-slate-900">{sup}</h4>
+                              {isOrdered && <Badge className="bg-slate-600 text-[8px] font-black uppercase">PEDIDO CONFIRMADO</Badge>}
+                            </div>
+                            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">{itemsInGroup.length} ÍTEMS • {isOrdered ? 'VALORES BLOQUEADOS' : 'VALORES EDITABLES'}</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs flex-1 md:flex-none" onClick={() => handleCopyShoppingList(sup)}>
+                            <Copy className="h-3.5 w-3.5" /> COPIAR
+                          </Button>
+                          
+                          <Button 
+                            variant={isOrdered ? "ghost" : "outline"} 
+                            size="sm" 
+                            className={cn("h-8 gap-2 font-bold text-xs flex-1 md:flex-none", isOrdered ? "text-amber-600 hover:bg-amber-50" : "border-emerald-600 text-emerald-700")}
+                            onClick={() => handleToggleSupplierStatus(sup)}
+                          >
+                            {isOrdered ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                            {isOrdered ? "DESBLOQUEAR" : "MARCAR COMO PEDIDO"}
+                          </Button>
+                          
+                          <Button 
+                            size="sm" 
+                            className="h-8 gap-2 bg-emerald-600 hover:bg-emerald-700 font-bold text-xs flex-1 md:flex-none" 
+                            onClick={() => handleReceiveMaterials(sup)} 
+                            disabled={itemsInGroup.every(i => i.manualQty <= 0)}
+                          >
+                            <Save className="h-3.5 w-3.5" /> INGRESAR COMPRA
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="hidden md:block border-2 rounded-xl bg-white shadow-md overflow-hidden">
+                        <Table className="min-w-[600px]">
+                          <TableHeader className="bg-slate-50">
+                            <TableRow>
+                              <TableHead className="text-[9px] font-black uppercase">Material</TableHead>
+                              <TableHead className="text-center font-black text-[9px] uppercase w-20">Cantidad</TableHead>
+                              <TableHead className="text-center font-black text-[9px] uppercase w-48">Precio Compra</TableHead>
+                              <TableHead className="text-center font-black text-[9px] uppercase w-40">Proveedor</TableHead>
+                              <TableHead className="text-right font-black text-[9px] uppercase w-28">Subtotal</TableHead>
+                              <TableHead className="w-10"></TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {itemsInGroup.map(f => {
+                              const lineId = f.id;
+                              const isZero = manualPurchasePrices[lineId] <= 0;
+                              const currentCurrency = manualPurchaseCurrencies[lineId] || (f.manualCurrency || 'ARS');
+                              
+                              return (
+                                <TableRow key={lineId} className="hover:bg-muted/5 h-10">
+                                  <TableCell className="py-1">
+                                    <p className="font-bold text-xs">{f.name}</p>
+                                    <p className="text-[8px] text-muted-foreground uppercase">Stock Actual: {f.available}</p>
+                                  </TableCell>
+                                  <TableCell className="py-1">
+                                    <Input 
+                                      type="number" 
+                                      disabled={isOrdered} 
+                                      value={manualPurchaseQtys[lineId] ?? 0} 
+                                      onChange={(e) => {
+                                        const val = Number(e.target.value);
+                                        setManualPurchaseQtys(prev => ({ ...prev, [lineId]: val }));
+                                      }} 
+                                      className="w-full text-center font-black text-xs bg-muted/30 border-none rounded h-7 focus:ring-2 focus:ring-primary/20 focus:outline-none" 
+                                    />
+                                  </TableCell>
+                                  <TableCell className="py-1">
+                                    <div className="flex items-center gap-1.5">
+                                      <Input 
+                                        type="number" 
+                                        disabled={isOrdered} 
+                                        value={manualPurchasePrices[lineId] ?? 0} 
+                                        onChange={(e) => {
+                                          const val = Number(e.target.value);
+                                          setManualPurchasePrices(prev => ({ ...prev, [lineId]: val }));
+                                        }} 
+                                        className={cn(
+                                          "w-full text-center font-black text-xs h-7 border rounded transition-all focus:outline-none focus:ring-2",
+                                          isZero ? "bg-rose-50 border-rose-300 text-rose-600 animate-pulse" : "bg-white border-emerald-100 text-emerald-700"
+                                        )} 
+                                      />
+                                      <Tabs 
+                                        value={currentCurrency} 
+                                        onValueChange={(v: any) => setManualPurchaseCurrencies(prev => ({ ...prev, [lineId]: v }))}
+                                        className={cn("shrink-0 h-7", isOrdered && "pointer-events-none opacity-50")}
+                                      >
+                                        <TabsList className="h-7 p-0 gap-0 border">
+                                          <TabsTrigger value="ARS" className="h-6 text-[8px] font-black px-1.5 data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
+                                          <TabsTrigger value="USD" className="h-6 text-[8px] font-black px-1.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
+                                        </TabsList>
+                                      </Tabs>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="py-1">
+                                    <Select 
+                                      disabled={isOrdered}
+                                      value={manualSuppliers[lineId] || "Sin Proveedor"} 
+                                      onValueChange={(v) => handleUpdateItemSupplierGlobally(lineId, f.productId, v)}
+                                    >
+                                      <SelectTrigger className="h-7 text-[10px] font-bold border-none bg-transparent">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>
+                                        {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                                      </SelectContent>
+                                    </Select>
+                                  </TableCell>
+                                  <TableCell className="text-right py-1">
+                                    <p className="text-[10px] font-bold">{currentCurrency === 'USD' ? 'u$s' : '$'} {( (manualPurchaseQtys[lineId] ?? 0) * (manualPurchasePrices[lineId] ?? 0)).toLocaleString('es-AR')}</p>
+                                  </TableCell>
+                                  <TableCell className="py-1">
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-7 w-7 text-destructive" 
+                                      disabled={isOrdered}
+                                      onClick={() => handleRemoveItemFromPurchaseOrder(lineId)}
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      <div className="md:hidden space-y-4">
+                        {itemsInGroup.map(f => {
+                          const lineId = f.id;
+                          const currentCurrency = manualPurchaseCurrencies[lineId] || (f.manualCurrency || 'ARS');
+                          const isZero = manualPurchasePrices[lineId] <= 0;
+                          
+                          return (
+                            <Card key={lineId} className="p-4 border-muted shadow-sm">
+                              <div className="flex justify-between items-start mb-4">
+                                <div className="space-y-1">
+                                  <h5 className="font-black text-xs uppercase tracking-tight">{f.name}</h5>
+                                  <p className="text-[9px] text-muted-foreground font-bold">STOCK ACTUAL: {f.available}</p>
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" disabled={isOrdered} onClick={() => handleRemoveItemFromPurchaseOrder(lineId)}>
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4 mb-4">
+                                <div className="space-y-1.5">
+                                  <Label className="text-[9px] font-black uppercase text-muted-foreground">Cantidad</Label>
+                                  <div className="flex items-center gap-2">
+                                    <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" disabled={isOrdered} onClick={() => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: Math.max(0, (prev[lineId] ?? 0) - 1) }))}>
+                                      <Minus className="h-4 w-4" />
+                                    </Button>
+                                    <Input 
+                                      type="number" 
+                                      className="h-10 text-center font-black text-lg" 
+                                      disabled={isOrdered}
+                                      value={manualPurchaseQtys[lineId] ?? 0}
+                                      onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: Number(e.target.value) }))}
+                                    />
+                                    <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" disabled={isOrdered} onClick={() => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: (prev[lineId] ?? 0) + 1 }))}>
+                                      <Plus className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="text-[9px] font-black uppercase text-muted-foreground">Precio Compra</Label>
+                                  <div className="relative">
+                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-black opacity-40">{currentCurrency === 'USD' ? 'u$s' : '$'}</span>
+                                    <Input 
+                                      type="number" 
+                                      className={cn("h-10 pl-6 text-center font-black text-lg", isZero ? "bg-rose-50 border-rose-300" : "bg-emerald-50/20 border-emerald-200")} 
+                                      disabled={isOrdered}
+                                      value={manualPurchasePrices[lineId] ?? 0}
+                                      onChange={(e) => setManualPurchasePrices(prev => ({ ...prev, [lineId]: Number(e.target.value) }))}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4 items-end">
+                                <div className="space-y-1.5">
+                                  <Label className="text-[9px] font-black uppercase text-muted-foreground">Moneda</Label>
+                                  <Tabs 
+                                    value={currentCurrency} 
+                                    onValueChange={(v: any) => setManualPurchaseCurrencies(prev => ({ ...prev, [lineId]: v }))}
+                                    className={cn("w-full", isOrdered && "pointer-events-none opacity-50")}
+                                  >
+                                    <TabsList className="grid grid-cols-2 h-10 p-1 border">
+                                      <TabsTrigger value="ARS" className="text-[10px] font-black">ARS</TabsTrigger>
+                                      <TabsTrigger value="USD" className="text-[10px] font-black">USD</TabsTrigger>
+                                    </TabsList>
+                                  </Tabs>
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="text-[9px] font-black uppercase text-muted-foreground">Subtotal</Label>
+                                  <div className="h-10 flex items-center justify-end px-3 bg-slate-50 border rounded-lg">
+                                    <span className="font-black text-sm">{currentCurrency === 'USD' ? 'u$s' : '$'} {( (manualPurchaseQtys[lineId] ?? 0) * (manualPurchasePrices[lineId] ?? 0)).toLocaleString('es-AR')}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </Card>
+                          )
+                        })}
+                      </div>
+
+                      <div className="bg-slate-50 border-t p-3 grid grid-cols-2 gap-4">
+                        <div className="flex items-center gap-2"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} ARS:</span><span className="font-black text-xs text-primary">${groupARS.toLocaleString('es-AR')}</span></div>
+                        <div className="flex items-center gap-2 justify-end"><span className="text-[8px] font-black uppercase text-slate-400">Total {sup} USD:</span><span className="font-black text-xs text-emerald-700">u$s {groupUSD.toLocaleString('es-AR')}</span></div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
           <DialogFooter className="p-4 border-t bg-slate-50 shrink-0">
             <div className="flex justify-between items-center w-full">
@@ -2784,35 +2869,6 @@ function CatalogContent() {
       )}
     </div>
   )
-
-  function addComponent(productId: string) {
-    if (formData.components.some(c => c.productId === productId)) return;
-    setFormData(prev => ({ ...prev, components: [...prev.components, { productId, quantity: 1 }] }));
-  }
-
-  function removeComponent(idx: number) {
-    setFormData(prev => ({ ...prev, components: prev.components.filter((_, i) => i !== idx) }));
-  }
-
-  function updateComponentQty(idx: number, qty: number) {
-    const newComps = [...formData.components];
-    newComps[idx].quantity = qty;
-    setFormData(prev => ({ ...prev, components: newComps }));
-  }
-
-  function confirmDeleteOrder() {
-    if (!orderToDelete) return
-    deleteDocumentNonBlocking(doc(db, 'production_orders', orderToDelete.id))
-    setOrderToDelete(null)
-    toast({ title: "Orden eliminada" })
-  }
-
-  function confirmDeletePurchaseOrder() {
-    if (!purchaseOrderToDelete) return
-    deleteDocumentNonBlocking(doc(db, 'purchase_orders', purchaseOrderToDelete.id))
-    setPurchaseOrderToDelete(null)
-    toast({ title: "Orden de compra eliminada" })
-  }
 }
 
 export default function CatalogPage() {
