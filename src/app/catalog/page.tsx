@@ -2005,7 +2005,18 @@ function CatalogContent() {
               </div>
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Cantidad Planificada</Label>
-                <div className="p-4 border rounded-2xl bg-slate-50 font-black text-2xl text-primary">{liveOrderToView?.quantity}</div>
+                <div className="relative group">
+                  <Input 
+                    type="number" 
+                    value={liveOrderToView?.quantity} 
+                    disabled={liveOrderToView?.status === 'completed'}
+                    onChange={(e) => updateDocumentNonBlocking(doc(db, 'production_orders', liveOrderToView.id), { quantity: Number(e.target.value) })}
+                    className="h-16 text-3xl font-black text-primary bg-slate-50 border-primary/20 text-center"
+                  />
+                  {liveOrderToView?.status !== 'completed' && (
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[8px] font-black uppercase text-muted-foreground opacity-40 group-hover:opacity-100 transition-opacity">Editar</span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -2854,6 +2865,150 @@ function CatalogContent() {
       </AlertDialog>
 
       <MobileNav />
+
+      {/* VISTA DE IMPRESIÓN (PDF) */}
+      <div className="print-only w-full p-8 bg-white text-slate-900 font-sans">
+        {itemToPrint && (
+          <div className="space-y-8">
+            <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
+              <div>
+                <h1 className="text-2xl font-black uppercase tracking-tight">Ficha Técnica de Producto</h1>
+                <p className="text-sm font-bold text-slate-600">{itemToPrint.name}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs font-black uppercase text-slate-400">Dosimat Pro System</p>
+                <p className="text-sm font-bold">{new Date().toLocaleDateString('es-AR')}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-8">
+              <div className="space-y-4">
+                <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-widest border-b pb-1">Parámetros de Venta</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 border rounded-xl bg-slate-50">
+                    <p className="text-[8px] font-black uppercase text-blue-600">Venta ARS</p>
+                    <p className="text-lg font-black">${(itemToPrint.priceARS || 0).toLocaleString('es-AR')}</p>
+                  </div>
+                  <div className="p-3 border rounded-xl bg-slate-50">
+                    <p className="text-[8px] font-black uppercase text-emerald-600">Venta USD</p>
+                    <p className="text-lg font-black">u$s {(itemToPrint.priceUSD || 0).toLocaleString('es-AR')}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-widest border-b pb-1">Situación de Stock</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 border rounded-xl bg-slate-50">
+                    <p className="text-[8px] font-black uppercase text-slate-400">Actual</p>
+                    <p className="text-lg font-black">{itemToPrint.stock || 0}</p>
+                  </div>
+                  <div className="p-3 border rounded-xl bg-slate-50">
+                    <p className="text-[8px] font-black uppercase text-rose-600">Mínimo</p>
+                    <p className="text-lg font-black">{itemToPrint.minStock || 0}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {itemToPrint.isCompuesto && (
+              <div className="space-y-4">
+                <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-widest border-b pb-1">Estructura de Materiales (BOM)</h3>
+                <table className="w-full border-collapse text-[10px]">
+                  <thead>
+                    <tr className="bg-slate-900 text-white">
+                      <th className="p-2 text-left uppercase font-black">Componente</th>
+                      <th className="p-2 text-center uppercase font-black">Cantidad</th>
+                      <th className="p-2 text-right uppercase font-black">Costo Ref. (ARS)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(itemToPrint.components || []).map((comp: any, i: number) => {
+                      const detail = items?.find(it => it.id === comp.productId);
+                      const cost = calculateCost(detail || {}, items || [], currentRate).ars;
+                      return (
+                        <tr key={i} className="border-b border-slate-300">
+                          <td className="p-2 font-bold">{detail?.name || 'Desconocido'}</td>
+                          <td className="p-2 text-center font-black">{comp.quantity}</td>
+                          <td className="p-2 text-right">${(cost * comp.quantity).toLocaleString('es-AR')}</td>
+                        </tr>
+                      );
+                    })}
+                    <tr className="bg-slate-100 font-black">
+                      <td colSpan={2} className="p-2 text-right uppercase">Total Costo Materiales</td>
+                      <td className="p-2 text-right">${(itemToPrint.calculatedCostARS - ((itemToPrint.laborCostARS || 0) + (itemToPrint.laborCostUSD || 0) * currentRate)).toLocaleString('es-AR')}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {orderToPrint && (
+          <div className="space-y-8">
+            <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
+              <div>
+                <h1 className="text-2xl font-black uppercase tracking-tight">Plan de Armado / Producción</h1>
+                <p className="text-sm font-bold text-slate-600">#{orderToPrint.id.toUpperCase().slice(0, 6)} - {orderToPrint.productName}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-black uppercase text-slate-400">Fecha de Plan</p>
+                <p className="text-sm font-bold">{new Date(orderToPrint.createdAt).toLocaleDateString('es-AR')}</p>
+              </div>
+            </div>
+
+            <div className="p-6 border-2 border-slate-900 rounded-2xl bg-slate-50 flex justify-between items-center">
+              <div>
+                <p className="text-xs font-black uppercase text-slate-500">Unidades a fabricar</p>
+                <p className="text-5xl font-black text-slate-900">{orderToPrint.quantity}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs font-black uppercase text-slate-500">Estado de Plan</p>
+                <p className="text-xl font-black uppercase text-primary">{orderToPrint.status}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-widest border-b pb-1">Lista de Recolección de Materiales (Picking List)</h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-900 text-white">
+                    <th className="p-2 text-left uppercase font-black">Material</th>
+                    <th className="p-2 text-center uppercase font-black">Requerido</th>
+                    <th className="p-2 text-center uppercase font-black">Entregado</th>
+                    <th className="p-2 text-left uppercase font-black">Ubicación / Notas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {explosionSummary?.all.map((f: any, i: number) => (
+                    <tr key={i} className="border-b border-slate-300 h-12">
+                      <td className="p-2 font-bold">{f.name}</td>
+                      <td className="p-2 text-center font-black text-lg">{f.required}</td>
+                      <td className="p-2 text-center">
+                        <div className="w-8 h-8 border-2 border-slate-900 rounded mx-auto"></div>
+                      </td>
+                      <td className="p-2 border-l border-slate-200">
+                        <div className="h-4 border-b border-dotted border-slate-400 w-full"></div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-12 pt-8 border-t border-dashed grid grid-cols-2 gap-12">
+              <div className="text-center">
+                <div className="h-px bg-slate-900 w-48 mx-auto mb-2"></div>
+                <p className="text-[10px] font-black uppercase">Responsable de Armado</p>
+              </div>
+              <div className="text-center">
+                <div className="h-px bg-slate-900 w-48 mx-auto mb-2"></div>
+                <p className="text-[10px] font-black uppercase">Control de Calidad / Stock</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
