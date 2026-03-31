@@ -232,6 +232,7 @@ function CatalogContent() {
   const [newSupplierName, setNewSupplierName] = useState("")
   const [newSupplierPhone, setNewSupplierPhone] = useState("")
   const [newSupplierAddress, setNewSupplierAddress] = useState("")
+  const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null)
   
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
   const [itemToPrint, setItemToPrint] = useState<any | null>(null)
@@ -1155,9 +1156,14 @@ function CatalogContent() {
     toast({ title: editingCategoryId ? "Categoría actualizada" : "Categoría creada" })
   }
 
+  const handleEditCategory = (cat: any) => {
+    setEditingCategoryId(cat.id);
+    setNewCategoryName(cat.name || "");
+  };
+
   const handleSaveSupplier = () => {
     if (!newSupplierName.trim()) return
-    const id = Math.random().toString(36).substr(2, 9)
+    const id = editingSupplierId || Math.random().toString(36).substr(2, 9)
     setDocumentNonBlocking(doc(db, 'suppliers', id), { 
       id, 
       name: newSupplierName,
@@ -1167,8 +1173,16 @@ function CatalogContent() {
     setNewSupplierName("")
     setNewSupplierPhone("")
     setNewSupplierAddress("")
-    toast({ title: "Proveedor guardado" })
+    setEditingSupplierId(null)
+    toast({ title: editingSupplierId ? "Proveedor actualizado" : "Proveedor guardado" })
   }
+
+  const handleEditSupplier = (sup: any) => {
+    setEditingSupplierId(sup.id);
+    setNewSupplierName(sup.name || "");
+    setNewSupplierPhone(sup.phone || "");
+    setNewSupplierAddress(sup.address || "");
+  };
 
   const handleDeleteSupplier = (id: string) => {
     deleteDocumentNonBlocking(doc(db, 'suppliers', id))
@@ -2564,7 +2578,8 @@ function CatalogContent() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-muted/20 rounded-xl border border-dashed">
               <div className="space-y-1"><Label className="text-[10px] font-black uppercase">Nombre</Label><Input value={newSupplierName} onChange={(e) => setNewSupplierName(e.target.value)} placeholder="Ej: Aceros S.A." className="h-10 bg-white" /></div>
               <div className="space-y-1"><Label className="text-[10px] font-black uppercase">Teléfono</Label><Input value={newSupplierPhone} onChange={(e) => setNewSupplierPhone(e.target.value)} placeholder="Ej: 11 5555-5555" className="h-10 bg-white" /></div>
-              <div className="space-y-1"><Label className="text-[10px] font-black uppercase">Dirección</Label><div className="flex gap-2"><Input value={newSupplierAddress} onChange={(e) => setNewSupplierAddress(e.target.value)} placeholder="Ej: Av. Rivadavia 123" className="h-10 bg-white" /><Button onClick={handleSaveSupplier} className="h-10 px-3"><Plus className="h-4 w-4" /></Button></div></div>
+              <div className="space-y-1"><Label className="text-[10px] font-black uppercase">Dirección</Label><div className="flex gap-2"><Input value={newSupplierAddress} onChange={(e) => setNewSupplierAddress(e.target.value)} placeholder="Ej: Av. Rivadavia 123" className="h-10 bg-white" /><Button onClick={handleSaveSupplier} className="h-10 px-3">{editingSupplierId ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}</Button></div></div>
+              {editingSupplierId && <div className="col-span-3 flex justify-end"><Button variant="link" size="sm" className="h-6 text-[10px] uppercase font-bold text-amber-600" onClick={() => { setEditingSupplierId(null); setNewSupplierName(""); setNewSupplierPhone(""); setNewSupplierAddress(""); }}>Cancelar Edición</Button></div>}
             </div>
             <ScrollArea className="h-[350px] border rounded-2xl p-4 bg-white shadow-inner">
               <div className="space-y-2">
@@ -2574,10 +2589,14 @@ function CatalogContent() {
                       <div className="p-2 bg-primary/10 text-primary rounded-lg"><Briefcase className="h-4 w-4" /></div>
                       <div>
                         <p className="text-sm font-bold text-slate-800 leading-none">{sup.name}</p>
-                        {sup.phone && <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1"><Phone className="h-2.5 w-2.5" /> {sup.phone}</p>}
+                        <div className="mt-1 space-y-0.5">
+                          {sup.phone && <p className="text-[10px] text-muted-foreground flex items-center gap-1 font-medium"><Phone className="h-2.5 w-2.5" /> {sup.phone}</p>}
+                          {sup.address && <p className="text-[10px] text-muted-foreground flex items-center gap-1 font-medium"><MapPin className="h-2.5 w-2.5" /> {sup.address}</p>}
+                        </div>
                       </div>
                     </div>
                     <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/5" onClick={() => handleEditSupplier(sup)} title="Editar Proveedor"><Edit className="h-4 w-4" /></Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/5" onClick={() => { setSelectedSupplierForHistory(sup.name); setIsSupplierHistoryOpen(true); }} title="Ver Historial de Compras"><History className="h-4 w-4" /></Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-rose-50" onClick={() => handleDeleteSupplier(sup.id)}><Trash2 className="h-4 w-4" /></Button>
                     </div>
@@ -2591,12 +2610,13 @@ function CatalogContent() {
 
       <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Categorías de Gasto</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Categorías de Productos</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="flex gap-2">
               <Input placeholder="Nueva categoría..." value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} />
-              <Button onClick={handleSaveCategory}><Plus className="h-4 w-4" /></Button>
+              <Button onClick={handleSaveCategory}>{editingCategoryId ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}</Button>
             </div>
+            {editingCategoryId && <Button variant="link" size="sm" className="h-6 text-[10px] uppercase font-bold text-amber-600" onClick={() => { setEditingCategoryId(null); setNewCategoryName(""); }}>Cancelar Edición</Button>}
             <ScrollArea className="h-[300px] border rounded-md p-2">
               {categories.map((cat: any) => (
                 <div key={cat.id} className="flex justify-between items-center p-2 border-b last:border-0 hover:bg-muted/5">
@@ -2605,6 +2625,9 @@ function CatalogContent() {
                     {cat.isFavorite && <Star className="h-3 w-3 fill-amber-400 text-amber-400" />}
                   </div>
                   <div className="flex gap-1">
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-primary" onClick={() => handleEditCategory(cat)} title="Editar Nombre">
+                      <Edit className="h-4 w-4" />
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { 
                       updateDocumentNonBlocking(doc(db, 'product_categories', cat.id), { isFavorite: !cat.isFavorite });
                     }}>
