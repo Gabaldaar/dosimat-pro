@@ -512,7 +512,10 @@ function CatalogContent() {
         manualPrice,
         manualCurrency,
         supplier: currentSup,
-        received: item.received || false
+        received: item.received || false,
+        refCostARS: prod?.costARS || 0,
+        refCostUSD: prod?.costUSD || 0,
+        refCostCurrency: prod?.costCurrency || (prod?.costUSD > 0 && !prod?.costARS ? 'USD' : 'ARS')
       };
     }).filter((i: any) => !i.received);
 
@@ -1632,13 +1635,13 @@ function CatalogContent() {
               <Label className="font-bold">Título / Identificador de la Orden</Label>
               <Input value={newPOTitle} onChange={(e) => setNewPOTitle(e.target.value)} placeholder="Ej: Reposición de Ferretería, Insumos de Verano..." />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end bg-muted/20 p-4 rounded-xl border border-dashed">
+            <div className="grid grid-cols-2 md:grid-cols-2 gap-4 items-end bg-muted/20 p-4 rounded-xl border border-dashed">
               <div className="space-y-2">
-                <Label className="text-[10px] font-bold uppercase text-muted-foreground">Filtrar por Categoría</Label>
+                <Label className="text-[10px] font-bold uppercase text-muted-foreground">Filtrar Categoría</Label>
                 <Select value={newPOCatFilter} onValueChange={setNewPOCatFilter}>
-                  <SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="bg-white h-10 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent className="max-h-60">
-                    <SelectItem value="all">Todas las Categorías</SelectItem>
+                    <SelectItem value="all">Todas</SelectItem>
                     {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -1651,7 +1654,7 @@ function CatalogContent() {
                     setNewPurchaseOrderItems([...newPOItems, { ...item, qtyToAdd: 1, lineId: Math.random().toString(36).substring(2, 9) }]);
                   }
                 }}>
-                  <SelectTrigger className="bg-white h-10"><SelectValue placeholder="Buscar ítem..." /></SelectTrigger>
+                  <SelectTrigger className="bg-white h-10 text-xs"><SelectValue placeholder="Buscar..." /></SelectTrigger>
                   <SelectContent className="max-h-60">
                     {items?.filter(i => !i.isService && (newPOCatFilter === 'all' || i.categoryId === newPOCatFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(i => (
                       <SelectItem key={i.id} value={i.id}>{i.name} (Stock: {i.stock || 0})</SelectItem>
@@ -1813,13 +1816,13 @@ function CatalogContent() {
           {purchaseOrderToView?.status !== 'completed' && (
             <div className="px-6 py-3 bg-muted/10 border-b flex flex-col md:flex-row gap-4 items-end">
               <div className="space-y-1 flex-1">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <Label className="text-[10px] font-black uppercase text-muted-foreground">Filtrar Categoría</Label>
                     <Select value={newPOCatFilter} onValueChange={setNewPOCatFilter}>
-                      <SelectTrigger className="bg-white h-9 text-xs"><SelectValue placeholder="Ver todas..." /></SelectTrigger>
+                      <SelectTrigger className="bg-white h-9 text-[10px]"><SelectValue placeholder="Todas" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">Todas las Categorías</SelectItem>
+                        <SelectItem value="all">Todas</SelectItem>
                         {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
@@ -1827,7 +1830,7 @@ function CatalogContent() {
                   <div className="space-y-1">
                     <Label className="text-[10px] font-black uppercase text-muted-foreground">Añadir más productos</Label>
                     <Select onValueChange={handleAddItemToPurchaseOrder}>
-                      <SelectTrigger className="bg-white h-9 text-xs"><SelectValue placeholder="Buscar ítem..." /></SelectTrigger>
+                      <SelectTrigger className="bg-white h-9 text-[10px]"><SelectValue placeholder="Añadir..." /></SelectTrigger>
                       <SelectContent className="max-h-60">
                         {items?.filter(i => !i.isService && (newPOCatFilter === 'all' || i.categoryId === newPOCatFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(i => (
                           <SelectItem key={i.id} value={i.id}>{i.name} (Stock: {i.stock || 0})</SelectItem>
@@ -1911,12 +1914,17 @@ function CatalogContent() {
                               const lineId = f.id;
                               const isZero = manualPurchasePrices[lineId] <= 0;
                               const currentCurrency = manualPurchaseCurrencies[lineId] || (f.manualCurrency || 'ARS');
+                              const refCost = f.refCostCurrency === 'USD' ? f.refCostUSD : f.refCostARS;
+                              const refSymbol = f.refCostCurrency === 'USD' ? 'u$s' : '$';
                               
                               return (
                                 <TableRow key={lineId} className="hover:bg-muted/5 h-10">
                                   <TableCell className="py-1">
                                     <p className="font-bold text-xs">{f.name}</p>
-                                    <p className="text-[8px] text-muted-foreground uppercase">Stock Actual: {f.available}</p>
+                                    <div className="flex gap-2 items-center">
+                                      <span className="text-[8px] text-muted-foreground uppercase font-black">Stock: {f.available}</span>
+                                      <span className="text-[8px] text-primary/60 uppercase font-black">Costo Ref: {refSymbol} {refCost.toLocaleString()}</span>
+                                    </div>
                                   </TableCell>
                                   <TableCell className="py-1">
                                     <Input 
@@ -1998,44 +2006,49 @@ function CatalogContent() {
                           const lineId = f.id;
                           const currentCurrency = manualPurchaseCurrencies[lineId] || (f.manualCurrency || 'ARS');
                           const isZero = manualPurchasePrices[lineId] <= 0;
+                          const refCost = f.refCostCurrency === 'USD' ? f.refCostUSD : f.refCostARS;
+                          const refSymbol = f.refCostCurrency === 'USD' ? 'u$s' : '$';
                           
                           return (
                             <Card key={lineId} className="p-4 border-muted shadow-sm">
                               <div className="flex justify-between items-start mb-4">
                                 <div className="space-y-1">
                                   <h5 className="font-black text-xs uppercase tracking-tight">{f.name}</h5>
-                                  <p className="text-[9px] text-muted-foreground font-bold">STOCK ACTUAL: {f.available}</p>
+                                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                                    <span className="text-[9px] text-muted-foreground font-black">STOCK: {f.available}</span>
+                                    <span className="text-[9px] text-primary font-black uppercase">REF: {refSymbol} {refCost.toLocaleString()}</span>
+                                  </div>
                                 </div>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" disabled={isOrdered} onClick={() => handleRemoveItemFromPurchaseOrder(lineId)}>
                                   <X className="h-4 w-4" />
                                 </Button>
                               </div>
-                              <div className="grid grid-cols-2 gap-4 mb-4">
+                              <div className="grid grid-cols-1 gap-4 mb-4">
                                 <div className="space-y-1.5">
-                                  <Label className="text-[9px] font-black uppercase text-muted-foreground">Cantidad</Label>
+                                  <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1 tracking-widest">Cantidad</Label>
                                   <div className="flex items-center gap-2">
-                                    <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" disabled={isOrdered} onClick={() => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: Math.max(0, (prev[lineId] ?? 0) - 1) }))}>
+                                    <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" disabled={isOrdered} onClick={() => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: Math.max(0, (prev[lineId] ?? 0) - 1) }))}>
                                       <Minus className="h-4 w-4" />
                                     </Button>
                                     <Input 
                                       type="number" 
-                                      className="h-10 text-center font-black text-lg" 
+                                      className="h-11 flex-1 text-center font-black text-xl bg-slate-50 border-slate-200" 
                                       disabled={isOrdered}
                                       value={manualPurchaseQtys[lineId] ?? 0}
                                       onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: Number(e.target.value) }))}
                                     />
-                                    <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" disabled={isOrdered} onClick={() => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: (prev[lineId] ?? 0) + 1 }))}>
+                                    <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" disabled={isOrdered} onClick={() => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: (prev[lineId] ?? 0) + 1 }))}>
                                       <Plus className="h-4 w-4" />
                                     </Button>
                                   </div>
                                 </div>
                                 <div className="space-y-1.5">
-                                  <Label className="text-[9px] font-black uppercase text-muted-foreground">Precio Compra</Label>
+                                  <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1 tracking-widest">Precio Compra</Label>
                                   <div className="relative">
-                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-black opacity-40">{currentCurrency === 'USD' ? 'u$s' : '$'}</span>
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black opacity-40">{currentCurrency === 'USD' ? 'u$s' : '$'}</span>
                                     <Input 
                                       type="number" 
-                                      className={cn("h-10 pl-6 text-center font-black text-lg", isZero ? "bg-rose-50 border-rose-300" : "bg-emerald-50/20 border-emerald-200")} 
+                                      className={cn("h-11 pl-10 text-center font-black text-xl bg-white", isZero ? "bg-rose-50 border-rose-300" : "border-emerald-200")} 
                                       disabled={isOrdered}
                                       value={manualPurchasePrices[lineId] ?? 0}
                                       onChange={(e) => setManualPurchasePrices(prev => ({ ...prev, [lineId]: Number(e.target.value) }))}
@@ -2045,22 +2058,22 @@ function CatalogContent() {
                               </div>
                               <div className="grid grid-cols-2 gap-4 items-end">
                                 <div className="space-y-1.5">
-                                  <Label className="text-[9px] font-black uppercase text-muted-foreground">Moneda</Label>
+                                  <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1">Moneda</Label>
                                   <Tabs 
                                     value={currentCurrency} 
                                     onValueChange={(v: any) => setManualPurchaseCurrencies(prev => ({ ...prev, [lineId]: v }))}
                                     className={cn("w-full", isOrdered && "pointer-events-none opacity-50")}
                                   >
-                                    <TabsList className="grid grid-cols-2 h-10 p-1 border">
-                                      <TabsTrigger value="ARS" className="text-[10px] font-black">ARS</TabsTrigger>
-                                      <TabsTrigger value="USD" className="text-[10px] font-black">USD</TabsTrigger>
+                                    <TabsList className="grid grid-cols-2 h-10 p-1 border bg-muted/20">
+                                      <TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
+                                      <TabsTrigger value="USD" className="text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
                                     </TabsList>
                                   </Tabs>
                                 </div>
                                 <div className="space-y-1.5">
-                                  <Label className="text-[9px] font-black uppercase text-muted-foreground">Subtotal</Label>
+                                  <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1">Subtotal</Label>
                                   <div className="h-10 flex items-center justify-end px-3 bg-slate-50 border rounded-lg">
-                                    <span className="font-black text-sm">{currentCurrency === 'USD' ? 'u$s' : '$'} {( (manualPurchaseQtys[lineId] ?? 0) * (manualPurchasePrices[lineId] ?? 0)).toLocaleString('es-AR')}</span>
+                                    <span className="font-black text-base">{currentCurrency === 'USD' ? 'u$s' : '$'} {( (manualPurchaseQtys[lineId] ?? 0) * (manualPurchasePrices[lineId] ?? 0)).toLocaleString('es-AR')}</span>
                                   </div>
                                 </div>
                               </div>
@@ -2082,8 +2095,8 @@ function CatalogContent() {
           <DialogFooter className="p-4 border-t bg-slate-50 shrink-0">
             <div className="flex justify-between items-center w-full">
               <div className="flex gap-4">
-                <div><p className="text-[8px] font-black text-slate-400 uppercase">Proyectado ARS</p><p className="text-xl font-black text-blue-700">${purchaseCalculations?.totalARS.toLocaleString('es-AR')}</p></div>
-                <div><p className="text-[8px] font-black text-slate-400 uppercase">Proyectado USD</p><p className="text-xl font-black text-emerald-600">u$s {purchaseCalculations?.totalUSD.toLocaleString('es-AR')}</p></div>
+                <div><p className="text-[8px] font-black text-slate-400 uppercase">Proyectado ARS</p><p className="text-lg md:text-xl font-black text-blue-700">${purchaseCalculations?.totalARS.toLocaleString('es-AR')}</p></div>
+                <div><p className="text-[8px] font-black text-slate-400 uppercase">Proyectado USD</p><p className="text-lg md:text-xl font-black text-emerald-600">u$s {purchaseCalculations?.totalUSD.toLocaleString('es-AR')}</p></div>
               </div>
               <Button onClick={handleCloseOrderView} className="font-bold">Cerrar</Button>
             </div>
@@ -2230,15 +2243,15 @@ function CatalogContent() {
             </div>
           </DialogHeader>
           <div className="px-4 py-2 shrink-0 border-b bg-muted/10">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-2 gap-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Filtrar artículos..." className="pl-10 h-10" value={auditSearch} onChange={(e) => setAuditSearch(e.target.value)} />
+                <Input placeholder="Filtrar..." className="pl-10 h-10 text-xs" value={auditSearch} onChange={(e) => setAuditSearch(e.target.value)} />
               </div>
               <Select value={auditCategoryFilter} onValueChange={setAuditCategoryFilter}>
-                <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-10 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent className="max-h-[60vh]">
-                  <SelectItem value="all">TODAS LAS CATEGORÍAS</SelectItem>
+                  <SelectItem value="all">TODAS</SelectItem>
                   {categories.map(c => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
                 </SelectContent>
               </Select>
