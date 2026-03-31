@@ -2284,7 +2284,7 @@ function CatalogContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items?.filter(i => !i.isService && i.trackStock !== false && i.name.toLowerCase().includes(auditSearch.toLowerCase()) && (auditCategoryFilter === "all" || i.categoryId === auditCategoryFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(item => (
+                  {items?.filter(i => !i.isService && i.name.toLowerCase().includes(auditSearch.toLowerCase()) && (auditCategoryFilter === "all" || i.categoryId === auditCategoryFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(item => (
                     <TableRow key={item.id} className="h-12 hover:bg-muted/5 transition-colors">
                       <TableCell className="py-1"><p className="font-bold text-xs">{item.name}</p></TableCell>
                       <TableCell className="text-center py-1">
@@ -2318,140 +2318,6 @@ function CatalogContent() {
           </div>
           <DialogFooter className="p-3 bg-slate-50 border-t shrink-0">
             <Button onClick={() => setIsAuditOpen(false)} className="w-full h-10 font-bold text-sm">Cerrar Auditoría</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!orderToView} onOpenChange={handleCloseOrderView}>
-        <DialogContent className="max-w-6xl h-[95vh] flex flex-col p-0 w-[95vw]">
-          <DialogHeader className="p-4 border-b shrink-0 bg-amber-500/5">
-            <div className="flex flex-col md:flex-row justify-between items-start pr-8 gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Factory className="h-5 w-5 text-amber-600" />
-                  <DialogTitle className="text-xl font-black uppercase text-amber-700 tracking-tighter">Plan de Producción #{liveOrderToView?.id.toUpperCase().slice(0, 6)}</DialogTitle>
-                </div>
-                <div className="flex items-center gap-3">
-                  <DialogDescription className="text-base text-amber-800 font-bold">Fabricar <b>{liveOrderToView?.productName}</b></DialogDescription>
-                  {liveOrderToView?.status !== 'completed' && (
-                    <div className="flex items-center gap-2 bg-amber-100 px-2 py-1 rounded-xl border border-amber-200 shadow-inner">
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-amber-700" onClick={() => { const newQty = Math.max(1, liveOrderToView!.quantity - 1); updateDocumentNonBlocking(doc(db, 'production_orders', liveOrderToView!.id), { quantity: newQty }); }}><Minus className="h-4 w-4" /></Button>
-                      <span className="text-sm font-black text-amber-900 tabular-nums">{liveOrderToView?.quantity}</span>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-amber-700" onClick={() => { const newQty = liveOrderToView!.quantity + 1; updateDocumentNonBlocking(doc(db, 'production_orders', liveOrderToView!.id), { quantity: newQty }); }}><Plus className="h-4 w-4" /></Button>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Button variant="outline" size="sm" className="h-9 gap-2 font-bold text-xs bg-white border-amber-200 text-amber-700" onClick={() => handlePrintProductionOrder(liveOrderToView)}>
-                  <Printer className="h-4 w-4" /> IMPRIMIR PLAN
-                </Button>
-                <Badge className={cn("font-black uppercase text-[10px] px-3 py-1", { draft: "bg-slate-100 text-slate-600", pending_purchase: "bg-rose-100 text-rose-700 border-rose-200", ready: "bg-blue-100 text-blue-700 border-blue-200", completed: "bg-emerald-100 text-emerald-700 border-emerald-200" }[liveOrderToView?.status as string])}>
-                  {liveOrderToView?.status === 'pending_purchase' ? 'FALTAN MATERIALES' : liveOrderToView?.status === 'ready' ? 'LISTO PARA ARMAR' : liveOrderToView?.status}
-                </Badge>
-              </div>
-            </div>
-          </DialogHeader>
-          
-          <div className="flex-1 min-0 overflow-y-auto p-6 space-y-6">
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                  <Layers className="h-4 w-4" /> Necesidades de Insumos (Explosión)
-                </h3>
-                {liveOrderToView?.purchaseOrderId && (
-                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 font-black text-[9px] gap-1.5 px-3">
-                    <Check className="h-3 w-3" /> COMPRA VINCULADA: #{liveOrderToView.purchaseOrderId.slice(0,4).toUpperCase()}
-                  </Badge>
-                )}
-              </div>
-              
-              <div className="border rounded-2xl bg-white shadow-md overflow-hidden">
-                <Table>
-                  <TableHeader className="bg-slate-50">
-                    <TableRow>
-                      <TableHead className="text-[10px] font-black uppercase">Componente</TableHead>
-                      <TableHead className="text-center font-black text-[10px] uppercase">Necesario</TableHead>
-                      <TableHead className="text-center font-black text-[10px] uppercase">En Stock</TableHead>
-                      <TableHead className="text-center font-black text-[10px] uppercase">Faltante</TableHead>
-                      <TableHead className="text-[10px] font-black uppercase">Proveedor Sugerido</TableHead>
-                      <TableHead className="text-center font-black text-[10px] uppercase w-20">Estado</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {explosionSummary?.all.map(f => {
-                      const deficit = f.required - f.available;
-                      const hasMissing = deficit > 0;
-                      return (
-                        <TableRow key={f.id} className="h-14">
-                          <TableCell className="py-2">
-                            <p className="font-bold text-sm leading-tight">{f.name}</p>
-                            <p className="text-[9px] text-muted-foreground uppercase">{f.isCompuesto ? 'Parte Compuesta' : 'Insumo Directo'}</p>
-                          </TableCell>
-                          <TableCell className="text-center font-black text-slate-800">{f.required}</TableCell>
-                          <TableCell className="text-center font-bold text-slate-600">{f.available}</TableCell>
-                          <TableCell className="text-center">
-                            <span className={cn("font-black text-sm", hasMissing ? "text-rose-600" : "text-emerald-600")}>
-                              {hasMissing ? deficit : '-'}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-xs font-bold text-slate-500 uppercase">{f.supplier}</TableCell>
-                          <TableCell className="text-center">
-                            {hasMissing ? (
-                              <div className="flex justify-center"><AlertTriangle className="h-5 w-5 text-amber-500" /></div>
-                            ) : (
-                              <div className="flex justify-center"><CheckCircle2 className="h-5 w-5 text-emerald-500" /></div>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-
-            {liveOrderToView?.status === 'pending_purchase' && (
-              <Card className="bg-amber-50 border-amber-200 border-dashed p-6">
-                <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                  <div className="space-y-1">
-                    <h4 className="text-lg font-black text-amber-800">
-                      {liveOrderToView.purchaseOrderId ? 'Sincronizar Pedido de Compra' : 'Faltan Materiales para Fabricar'}
-                    </h4>
-                    <p className="text-sm text-amber-700">
-                      {liveOrderToView.purchaseOrderId 
-                        ? 'Ya existe una compra vinculada. Haz clic para agregar los faltantes adicionales según la nueva cantidad.'
-                        : `Se han detectado ${explosionSummary?.all.filter(f => (f.required - f.available) > 0).length} ítems sin stock suficiente.`}
-                    </p>
-                  </div>
-                  <Button onClick={handleGeneratePOFromProduction} className="bg-amber-600 hover:bg-amber-700 font-black h-12 px-8 shadow-lg shadow-amber-200 gap-2">
-                    {liveOrderToView.purchaseOrderId ? <RefreshCw className="h-5 w-5" /> : <ShoppingCart className="h-5 w-5" />}
-                    {liveOrderToView.purchaseOrderId ? 'ACTUALIZAR COMPRA ASOCIADA' : 'GENERAR ORDEN DE COMPRA POR FALTANTES'}
-                  </Button>
-                </div>
-              </Card>
-            )}
-          </div>
-
-          <DialogFooter className="p-4 border-t bg-slate-50 shrink-0">
-            <div className="flex justify-between items-center w-full">
-              <div>
-                {liveOrderToView?.purchaseOrderId && (
-                  <Button variant="link" className="text-xs font-black text-emerald-700 gap-1.5 p-0 h-auto" onClick={() => { 
-                    const po = purchaseOrders?.find(p => p.id === liveOrderToView.purchaseOrderId);
-                    if (po) { setPurchaseOrderToView(po); setOrderToView(null); setActiveTab("purchases"); }
-                  }}>
-                    <ExternalLink className="h-3 w-3" /> VER ORDEN DE COMPRA #{liveOrderToView.purchaseOrderId.slice(0,4).toUpperCase()}
-                  </Button>
-                )}
-              </div>
-              <div className="flex gap-3">
-                <Button variant="ghost" onClick={handleCloseOrderView} className="font-bold">Cerrar</Button>
-                {liveOrderToView?.status === 'ready' && (
-                  <Button onClick={handleAssembleFinal} className="bg-blue-600 hover:bg-blue-700 px-8 font-black shadow-lg h-12 uppercase tracking-widest"><Hammer className="mr-2 h-5 w-5" /> FINALIZAR ARMADO</Button>
-                )}
-              </div>
-            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2517,9 +2383,38 @@ function CatalogContent() {
                 )}
               </div>
               <div className="flex flex-wrap gap-4">
-                <div className="flex items-center gap-3 p-4 border rounded-2xl bg-white shadow-sm flex-1 min-w-[200px]"><Switch checked={formData.isService} onCheckedChange={(v) => { setFormData({...formData, isService: v, trackStock: !v && formData.trackStock, isCompuesto: v ? false : formData.isCompuesto}); }} /><div><Label className="font-bold">Es un servicio</Label></div></div>
-                {!formData.isService && <div className="flex items-center gap-3 p-4 border rounded-2xl bg-amber-50/50 border-amber-200 shadow-sm flex-1 min-w-[200px]"><Switch checked={formData.isCompuesto} onCheckedChange={(v) => { setFormData({...formData, isCompuesto: v, trackStock: v ? true : formData.trackStock}); }} /><div><Label className="font-bold text-amber-800">Producto compuesto</Label></div></div>}
-                {!formData.isService && formData.trackStock && <div className="flex gap-4 flex-1 min-w-[200px]"><div className="space-y-1 flex-1"><Label className="font-bold text-xs uppercase text-muted-foreground">Stock Actual</Label><Input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} className="h-11 font-black" /></div><div className="space-y-1 flex-1"><Label className="font-bold text-rose-600 text-xs uppercase">Mínimo Crítico</Label><Input type="number" value={formData.minStock} onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} className="h-11 border-rose-200 font-black" /></div></div>}
+                <div className="flex items-center gap-3 p-4 border rounded-2xl bg-white shadow-sm flex-1 min-w-[200px]">
+                  <Switch checked={formData.isService} onCheckedChange={(v) => { 
+                    setFormData({...formData, isService: v, trackStock: !v, isCompuesto: v ? false : formData.isCompuesto}); 
+                  }} />
+                  <div><Label className="font-bold">Es un servicio</Label></div>
+                </div>
+                {!formData.isService && (
+                  <div className="flex items-center gap-3 p-4 border rounded-2xl bg-amber-50/50 border-amber-200 shadow-sm flex-1 min-w-[200px]">
+                    <Switch checked={formData.isCompuesto} onCheckedChange={(v) => { 
+                      setFormData({...formData, isCompuesto: v, trackStock: v ? true : formData.trackStock}); 
+                    }} />
+                    <div><Label className="font-bold text-amber-800">Producto compuesto</Label></div>
+                  </div>
+                )}
+                {!formData.isService && !formData.isCompuesto && (
+                  <div className="flex items-center gap-3 p-4 border rounded-2xl bg-white shadow-sm flex-1 min-w-[200px]">
+                    <Switch checked={formData.trackStock} onCheckedChange={(v) => setFormData({...formData, trackStock: v})} />
+                    <div><Label className="font-bold">Controlar Stock</Label></div>
+                  </div>
+                )}
+                {!formData.isService && formData.trackStock && (
+                  <div className="flex gap-4 flex-1 min-w-[200px]">
+                    <div className="space-y-1 flex-1">
+                      <Label className="font-bold text-xs uppercase text-muted-foreground">Stock Actual</Label>
+                      <Input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} className="h-11 font-black" />
+                    </div>
+                    <div className="space-y-1 flex-1">
+                      <Label className="font-bold text-rose-600 text-xs uppercase">Mínimo Crítico</Label>
+                      <Input type="number" value={formData.minStock} onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} className="h-11 border-rose-200 font-black" />
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
             
@@ -2888,7 +2783,7 @@ function CatalogContent() {
             </div>
           </div>
 
-          <div className="mt-12 grid grid-cols-2 gap-12">
+          <div className="mt-6 grid grid-cols-2 gap-12">
             <div className="border-t-2 border-slate-300 pt-2 h-20">
               <p className="text-[8px] font-black uppercase text-slate-400">Operario Responsable (Firma)</p>
             </div>
