@@ -1361,6 +1361,11 @@ function CatalogContent() {
     setFormData(prev => ({ ...prev, components: newComps }));
   }
 
+  const handleOpenSupplierHistory = (supplierName: string) => {
+    setSelectedSupplierForHistory(supplierName);
+    setIsSupplierHistoryOpen(true);
+  };
+
   const FilterPanel = () => (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -2074,7 +2079,7 @@ function CatalogContent() {
               <div className="space-y-2">
                 <Label className="text-[10px] font-bold uppercase text-muted-foreground">Filtrar Categoría</Label>
                 <Select value={newPOCatFilter} onValueChange={setNewPOCatFilter}>
-                  <SelectTrigger className="bg-white h-10 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="bg-white h-10 text-xs"><SelectValue placeholder="Todas" /></SelectTrigger>
                   <SelectContent className="max-h-60">
                     <SelectItem value="all">Todas</SelectItem>
                     {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
@@ -2697,8 +2702,9 @@ function CatalogContent() {
                       </div>
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => handleEditSupplier(sup)}><Edit className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setSupplierToDelete(sup)}><Trash2 className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => handleOpenSupplierHistory(sup.name)} title="Ver Historial de Compras"><History className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => handleEditSupplier(sup)} title="Editar Proveedor"><Edit className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setSupplierToDelete(sup)} title="Eliminar Proveedor"><Trash2 className="h-4 w-4" /></Button>
                     </div>
                   </div>
                 ))}
@@ -2737,6 +2743,47 @@ function CatalogContent() {
             </Table>
           </div>
           <DialogFooter className="p-4 border-t bg-slate-50"><Button onClick={() => setIsPurchaseHistoryOpen(false)} className="font-bold">Cerrar</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isSupplierHistoryOpen} onOpenChange={setIsSupplierHistoryOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="p-6 border-b shrink-0 bg-emerald-50">
+            <div className="flex items-center gap-3">
+              <History className="h-6 w-6 text-emerald-600" />
+              <div>
+                <DialogTitle className="text-xl font-black uppercase text-emerald-700 tracking-tighter">Historial de Compras al Proveedor</DialogTitle>
+                <DialogDescription className="text-[10px] font-bold uppercase text-slate-500">{selectedSupplierForHistory}</DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto">
+            <Table>
+              <TableHeader className="bg-slate-50 sticky top-0 z-10">
+                <TableRow>
+                  <TableHead className="text-[9px] font-black uppercase">Fecha</TableHead>
+                  <TableHead className="text-[9px] font-black uppercase">Producto</TableHead>
+                  <TableHead className="text-center font-black text-[9px] uppercase">Cant.</TableHead>
+                  <TableHead className="text-right font-black text-[9px] uppercase">Precio Unit.</TableHead>
+                  <TableHead className="text-right font-black text-[9px] uppercase">Subtotal</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(!allPurchases || allPurchases.filter(p => p.supplierName === selectedSupplierForHistory).length === 0) ? (
+                  <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground italic">No se registran compras para este proveedor.</TableCell></TableRow>
+                ) : allPurchases.filter(p => p.supplierName === selectedSupplierForHistory).map(p => (
+                  <TableRow key={p.id} className="h-12">
+                    <TableCell className="text-xs font-bold">{new Date(p.date).toLocaleDateString('es-AR')}</TableCell>
+                    <TableCell className="text-xs font-black uppercase text-slate-600">{p.productName}</TableCell>
+                    <TableCell className="text-center font-bold">{p.quantity}</TableCell>
+                    <TableCell className="text-right font-black text-emerald-700">{p.currency === 'USD' ? 'u$s' : '$'} {p.price.toLocaleString('es-AR')}</TableCell>
+                    <TableCell className="text-right font-black">{p.currency === 'USD' ? 'u$s' : '$'} {(p.quantity * p.price).toLocaleString('es-AR')}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter className="p-4 border-t bg-slate-50"><Button onClick={() => setIsSupplierHistoryOpen(false)} className="font-bold">Cerrar Historial</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
