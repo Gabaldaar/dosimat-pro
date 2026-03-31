@@ -308,6 +308,7 @@ function TransactionsContent() {
   const finalConvertedAmount = useMemo(() => {
     if (!isCrossCurrency || !selectedAccountForManual) return manualAmount;
     const baseAmount = manualAmount * (activeTab === 'adjustment' ? Number(adjustmentSign) : activeTab === 'Expense' ? -1 : 1);
+    const sign = (activeTab === 'adjustment' ? Number(adjustmentSign) : activeTab === 'Expense' ? -1 : 1);
     if (manualCurrency === 'USD' && selectedAccountForManual.currency === 'ARS') return baseAmount * exchangeRate;
     if (manualCurrency === 'ARS' && selectedAccountForManual.currency === 'USD') return baseAmount / exchangeRate;
     return baseAmount;
@@ -751,7 +752,7 @@ function TransactionsContent() {
                 <CardContent className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-muted/20 rounded-xl border border-dashed">
                     <div className="space-y-2"><Label className="flex items-center gap-2 text-primary font-bold uppercase text-[10px] tracking-widest"><User className="h-3 w-3" /> Cliente</Label>
-                      <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
+                      <Select value={selectedCustomerId || ""} onValueChange={setSelectedCustomerId}>
                         <SelectTrigger className="bg-white"><SelectValue placeholder="Buscar cliente..." /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">GLOBAL / SIN CLIENTE</SelectItem>
@@ -771,7 +772,7 @@ function TransactionsContent() {
                             <Label className="text-xs font-bold uppercase">{activeTab === 'cobro' ? 'Monto a Cobrar' : 'Monto'}</Label>
                             <div className="relative">
                               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black opacity-40">{manualCurrency === 'USD' ? 'u$s' : '$'}</span>
-                              <Input type="number" value={manualAmount} onChange={(e) => setManualAmount(Number(e.target.value))} className="bg-white font-black text-xl h-12 pl-10" />
+                              <Input type="number" value={manualAmount ?? 0} onChange={(e) => setManualAmount(Number(e.target.value))} className="bg-white font-black text-xl h-12 pl-10" />
                             </div>
                           </div>
                           <div className="space-y-2"><Label className="text-xs font-bold uppercase">Moneda Operación</Label>
@@ -783,7 +784,8 @@ function TransactionsContent() {
                             </Tabs>
                           </div>
                           <div className="space-y-2"><Label className="text-xs font-bold uppercase">Caja Destino</Label>
-                            <Select value={manualAccountId} onValueChange={setManualAccountId}><SelectTrigger className="bg-white h-12"><SelectValue /></SelectTrigger>
+                            <Select value={manualAccountId || "pending"} onValueChange={setManualAccountId}>
+                              <SelectTrigger className="bg-white h-12"><SelectValue /></SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="pending">A CUENTA</SelectItem>
                                 {accounts?.map(a => (<SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>))}
@@ -812,7 +814,7 @@ function TransactionsContent() {
                                 <Label className="text-xs font-bold flex items-center gap-2">TIPO DE CAMBIO <Badge className="text-[8px] bg-emerald-600">SUGERIDO</Badge></Label>
                                 <div className="relative">
                                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black opacity-40">$</span>
-                                  <Input type="number" value={exchangeRate} onChange={(e) => setExchangeRate(Number(e.target.value))} className="bg-white font-black text-lg h-12 pl-10 border-primary/30" />
+                                  <Input type="number" value={exchangeRate ?? 1} onChange={(e) => setExchangeRate(Number(e.target.value))} className="bg-white font-black text-lg h-12 pl-10 border-primary/30" />
                                 </div>
                               </div>
                               <div className="p-4 bg-primary text-white rounded-2xl flex flex-col justify-center shadow-lg">
@@ -821,7 +823,7 @@ function TransactionsContent() {
                                   <span className="text-2xl font-black">{selectedAccountForManual.currency === 'USD' ? 'u$s' : '$'}</span>
                                   <Input 
                                     type="number" 
-                                    value={convertedAmountOverride !== null ? convertedAmountOverride : Math.abs(finalConvertedAmount)} 
+                                    value={(convertedAmountOverride !== null ? convertedAmountOverride : Math.abs(finalConvertedAmount)) ?? 0} 
                                     onChange={(e) => setConvertedAmountOverride(Number(e.target.value))}
                                     className="bg-white border-primary/30 text-2xl font-black text-primary h-12"
                                   />
@@ -861,7 +863,7 @@ function TransactionsContent() {
                                         <Input 
                                           type="number" 
                                           className="h-11 text-right font-black border-emerald-300 text-lg bg-emerald-50/30" 
-                                          value={imputations[tx.id] || ""} 
+                                          value={imputations[tx.id] ?? ""} 
                                           onChange={(e) => setImputations({...imputations, [tx.id]: Number(e.target.value)})}
                                           placeholder="0"
                                         />
@@ -901,7 +903,7 @@ function TransactionsContent() {
                                           <Input 
                                             type="number" 
                                             className="h-8 text-right font-black border-emerald-200" 
-                                            value={imputations[tx.id] || ""} 
+                                            value={imputations[tx.id] ?? ""} 
                                             onChange={(e) => setImputations({...imputations, [tx.id]: Number(e.target.value)})}
                                             placeholder="0"
                                           />
@@ -960,11 +962,11 @@ function TransactionsContent() {
                               {selectedItems.map((item, i) => (
                                 <TableRow key={i}>
                                   <TableCell className="font-bold text-xs">{item.name}</TableCell>
-                                  <TableCell><Input type="number" value={item.qty} className="h-8 text-center font-black px-1" onChange={(e) => { const n = [...selectedItems]; n[i].qty = Number(e.target.value); setSelectedItems(n); }} /></TableCell>
-                                  <TableCell><Input type="number" value={item.price} className="h-8 text-center font-black px-1" onChange={(e) => { const n = [...selectedItems]; n[i].price = Number(e.target.value); setSelectedItems(n); }} /></TableCell>
-                                  <TableCell><Input type="number" value={item.discount} className="h-8 text-center font-bold px-1" onChange={(e) => { const n = [...selectedItems]; n[i].discount = Number(e.target.value); setSelectedItems(n); }} /></TableCell>
+                                  <TableCell><Input type="number" value={item.qty ?? 0} className="h-8 text-center font-black px-1" onChange={(e) => { const n = [...selectedItems]; n[i].qty = Number(e.target.value); setSelectedItems(n); }} /></TableCell>
+                                  <TableCell><Input type="number" value={item.price ?? 0} className="h-8 text-center font-black px-1" onChange={(e) => { const n = [...selectedItems]; n[i].price = Number(e.target.value); setSelectedItems(n); }} /></TableCell>
+                                  <TableCell><Input type="number" value={item.discount ?? 0} className="h-8 text-center font-bold px-1" onChange={(e) => { const n = [...selectedItems]; n[i].discount = Number(e.target.value); setSelectedItems(n); }} /></TableCell>
                                   <TableCell>
-                                    <Tabs value={item.currency} onValueChange={(v) => { const n = [...selectedItems]; n[i].currency = v; setSelectedItems(n); }} className="w-full">
+                                    <Tabs value={item.currency || "ARS"} onValueChange={(v) => { const n = [...selectedItems]; n[i].currency = v; setSelectedItems(n); }} className="w-full">
                                       <TabsList className="grid grid-cols-2 h-7 p-0.5 border">
                                         <TabsTrigger value="ARS" className="text-[7px] font-black data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
                                         <TabsTrigger value="USD" className="text-[7px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
@@ -994,7 +996,7 @@ function TransactionsContent() {
                                   <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1 tracking-widest">Cantidad</Label>
                                   <Input 
                                     type="number" 
-                                    value={item.qty} 
+                                    value={item.qty ?? 0} 
                                     className="h-12 text-center font-black text-xl bg-slate-50 border-slate-200" 
                                     onChange={(e) => { const n = [...selectedItems]; n[i].qty = Number(e.target.value); setSelectedItems(n); }} 
                                   />
@@ -1003,7 +1005,7 @@ function TransactionsContent() {
                                   <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1 tracking-widest">Precio Unit.</Label>
                                   <Input 
                                     type="number" 
-                                    value={item.price} 
+                                    value={item.price ?? 0} 
                                     className="h-12 text-center font-black text-xl bg-slate-50 border-slate-200" 
                                     onChange={(e) => { const n = [...selectedItems]; n[i].price = Number(e.target.value); setSelectedItems(n); }} 
                                   />
@@ -1015,14 +1017,14 @@ function TransactionsContent() {
                                   <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1 tracking-widest">Descuento (%)</Label>
                                   <Input 
                                     type="number" 
-                                    value={item.discount} 
+                                    value={item.discount ?? 0} 
                                     className="h-11 text-center font-bold bg-white border-slate-200" 
                                     onChange={(e) => { const n = [...selectedItems]; n[i].discount = Number(e.target.value); setSelectedItems(n); }} 
                                   />
                                 </div>
                                 <div className="space-y-1.5">
                                   <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1 tracking-widest">Moneda</Label>
-                                  <Tabs value={item.currency} onValueChange={(v) => { const n = [...selectedItems]; n[i].currency = v; setSelectedItems(n); }} className="w-full">
+                                  <Tabs value={item.currency || "ARS"} onValueChange={(v) => { const n = [...selectedItems]; n[i].currency = v; setSelectedItems(n); }} className="w-full">
                                     <TabsList className="grid grid-cols-2 h-11 p-1 border bg-muted/20">
                                       <TabsTrigger value="ARS" className="text-[9px] font-black data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
                                       <TabsTrigger value="USD" className="text-[9px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
@@ -1047,7 +1049,7 @@ function TransactionsContent() {
                     <Label className="font-bold uppercase text-[10px] tracking-[0.2em] text-muted-foreground flex items-center gap-2">
                       <Receipt className="h-3 w-3" /> Notas / Concepto de Operación
                     </Label>
-                    <Input value={txDescription} onChange={(e) => setTxDescription(e.target.value)} placeholder="Ej: Pago de factura #123, Reposición zona norte..." className="bg-white h-12 italic border-primary/10 shadow-inner" />
+                    <Input value={txDescription || ""} onChange={(e) => setTxDescription(e.target.value)} placeholder="Ej: Pago de factura #123, Reposición zona norte..." className="bg-white h-12 italic border-primary/10 shadow-inner" />
                   </div>
                 </CardContent>
               </Card>
@@ -1060,13 +1062,13 @@ function TransactionsContent() {
                       {['ARS', 'USD'].map(curr => {
                         const total = cartTotals[curr as 'ARS'|'USD'];
                         if (total <= 0) return null;
-                        const paid = paidAmounts[curr];
+                        const paid = paidAmounts[curr] ?? 0;
                         const debt = total - paid;
                         return (
                           <div key={curr} className="p-4 rounded-2xl border bg-muted/10 space-y-3 shadow-inner">
                             <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase text-muted-foreground">Total {curr}:</span><span className="text-2xl font-black">{curr==='USD'?'u$s':'$'} {total.toLocaleString()}</span></div>
-                            <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-emerald-700">Abonado hoy ({curr}):</Label><Input type="number" value={paid} onChange={(e) => setPaidAmounts({...paidAmounts, [curr]: Number(e.target.value)})} className="h-12 border-emerald-200 font-black text-2xl text-emerald-700 bg-white" /></div>
-                            <div className="space-y-1"><Label className="text-[10px] uppercase font-black">Caja de Cobro:</Label><Select value={destinationAccounts[curr]} onValueChange={(v) => setDestinationAccounts({...destinationAccounts, [curr]: v})}><SelectTrigger className="h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">A CUENTA / SIN CAJA</SelectItem>{accounts?.filter(a => a.currency === curr).map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent></Select></div>
+                            <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-emerald-700">Abonado hoy ({curr}):</Label><Input type="number" value={paid ?? 0} onChange={(e) => setPaidAmounts({...paidAmounts, [curr]: Number(e.target.value)})} className="h-12 border-emerald-200 font-black text-2xl text-emerald-700 bg-white" /></div>
+                            <div className="space-y-1"><Label className="text-[10px] uppercase font-black">Caja de Cobro:</Label><Select value={destinationAccounts[curr] || "pending"} onValueChange={(v) => setDestinationAccounts({...destinationAccounts, [curr]: v})}><SelectTrigger className="h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">A CUENTA / SIN CAJA</SelectItem>{accounts?.filter(a => a.currency === curr).map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent></Select></div>
                             {debt > 0 && (
                               <div className="pt-2 border-t border-dashed mt-2 text-rose-600 font-black text-[10px] flex justify-between uppercase italic">
                                 <span>Quedará a cuenta:</span>
@@ -1082,7 +1084,7 @@ function TransactionsContent() {
                     <div className="p-5 rounded-2xl border bg-emerald-50 mb-4 shadow-inner space-y-4">
                       <div>
                         <p className="text-[10px] font-black uppercase text-emerald-700 tracking-widest mb-2">Monto de Operación ({manualCurrency})</p>
-                        <p className="text-4xl font-black text-emerald-800">{manualCurrency === 'USD' ? 'u$s' : '$'} {manualAmount.toLocaleString()}</p>
+                        <p className="text-4xl font-black text-emerald-800">{manualCurrency === 'USD' ? 'u$s' : '$'} {(manualAmount ?? 0).toLocaleString()}</p>
                       </div>
                       {isCrossCurrency && selectedAccountForManual && (
                         <div className="pt-3 border-t border-emerald-200">
@@ -1091,7 +1093,7 @@ function TransactionsContent() {
                             <span className="text-2xl font-black text-primary">{selectedAccountForManual.currency === 'USD' ? 'u$s' : '$'}</span>
                             <Input 
                               type="number" 
-                              value={convertedAmountOverride !== null ? convertedAmountOverride : Math.abs(finalConvertedAmount)} 
+                              value={(convertedAmountOverride !== null ? convertedAmountOverride : Math.abs(finalConvertedAmount)) ?? 0} 
                               onChange={(e) => setConvertedAmountOverride(Number(e.target.value))}
                               className="bg-white border-primary/30 text-2xl font-black text-primary h-12"
                             />
@@ -1112,17 +1114,17 @@ function TransactionsContent() {
                 <Card className="bg-emerald-50 border-l-4 border-l-emerald-500 shadow-sm"><CardContent className="p-4 flex items-center justify-between"><div><p className="text-[10px] font-black uppercase text-emerald-700/60 tracking-widest">Flujo Neto USD</p><h3 className={cn("text-2xl font-black mt-1", filteredTotals.usd < 0 ? "text-rose-600" : "text-emerald-600")}>u$s {filteredTotals.usd.toLocaleString()}</h3></div><TrendingUp className="h-8 w-8 text-emerald-500/20" /></CardContent></Card>
               </div>
               <Card className="glass-card p-4 flex flex-wrap gap-4 items-end border-dashed border-primary/20">
-                   <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Cliente</Label><Select value={filterCustomer} onValueChange={setFilterCustomer}><SelectTrigger className="w-[180px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos los clientes</SelectItem>{sortedCustomers.map(c => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}</SelectContent></Select></div>
-                   <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Caja</Label><Select value={filterAccount} onValueChange={setFilterAccount}><SelectTrigger className="w-[160px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas las cajas</SelectItem><SelectItem value="null">Sin Caja / A Cuenta</SelectItem>{accounts?.map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent></Select></div>
-                   <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Flujo</Label><Select value={filterFlow} onValueChange={setFilterFlow}><SelectTrigger className="w-[120px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos los flujos</SelectItem><SelectItem value="income" className="text-emerald-600 font-bold">Ingresos</SelectItem><SelectItem value="expense" className="text-rose-600 font-bold">Egresos</SelectItem></SelectContent></Select></div>
-                   <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Operación</Label><Select value={filterOpType} onValueChange={setFilterOpType}><SelectTrigger className="w-[140px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>
+                   <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Cliente</Label><Select value={filterCustomer || "all"} onValueChange={setFilterCustomer}><SelectTrigger className="w-[180px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos los clientes</SelectItem>{sortedCustomers.map(c => (<SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre}</SelectItem>))}</SelectContent></Select></div>
+                   <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Caja</Label><Select value={filterAccount || "all"} onValueChange={setFilterAccount}><SelectTrigger className="w-[160px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas las cajas</SelectItem><SelectItem value="null">Sin Caja / A Cuenta</SelectItem>{accounts?.map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent></Select></div>
+                   <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Flujo</Label><Select value={filterFlow || "all"} onValueChange={setFilterFlow}><SelectTrigger className="w-[120px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos los flujos</SelectItem><SelectItem value="income" className="text-emerald-600 font-bold">Ingresos</SelectItem><SelectItem value="expense" className="text-rose-600 font-bold">Egresos</SelectItem></SelectContent></Select></div>
+                   <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Operación</Label><Select value={filterOpType || "all"} onValueChange={setFilterOpType}><SelectTrigger className="w-[140px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>
                      {Object.keys(txTypeMap)
                       .filter(k => !['Adjustment','Expense', 'refill', 'adjustment'].includes(k))
                       .concat(['adjustment'])
                       .map(k => <SelectItem key={k} value={k}>{txTypeMap[k].label}</SelectItem>)}
                    </SelectContent></Select></div>
-                   <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Desde</Label><Input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="h-10 w-[140px] bg-white" /></div>
-                   <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Hasta</Label><Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="h-10 w-[140px] bg-white" /></div>
+                   <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Desde</Label><Input type="date" value={filterStartDate || ""} onChange={(e) => setFilterStartDate(e.target.value)} className="h-10 w-[140px] bg-white" /></div>
+                   <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Hasta</Label><Input type="date" value={filterEndDate || ""} onChange={(e) => setFilterEndDate(e.target.value)} className="h-10 w-[140px] bg-white" /></div>
                    <div className="flex gap-2">
                      <Button variant="outline" size="icon" className="h-10 w-10 border-primary/20" onClick={() => { setFilterCustomer("all"); setFilterAccount("all"); setFilterStartDate(""); setFilterEndDate(""); setFilterOpType("all"); setFilterFlow("all"); }}><FilterX className="h-4 w-4" /></Button>
                      <Button variant="outline" size="icon" className="h-10 w-10 border-emerald-200 text-emerald-700 bg-emerald-50" onClick={handlePrintPDF} title="Generar reporte PDF de la selección"><Printer className="h-4 w-4" /></Button>
@@ -1449,7 +1451,7 @@ function TransactionsContent() {
                 )}
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Seleccionar Plantilla</Label>
-                  <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                  <Select value={selectedTemplateId || ""} onValueChange={setSelectedTemplateId}>
                     <SelectTrigger className="bg-white h-11"><SelectValue placeholder="Elegir..." /></SelectTrigger>
                     <SelectContent>{(isWsDialogOpen ? wsTemplates : emailTemplates)?.map((t: any) => (<SelectItem key={t.id} value={t.id} className="font-bold">{t.name}</SelectItem>))}</SelectContent>
                   </Select>

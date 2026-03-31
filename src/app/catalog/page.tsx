@@ -1800,12 +1800,12 @@ function CatalogContent() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Nombre del Ítem</Label>
-                  <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="h-12 text-lg font-bold" />
+                  <Input value={formData.name || ""} onChange={(e) => setFormData({...formData, name: e.target.value})} className="h-12 text-lg font-bold" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Categoría</Label>
-                    <Select value={formData.categoryId} onValueChange={(v) => setFormData({...formData, categoryId: v})}>
+                    <Select value={formData.categoryId || ""} onValueChange={(v) => setFormData({...formData, categoryId: v})}>
                       <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
                       <SelectContent>
                         {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
@@ -1814,7 +1814,7 @@ function CatalogContent() {
                   </div>
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Proveedor Preferido</Label>
-                    <Select value={formData.supplier} onValueChange={(v) => setFormData({...formData, supplier: v})}>
+                    <Select value={formData.supplier || "none"} onValueChange={(v) => setFormData({...formData, supplier: v})}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">Sin Proveedor</SelectItem>
@@ -1839,14 +1839,14 @@ function CatalogContent() {
                     <Label className="text-[9px] font-black text-blue-700 uppercase">Venta ARS</Label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black opacity-40">$</span>
-                      <Input type="number" value={formData.priceARS} onChange={(e) => setFormData({...formData, priceARS: Number(e.target.value)})} className="pl-8 bg-white font-black text-lg h-10 border-blue-200" />
+                      <Input type="number" value={formData.priceARS ?? 0} onChange={(e) => setFormData({...formData, priceARS: Number(e.target.value)})} className="pl-8 bg-white font-black text-lg h-10 border-blue-200" />
                     </div>
                   </div>
                   <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl space-y-2">
                     <Label className="text-[9px] font-black text-emerald-700 uppercase">Venta USD</Label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black opacity-40">u$s</span>
-                      <Input type="number" value={formData.priceUSD} onChange={(e) => setFormData({...formData, priceUSD: Number(e.target.value)})} className="pl-10 bg-white font-black text-lg h-10 border-emerald-200" />
+                      <Input type="number" value={formData.priceUSD ?? 0} onChange={(e) => setFormData({...formData, priceUSD: Number(e.target.value)})} className="pl-10 bg-white font-black text-lg h-10 border-emerald-200" />
                     </div>
                   </div>
                 </div>
@@ -1867,8 +1867,8 @@ function CatalogContent() {
                   <div className="space-y-4">
                     <Label className="text-[10px] font-black uppercase text-muted-foreground">Valor del Insumo</Label>
                     <div className="flex items-center gap-3">
-                      <Input type="number" value={formData.costAmount} onChange={(e) => setFormData({...formData, costAmount: Number(e.target.value)})} className="h-12 text-xl font-black border-primary/20" />
-                      <Tabs value={formData.costCurrency} onValueChange={(v) => setFormData({...formData, costCurrency: v})} className="shrink-0">
+                      <Input type="number" value={formData.costAmount ?? 0} onChange={(e) => setFormData({...formData, costAmount: Number(e.target.value)})} className="h-12 text-xl font-black border-primary/20" />
+                      <Tabs value={formData.costCurrency || "ARS"} onValueChange={(v) => setFormData({...formData, costCurrency: v})} className="shrink-0">
                         <TabsList className="h-12 p-1 border">
                           <TabsTrigger value="ARS" className="h-10 text-[10px] font-black data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
                           <TabsTrigger value="USD" className="h-10 text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
@@ -1879,11 +1879,11 @@ function CatalogContent() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase text-muted-foreground">Stock Actual</Label>
-                      <Input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} className="h-12 font-black text-xl" />
+                      <Input type="number" value={formData.stock ?? 0} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} className="h-12 font-black text-xl" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase text-rose-600">Stock Mínimo</Label>
-                      <Input type="number" value={formData.minStock} onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} className="h-12 font-black text-xl border-rose-200 text-rose-700" />
+                      <Input type="number" value={formData.minStock ?? 0} onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} className="h-12 font-black text-xl border-rose-200 text-rose-700" />
                     </div>
                   </div>
                 </div>
@@ -1921,8 +1921,8 @@ function CatalogContent() {
                     <div className="p-4 border rounded-2xl bg-slate-50 space-y-4">
                       <Label className="text-[10px] font-black uppercase text-slate-500">Mano de Obra / Gastos de Armado</Label>
                       <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1"><Label className="text-[9px] font-bold uppercase">Pesos (ARS)</Label><Input type="number" value={formData.laborCostARS} onChange={(e) => setFormData({...formData, laborCostARS: Number(e.target.value)})} className="bg-white" /></div>
-                        <div className="space-y-1"><Label className="text-[9px] font-bold uppercase">Dólares (USD)</Label><Input type="number" value={formData.laborCostUSD} onChange={(e) => setFormData({...formData, laborCostUSD: Number(e.target.value)})} className="bg-white" /></div>
+                        <div className="space-y-1"><Label className="text-[9px] font-bold uppercase">Pesos (ARS)</Label><Input type="number" value={formData.laborCostARS ?? 0} onChange={(e) => setFormData({...formData, laborCostARS: Number(e.target.value)})} className="bg-white" /></div>
+                        <div className="space-y-1"><Label className="text-[9px] font-bold uppercase">Dólares (USD)</Label><Input type="number" value={formData.laborCostUSD ?? 0} onChange={(e) => setFormData({...formData, laborCostUSD: Number(e.target.value)})} className="bg-white" /></div>
                       </div>
                     </div>
                   </div>
@@ -1940,7 +1940,7 @@ function CatalogContent() {
                                 <p className="text-xs font-bold leading-tight">{items?.find(i => i.id === comp.productId)?.name}</p>
                                 <Button variant="link" className="h-auto p-0 text-[9px] font-black uppercase text-primary" onClick={() => handleJumpToComponent(comp.productId)}>Ver Componente</Button>
                               </TableCell>
-                              <TableCell className="py-2"><Input type="number" value={comp.quantity} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="h-8 text-center font-black" /></TableCell>
+                              <TableCell className="py-2"><Input type="number" value={comp.quantity ?? 0} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="h-8 text-center font-black" /></TableCell>
                               <TableCell className="py-2"><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeComponent(comp.originalIndex)}><X className="h-4 w-4" /></Button></TableCell>
                             </TableRow>
                           ))}
@@ -2008,7 +2008,7 @@ function CatalogContent() {
                 <div className="relative group">
                   <Input 
                     type="number" 
-                    value={liveOrderToView?.quantity} 
+                    value={liveOrderToView?.quantity ?? 0} 
                     disabled={liveOrderToView?.status === 'completed'}
                     onChange={(e) => updateDocumentNonBlocking(doc(db, 'production_orders', liveOrderToView.id), { quantity: Number(e.target.value) })}
                     className="h-16 text-3xl font-black text-primary bg-slate-50 border-primary/20 text-center"
@@ -2084,7 +2084,7 @@ function CatalogContent() {
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
             <div className="space-y-2">
               <Label className="font-bold">Título / Identificador de la Orden</Label>
-              <Input value={newPOTitle} onChange={(e) => setNewPOTitle(e.target.value)} placeholder="Ej: Reposición de Ferretería, Insumos de Verano..." />
+              <Input value={newPOTitle || ""} onChange={(e) => setNewPOTitle(e.target.value)} placeholder="Ej: Reposición de Ferretería, Insumos de Verano..." />
             </div>
             <div className="grid grid-cols-2 md:grid-cols-2 gap-4 items-end bg-muted/20 p-4 rounded-xl border border-dashed">
               <div className="space-y-2">
@@ -2134,7 +2134,7 @@ function CatalogContent() {
                           <Input 
                             type="number" 
                             className="h-8 text-center font-black" 
-                            value={item.qtyToAdd} 
+                            value={item.qtyToAdd ?? 0} 
                             onChange={(e) => {
                               const newList = [...newPOItems];
                               newList[idx].qtyToAdd = Number(e.target.value);
@@ -2309,15 +2309,15 @@ function CatalogContent() {
                   const hasSomeReceived = receivedItemsCount > 0;
                   
                   const groupARS = itemsInGroup.reduce((sum, i) => {
-                    const q = manualPurchaseQtys[i.id] ?? i.quantity;
-                    const p = manualPurchasePrices[i.id] ?? i.price;
+                    const q = manualPurchaseQtys[i.id] ?? i.quantity ?? 0;
+                    const p = manualPurchasePrices[i.id] ?? i.price ?? 0;
                     const c = manualPurchaseCurrencies[i.id] ?? (i.currency || 'ARS');
                     return sum + (q * (c === 'ARS' ? p : 0));
                   }, 0);
                   
                   const groupUSD = itemsInGroup.reduce((sum, i) => {
-                    const q = manualPurchaseQtys[i.id] ?? i.quantity;
-                    const p = manualPurchasePrices[i.id] ?? i.price;
+                    const q = manualPurchaseQtys[i.id] ?? i.quantity ?? 0;
+                    const p = manualPurchasePrices[i.id] ?? i.price ?? 0;
                     const c = manualPurchaseCurrencies[i.id] ?? (i.currency || 'ARS');
                     return sum + (q * (c === 'USD' ? p : 0));
                   }, 0);
@@ -2358,7 +2358,7 @@ function CatalogContent() {
                                 size="sm" 
                                 className="h-8 gap-2 bg-emerald-600 hover:bg-emerald-700 font-bold text-xs flex-1 md:flex-none" 
                                 onClick={() => handleReceiveMaterials(sup)} 
-                                disabled={itemsInGroup.every(i => (manualPurchaseQtys[i.id] ?? i.quantity) <= 0)}
+                                disabled={itemsInGroup.every(i => (manualPurchaseQtys[i.id] ?? i.quantity ?? 0) <= 0)}
                               >
                                 <Save className="h-3.5 w-3.5" /> INGRESAR COMPRA
                               </Button>
@@ -2393,8 +2393,8 @@ function CatalogContent() {
                           <TableBody>
                             {itemsInGroup.map((f: any) => {
                               const lineId = f.id;
-                              const currentQty = manualPurchaseQtys[lineId] ?? f.quantity;
-                              const currentPrice = manualPurchasePrices[lineId] ?? f.price;
+                              const currentQty = manualPurchaseQtys[lineId] ?? f.quantity ?? 0;
+                              const currentPrice = manualPurchasePrices[lineId] ?? f.price ?? 0;
                               const currentCurrency = manualPurchaseCurrencies[lineId] || (f.currency || 'ARS');
                               const isZero = currentPrice <= 0 && !f.received;
                               const isLineLocked = isOrdered || isCompleted || f.received;
@@ -2419,7 +2419,7 @@ function CatalogContent() {
                                     <Input 
                                       type="number" 
                                       disabled={isLineLocked} 
-                                      value={currentQty} 
+                                      value={currentQty ?? 0} 
                                       onChange={(e) => {
                                         const val = Number(e.target.value);
                                         setManualPurchaseQtys(prev => ({ ...prev, [lineId]: val }));
@@ -2432,7 +2432,7 @@ function CatalogContent() {
                                       <Input 
                                         type="number" 
                                         disabled={isLineLocked} 
-                                        value={currentPrice} 
+                                        value={currentPrice ?? 0} 
                                         onChange={(e) => {
                                           const val = Number(e.target.value);
                                           setManualPurchasePrices(prev => ({ ...prev, [lineId]: val }));
@@ -2493,8 +2493,8 @@ function CatalogContent() {
                       <div className="md:hidden space-y-4">
                         {itemsInGroup.map((f: any) => {
                           const lineId = f.id;
-                          const currentQty = manualPurchaseQtys[lineId] ?? f.quantity;
-                          const currentPrice = manualPurchasePrices[lineId] ?? f.price;
+                          const currentQty = manualPurchaseQtys[lineId] ?? f.quantity ?? 0;
+                          const currentPrice = manualPurchasePrices[lineId] ?? f.price ?? 0;
                           const currentCurrency = manualPurchaseCurrencies[lineId] || (f.currency || 'ARS');
                           const isLineLocked = isOrdered || isCompleted || f.received;
                           const isZero = currentPrice <= 0 && !f.received;
@@ -2524,17 +2524,17 @@ function CatalogContent() {
                                 <div className="space-y-1.5">
                                   <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1 tracking-widest">Cantidad</Label>
                                   <div className="flex items-center gap-2">
-                                    <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" disabled={isLineLocked} onClick={() => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: Math.max(0, (prev[lineId] ?? f.quantity) - 1) }))}>
+                                    <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" disabled={isLineLocked} onClick={() => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: Math.max(0, (prev[lineId] ?? f.quantity ?? 0) - 1) }))}>
                                       <Minus className="h-4 w-4" />
                                     </Button>
                                     <Input 
                                       type="number" 
                                       className="h-11 flex-1 text-center font-black text-xl bg-slate-50 border-slate-200" 
                                       disabled={isLineLocked}
-                                      value={currentQty}
+                                      value={currentQty ?? 0}
                                       onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: Number(e.target.value) }))}
                                     />
-                                    <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" disabled={isLineLocked} onClick={() => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: (prev[lineId] ?? f.quantity) + 1 }))}>
+                                    <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" disabled={isLineLocked} onClick={() => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: (prev[lineId] ?? f.quantity ?? 0) + 1 }))}>
                                       <Plus className="h-4 w-4" />
                                     </Button>
                                   </div>
@@ -2547,7 +2547,7 @@ function CatalogContent() {
                                       type="number" 
                                       className={cn("h-11 pl-10 text-center font-black text-xl bg-white", isZero ? "bg-rose-50 border-rose-300" : "border-emerald-200")} 
                                       disabled={isLineLocked}
-                                      value={currentPrice}
+                                      value={currentPrice ?? 0}
                                       onChange={(e) => setManualPurchasePrices(prev => ({ ...prev, [lineId]: Number(e.target.value) }))}
                                     />
                                   </div>
@@ -2592,8 +2592,8 @@ function CatalogContent() {
           <DialogFooter className="p-4 border-t bg-slate-50 shrink-0">
             <div className="flex justify-between items-center w-full">
               <div className="flex gap-4">
-                <div><p className="text-[8px] font-black text-slate-400 uppercase">Proyectado ARS</p><p className="text-lg md:text-xl font-black text-blue-700">${purchaseCalculations?.totalARS.toLocaleString('es-AR')}</p></div>
-                <div><p className="text-[8px] font-black text-slate-400 uppercase">Proyectado USD</p><p className="text-lg md:text-xl font-black text-emerald-600">u$s {purchaseCalculations?.totalUSD.toLocaleString('es-AR')}</p></div>
+                <div><p className="text-[8px] font-black text-slate-400 uppercase">Proyectado ARS</p><p className="text-lg md:text-xl font-black text-blue-700">${(purchaseCalculations?.totalARS ?? 0).toLocaleString('es-AR')}</p></div>
+                <div><p className="text-[8px] font-black text-slate-400 uppercase">Proyectado USD</p><p className="text-lg md:text-xl font-black text-emerald-600">u$s {(purchaseCalculations?.totalUSD ?? 0).toLocaleString('es-AR')}</p></div>
               </div>
               <Button onClick={handleCloseOrderView} className="font-bold">Cerrar</Button>
             </div>
@@ -2610,7 +2610,7 @@ function CatalogContent() {
                 <DialogDescription className="text-[10px] font-bold uppercase">Ajuste rápido de inventario y costos</DialogDescription>
               </div>
               <div className="flex gap-4">
-                <div className="relative"><Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Buscar..." value={auditSearch} onChange={(e) => setAuditSearch(e.target.value)} className="h-8 pl-8 text-xs w-48 bg-white" /></div>
+                <div className="relative"><Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Buscar..." value={auditSearch || ""} onChange={(e) => setAuditSearch(e.target.value)} className="h-8 pl-8 text-xs w-48 bg-white" /></div>
                 <Select value={auditCategoryFilter} onValueChange={setAuditCategoryFilter}>
                   <SelectTrigger className="h-8 text-xs w-40 bg-white"><SelectValue placeholder="Categoría" /></SelectTrigger>
                   <SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}<SelectItem value="all">Todas</SelectItem></SelectContent>
@@ -2625,11 +2625,11 @@ function CatalogContent() {
                 {items?.filter(i => !i.isService && (auditCategoryFilter === 'all' || i.categoryId === auditCategoryFilter) && (i.name.toLowerCase().includes(auditSearch.toLowerCase()))).sort((a,b) => a.name.localeCompare(b.name)).map(item => (
                   <TableRow key={item.id} className="hover:bg-muted/5 h-12">
                     <TableCell className="py-1"><p className="text-xs font-bold leading-tight">{item.name}</p><p className="text-[9px] text-muted-foreground font-medium uppercase">{categoryMap[item.categoryId] || 'S/C'}</p></TableCell>
-                    <TableCell className="py-1"><Input type="number" value={item.stock} onChange={(e) => handleUpdateItemAudit(item.id, { stock: Number(e.target.value) })} className="h-8 text-center font-black text-xs" /></TableCell>
-                    <TableCell className="py-1"><Input type="number" value={item.minStock} onChange={(e) => handleUpdateItemAudit(item.id, { minStock: Number(e.target.value) })} className="h-8 text-center font-black text-xs text-rose-600" /></TableCell>
+                    <TableCell className="py-1"><Input type="number" value={item.stock ?? 0} onChange={(e) => handleUpdateItemAudit(item.id, { stock: Number(e.target.value) })} className="h-8 text-center font-black text-xs" /></TableCell>
+                    <TableCell className="py-1"><Input type="number" value={item.minStock ?? 0} onChange={(e) => handleUpdateItemAudit(item.id, { minStock: Number(e.target.value) })} className="h-8 text-center font-black text-xs text-rose-600" /></TableCell>
                     <TableCell className="py-1">
                       <div className="flex items-center gap-1.5">
-                        <Input type="number" value={item.costCurrency === 'USD' ? item.costUSD : item.costARS} onChange={(e) => handleUpdateItemAudit(item.id, { costAmount: Number(e.target.value) })} className="h-8 text-center font-black text-xs text-emerald-700" />
+                        <Input type="number" value={(item.costCurrency === 'USD' ? item.costUSD : item.costARS) ?? 0} onChange={(e) => handleUpdateItemAudit(item.id, { costAmount: Number(e.target.value) })} className="h-8 text-center font-black text-xs text-emerald-700" />
                         <Tabs value={item.costCurrency || 'ARS'} onValueChange={(v) => handleUpdateItemAudit(item.id, { costCurrency: v })} className="shrink-0">
                           <TabsList className="h-8 p-0 gap-0 border">
                             <TabsTrigger value="ARS" className="h-7 text-[8px] font-black px-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
@@ -2655,7 +2655,7 @@ function CatalogContent() {
           <DialogHeader><DialogTitle>Gestionar Categorías</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="flex gap-2">
-              <Input placeholder="Nombre de categoría..." value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} />
+              <Input placeholder="Nombre de categoría..." value={newCategoryName || ""} onChange={(e) => setNewCategoryName(e.target.value)} />
               <Button onClick={handleSaveCategory}>{editingCategoryId ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}</Button>
             </div>
             <ScrollArea className="h-64 border rounded-xl p-2 bg-slate-50">
@@ -2683,9 +2683,9 @@ function CatalogContent() {
             <Card className="p-4 bg-muted/20 border-dashed space-y-4">
               <p className="text-[10px] font-black uppercase text-primary tracking-widest">{editingSupplierId ? 'Editando Proveedor' : 'Nuevo Proveedor'}</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1"><Label className="text-xs">Nombre Fantasía</Label><Input value={newSupplierName} onChange={(e) => setNewSupplierName(e.target.value)} className="bg-white" /></div>
-                <div className="space-y-1"><Label className="text-xs">Teléfono / WhatsApp</Label><Input value={newSupplierPhone} onChange={(e) => setNewSupplierPhone(e.target.value)} className="bg-white" /></div>
-                <div className="col-span-full space-y-1"><Label className="text-xs">Dirección / Localidad</Label><Input value={newSupplierAddress} onChange={(e) => setNewSupplierAddress(e.target.value)} className="bg-white" /></div>
+                <div className="space-y-1"><Label className="text-xs">Nombre Fantasía</Label><Input value={newSupplierName || ""} onChange={(e) => setNewSupplierName(e.target.value)} className="bg-white" /></div>
+                <div className="space-y-1"><Label className="text-xs">Teléfono / WhatsApp</Label><Input value={newSupplierPhone || ""} onChange={(e) => setNewSupplierPhone(e.target.value)} className="bg-white" /></div>
+                <div className="col-span-full space-y-1"><Label className="text-xs">Dirección / Localidad</Label><Input value={newSupplierAddress || ""} onChange={(e) => setNewSupplierAddress(e.target.value)} className="bg-white" /></div>
               </div>
               <div className="flex justify-end gap-2">
                 {editingSupplierId && <Button variant="outline" onClick={() => { setEditingSupplierId(null); setNewSupplierName(""); setNewSupplierPhone(""); setNewSupplierAddress(""); }}>Cancelar</Button>}
