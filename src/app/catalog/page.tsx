@@ -1444,11 +1444,12 @@ function CatalogContent() {
                 <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5", statusInfo.color)}>
                   <StatusIcon className="h-2.5 w-2.5 mr-1" /> {statusInfo.label}
                 </Badge>
-                {!isHistory && (
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500" onClick={(e) => { e.stopPropagation(); handlePrintProductionOrder(order); }}><Printer className="h-4 w-4" /></Button>
+                  {!isHistory && (
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={(e) => { e.stopPropagation(); setOrderToDelete(order); }}><Trash2 className="h-4 w-4" /></Button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
               <CardTitle className="text-lg mt-2 font-bold leading-tight">{order.productName}</CardTitle>
               <CardDescription className="text-[10px] font-bold uppercase tracking-tighter">Creada el {new Date(order.createdAt).toLocaleDateString('es-AR')}</CardDescription>
@@ -1769,6 +1770,209 @@ function CatalogContent() {
         </SidebarInset>
       </div>
 
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[95vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 border-b shrink-0">
+            <div className="flex justify-between items-start pr-8">
+              <div className="flex items-center gap-3">
+                <Box className="h-6 w-6 text-primary" />
+                <div>
+                  <DialogTitle className="text-xl font-black uppercase text-primary tracking-tighter">{editingItemId ? 'Configurar Ítem' : 'Nuevo Ítem'}</DialogTitle>
+                  <DialogDescription className="text-[10px] font-bold uppercase text-slate-500">Parámetros técnicos, costos y estructura</DialogDescription>
+                </div>
+              </div>
+              {editHistory.length > 0 && (
+                <Button variant="outline" size="sm" className="h-8 gap-1 font-bold text-[10px]" onClick={handleGoBackInHistory}>
+                  <ChevronLeft className="h-3 w-3" /> VOLVER A ANTERIOR
+                </Button>
+              )}
+            </div>
+          </DialogHeader>
+          <div id="config-item-scroll" className="flex-1 overflow-y-auto p-6 space-y-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Nombre del Ítem</Label>
+                  <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="h-12 text-lg font-bold" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Categoría</Label>
+                    <Select value={formData.categoryId} onValueChange={(v) => setFormData({...formData, categoryId: v})}>
+                      <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                      <SelectContent>
+                        {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Proveedor Preferido</Label>
+                    <Select value={formData.supplier} onValueChange={(v) => setFormData({...formData, supplier: v})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Sin Proveedor</SelectItem>
+                        {sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4 p-4 bg-muted/20 rounded-2xl border border-dashed">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2"><Switch checked={formData.isService} onCheckedChange={(v) => setFormData({...formData, isService: v, trackStock: !v})} /><Label className="text-[10px] font-black uppercase">Es un Servicio</Label></div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2"><Switch disabled={formData.isService} checked={formData.trackStock} onCheckedChange={(v) => setFormData({...formData, trackStock: v})} /><Label className="text-[10px] font-black uppercase">Controlar Stock</Label></div>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Precios de Venta</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl space-y-2">
+                    <Label className="text-[9px] font-black text-blue-700 uppercase">Venta ARS</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black opacity-40">$</span>
+                      <Input type="number" value={formData.priceARS} onChange={(e) => setFormData({...formData, priceARS: Number(e.target.value)})} className="pl-8 bg-white font-black text-lg h-10 border-blue-200" />
+                    </div>
+                  </div>
+                  <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl space-y-2">
+                    <Label className="text-[9px] font-black text-emerald-700 uppercase">Venta USD</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black opacity-40">u$s</span>
+                      <Input type="number" value={formData.priceUSD} onChange={(e) => setFormData({...formData, priceUSD: Number(e.target.value)})} className="pl-10 bg-white font-black text-lg h-10 border-emerald-200" />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 p-4 border rounded-2xl bg-slate-50">
+                  <Switch checked={formData.isCompuesto} onCheckedChange={(v) => setFormData({...formData, isCompuesto: v})} />
+                  <div>
+                    <Label className="font-black text-xs uppercase text-slate-700">Producto Compuesto (BOM)</Label>
+                    <p className="text-[9px] text-muted-foreground uppercase font-bold">SE FABRICA A PARTIR DE OTROS COMPONENTES</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {!formData.isCompuesto ? (
+              <section className="space-y-4 p-6 bg-slate-50 border rounded-2xl">
+                <div className="flex items-center gap-2 mb-2"><Coins className="h-4 w-4 text-primary" /><h3 className="text-xs font-black uppercase tracking-widest text-slate-700">Costo de Reposición (Simple)</h3></div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground">Valor del Insumo</Label>
+                    <div className="flex items-center gap-3">
+                      <Input type="number" value={formData.costAmount} onChange={(e) => setFormData({...formData, costAmount: Number(e.target.value)})} className="h-12 text-xl font-black border-primary/20" />
+                      <Tabs value={formData.costCurrency} onValueChange={(v) => setFormData({...formData, costCurrency: v})} className="shrink-0">
+                        <TabsList className="h-12 p-1 border">
+                          <TabsTrigger value="ARS" className="h-10 text-[10px] font-black data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
+                          <TabsTrigger value="USD" className="h-10 text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
+                        </TabsList>
+                      </Tabs>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black uppercase text-muted-foreground">Stock Actual</Label>
+                      <Input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} className="h-12 font-black text-xl" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black uppercase text-rose-600">Stock Mínimo</Label>
+                      <Input type="number" value={formData.minStock} onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} className="h-12 font-black text-xl border-rose-200 text-rose-700" />
+                    </div>
+                  </div>
+                </div>
+              </section>
+            ) : (
+              <section className="space-y-6">
+                <div className="p-6 bg-slate-900 text-white rounded-3xl space-y-6 shadow-xl">
+                  <div className="flex justify-between items-center"><h3 className="text-sm font-black uppercase tracking-[0.2em] flex items-center gap-2"><Layers className="h-5 w-5 text-primary" /> Estructura de Materiales (BOM)</h3><Badge variant="outline" className="text-white border-white/20">COSTOS CALCULADOS</Badge></div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="p-4 bg-white/5 rounded-2xl border border-white/10"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Costo Materiales (ARS)</p><p className="text-2xl font-black">${(currentEditingCosts.ars - totalLaborARS).toLocaleString('es-AR')}</p></div>
+                    <div className="p-4 bg-white/5 rounded-2xl border border-white/10"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Mano de Obra (ARS)</p><p className="text-2xl font-black">${totalLaborARS.toLocaleString('es-AR')}</p></div>
+                    <div className="p-4 bg-primary rounded-2xl shadow-lg"><p className="text-[10px] font-black text-white/70 uppercase tracking-widest mb-1">Costo Total Final (ARS)</p><p className="text-3xl font-black">${currentEditingCosts.ars.toLocaleString('es-AR')}</p></div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-4">
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest flex items-center gap-2"><Plus className="h-3 w-3" /> Agregar Componente</Label>
+                    <div className="space-y-2">
+                      <Select value={bomFilterCategory} onValueChange={setBomFilterCategory}>
+                        <SelectTrigger className="h-8 text-[10px]"><SelectValue placeholder="Filtrar categoría..." /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todas</SelectItem>
+                          {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Select onValueChange={addComponent}>
+                        <SelectTrigger className="h-11 bg-white"><SelectValue placeholder="Buscar pieza..." /></SelectTrigger>
+                        <SelectContent className="max-h-60">
+                          {items?.filter(i => i.id !== editingItemId && !i.isService && (bomFilterCategory === 'all' || i.categoryId === bomFilterCategory)).sort((a,b) => a.name.localeCompare(b.name)).map(i => (
+                            <SelectItem key={i.id} value={i.id}>{i.name} (Stock: {i.stock || 0})</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="p-4 border rounded-2xl bg-slate-50 space-y-4">
+                      <Label className="text-[10px] font-black uppercase text-slate-500">Mano de Obra / Gastos de Armado</Label>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1"><Label className="text-[9px] font-bold uppercase">Pesos (ARS)</Label><Input type="number" value={formData.laborCostARS} onChange={(e) => setFormData({...formData, laborCostARS: Number(e.target.value)})} className="bg-white" /></div>
+                        <div className="space-y-1"><Label className="text-[9px] font-bold uppercase">Dólares (USD)</Label><Input type="number" value={formData.laborCostUSD} onChange={(e) => setFormData({...formData, laborCostUSD: Number(e.target.value)})} className="bg-white" /></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Lista de Materiales</Label>
+                    <div className="border rounded-2xl overflow-hidden bg-white shadow-sm">
+                      <Table>
+                        <TableHeader className="bg-slate-50"><TableRow><TableHead className="text-[9px] font-black uppercase">Pieza</TableHead><TableHead className="text-center font-black text-[9px] uppercase w-20">Cant.</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
+                        <TableBody>
+                          {sortedAddedComponents.length === 0 ? (
+                            <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground italic text-xs">No hay componentes.</TableCell></TableRow>
+                          ) : sortedAddedComponents.map((comp, idx) => (
+                            <TableRow key={comp.productId}>
+                              <TableCell className="py-2">
+                                <p className="text-xs font-bold leading-tight">{items?.find(i => i.id === comp.productId)?.name}</p>
+                                <Button variant="link" className="h-auto p-0 text-[9px] font-black uppercase text-primary" onClick={() => handleJumpToComponent(comp.productId)}>Ver Componente</Button>
+                              </TableCell>
+                              <TableCell className="py-2"><Input type="number" value={comp.quantity} onChange={(e) => updateComponentQty(comp.originalIndex, Number(e.target.value))} className="h-8 text-center font-black" /></TableCell>
+                              <TableCell className="py-2"><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeComponent(comp.originalIndex)}><X className="h-4 w-4" /></Button></TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {whereUsed.length > 0 && (
+              <section className="space-y-4 pt-6 border-t">
+                <h3 className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                  <LinkIcon className="h-4 w-4" /> Impacto en Producción (Donde se usa)
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {whereUsed.map((parent) => (
+                    <div key={parent.id} className="p-4 border rounded-2xl bg-primary/5 flex justify-between items-center group">
+                      <div className="space-y-1 min-w-0">
+                        <p className="text-xs font-black text-slate-800 truncate uppercase tracking-tight">{parent.name}</p>
+                        <p className="text-[10px] text-primary font-bold uppercase tracking-widest">Requerido: {parent.quantity} unidades</p>
+                      </div>
+                      <Button variant="ghost" size="sm" className="h-8 text-[9px] font-black uppercase opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleJumpToComponent(parent.id)}>
+                        VER PADRE <ChevronRight className="h-3 w-3 ml-1" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+          <DialogFooter className="p-4 border-t bg-slate-50 shrink-0">
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="font-bold">Cancelar</Button>
+            <Button onClick={handleSave} className="font-black px-12 h-11 uppercase text-xs tracking-widest">{editingItemId ? 'Guardar Cambios' : 'Crear Producto'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!orderToView} onOpenChange={handleCloseOrderView}>
         <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-6 border-b shrink-0 bg-primary/5">
@@ -1780,7 +1984,10 @@ function CatalogContent() {
                   <DialogDescription className="text-[10px] font-bold uppercase text-slate-500">Gestión de armado de producto compuesto</DialogDescription>
                 </div>
               </div>
-              <Badge variant="outline" className="font-black uppercase text-[10px] py-1 px-3 bg-white">{liveOrderToView?.status}</Badge>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handlePrintProductionOrder(liveOrderToView)} title="Imprimir Plan de Armado"><Printer className="h-4 w-4" /></Button>
+                <Badge variant="outline" className="font-black uppercase text-[10px] py-1 px-3 bg-white">{liveOrderToView?.status}</Badge>
+              </div>
             </div>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto p-6 space-y-8">
@@ -2375,6 +2582,184 @@ function CatalogContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={isAuditOpen} onOpenChange={setIsAuditOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 border-b shrink-0 bg-primary/5">
+            <div className="flex justify-between items-end">
+              <div className="space-y-1">
+                <DialogTitle className="text-xl font-black uppercase text-primary">Panel de Auditoría de Stock</DialogTitle>
+                <DialogDescription className="text-[10px] font-bold uppercase">Ajuste rápido de inventario y costos</DialogDescription>
+              </div>
+              <div className="flex gap-4">
+                <div className="relative"><Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Buscar..." value={auditSearch} onChange={(e) => setAuditSearch(e.target.value)} className="h-8 pl-8 text-xs w-48 bg-white" /></div>
+                <Select value={auditCategoryFilter} onValueChange={setAuditCategoryFilter}>
+                  <SelectTrigger className="h-8 text-xs w-40 bg-white"><SelectValue placeholder="Categoría" /></SelectTrigger>
+                  <SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}<SelectItem value="all">Todas</SelectItem></SelectContent>
+                </Select>
+              </div>
+            </div>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto">
+            <Table>
+              <TableHeader className="bg-slate-50 sticky top-0 z-10"><TableRow><TableHead className="text-[10px] font-black uppercase">Producto</TableHead><TableHead className="text-center font-black text-[10px] uppercase w-32">Stock</TableHead><TableHead className="text-center font-black text-[10px] uppercase w-32">Mínimo</TableHead><TableHead className="text-center font-black text-[10px] uppercase w-48">Costo Ref.</TableHead><TableHead className="text-center font-black text-[10px] uppercase w-48">Proveedor</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {items?.filter(i => !i.isService && (auditCategoryFilter === 'all' || i.categoryId === auditCategoryFilter) && (i.name.toLowerCase().includes(auditSearch.toLowerCase()))).sort((a,b) => a.name.localeCompare(b.name)).map(item => (
+                  <TableRow key={item.id} className="hover:bg-muted/5 h-12">
+                    <TableCell className="py-1"><p className="text-xs font-bold leading-tight">{item.name}</p><p className="text-[9px] text-muted-foreground font-medium uppercase">{categoryMap[item.categoryId] || 'S/C'}</p></TableCell>
+                    <TableCell className="py-1"><Input type="number" value={item.stock} onChange={(e) => handleUpdateItemAudit(item.id, { stock: Number(e.target.value) })} className="h-8 text-center font-black text-xs" /></TableCell>
+                    <TableCell className="py-1"><Input type="number" value={item.minStock} onChange={(e) => handleUpdateItemAudit(item.id, { minStock: Number(e.target.value) })} className="h-8 text-center font-black text-xs text-rose-600" /></TableCell>
+                    <TableCell className="py-1">
+                      <div className="flex items-center gap-1.5">
+                        <Input type="number" value={item.costCurrency === 'USD' ? item.costUSD : item.costARS} onChange={(e) => handleUpdateItemAudit(item.id, { costAmount: Number(e.target.value) })} className="h-8 text-center font-black text-xs text-emerald-700" />
+                        <Tabs value={item.costCurrency || 'ARS'} onValueChange={(v) => handleUpdateItemAudit(item.id, { costCurrency: v })} className="shrink-0"><TabsList className="h-8 p-0 gap-0 border"><TabsTrigger value="ARS" className="h-7 text-[8px] font-black px-2">ARS</TabsTrigger><TabsTrigger value="USD" className="h-7 text-[8px] font-black px-2">USD</TabsTrigger></TabsList></Tabs>
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-1">
+                      <Select value={item.supplier || "Sin Proveedor"} onValueChange={(v) => handleUpdateGlobalSupplier(item.id, v)}><SelectTrigger className="h-8 text-[10px] font-bold border-none bg-transparent"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Sin Proveedor">Sin Proveedor</SelectItem>{sortedSuppliers.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter className="p-4 border-t bg-slate-50"><Button onClick={() => setIsAuditOpen(false)} className="font-bold">Cerrar Auditoría</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Gestionar Categorías</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex gap-2">
+              <Input placeholder="Nombre de categoría..." value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} />
+              <Button onClick={handleSaveCategory}>{editingCategoryId ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}</Button>
+            </div>
+            <ScrollArea className="h-64 border rounded-xl p-2 bg-slate-50">
+              {categories.map((cat: any) => (
+                <div key={cat.id} className="flex justify-between items-center p-2 border-b last:border-0 hover:bg-white transition-colors">
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="icon" className="h-6 w-6 text-amber-500" onClick={() => updateDocumentNonBlocking(doc(db, 'product_categories', cat.id), { isFavorite: !cat.isFavorite })}>{cat.isFavorite ? <Star className="h-4 w-4 fill-amber-500" /> : <StarOff className="h-4 w-4" />}</Button>
+                    <span className="text-sm font-medium">{cat.name}</span>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-primary" onClick={() => handleEditCategory(cat)}><Edit className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteDocumentNonBlocking(doc(db, 'product_categories', cat.id))}><Trash2 className="h-4 w-4" /></Button>
+                  </div>
+                </div>
+              ))}
+            </ScrollArea>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isSupplierManagerOpen} onOpenChange={setIsSupplierManagerOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="p-6 border-b shrink-0"><DialogTitle>Gestionar Proveedores</DialogTitle></DialogHeader>
+          <div className="p-6 space-y-6 flex-1 overflow-y-auto">
+            <Card className="p-4 bg-muted/20 border-dashed space-y-4">
+              <p className="text-[10px] font-black uppercase text-primary tracking-widest">{editingSupplierId ? 'Editando Proveedor' : 'Nuevo Proveedor'}</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1"><Label className="text-xs">Nombre Fantasía</Label><Input value={newSupplierName} onChange={(e) => setNewSupplierName(e.target.value)} className="bg-white" /></div>
+                <div className="space-y-1"><Label className="text-xs">Teléfono / WhatsApp</Label><Input value={newSupplierPhone} onChange={(e) => setNewSupplierPhone(e.target.value)} className="bg-white" /></div>
+                <div className="col-span-full space-y-1"><Label className="text-xs">Dirección / Localidad</Label><Input value={newSupplierAddress} onChange={(e) => setNewSupplierAddress(e.target.value)} className="bg-white" /></div>
+              </div>
+              <div className="flex justify-end gap-2">
+                {editingSupplierId && <Button variant="outline" onClick={() => { setEditingSupplierId(null); setNewSupplierName(""); setNewSupplierPhone(""); setNewSupplierAddress(""); }}>Cancelar</Button>}
+                <Button onClick={handleSaveSupplier} className="px-8 font-bold">{editingSupplierId ? 'Guardar Cambios' : 'Registrar Proveedor'}</Button>
+              </div>
+            </Card>
+            <div className="space-y-3">
+              <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest px-1">Proveedores Registrados ({sortedSuppliers.length})</p>
+              <div className="grid grid-cols-1 gap-3">
+                {sortedSuppliers.map((sup: any) => (
+                  <div key={sup.id} className="p-4 border rounded-2xl bg-white flex justify-between items-center hover:shadow-md transition-all group">
+                    <div className="space-y-1">
+                      <h4 className="font-black text-sm uppercase tracking-tight text-slate-800">{sup.name}</h4>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1">
+                        {sup.phone && <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1"><Phone className="h-2.5 w-2.5" /> {sup.phone}</p>}
+                        {sup.address && <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1"><MapPin className="h-2.5 w-2.5" /> {sup.address}</p>}
+                      </div>
+                    </div>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => handleEditSupplier(sup)}><Edit className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeleteSupplier(sup.id)}><Trash2 className="h-4 w-4" /></Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="p-4 border-t bg-slate-50"><Button variant="outline" onClick={() => setIsSupplierManagerOpen(false)} className="w-full font-bold">Cerrar Gestor</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isPurchaseHistoryOpen} onOpenChange={setIsPurchaseHistoryOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="p-6 border-b shrink-0 bg-primary/5">
+            <div className="flex items-center gap-3">
+              <History className="h-6 w-6 text-primary" />
+              <div>
+                <DialogTitle className="text-xl font-black uppercase text-primary tracking-tighter">Historial de Compras</DialogTitle>
+                <DialogDescription className="text-[10px] font-bold uppercase text-slate-500">{selectedProductForHistory?.name}</DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto">
+            <Table>
+              <TableHeader className="bg-slate-50 sticky top-0 z-10"><TableRow><TableHead className="text-[9px] font-black uppercase">Fecha</TableHead><TableHead className="text-[9px] font-black uppercase">Proveedor</TableHead><TableHead className="text-center font-black text-[9px] uppercase">Cant.</TableHead><TableHead className="text-right font-black text-[9px] uppercase">Precio Unit.</TableHead><TableHead className="text-right font-black text-[9px] uppercase">Total</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {allPurchases?.filter(p => p.productId === selectedProductForHistory?.id).map(p => (
+                  <TableRow key={p.id} className="h-12">
+                    <TableCell className="text-xs font-bold">{new Date(p.date).toLocaleDateString('es-AR')}</TableCell>
+                    <TableCell className="text-xs font-black uppercase text-slate-600">{p.supplierName}</TableCell>
+                    <TableCell className="text-center font-bold">{p.quantity}</TableCell>
+                    <TableCell className="text-right font-black text-emerald-700">{p.currency === 'USD' ? 'u$s' : '$'} {p.price.toLocaleString('es-AR')}</TableCell>
+                    <TableCell className="text-right font-black">{p.currency === 'USD' ? 'u$s' : '$'} {(p.quantity * p.price).toLocaleString('es-AR')}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter className="p-4 border-t bg-slate-50"><Button onClick={() => setIsPurchaseHistoryOpen(false)} className="font-bold">Cerrar</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!itemToDelete} onOpenChange={(o) => !o && setItemToDelete(null)}>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle><AlertDialogDescription>Se borrará permanentemente a <b>{itemToDelete?.name}</b> del catálogo y stock. Esta acción no se puede deshacer.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => { deleteDocumentNonBlocking(doc(db, 'products_services', itemToDelete.id)); setItemToDelete(null); toast({ title: "Ítem eliminado" }); }} className="bg-destructive">Eliminar</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!orderToDelete} onOpenChange={(o) => !o && setOrderToDelete(null)}>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Eliminar plan de producción?</AlertDialogTitle><AlertDialogDescription>Se perderá la planificación de <b>{orderToDelete?.productName}</b>. El stock de insumos permanecerá intacto.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteOrder} className="bg-destructive">Eliminar</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!purchaseOrderToDelete} onOpenChange={(o) => !o && setPurchaseOrderToDelete(null)}>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>¿Eliminar orden de compra?</AlertDialogTitle><AlertDialogDescription>Se cancelará el pedido de reposición. Esta acción no afecta el stock actual.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={confirmDeletePurchaseOrder} className="bg-destructive">Eliminar</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!orderToFinalize} onOpenChange={(o) => !o && setOrderToFinalize(null)}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2"><CheckCircle className="h-5 w-5 text-emerald-600" /> ¿Confirmar Finalización de Armado?</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-4 pt-2">
+              <p>Al confirmar:</p>
+              <ul className="list-disc pl-5 space-y-1 text-xs font-bold text-slate-700">
+                <li>Se descontarán automáticamente los insumos del stock según la explosión inteligente.</li>
+                <li>Se sumarán <b>{orderToFinalize?.quantity} unidades</b> al stock de <b>{orderToFinalize?.productName}</b>.</li>
+                <li>La orden pasará al historial como completada.</li>
+              </ul>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleConfirmFinalize} className="bg-emerald-600 hover:bg-emerald-700">CONFIRMAR E INGRESAR</AlertDialogAction></AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={isExitAlertOpen} onOpenChange={setIsExitAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader><AlertDialogTitle>Cambios sin guardar</AlertDialogTitle><AlertDialogDescription>Has realizado modificaciones en la orden de compra que no han sido guardadas. ¿Deseas salir de todas formas?</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel>Seguir editando</AlertDialogCancel><AlertDialogAction onClick={() => { setIsExitAlertOpen(false); setPurchaseOrderToView(null); setOrderToView(null); }} className="bg-destructive">Salir sin guardar</AlertDialogAction></AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <MobileNav />
     </div>
