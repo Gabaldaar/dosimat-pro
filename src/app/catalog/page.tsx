@@ -62,7 +62,8 @@ import {
   Droplet,
   ChevronLeft,
   ExternalLink,
-  ChevronDown
+  ChevronDown,
+  LinkIcon
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -555,6 +556,24 @@ function CatalogContent() {
     })
     return counts
   }, [items])
+
+  const whereUsed = useMemo(() => {
+    if (!editingItemId || !items) return [];
+    return items
+      .filter((parent: any) => 
+        parent.isCompuesto && 
+        parent.components?.some((comp: any) => comp.productId === editingItemId)
+      )
+      .map((parent: any) => {
+        const comp = parent.components.find((c: any) => c.productId === editingItemId);
+        return {
+          id: parent.id,
+          name: parent.name,
+          quantity: comp?.quantity || 0
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [editingItemId, items]);
 
   const loadItemIntoForm = useCallback((item: any) => {
     setEditingItemId(item.id)
@@ -2417,6 +2436,29 @@ function CatalogContent() {
                 )}
               </div>
             </section>
+
+            {whereUsed.length > 0 && (
+              <section className="space-y-4 pt-8 border-t-2">
+                <div className="flex items-center gap-2 border-b-2 pb-2">
+                  <LinkIcon className="h-4 w-4 text-emerald-600" />
+                  <h3 className="font-black text-xs uppercase tracking-[0.2em] text-muted-foreground">Impacto en Producción (Donde se usa)</h3>
+                </div>
+                <p className="text-[10px] text-muted-foreground italic mb-2">Este ítem es un componente necesario para fabricar los siguientes productos:</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {whereUsed.map((parent) => (
+                    <div key={parent.id} className="flex items-center justify-between p-4 rounded-2xl border bg-emerald-50/30 border-emerald-100 hover:border-emerald-300 transition-all group">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-slate-800 truncate">{parent.name}</p>
+                        <p className="text-[10px] font-black text-emerald-700 uppercase">Requiere: {parent.quantity} unidades</p>
+                      </div>
+                      <Button variant="ghost" size="sm" className="h-9 gap-2 text-emerald-700 hover:bg-emerald-100 font-bold text-xs" onClick={() => handleJumpToComponent(parent.id)}>
+                        VER PADRE <ArrowRight className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
             
             {formData.isCompuesto && (
               <section className="space-y-6 pt-8 border-t-2">
