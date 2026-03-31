@@ -138,6 +138,18 @@ function RoutesContent() {
   const { data: catalog } = useCollection(catalogQuery)
   const { data: emailTemplates } = useCollection(emailTemplatesQuery)
 
+  const refillClients = useMemo(() => {
+    if (!clients) return [];
+    return [...clients]
+      .filter((c: any) => c.esClienteReposicion)
+      .sort((a: any, b: any) => {
+        const apA = (a.apellido || "").toLowerCase();
+        const apB = (b.apellido || "").toLowerCase();
+        if (apA !== apB) return apA.localeCompare(apB);
+        return (a.nombre || "").toLowerCase().localeCompare((b.nombre || "").toLowerCase());
+      });
+  }, [clients]);
+
   const referencePrices = useMemo(() => {
     if (!catalog) return { cloro: 0, acido: 0 }
     const cloroItem = catalog.find((i: any) => i.name === "Bidón CL (Pago Ef.)")
