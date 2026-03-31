@@ -39,7 +39,8 @@ import {
   Copy,
   Coins,
   Mail,
-  Lock
+  Lock,
+  History
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -68,6 +69,12 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select"
+import { 
+  Tabs, 
+  TabsContent, 
+  TabsList, 
+  TabsTrigger 
+} from "@/components/ui/tabs"
 import { useToast } from "../../hooks/use-toast"
 import { 
   useFirestore, 
@@ -99,6 +106,7 @@ function RoutesContent() {
   const [selectedSheetId, setSelectedSheetId] = useState<string | null>(null)
   const [isNewSheetOpen, setIsNewSheetOpen] = useState(false)
   const [sheetToDelete, setSheetToDelete] = useState<any | null>(null)
+  const [listTab, setListTab] = useState("active")
 
   // Estados para envío de Mail
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false)
@@ -161,7 +169,6 @@ function RoutesContent() {
     }
   }, [searchParams, rawRouteSheets, isReplenisher, showRestrictedToast])
 
-  // Seguridad extra: Si un repositor intenta ver el detalle de una planned
   const selectedSheet = useMemo(() => rawRouteSheets?.find(s => s.id === selectedSheetId), [rawRouteSheets, selectedSheetId])
   
   useEffect(() => {
@@ -172,27 +179,8 @@ function RoutesContent() {
     }
   }, [selectedSheet, isReplenisher, view, showRestrictedToast]);
 
-  const routeSheets = useMemo(() => {
-    if (!rawRouteSheets) return []
-    return rawRouteSheets
-  }, [rawRouteSheets])
-
-  const refillClients = useMemo(() => {
-    if (!clients) return []
-    return [...clients]
-      .filter(c => c.esClienteReposicion)
-      .sort((a: any, b: any) => {
-        const apellidoA = (a.apellido || "").toLowerCase();
-        const apellidoB = (b.apellido || "").toLowerCase();
-        if (apellidoA < apellidoB) return -1;
-        if (apellidoA > apellidoB) return 1;
-        const nombreA = (a.nombre || "").toLowerCase();
-        const nombreB = (b.nombre || "").toLowerCase();
-        if (nombreA < nombreB) return -1;
-        if (nombreA > nombreB) return 1;
-        return 0;
-      })
-  }, [clients])
+  const activeSheets = useMemo(() => rawRouteSheets?.filter(s => s.status === 'planned' || s.status === 'active') || [], [rawRouteSheets]);
+  const historySheets = useMemo(() => rawRouteSheets?.filter(s => s.status === 'completed') || [], [rawRouteSheets]);
 
   const [newSheetDate, setNewSheetDate] = useState(new Date().toISOString().split('T')[0])
 
@@ -294,6 +282,7 @@ function RoutesContent() {
     updateDocumentNonBlocking(doc(db, 'route_sheets', selectedSheetId), { status: "completed" })
     toast({ title: "Ruta finalizada" })
     setMainView("list")
+    setListTab("history")
   }
 
   const handleGenerateTransaction = (item: any) => {
@@ -451,6 +440,81 @@ function RoutesContent() {
   const isEditingAllowed = selectedSheet && selectedSheet.status === 'planned' && (isAdmin || isCommunicator)
   const showProgressLayout = selectedSheet && (selectedSheet.status === 'active' || selectedSheet.status === 'completed')
 
+  const renderSheetList = (sheets: any[]) => (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {sheets.map((sheet: any) => {
+        const isLockedForReplenisher = isReplenisher && (sheet.status || "").toLowerCase() === 'planned';
+        const isCompleted = sheet.status === 'completed';
+        const statusInfo = {
+          planned: { label: "Planificada", color: "bg-blue-100 text-blue-700", icon: isLockedForReplenisher ? Lock : Clock },
+          active: { label: "En Camino", color: "bg-amber-100 text-amber-700", icon: Truck },
+          completed: { label: "Finalizada", color: "bg-emerald-100 text-emerald-700", icon: CheckCircle2 }
+        }[sheet.status as keyof typeof statusInfo] || { label: sheet.status, color: "bg-muted", icon: Clock }
+        const Icon = statusInfo.icon
+
+        const sheetPlannedTotals = sheet.items?.reduce((acc: any, curr: any) => {
+          acc.cloro += Number(curr.plannedChlorine || 0);
+          acc.acido += Number(curr.plannedAcid || 0);
+          return acc;
+        }, { cloro: 0, acido: 0 }) || { cloro: 0, acido: 0 };
+
+        return (
+          <Card 
+            key={sheet.id} 
+            className={cn(
+              "glass-card hover:shadow-md transition-all cursor-pointer group",
+              isLockedForReplenisher && "opacity-60 cursor-not-allowed border-dashed",
+              isCompleted && "opacity-75 grayscale-[0.3] hover:grayscale-0 shadow-none border-dashed"
+            )}
+            onClick={() => { 
+              if (isLockedForReplenisher) {
+                showRestrictedToast();
+                return;
+              }
+              setSelectedSheetId(sheet.id); 
+              setMainView("detail"); 
+            }}
+          >
+            <CardHeader className="pb-3">
+              <div className="flex justify-between items-start">
+                <Badge variant="outline" className={cn("text-[10px] font-black uppercase tracking-wider", statusInfo.color)}>
+                  <Icon className="h-3 w-3 mr-1" /> {statusInfo.label}
+                </Badge>
+                {(isAdmin || (isCommunicator && sheet.status === 'planned')) && !isCompleted && (
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); setSheetToDelete(sheet); }}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              <CardTitle className="text-xl mt-2">{new Date(sheet.date + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Clientes:</span>
+                <span className="font-bold">{sheet.items?.length || 0}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 px-2 py-1.5 rounded-lg shadow-sm">
+                  <Droplet className="h-3.5 w-3.5 text-blue-600" />
+                  <span className="text-xs font-black text-blue-700 tracking-tighter">{sheetPlannedTotals.cloro} CLORO</span>
+                </div>
+                <div className="flex items-center gap-2 bg-rose-50 border border-rose-100 px-2 py-1.5 rounded-lg shadow-sm">
+                  <Beaker className="h-3.5 w-3.5 text-rose-600" />
+                  <span className="text-xs font-black text-rose-700 tracking-tighter">{sheetPlannedTotals.acido} ÁCIDO</span>
+                </div>
+              </div>
+            </CardContent>
+            <CardFooter className="pt-0">
+              <Button variant="link" className={cn("p-0 h-auto text-xs font-bold", isLockedForReplenisher ? "text-muted-foreground" : "text-primary")}>
+                {isLockedForReplenisher ? 'SOLO LECTURA' : 'VER DETALLE'} <ChevronRight className="h-3 w-3 ml-1" />
+              </Button>
+            </CardFooter>
+          </Card>
+        )
+      })}
+    </div>
+  );
+
   return (
     <div className="flex min-h-screen w-full bg-background">
       <div className="no-print w-full flex">
@@ -495,86 +559,43 @@ function RoutesContent() {
           </header>
 
           {view === "list" ? (
-            <section className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {loadingSheets ? (
-                  <div className="col-span-full flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-                ) : routeSheets?.length === 0 ? (
-                  <Card className="col-span-full p-12 text-center border-dashed bg-muted/5">
-                    <ClipboardList className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
-                    <h3 className="text-lg font-semibold">No hay hojas de ruta disponibles</h3>
-                    {isReplenisher && <p className="text-sm text-muted-foreground mt-2">Aún no se han habilitado rutas para entrega hoy.</p>}
-                  </Card>
-                ) : routeSheets?.map((sheet: any) => {
-                  const isLockedForReplenisher = isReplenisher && (sheet.status || "").toLowerCase() === 'planned';
-                  const statusInfo = {
-                    planned: { label: "Planificada", color: "bg-blue-100 text-blue-700", icon: isLockedForReplenisher ? Lock : Clock },
-                    active: { label: "En Camino", color: "bg-amber-100 text-amber-700", icon: Truck },
-                    completed: { label: "Finalizada", color: "bg-emerald-100 text-emerald-700", icon: CheckCircle2 }
-                  }[sheet.status as keyof typeof statusInfo] || { label: sheet.status, color: "bg-muted", icon: Clock }
-                  const Icon = statusInfo.icon
-
-                  const sheetPlannedTotals = sheet.items?.reduce((acc: any, curr: any) => {
-                    acc.cloro += Number(curr.plannedChlorine || 0);
-                    acc.acido += Number(curr.plannedAcid || 0);
-                    return acc;
-                  }, { cloro: 0, acido: 0 }) || { cloro: 0, acido: 0 };
-
-                  return (
-                    <Card 
-                      key={sheet.id} 
-                      className={cn(
-                        "glass-card hover:shadow-md transition-all cursor-pointer group",
-                        isLockedForReplenisher && "opacity-60 cursor-not-allowed border-dashed"
-                      )}
-                      onClick={() => { 
-                        if (isLockedForReplenisher) {
-                          showRestrictedToast();
-                          return;
-                        }
-                        setSelectedSheetId(sheet.id); 
-                        setMainView("detail"); 
-                      }}
-                    >
-                      <CardHeader className="pb-3">
-                        <div className="flex justify-between items-start">
-                          <Badge variant="outline" className={cn("text-[10px] font-black uppercase tracking-wider", statusInfo.color)}>
-                            <Icon className="h-3 w-3 mr-1" /> {statusInfo.label}
-                          </Badge>
-                          {(isAdmin || (isCommunicator && sheet.status === 'planned')) && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); setSheetToDelete(sheet); }}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                        <CardTitle className="text-xl mt-2">{new Date(sheet.date + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Clientes:</span>
-                          <span className="font-bold">{sheet.items?.length || 0}</span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 px-2 py-1.5 rounded-lg shadow-sm">
-                            <Droplet className="h-3.5 w-3.5 text-blue-600" />
-                            <span className="text-xs font-black text-blue-700 tracking-tighter">{sheetPlannedTotals.cloro} CLORO</span>
-                          </div>
-                          <div className="flex items-center gap-2 bg-rose-50 border border-rose-100 px-2 py-1.5 rounded-lg shadow-sm">
-                            <Beaker className="h-3.5 w-3.5 text-rose-600" />
-                            <span className="text-xs font-black text-rose-700 tracking-tighter">{sheetPlannedTotals.acido} ÁCIDO</span>
-                          </div>
-                        </div>
-                      </CardContent>
-                      <CardFooter className="pt-0">
-                        <Button variant="link" className={cn("p-0 h-auto text-xs font-bold", isLockedForReplenisher ? "text-muted-foreground" : "text-primary")}>
-                          {isLockedForReplenisher ? 'SOLO LECTURA' : 'VER DETALLE'} <ChevronRight className="h-3 w-3 ml-1" />
-                        </Button>
-                      </CardFooter>
-                    </Card>
-                  )
-                })}
+            <Tabs value={listTab} onValueChange={setListTab} className="space-y-6">
+              <div className="flex items-center justify-between">
+                <TabsList className="bg-muted/50 p-1">
+                  <TabsTrigger value="active" className="font-bold gap-2">
+                    En Curso <Badge variant="secondary" className="h-5 min-w-5 p-0 flex items-center justify-center rounded-full text-[10px]">{activeSheets.length}</Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value="history" className="font-bold gap-2">
+                    <History className="h-3.5 w-3.5" /> Historial <Badge variant="outline" className="h-5 min-w-5 p-0 flex items-center justify-center rounded-full text-[10px] opacity-60">{historySheets.length}</Badge>
+                  </TabsTrigger>
+                </TabsList>
               </div>
-            </section>
+
+              {loadingSheets ? (
+                <div className="flex justify-center py-20"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>
+              ) : (
+                <>
+                  <TabsContent value="active" className="m-0 focus-visible:outline-none">
+                    {activeSheets.length === 0 ? (
+                      <Card className="p-20 text-center border-dashed bg-muted/5">
+                        <ClipboardList className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
+                        <h3 className="text-lg font-semibold">No hay hojas de ruta en curso</h3>
+                        <p className="text-sm text-muted-foreground mt-2">Planifica una nueva planilla para comenzar el día.</p>
+                      </Card>
+                    ) : renderSheetList(activeSheets)}
+                  </TabsContent>
+
+                  <TabsContent value="history" className="m-0 focus-visible:outline-none">
+                    {historySheets.length === 0 ? (
+                      <Card className="p-20 text-center border-dashed bg-muted/5">
+                        <History className="h-12 w-12 mx-auto text-muted-foreground opacity-20 mb-4" />
+                        <h3 className="text-lg font-semibold">El historial está vacío</h3>
+                      </Card>
+                    ) : renderSheetList(historySheets)}
+                  </TabsContent>
+                </>
+              )}
+            </Tabs>
           ) : (
             <div className="space-y-6 animate-in fade-in duration-300 pb-20">
               {selectedSheet && (
