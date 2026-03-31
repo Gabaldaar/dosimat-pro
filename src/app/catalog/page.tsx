@@ -263,6 +263,8 @@ function CatalogContent() {
   const [supplierStatuses, setSupplierStatuses] = useState<Record<string, 'pending' | 'ordered'>>({})
   const [initialPlanData, setInitialPlanData] = useState({ qtys: {}, sups: {}, prices: {}, currencies: {}, statuses: {}, qty: 0, itemsCount: 0 })
 
+  const [initialProductionQty, setInitialProductionQty] = useState<number | null>(null)
+
   const [editHistory, setEditHistory] = useState<any[]>([])
 
   const [formData, setFormData] = useState({
@@ -466,9 +468,9 @@ function CatalogContent() {
       
       purchaseOrderToView.items.forEach((item: any) => {
         const lineId = item.id || item.productId;
-        newManualQtys[lineId] = item.quantity;
+        newManualQtys[lineId] = item.quantity ?? 0;
         newManualCurrencies[lineId] = item.currency || 'ARS';
-        newManualPrices[lineId] = item.price || 0;
+        newManualPrices[lineId] = item.price ?? 0;
         newManualSups[lineId] = item.supplier || "Sin Proveedor";
       });
       
@@ -503,8 +505,14 @@ function CatalogContent() {
            !itemsCountMatch;
   }, [manualPurchaseQtys, manualPurchasePrices, manualPurchaseCurrencies, manualSuppliers, supplierStatuses, initialPlanData, purchaseOrderToView]);
 
+  const isProductionOutOfSync = useMemo(() => {
+    if (!orderToView || !liveOrderToView) return false;
+    if (liveOrderToView.status === 'completed') return false;
+    return liveOrderToView.quantity !== initialProductionQty;
+  }, [orderToView, liveOrderToView, initialProductionQty]);
+
   const handleCloseOrderView = () => {
-    if (hasUnsavedChanges) {
+    if (hasUnsavedChanges || isProductionOutOfSync) {
       setIsExitAlertOpen(true);
     } else {
       setOrderToView(null);
@@ -607,24 +615,24 @@ function CatalogContent() {
     });
 
     const costCurrency = item.costCurrency || (item.costUSD > 0 && !item.costARS ? 'USD' : 'ARS');
-    const costAmount = costCurrency === 'USD' ? (item.costUSD || 0) : (item.costARS || 0);
+    const costAmount = costCurrency === 'USD' ? (item.costUSD ?? 0) : (item.costARS ?? 0);
 
     setFormData({
       name: item.name || "",
       categoryId: item.categoryId || "",
       supplier: item.supplier || "none",
-      priceARS: item.priceARS || 0,
-      priceUSD: item.priceUSD || 0,
+      priceARS: item.priceARS ?? 0,
+      priceUSD: item.priceUSD ?? 0,
       costAmount: costAmount,
       costCurrency: costCurrency,
-      laborCostARS: item.laborCostARS || 0,
-      laborCostUSD: item.laborCostUSD || 0,
+      laborCostARS: item.laborCostARS ?? 0,
+      laborCostUSD: item.laborCostUSD ?? 0,
       isService: item.isService || false,
       isCompuesto: item.isCompuesto || false,
       trackStock: item.trackStock !== undefined ? item.trackStock : !item.isService,
       description: item.description || "",
-      stock: item.stock || 0,
-      minStock: item.minStock || 0,
+      stock: item.stock ?? 0,
+      minStock: item.minStock ?? 0,
       components: sanitizedComponents
     })
   }, []);
@@ -643,6 +651,11 @@ function CatalogContent() {
     }
     setIsDialogOpen(true)
   }
+
+  const handleOpenOrderView = (order: any) => {
+    setOrderToView(order);
+    setInitialProductionQty(order.quantity);
+  };
 
   const handleJumpToComponent = (componentId: string) => {
     const component = items?.find(i => i.id === componentId);
@@ -689,8 +702,8 @@ function CatalogContent() {
       ...formData,
       id,
       supplier: formData.supplier === 'none' ? "" : formData.supplier,
-      costARS: formData.costCurrency === 'ARS' ? formData.costAmount : 0,
-      costUSD: formData.costCurrency === 'USD' ? formData.costAmount : 0
+      costARS: formData.costCurrency === 'ARS' ? (formData.costAmount ?? 0) : 0,
+      costUSD: formData.costCurrency === 'USD' ? (formData.costAmount ?? 0) : 0
     }
 
     setDocumentNonBlocking(doc(db, 'products_services', id), savePayload, { merge: true })
@@ -736,7 +749,7 @@ function CatalogContent() {
       productId: item.id,
       productName: item.name,
       quantity: Number(item.qtyToAdd) || 1,
-      price: item.costCurrency === 'USD' ? (item.costUSD || 0) : (item.costARS || 0),
+      price: item.costCurrency === 'USD' ? (item.costUSD ?? 0) : (item.costARS ?? 0),
       currency: item.costCurrency || 'ARS',
       supplier: item.supplier || "Sin Proveedor",
       received: false
@@ -768,6 +781,7 @@ function CatalogContent() {
     
     if (missingItems.length === 0 && !liveOrderToView.purchaseOrderId) {
       toast({ title: "Sin faltantes", description: "No hay materiales faltantes para este armado." });
+      setInitialProductionQty(liveOrderToView.quantity);
       return;
     }
 
@@ -810,7 +824,7 @@ function CatalogContent() {
               productId: missing.id,
               productName: missing.name,
               quantity: netMissing,
-              price: missing.costCurrency === 'USD' ? missing.costUSD : missing.costARS,
+              price: missing.costCurrency === 'USD' ? (missing.costUSD ?? 0) : (missing.costARS ?? 0),
               currency: missing.costCurrency || 'ARS',
               supplier: supplier,
               received: false
@@ -829,6 +843,7 @@ function CatalogContent() {
         toast({ title: "Orden al día", description: "La orden de compra vinculada ya cubre los materiales necesarios." });
       }
       
+      setInitialProductionQty(liveOrderToView.quantity);
       setPurchaseOrderToView(existingPO);
       setOrderToView(null);
       setActiveTab("purchases");
@@ -839,7 +854,7 @@ function CatalogContent() {
         productId: m.id,
         productName: m.name,
         quantity: Math.max(m.missing, m.suggestedToBuy),
-        price: m.costCurrency === 'USD' ? m.costUSD : m.costARS,
+        price: m.costCurrency === 'USD' ? (m.costUSD ?? 0) : (m.costARS ?? 0),
         currency: m.costCurrency || 'ARS',
         supplier: m.supplier || "Sin Proveedor",
         received: false
@@ -858,6 +873,7 @@ function CatalogContent() {
       setDocumentNonBlocking(doc(db, 'purchase_orders', newPOId), newPO, { merge: true });
       updateDocumentNonBlocking(doc(db, 'production_orders', liveOrderToView.id), { purchaseOrderId: newPOId });
       
+      setInitialProductionQty(liveOrderToView.quantity);
       setPurchaseOrderToView(newPO);
       setOrderToView(null);
       setActiveTab("purchases");
@@ -908,7 +924,7 @@ function CatalogContent() {
       productId: prod.id,
       productName: prod.name,
       quantity: 1,
-      price: prod.costCurrency === 'USD' ? prod.costUSD : prod.costARS,
+      price: prod.costCurrency === 'USD' ? (prod.costUSD ?? 0) : (prod.costARS ?? 0),
       currency: prod.costCurrency || 'ARS',
       supplier: prod.supplier || "Sin Proveedor",
       received: false
@@ -1042,7 +1058,7 @@ function CatalogContent() {
     if (!item) return;
     const finalUpdates = { ...updates };
     if ('costAmount' in updates || 'costCurrency' in updates) {
-      const amount = updates.costAmount ?? (item.costCurrency === 'USD' ? item.costUSD : item.costARS);
+      const amount = updates.costAmount ?? (item.costCurrency === 'USD' ? (item.costUSD ?? 0) : (item.costARS ?? 0));
       const currency = updates.costCurrency ?? item.costCurrency;
       finalUpdates.costARS = currency === 'ARS' ? amount : 0;
       finalUpdates.costUSD = currency === 'USD' ? amount : 0;
@@ -1417,9 +1433,9 @@ function CatalogContent() {
       groups[sup].push({
         ...item,
         id: lineId,
-        available: prod?.stock || 0,
-        refCostARS: prod?.costARS || 0,
-        refCostUSD: prod?.costUSD || 0,
+        available: prod?.stock ?? 0,
+        refCostARS: prod?.costARS ?? 0,
+        refCostUSD: prod?.costUSD ?? 0,
         refCostCurrency: prod?.costCurrency || (prod?.costUSD > 0 && !prod?.costARS ? 'USD' : 'ARS')
       });
     });
@@ -1444,7 +1460,7 @@ function CatalogContent() {
               "glass-card hover:shadow-lg transition-all cursor-pointer border-l-4 group", 
               isHistory ? 'border-l-emerald-500 shadow-none' : 'border-l-amber-500'
             )} 
-            onClick={() => setOrderToView(order)}
+            onClick={() => handleOpenOrderView(order)}
           >
             <CardHeader className="pb-3">
               <div className="flex justify-between items-start">
@@ -1604,7 +1620,7 @@ function CatalogContent() {
                   <div className="flex flex-col sm:flex-row gap-4 items-center">
                     <div className="relative flex-1 w-full">
                       <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <input placeholder="Buscar por nombre..." className="w-full pl-10 h-11 bg-white/50 backdrop-blur-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                      <input placeholder="Buscar por nombre..." className="w-full pl-10 h-11 bg-white/50 backdrop-blur-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20" value={searchTerm ?? ""} onChange={(e) => setSearchTerm(e.target.value)} />
                     </div>
                     
                     <div className="md:hidden w-full sm:w-auto">
@@ -1641,10 +1657,10 @@ function CatalogContent() {
                     <section className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6">
                       {filteredItems.map((item: any) => { 
                         const tracksStock = item.trackStock !== false; 
-                        const isLowStock = tracksStock && !item.isService && (item.stock || 0) <= (item.minStock || 0); 
+                        const isLowStock = tracksStock && !item.isService && (item.stock ?? 0) <= (item.minStock ?? 0); 
                         const catName = categoryMap[item.categoryId] || "Sin Categoría"; 
-                        const marginARS = getMarginInfo(item.priceARS, item.calculatedCostARS); 
-                        const marginUSD = getMarginInfo(item.priceUSD, item.calculatedCostUSD); 
+                        const marginARS = getMarginInfo(item.priceARS ?? 0, item.calculatedCostARS ?? 0); 
+                        const marginUSD = getMarginInfo(item.priceUSD ?? 0, item.calculatedCostUSD ?? 0); 
                         return (
                           <Card key={item.id} className={cn("glass-card hover:shadow-md transition-all group border-l-4", isLowStock ? "border-l-rose-500 bg-rose-50/30" : "border-l-primary")}>
                             <CardHeader className="pb-2">
@@ -1680,7 +1696,7 @@ function CatalogContent() {
                                 <div className="flex items-center justify-between p-2 bg-white rounded-lg border shadow-sm">
                                   <div className="flex flex-col">
                                     <span className="text-[9px] font-black text-muted-foreground uppercase tracking-wider">Stock Actual</span>
-                                    <span className={cn("text-xl font-black", isLowStock ? "text-rose-600" : "text-emerald-600")}>{item.stock || 0}</span>
+                                    <span className={cn("text-xl font-black", isLowStock ? "text-rose-600" : "text-emerald-600")}>{item.stock ?? 0}</span>
                                   </div>
                                   {isLowStock && <AlertTriangle className="h-5 w-5 text-rose-500 animate-pulse" />}
                                 </div>
@@ -1688,14 +1704,14 @@ function CatalogContent() {
                               <div className="grid grid-cols-2 gap-2">
                                 <div className="p-2 bg-blue-50 rounded-lg border border-blue-100 relative overflow-hidden">
                                   <span className="text-[9px] font-black text-blue-700 uppercase block">Venta ARS</span>
-                                  <span className="text-md font-black text-blue-800">${(item.priceARS || 0).toLocaleString('es-AR')}</span>
+                                  <span className="text-md font-black text-blue-800">${(item.priceARS ?? 0).toLocaleString('es-AR')}</span>
                                   {isAdmin && marginARS && (
                                     <div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginARS.color)}>{marginARS.icon} {marginARS.value}%</div>
                                   )}
                                 </div>
                                 <div className="p-2 bg-emerald-50 rounded-lg border border-emerald-100 relative overflow-hidden">
                                   <span className="text-[9px] font-black text-emerald-700 uppercase block">Venta USD</span>
-                                  <span className="text-md font-black text-emerald-700">u$s {(item.priceUSD || 0).toLocaleString('es-AR')}</span>
+                                  <span className="text-md font-black text-emerald-700">u$s {(item.priceUSD ?? 0).toLocaleString('es-AR')}</span>
                                   {isAdmin && marginUSD && (
                                     <div className={cn("absolute top-1 right-1 flex items-center gap-0.5 text-[9px] font-black", marginUSD.color)}>{marginUSD.icon} {marginUSD.value}%</div>
                                   )}
@@ -1800,12 +1816,12 @@ function CatalogContent() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Nombre del Ítem</Label>
-                  <Input value={formData.name || ""} onChange={(e) => setFormData({...formData, name: e.target.value})} className="h-12 text-lg font-bold" />
+                  <Input value={formData.name ?? ""} onChange={(e) => setFormData({...formData, name: e.target.value})} className="h-12 text-lg font-bold" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Categoría</Label>
-                    <Select value={formData.categoryId || ""} onValueChange={(v) => setFormData({...formData, categoryId: v})}>
+                    <Select value={formData.categoryId ?? ""} onValueChange={(v) => setFormData({...formData, categoryId: v})}>
                       <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
                       <SelectContent>
                         {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
@@ -1913,7 +1929,7 @@ function CatalogContent() {
                         <SelectTrigger className="h-11 bg-white"><SelectValue placeholder="Buscar pieza..." /></SelectTrigger>
                         <SelectContent className="max-h-60">
                           {items?.filter(i => i.id !== editingItemId && !i.isService && (bomFilterCategory === 'all' || i.categoryId === bomFilterCategory)).sort((a,b) => a.name.localeCompare(b.name)).map(i => (
-                            <SelectItem key={i.id} value={i.id}>{i.name} (Stock: {i.stock || 0})</SelectItem>
+                            <SelectItem key={i.id} value={i.id}>{i.name} (Stock: {i.stock ?? 0})</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -2024,8 +2040,17 @@ function CatalogContent() {
               <div className="flex justify-between items-end">
                 <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2"><Layers className="h-4 w-4" /> Explosión de Materiales</h3>
                 {liveOrderToView?.status !== 'completed' && (
-                  <Button variant="outline" size="sm" className="h-8 font-bold text-[10px]" onClick={handleGeneratePOFromProduction}>
-                    <ShoppingCart className="h-3 w-3 mr-1.5" /> GENERAR/ACTUALIZAR COMPRA
+                  <Button 
+                    variant={isProductionOutOfSync ? "destructive" : "outline"} 
+                    size="sm" 
+                    className={cn(
+                      "h-8 font-bold text-[10px] transition-all", 
+                      isProductionOutOfSync && "animate-pulse shadow-lg shadow-destructive/20"
+                    )} 
+                    onClick={handleGeneratePOFromProduction}
+                  >
+                    <ShoppingCart className="h-3.5 w-3.5 mr-1.5" /> 
+                    {isProductionOutOfSync ? 'ACTUALIZAR COMPRA (PLAN MODIFICADO)' : 'GENERAR/ACTUALIZAR COMPRA'}
                   </Button>
                 )}
               </div>
@@ -2084,12 +2109,12 @@ function CatalogContent() {
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
             <div className="space-y-2">
               <Label className="font-bold">Título / Identificador de la Orden</Label>
-              <Input value={newPOTitle || ""} onChange={(e) => setNewPOTitle(e.target.value)} placeholder="Ej: Reposición de Ferretería, Insumos de Verano..." />
+              <Input value={newPOTitle ?? ""} onChange={(e) => setNewPOTitle(e.target.value)} placeholder="Ej: Reposición de Ferretería, Insumos de Verano..." />
             </div>
             <div className="grid grid-cols-2 md:grid-cols-2 gap-4 items-end bg-muted/20 p-4 rounded-xl border border-dashed">
               <div className="space-y-2">
                 <Label className="text-[10px] font-bold uppercase text-muted-foreground">Filtrar Categoría</Label>
-                <Select value={newPOCatFilter} onValueChange={setNewPOCatFilter}>
+                <Select value={newPOCatFilter ?? ""} onValueChange={setNewPOCatFilter}>
                   <SelectTrigger className="bg-white h-10 text-xs"><SelectValue placeholder="Todas" /></SelectTrigger>
                   <SelectContent className="max-h-60">
                     <SelectItem value="all">Todas</SelectItem>
@@ -2108,7 +2133,7 @@ function CatalogContent() {
                   <SelectTrigger className="bg-white h-10 text-xs"><SelectValue placeholder="Buscar..." /></SelectTrigger>
                   <SelectContent className="max-h-60">
                     {items?.filter(i => !i.isService && (newPOCatFilter === 'all' || i.categoryId === newPOCatFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(i => (
-                      <SelectItem key={i.id} value={i.id}>{i.name} (Stock: {i.stock || 0})</SelectItem>
+                      <SelectItem key={i.id} value={i.id}>{i.name} (Stock: {i.stock ?? 0})</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -2188,7 +2213,7 @@ function CatalogContent() {
               <div className="hidden md:block h-16 w-px bg-amber-200" />
               <div className="hidden md:block flex-1 text-right">
                 <p className="text-[10px] font-black text-amber-700 uppercase">Stock Actual</p>
-                <p className="text-2xl font-black text-amber-900">{selectedForAssembly?.stock || 0}</p>
+                <p className="text-2xl font-black text-amber-900">{selectedForAssembly?.stock ?? 0}</p>
               </div>
             </div>
 
@@ -2270,7 +2295,7 @@ function CatalogContent() {
                 <div className="grid grid-cols-2 md:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <Label className="text-[10px] font-black uppercase text-muted-foreground">Filtrar Categoría</Label>
-                    <Select value={newPOCatFilter} onValueChange={setNewPOCatFilter}>
+                    <Select value={newPOCatFilter ?? ""} onValueChange={setNewPOCatFilter}>
                       <SelectTrigger className="bg-white h-9 text-[10px]"><SelectValue placeholder="Todas" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todas</SelectItem>
@@ -2284,7 +2309,7 @@ function CatalogContent() {
                       <SelectTrigger className="bg-white h-9 text-[10px]"><SelectValue placeholder="Añadir..." /></SelectTrigger>
                       <SelectContent className="max-h-60">
                         {items?.filter(i => !i.isService && (newPOCatFilter === 'all' || i.categoryId === newPOCatFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(i => (
-                          <SelectItem key={i.id} value={i.id}>{i.name} (Stock: {i.stock || 0})</SelectItem>
+                          <SelectItem key={i.id} value={i.id}>{i.name} (Stock: {i.stock ?? 0})</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -2410,7 +2435,7 @@ function CatalogContent() {
                                         <p className="font-bold text-xs">{f.productName}</p>
                                         <div className="flex gap-2 items-center">
                                           <span className="text-[8px] text-muted-foreground uppercase font-black">Stock: {f.available}</span>
-                                          <span className="text-[8px] text-primary/60 uppercase font-black">Ref: {refSymbol} {refCost.toLocaleString()}</span>
+                                          <span className="text-[8px] text-primary/60 uppercase font-black">Ref: {refSymbol} {(refCost ?? 0).toLocaleString()}</span>
                                         </div>
                                       </div>
                                     </div>
@@ -2443,7 +2468,7 @@ function CatalogContent() {
                                         )} 
                                       />
                                       <Tabs 
-                                        value={currentCurrency} 
+                                        value={currentCurrency ?? ""} 
                                         onValueChange={(v: any) => setManualPurchaseCurrencies(prev => ({ ...prev, [lineId]: v }))}
                                         className={cn("shrink-0 h-8", isLineLocked && "pointer-events-none opacity-50")}
                                       >
@@ -2511,7 +2536,7 @@ function CatalogContent() {
                                   </div>
                                   <div className="flex flex-wrap gap-x-3 gap-y-1">
                                     <span className="text-[9px] text-muted-foreground font-black">STOCK: {f.available}</span>
-                                    <span className="text-[9px] text-primary font-black uppercase">REF: {refSymbol} {refCost.toLocaleString()}</span>
+                                    <span className="text-[9px] text-primary font-black uppercase">REF: {refSymbol} {(refCost ?? 0).toLocaleString()}</span>
                                   </div>
                                 </div>
                                 {!isLineLocked && (
@@ -2557,7 +2582,7 @@ function CatalogContent() {
                                 <div className="space-y-1.5">
                                   <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1">Moneda</Label>
                                   <Tabs 
-                                    value={currentCurrency} 
+                                    value={currentCurrency ?? ""} 
                                     onValueChange={(v: any) => setManualPurchaseCurrencies(prev => ({ ...prev, [lineId]: v }))}
                                     className={cn("w-full", isLineLocked && "pointer-events-none opacity-50")}
                                   >
@@ -2610,8 +2635,8 @@ function CatalogContent() {
                 <DialogDescription className="text-[10px] font-bold uppercase">Ajuste rápido de inventario y costos</DialogDescription>
               </div>
               <div className="flex gap-4">
-                <div className="relative"><Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Buscar..." value={auditSearch || ""} onChange={(e) => setAuditSearch(e.target.value)} className="h-8 pl-8 text-xs w-48 bg-white" /></div>
-                <Select value={auditCategoryFilter} onValueChange={setAuditCategoryFilter}>
+                <div className="relative"><Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" /><Input placeholder="Buscar..." value={auditSearch ?? ""} onChange={(e) => setAuditSearch(e.target.value)} className="h-8 pl-8 text-xs w-48 bg-white" /></div>
+                <Select value={auditCategoryFilter ?? ""} onValueChange={setAuditCategoryFilter}>
                   <SelectTrigger className="h-8 text-xs w-40 bg-white"><SelectValue placeholder="Categoría" /></SelectTrigger>
                   <SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}<SelectItem value="all">Todas</SelectItem></SelectContent>
                 </Select>
@@ -2655,7 +2680,7 @@ function CatalogContent() {
           <DialogHeader><DialogTitle>Gestionar Categorías</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="flex gap-2">
-              <Input placeholder="Nombre de categoría..." value={newCategoryName || ""} onChange={(e) => setNewCategoryName(e.target.value)} />
+              <Input placeholder="Nombre de categoría..." value={newCategoryName ?? ""} onChange={(e) => setNewCategoryName(e.target.value)} />
               <Button onClick={handleSaveCategory}>{editingCategoryId ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}</Button>
             </div>
             <ScrollArea className="h-64 border rounded-xl p-2 bg-slate-50">
@@ -2683,9 +2708,9 @@ function CatalogContent() {
             <Card className="p-4 bg-muted/20 border-dashed space-y-4">
               <p className="text-[10px] font-black uppercase text-primary tracking-widest">{editingSupplierId ? 'Editando Proveedor' : 'Nuevo Proveedor'}</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1"><Label className="text-xs">Nombre Fantasía</Label><Input value={newSupplierName || ""} onChange={(e) => setNewSupplierName(e.target.value)} className="bg-white" /></div>
-                <div className="space-y-1"><Label className="text-xs">Teléfono / WhatsApp</Label><Input value={newSupplierPhone || ""} onChange={(e) => setNewSupplierPhone(e.target.value)} className="bg-white" /></div>
-                <div className="col-span-full space-y-1"><Label className="text-xs">Dirección / Localidad</Label><Input value={newSupplierAddress || ""} onChange={(e) => setNewSupplierAddress(e.target.value)} className="bg-white" /></div>
+                <div className="space-y-1"><Label className="text-xs">Nombre Fantasía</Label><Input value={newSupplierName ?? ""} onChange={(e) => setNewSupplierName(e.target.value)} className="bg-white" /></div>
+                <div className="space-y-1"><Label className="text-xs">Teléfono / WhatsApp</Label><Input value={newSupplierPhone ?? ""} onChange={(e) => setNewSupplierPhone(e.target.value)} className="bg-white" /></div>
+                <div className="col-span-full space-y-1"><Label className="text-xs">Dirección / Localidad</Label><Input value={newSupplierAddress ?? ""} onChange={(e) => setNewSupplierAddress(e.target.value)} className="bg-white" /></div>
               </div>
               <div className="flex justify-end gap-2">
                 {editingSupplierId && <Button variant="outline" onClick={() => { setEditingSupplierId(null); setNewSupplierName(""); setNewSupplierPhone(""); setNewSupplierAddress(""); }}>Cancelar</Button>}
@@ -2746,7 +2771,7 @@ function CatalogContent() {
                     <TableCell className="text-xs font-bold">{new Date(p.date).toLocaleDateString('es-AR')}</TableCell>
                     <TableCell className="text-xs font-black uppercase text-slate-600">{p.supplierName}</TableCell>
                     <TableCell className="text-center font-bold">{p.quantity}</TableCell>
-                    <TableCell className="text-right font-black text-emerald-700">{p.currency === 'USD' ? 'u$s' : '$'} {p.price.toLocaleString('es-AR')}</TableCell>
+                    <TableCell className="text-right font-black text-emerald-700">{p.currency === 'USD' ? 'u$s' : '$'} {(p.price ?? 0).toLocaleString('es-AR')}</TableCell>
                     <TableCell className="text-right font-black">{p.currency === 'USD' ? 'u$s' : '$'} {(p.quantity * p.price).toLocaleString('es-AR')}</TableCell>
                   </TableRow>
                 ))}
@@ -2787,7 +2812,7 @@ function CatalogContent() {
                     <TableCell className="text-xs font-bold">{new Date(p.date).toLocaleDateString('es-AR')}</TableCell>
                     <TableCell className="text-xs font-black uppercase text-slate-600">{p.productName}</TableCell>
                     <TableCell className="text-center font-bold">{p.quantity}</TableCell>
-                    <TableCell className="text-right font-black text-emerald-700">{p.currency === 'USD' ? 'u$s' : '$'} {p.price.toLocaleString('es-AR')}</TableCell>
+                    <TableCell className="text-right font-black text-emerald-700">{p.currency === 'USD' ? 'u$s' : '$'} {(p.price ?? 0).toLocaleString('es-AR')}</TableCell>
                     <TableCell className="text-right font-black">{p.currency === 'USD' ? 'u$s' : '$'} {(p.quantity * p.price).toLocaleString('es-AR')}</TableCell>
                   </TableRow>
                 ))}
@@ -2829,8 +2854,8 @@ function CatalogContent() {
 
       <AlertDialog open={isExitAlertOpen} onOpenChange={setIsExitAlertOpen}>
         <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>Cambios sin guardar</AlertDialogTitle><AlertDialogDescription>Has realizado modificaciones en la orden de compra que no han sido guardadas. ¿Deseas salir de todas formas?</AlertDialogDescription></AlertDialogHeader>
-          <AlertDialogFooter><AlertDialogCancel>Seguir editando</AlertDialogCancel><AlertDialogAction onClick={() => { setIsExitAlertOpen(false); setPurchaseOrderToView(null); setOrderToView(null); }} className="bg-destructive">Salir sin guardar</AlertDialogAction></AlertDialogFooter>
+          <AlertDialogHeader><AlertDialogTitle>Cambios sin guardar o sincronizar</AlertDialogTitle><AlertDialogDescription>Has realizado modificaciones que no han sido sincronizadas o guardadas. ¿Deseas salir de todas formas?</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel>Seguir editando</AlertDialogCancel><AlertDialogAction onClick={() => { setIsExitAlertOpen(false); setPurchaseOrderToView(null); setOrderToView(null); setInitialProductionQty(null); }} className="bg-destructive">Salir sin guardar</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
@@ -2887,11 +2912,11 @@ function CatalogContent() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-3 border rounded-xl bg-slate-50">
                     <p className="text-[8px] font-black uppercase text-blue-600">Venta ARS</p>
-                    <p className="text-lg font-black">${(itemToPrint.priceARS || 0).toLocaleString('es-AR')}</p>
+                    <p className="text-lg font-black">${(itemToPrint.priceARS ?? 0).toLocaleString('es-AR')}</p>
                   </div>
                   <div className="p-3 border rounded-xl bg-slate-50">
                     <p className="text-[8px] font-black uppercase text-emerald-600">Venta USD</p>
-                    <p className="text-lg font-black">u$s {(itemToPrint.priceUSD || 0).toLocaleString('es-AR')}</p>
+                    <p className="text-lg font-black">u$s {(itemToPrint.priceUSD ?? 0).toLocaleString('es-AR')}</p>
                   </div>
                 </div>
               </div>
@@ -2900,11 +2925,11 @@ function CatalogContent() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-3 border rounded-xl bg-slate-50">
                     <p className="text-[8px] font-black uppercase text-slate-400">Actual</p>
-                    <p className="text-lg font-black">{itemToPrint.stock || 0}</p>
+                    <p className="text-lg font-black">{itemToPrint.stock ?? 0}</p>
                   </div>
                   <div className="p-3 border rounded-xl bg-slate-50">
                     <p className="text-[8px] font-black uppercase text-rose-600">Mínimo</p>
-                    <p className="text-lg font-black">{itemToPrint.minStock || 0}</p>
+                    <p className="text-lg font-black">{itemToPrint.minStock ?? 0}</p>
                   </div>
                 </div>
               </div>
@@ -2935,7 +2960,7 @@ function CatalogContent() {
                     })}
                     <tr className="bg-slate-100 font-black">
                       <td colSpan={2} className="p-2 text-right uppercase">Total Costo Materiales</td>
-                      <td className="p-2 text-right">${(itemToPrint.calculatedCostARS - ((itemToPrint.laborCostARS || 0) + (itemToPrint.laborCostUSD || 0) * currentRate)).toLocaleString('es-AR')}</td>
+                      <td className="p-2 text-right">${(itemToPrint.calculatedCostARS - ((itemToPrint.laborCostARS ?? 0) + (itemToPrint.laborCostUSD ?? 0) * currentRate)).toLocaleString('es-AR')}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -2959,7 +2984,7 @@ function CatalogContent() {
 
             <div className="p-6 border-2 border-slate-900 rounded-2xl bg-slate-50 flex justify-between items-center">
               <div>
-                <p className="text-xs font-black uppercase text-slate-500">Unidades a fabricar</p>
+                <p className="text-xs font-black uppercase text-slate-50">Unidades a fabricar</p>
                 <p className="text-5xl font-black text-slate-900">{orderToPrint.quantity}</p>
               </div>
               <div className="text-right">
