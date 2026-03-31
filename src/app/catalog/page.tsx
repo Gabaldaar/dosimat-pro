@@ -264,6 +264,7 @@ function CatalogContent() {
   const [initialPlanData, setInitialPlanData] = useState({ qtys: {}, sups: {}, prices: {}, currencies: {}, statuses: {}, qty: 0, itemsCount: 0 })
 
   const [initialProductionQty, setInitialProductionQty] = useState<number | null>(null)
+  const [localProductionQty, setLocalProductionQty] = useState<number>(0)
 
   const [editHistory, setEditHistory] = useState<any[]>([])
 
@@ -376,7 +377,7 @@ function CatalogContent() {
     }
 
     const target = currentOrder ? items?.find(i => i.id === currentOrder.productId) : selectedForAssembly;
-    const qty = currentOrder ? currentOrder.quantity : assemblyQty;
+    const qty = currentOrder ? localProductionQty : assemblyQty;
     
     if (!target || !items) return null;
 
@@ -446,18 +447,21 @@ function CatalogContent() {
       all: flatList,
       toBuySuggested: flatList.filter(f => f.suggestedToBuy > 0)
     };
-  }, [selectedForAssembly, assemblyQty, items, liveOrderToView]);
+  }, [selectedForAssembly, assemblyQty, items, liveOrderToView, localProductionQty]);
 
   useEffect(() => {
     if (liveOrderToView && liveOrderToView.status !== 'completed' && explosionSummary) {
-      const anyMissing = explosionSummary.all.some(f => (f.available - f.required) < 0);
-      const newStatus = anyMissing ? 'pending_purchase' : 'ready';
-      
-      if (newStatus !== liveOrderToView.status) {
-        updateDocumentNonBlocking(doc(db, 'production_orders', liveOrderToView.id), { status: newStatus });
+      // Solo actualizamos estado si la cantidad de la DB ya se actualizó
+      if (liveOrderToView.quantity === localProductionQty) {
+        const anyMissing = explosionSummary.all.some(f => (f.available - f.required) < 0);
+        const newStatus = anyMissing ? 'pending_purchase' : 'ready';
+        
+        if (newStatus !== liveOrderToView.status) {
+          updateDocumentNonBlocking(doc(db, 'production_orders', liveOrderToView.id), { status: newStatus });
+        }
       }
     }
-  }, [items, liveOrderToView, explosionSummary, db]);
+  }, [items, liveOrderToView, explosionSummary, db, localProductionQty]);
 
   useEffect(() => {
     if (purchaseOrderToView) {
@@ -508,8 +512,8 @@ function CatalogContent() {
   const isProductionOutOfSync = useMemo(() => {
     if (!orderToView || !liveOrderToView) return false;
     if (liveOrderToView.status === 'completed') return false;
-    return liveOrderToView.quantity !== initialProductionQty;
-  }, [orderToView, liveOrderToView, initialProductionQty]);
+    return localProductionQty !== initialProductionQty;
+  }, [orderToView, liveOrderToView, initialProductionQty, localProductionQty]);
 
   const handleCloseOrderView = () => {
     if (hasUnsavedChanges || isProductionOutOfSync) {
@@ -655,6 +659,7 @@ function CatalogContent() {
   const handleOpenOrderView = (order: any) => {
     setOrderToView(order);
     setInitialProductionQty(order.quantity);
+    setLocalProductionQty(order.quantity);
   };
 
   const handleJumpToComponent = (componentId: string) => {
@@ -775,79 +780,86 @@ function CatalogContent() {
   }
 
   const handleGeneratePOFromProduction = () => {
-    if (!liveOrderToView || !explosionSummary) return;
+    if (!orderToView || !explosionSummary) return;
     
-    const missingItems = explosionSummary.all.filter(f => (f.required - f.available) > 0);
-    
-    if (missingItems.length === 0 && !liveOrderToView.purchaseOrderId) {
-      toast({ title: "Sin faltantes", description: "No hay materiales faltantes para este armado." });
-      setInitialProductionQty(liveOrderToView.quantity);
-      return;
-    }
+    // 1. Actualizar la cantidad del plan en la DB
+    updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), { 
+      quantity: localProductionQty 
+    });
 
-    const linkedPOId = liveOrderToView.purchaseOrderId;
+    const linkedPOId = orderToView.purchaseOrderId;
     const existingPO = purchaseOrders?.find(po => po.id === linkedPOId);
 
     if (existingPO && existingPO.status !== 'completed') {
       const updatedItems = [...existingPO.items];
       const newSupplierStatuses = { ...(existingPO.supplierStatuses || {}) };
-      let itemsAdded = 0;
-
-      missingItems.forEach(missing => {
-        const totalRequired = missing.required;
-        const currentInStock = missing.available;
-        const totalAlreadyInPO = existingPO.items
-          .filter((i: any) => i.productId === missing.id)
-          .reduce((sum: number, i: any) => sum + i.quantity, 0);
+      
+      explosionSummary.all.forEach(req => {
+        const productId = req.id;
+        const required = req.required; // Total necesario para el NUEVO plan
+        const stock = req.available;   // Stock actual
         
-        const netMissing = totalRequired - (currentInStock + totalAlreadyInPO);
+        // Buscar líneas existentes en la OC para este producto
+        const poLines = updatedItems.filter((i: any) => i.productId === productId);
+        const totalPendingInPO = poLines.filter((i: any) => !i.received).reduce((sum, i) => sum + i.quantity, 0);
         
-        if (netMissing > 0) {
-          itemsAdded++;
-          const supplier = missing.supplier || "Sin Proveedor";
-          
-          if (newSupplierStatuses[supplier] === 'ordered') {
-            newSupplierStatuses[supplier] = 'pending';
-          }
-
-          const pendingLineIdx = updatedItems.findIndex((i: any) => 
-            i.productId === missing.id && 
-            (newSupplierStatuses[i.supplier || "Sin Proveedor"] !== 'ordered') &&
-            !i.received
-          );
-
-          if (pendingLineIdx > -1) {
-            updatedItems[pendingLineIdx].quantity += netMissing;
+        // Cuánto necesitamos tener en la OC (Pendiente) para cubrir el plan
+        const targetPending = Math.max(0, required - stock);
+        
+        if (targetPending !== totalPendingInPO) {
+          if (targetPending > totalPendingInPO) {
+            // Aumentar: sumar a la primera línea pendiente o crear nueva
+            const diff = targetPending - totalPendingInPO;
+            const firstPendingLine = updatedItems.find(i => i.productId === productId && !i.received);
+            
+            if (firstPendingLine) {
+              const lineIdx = updatedItems.findIndex(i => i.id === firstPendingLine.id);
+              updatedItems[lineIdx].quantity += diff;
+              const supplier = updatedItems[lineIdx].supplier || "Sin Proveedor";
+              newSupplierStatuses[supplier] = 'pending'; // Desbloquear proveedor
+            } else {
+              const supplier = req.supplier || "Sin Proveedor";
+              updatedItems.push({
+                id: Math.random().toString(36).substring(2, 11),
+                productId: productId,
+                productName: req.name,
+                quantity: diff,
+                price: req.costCurrency === 'USD' ? (req.costUSD ?? 0) : (req.costARS ?? 0),
+                currency: req.costCurrency || 'ARS',
+                supplier: supplier,
+                received: false
+              });
+              newSupplierStatuses[supplier] = 'pending'; // Desbloquear proveedor
+            }
           } else {
-            updatedItems.push({
-              id: Math.random().toString(36).substring(2, 11),
-              productId: missing.id,
-              productName: missing.name,
-              quantity: netMissing,
-              price: missing.costCurrency === 'USD' ? (missing.costUSD ?? 0) : (missing.costARS ?? 0),
-              currency: missing.costCurrency || 'ARS',
-              supplier: supplier,
-              received: false
-            });
+            // Disminuir: reducir de las líneas pendientes
+            let diff = totalPendingInPO - targetPending;
+            const pendingLines = updatedItems.filter(i => i.productId === productId && !i.received);
+            
+            for (const line of pendingLines) {
+              if (diff <= 0) break;
+              const lineIdx = updatedItems.findIndex(i => i.id === line.id);
+              const toReduce = Math.min(updatedItems[lineIdx].quantity, diff);
+              updatedItems[lineIdx].quantity -= toReduce;
+              diff -= toReduce;
+              const supplier = updatedItems[lineIdx].supplier || "Sin Proveedor";
+              newSupplierStatuses[supplier] = 'pending'; // Desbloquear proveedor
+            }
           }
         }
       });
 
-      if (itemsAdded > 0) {
-        updateDocumentNonBlocking(doc(db, 'purchase_orders', existingPO.id), { 
-          items: updatedItems,
-          supplierStatuses: newSupplierStatuses 
-        });
-        toast({ title: "Orden de Compra actualizada", description: `Se añadieron ${itemsAdded} ajustes de cantidad. Proveedores afectados desbloqueados.` });
-      } else {
-        toast({ title: "Orden al día", description: "La orden de compra vinculada ya cubre los materiales necesarios." });
-      }
-      
-      setInitialProductionQty(liveOrderToView.quantity);
-      setPurchaseOrderToView(existingPO);
-      setOrderToView(null);
-      setActiveTab("purchases");
+      // Limpiar ítems con cantidad 0 que no fueron recibidos
+      const finalItems = updatedItems.filter(i => i.quantity > 0 || i.received);
+
+      updateDocumentNonBlocking(doc(db, 'purchase_orders', existingPO.id), { 
+        items: finalItems,
+        supplierStatuses: newSupplierStatuses 
+      });
+      toast({ title: "Orden de Compra sincronizada", description: "Cantidades ajustadas y proveedores afectados desbloqueados para revisión." });
     } else {
+      // Crear nueva OC si no existía (basada en el nuevo plan)
+      const missingItems = explosionSummary.all.filter(f => (f.required - f.available) > 0);
       const newPOId = Math.random().toString(36).substring(2, 11);
       const newPOItems = missingItems.map(m => ({
         id: Math.random().toString(36).substring(2, 11),
@@ -862,23 +874,20 @@ function CatalogContent() {
 
       const newPO = {
         id: newPOId,
-        description: `Faltantes: ${liveOrderToView.productName} (#${liveOrderToView.id.slice(0, 4)})`,
+        description: `Faltantes: ${orderToView.productName} (#${orderToView.id.slice(0, 4)})`,
         status: 'pending',
         createdAt: new Date().toISOString(),
         items: newPOItems,
         supplierStatuses: {},
-        productionOrderId: liveOrderToView.id
+        productionOrderId: orderToView.id
       };
 
       setDocumentNonBlocking(doc(db, 'purchase_orders', newPOId), newPO, { merge: true });
-      updateDocumentNonBlocking(doc(db, 'production_orders', liveOrderToView.id), { purchaseOrderId: newPOId });
-      
-      setInitialProductionQty(liveOrderToView.quantity);
-      setPurchaseOrderToView(newPO);
-      setOrderToView(null);
-      setActiveTab("purchases");
-      toast({ title: "Orden de Compra generada", description: "Vinculada a este plan de producción." });
+      updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), { purchaseOrderId: newPOId });
+      toast({ title: "Orden de Compra generada", description: "Nueva orden vinculada al plan de producción." });
     }
+    
+    setInitialProductionQty(localProductionQty);
   }
 
   const handleUpdateOrderPlan = () => {
@@ -2024,13 +2033,13 @@ function CatalogContent() {
                 <div className="relative group">
                   <Input 
                     type="number" 
-                    value={liveOrderToView?.quantity ?? 0} 
+                    value={localProductionQty ?? 0} 
                     disabled={liveOrderToView?.status === 'completed'}
-                    onChange={(e) => updateDocumentNonBlocking(doc(db, 'production_orders', liveOrderToView.id), { quantity: Number(e.target.value) })}
+                    onChange={(e) => setLocalProductionQty(Number(e.target.value))}
                     className="h-16 text-3xl font-black text-primary bg-slate-50 border-primary/20 text-center"
                   />
                   {liveOrderToView?.status !== 'completed' && (
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[8px] font-black uppercase text-muted-foreground opacity-40 group-hover:opacity-100 transition-opacity">Editar</span>
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[8px] font-black uppercase text-muted-foreground opacity-40 group-hover:opacity-100 transition-opacity">Editar Local</span>
                   )}
                 </div>
               </div>
@@ -2050,7 +2059,7 @@ function CatalogContent() {
                     onClick={handleGeneratePOFromProduction}
                   >
                     <ShoppingCart className="h-3.5 w-3.5 mr-1.5" /> 
-                    {isProductionOutOfSync ? 'ACTUALIZAR COMPRA (PLAN MODIFICADO)' : 'GENERAR/ACTUALIZAR COMPRA'}
+                    {isProductionOutOfSync ? 'ACTUALIZAR COMPRA (PLAN MODIFICADO)' : 'SINCRONIZAR COMPRA'}
                   </Button>
                 )}
               </div>
@@ -2089,7 +2098,7 @@ function CatalogContent() {
           <DialogFooter className="p-4 border-t bg-slate-50">
             <div className="flex justify-between items-center w-full">
               <Button variant="outline" onClick={handleCloseOrderView} className="font-bold">Cerrar</Button>
-              {liveOrderToView?.status === 'ready' && (
+              {liveOrderToView?.status === 'ready' && !isProductionOutOfSync && (
                 <Button onClick={handleAssembleFinal} className="bg-blue-600 hover:bg-blue-700 font-black px-8">FINALIZAR ARMADO E INGRESAR STOCK</Button>
               )}
             </div>
@@ -2854,7 +2863,7 @@ function CatalogContent() {
 
       <AlertDialog open={isExitAlertOpen} onOpenChange={setIsExitAlertOpen}>
         <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>Cambios sin guardar o sincronizar</AlertDialogTitle><AlertDialogDescription>Has realizado modificaciones que no han sido sincronizadas o guardadas. ¿Deseas salir de todas formas?</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogHeader><AlertDialogTitle>Cambios sin guardar o sincronizar</AlertDialogTitle><AlertDialogDescription>Has realizado modificaciones en el plan o en la orden de compra que no han sido guardadas. ¿Deseas salir de todas formas?</AlertDialogDescription></AlertDialogHeader>
           <AlertDialogFooter><AlertDialogCancel>Seguir editando</AlertDialogCancel><AlertDialogAction onClick={() => { setIsExitAlertOpen(false); setPurchaseOrderToView(null); setOrderToView(null); setInitialProductionQty(null); }} className="bg-destructive">Salir sin guardar</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -2971,7 +2980,7 @@ function CatalogContent() {
 
         {orderToPrint && (
           <div className="space-y-8">
-            <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
+            <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
               <div>
                 <h1 className="text-2xl font-black uppercase tracking-tight">Plan de Armado / Producción</h1>
                 <p className="text-sm font-bold text-slate-600">#{orderToPrint.id.toUpperCase().slice(0, 6)} - {orderToPrint.productName}</p>
@@ -2982,9 +2991,9 @@ function CatalogContent() {
               </div>
             </div>
 
-            <div className="p-6 border-2 border-slate-900 rounded-2xl bg-slate-50 flex justify-between items-center">
+            <div className="p-6 border-2 border-slate-900 rounded-2xl bg-slate-50 flex justify-between items-center mb-8">
               <div>
-                <p className="text-xs font-black uppercase text-slate-50">Unidades a fabricar</p>
+                <p className="text-xs font-black uppercase text-slate-500">Unidades a fabricar</p>
                 <p className="text-5xl font-black text-slate-900">{orderToPrint.quantity}</p>
               </div>
               <div className="text-right">
