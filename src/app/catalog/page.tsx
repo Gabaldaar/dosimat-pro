@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect, useCallback, Suspense } from "react"
@@ -63,7 +64,8 @@ import {
   ExternalLink,
   ChevronDown,
   LinkIcon,
-  Archive
+  Archive,
+  CreditCard
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -1287,6 +1289,27 @@ function CatalogContent() {
     toast({ title: "Lista de compras copiada", description: `Lista filtrada para ${supplierFilter}.` });
   }
 
+  const handleRegisterPayment = (supplierName: string) => {
+    if (!purchaseOrderToView) return;
+    const itemsInGroup = displayItemsBySupplier[supplierName] || [];
+    const receivedItems = itemsInGroup.filter(i => i.received);
+    
+    if (receivedItems.length === 0) {
+      toast({ title: "Sin entregas", description: "Debes ingresar la mercadería antes de registrar el pago.", variant: "destructive" });
+      return;
+    }
+
+    const ars = receivedItems.reduce((sum, i) => sum + ((manualPurchaseQtys[i.id] ?? i.quantity) * (manualPurchaseCurrencies[i.id] === 'ARS' ? (manualPurchasePrices[i.id] ?? i.price) : 0)), 0);
+    const usd = receivedItems.reduce((sum, i) => sum + ((manualPurchaseQtys[i.id] ?? i.quantity) * (manualPurchaseCurrencies[i.id] === 'USD' ? (manualPurchasePrices[i.id] ?? i.price) : 0)), 0);
+
+    const amount = ars > 0 ? ars : usd;
+    const currency = ars > 0 ? 'ARS' : 'USD';
+    const poRef = purchaseOrderToView.id.toUpperCase().slice(0, 6);
+    const desc = `Pago Compra OC #${poRef} - Prov: ${supplierName}`;
+
+    router.push(`/transactions?mode=new&type=Expense&amount=${amount}&currency=${currency}&description=${encodeURIComponent(desc)}`);
+  }
+
   const handleExportBOM = (item: any) => {
     setItemToPrint(item);
     setTimeout(() => {
@@ -2057,6 +2080,8 @@ function CatalogContent() {
                   const itemsInGroup = displayItemsBySupplier[sup];
                   const isOrdered = supplierStatuses[sup] === 'ordered';
                   const isCompleted = purchaseOrderToView?.status === 'completed';
+                  const receivedItemsCount = itemsInGroup.filter(i => i.received).length;
+                  const hasSomeReceived = receivedItemsCount > 0;
                   
                   const groupARS = itemsInGroup.reduce((sum, i) => {
                     const q = manualPurchaseQtys[i.id] ?? i.quantity;
@@ -2087,32 +2112,45 @@ function CatalogContent() {
                             <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">{itemsInGroup.length} ÍTEMS • {(isOrdered || isCompleted) ? 'VALORES BLOQUEADOS' : 'VALORES EDITABLES'}</p>
                           </div>
                         </div>
-                        {!isCompleted && (
-                          <div className="flex flex-wrap gap-2">
-                            <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs flex-1 md:flex-none" onClick={() => handleCopyShoppingList(sup)}>
-                              <Copy className="h-3.5 w-3.5" /> COPIAR
-                            </Button>
-                            
+                        <div className="flex flex-wrap gap-2">
+                          {!isCompleted && (
+                            <>
+                              <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs flex-1 md:flex-none" onClick={() => handleCopyShoppingList(sup)}>
+                                <Copy className="h-3.5 w-3.5" /> COPIAR
+                              </Button>
+                              
+                              <Button 
+                                variant={isOrdered ? "ghost" : "outline"} 
+                                size="sm" 
+                                className={cn("h-8 gap-2 font-bold text-xs flex-1 md:flex-none", isOrdered ? "text-amber-600 hover:bg-amber-50" : "border-emerald-600 text-emerald-700")}
+                                onClick={() => handleToggleSupplierStatus(sup)}
+                              >
+                                {isOrdered ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                                {isOrdered ? "DESBLOQUEAR" : "MARCAR COMO PEDIDO"}
+                              </Button>
+                              
+                              <Button 
+                                size="sm" 
+                                className="h-8 gap-2 bg-emerald-600 hover:bg-emerald-700 font-bold text-xs flex-1 md:flex-none" 
+                                onClick={() => handleReceiveMaterials(sup)} 
+                                disabled={itemsInGroup.every(i => (manualPurchaseQtys[i.id] ?? i.quantity) <= 0)}
+                              >
+                                <Save className="h-3.5 w-3.5" /> INGRESAR COMPRA
+                              </Button>
+                            </>
+                          )}
+                          
+                          {hasSomeReceived && (
                             <Button 
-                              variant={isOrdered ? "ghost" : "outline"} 
+                              variant="outline" 
                               size="sm" 
-                              className={cn("h-8 gap-2 font-bold text-xs flex-1 md:flex-none", isOrdered ? "text-amber-600 hover:bg-amber-50" : "border-emerald-600 text-emerald-700")}
-                              onClick={() => handleToggleSupplierStatus(sup)}
+                              className="h-8 gap-2 border-primary text-primary hover:bg-primary/5 font-bold text-xs flex-1 md:flex-none" 
+                              onClick={() => handleRegisterPayment(sup)}
                             >
-                              {isOrdered ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-                              {isOrdered ? "DESBLOQUEAR" : "MARCAR COMO PEDIDO"}
+                              <CreditCard className="h-3.5 w-3.5" /> REGISTRAR PAGO
                             </Button>
-                            
-                            <Button 
-                              size="sm" 
-                              className="h-8 gap-2 bg-emerald-600 hover:bg-emerald-700 font-bold text-xs flex-1 md:flex-none" 
-                              onClick={() => handleReceiveMaterials(sup)} 
-                              disabled={itemsInGroup.every(i => (manualPurchaseQtys[i.id] ?? i.quantity) <= 0)}
-                            >
-                              <Save className="h-3.5 w-3.5" /> INGRESAR COMPRA
-                            </Button>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
 
                       <div className="hidden md:block border-2 rounded-xl bg-white shadow-md overflow-hidden">

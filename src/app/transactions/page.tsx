@@ -39,7 +39,8 @@ import {
   MessageSquare,
   ChevronRight,
   Wallet,
-  Printer
+  Printer,
+  ArrowRightLeft
 } from "lucide-react"
 import { useToast } from "../../hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -126,6 +127,8 @@ function TransactionsContent() {
   const [filterFlow, setFilterFlow] = useState("all")
   const [itemFilterCategory, setItemFilterCategory] = useState("all")
 
+  const [exchangeRate, setExchangeRate] = useState(1)
+
   // Desbloqueador global de puntero (Evita congelamientos de Radix UI)
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -164,6 +167,9 @@ function TransactionsContent() {
     const clientId = searchParams.get('clientId')
     const type = searchParams.get('type')
     const accountId = searchParams.get('accountId')
+    const amount = searchParams.get('amount')
+    const currency = searchParams.get('currency')
+    const desc = searchParams.get('description')
 
     if (mode === 'new') setMainView("register")
     if (clientId && clientId !== 'none') { 
@@ -172,6 +178,10 @@ function TransactionsContent() {
     }
     if (type) setActiveTab(type === 'refill' ? 'refill' : type)
     if (accountId) setFilterAccount(accountId)
+    
+    if (amount) setManualAmount(Number(amount))
+    if (currency) setManualCurrency(currency)
+    if (desc) setTxDescription(decodeURIComponent(desc))
   }, [searchParams])
 
   // Lógica de auto-población desde Hojas de Ruta
@@ -276,6 +286,28 @@ function TransactionsContent() {
   const [txDescription, setTxDescription] = useState("")
   const [imputations, setImputations] = useState<Record<string, number>>({})
 
+  const selectedAccountForManual = useMemo(() => accounts?.find(a => a.id === manualAccountId), [accounts, manualAccountId]);
+  const isCrossCurrency = useMemo(() => selectedAccountForManual && selectedAccountForManual.currency !== manualCurrency, [selectedAccountForManual, manualCurrency]);
+
+  useEffect(() => {
+    if (isCrossCurrency) {
+      fetch('https://dolarapi.com/v1/dolares/oficial')
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.venta) setExchangeRate(data.venta);
+        })
+        .catch(err => console.error("Error fetching rate:", err));
+    }
+  }, [isCrossCurrency]);
+
+  const finalConvertedAmount = useMemo(() => {
+    if (!isCrossCurrency || !selectedAccountForManual) return manualAmount;
+    const baseAmount = manualAmount * (activeTab === 'adjustment' ? Number(adjustmentSign) : activeTab === 'Expense' ? -1 : 1);
+    if (manualCurrency === 'USD' && selectedAccountForManual.currency === 'ARS') return baseAmount * exchangeRate;
+    if (manualCurrency === 'ARS' && selectedAccountForManual.currency === 'USD') return baseAmount / exchangeRate;
+    return baseAmount;
+  }, [isCrossCurrency, selectedAccountForManual, manualAmount, manualCurrency, exchangeRate, activeTab, adjustmentSign]);
+
   const customerPendingTxs = useMemo(() => {
     if (!selectedCustomerId || !transactions || selectedCustomerId === "none") return []
     return transactions.filter(tx => tx.clientId === selectedCustomerId && tx.pendingAmount !== 0 && tx.type !== 'cobro')
@@ -337,7 +369,7 @@ function TransactionsContent() {
         updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [field]: increment(amountToRevert) });
       }
       if (tx.financialAccountId) {
-        const amountToRevert = ['cobro', 'adjustment', 'Expense'].includes(tx.type) ? -Number(tx.amount) : -Number(tx.paidAmount || 0);
+        const amountToRevert = editingTx.accountMovementAmount ? -Number(editingTx.accountMovementAmount) : (['cobro', 'adjustment', 'Expense'].includes(tx.type) ? -Number(tx.amount) : -Number(tx.paidAmount || 0));
         updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), { initialBalance: increment(amountToRevert) });
       }
       if (tx.type === 'cobro' && tx.imputations) {
@@ -352,29 +384,37 @@ function TransactionsContent() {
 
     if (['cobro', 'adjustment', 'Expense'].includes(activeTab)) {
       const txId = editingTx?.id || Math.random().toString(36).substring(2, 11)
-      const finalAmount = Number(manualAmount) * (activeTab === 'adjustment' ? Number(adjustmentSign) : activeTab === 'Expense' ? -1 : 1)
+      const baseManualAmount = Number(manualAmount) * (activeTab === 'adjustment' ? Number(adjustmentSign) : activeTab === 'Expense' ? -1 : 1);
       
-      const acc = manualAccountId !== "pending" ? accounts?.find(a => a.id === manualAccountId) : null;
-      const accountBalanceAfter = (Number(acc?.initialBalance || 0)) + finalAmount;
+      const acc = selectedAccountForManual;
+      const accountMovementAmount = isCrossCurrency ? finalConvertedAmount : baseManualAmount;
+      const accountBalanceAfter = (Number(acc?.initialBalance || 0)) + accountMovementAmount;
+
+      let desc = txDescription || `${txTypeMap[activeTab].label} manual`;
+      if (isCrossCurrency && acc) {
+        desc += ` (Convertido de ${manualCurrency} ${manualAmount} @ ${exchangeRate} a ${acc.currency})`;
+      }
 
       const txData = { 
         id: txId, 
         date: finalDateStr, 
         clientId: selectedCustomerId === "none" ? null : selectedCustomerId, 
         type: activeTab, 
-        amount: finalAmount, 
+        amount: baseManualAmount, 
         currency: manualCurrency, 
-        description: txDescription || `${txTypeMap[activeTab].label} manual`, 
+        description: desc, 
         financialAccountId: manualAccountId === "pending" ? null : manualAccountId, 
-        paidAmount: activeTab === 'cobro' ? finalAmount : 0, 
-        pendingAmount: (activeTab === 'adjustment' && finalAmount < 0) ? finalAmount : 0,
+        paidAmount: activeTab === 'cobro' ? baseManualAmount : 0, 
+        pendingAmount: (activeTab === 'adjustment' && baseManualAmount < 0) ? baseManualAmount : 0,
         imputations: activeTab === 'cobro' ? imputations : null,
-        accountBalanceAfter
+        accountBalanceAfter,
+        accountMovementAmount: accountMovementAmount, // Guardamos el monto real que movió la caja
+        accountMovementCurrency: acc?.currency || manualCurrency
       }
 
       setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
-      if (manualAccountId !== "pending") updateDocumentNonBlocking(doc(db, 'financial_accounts', manualAccountId), { initialBalance: increment(finalAmount) });
-      if (client) { const field = manualCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'; updateDocumentNonBlocking(doc(db, 'clients', client.id), { [field]: increment(finalAmount) }); }
+      if (manualAccountId !== "pending") updateDocumentNonBlocking(doc(db, 'financial_accounts', manualAccountId), { initialBalance: increment(accountMovementAmount) });
+      if (client) { const field = manualCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'; updateDocumentNonBlocking(doc(db, 'clients', client.id), { [field]: increment(baseManualAmount) }); }
       if (activeTab === 'cobro') { 
         Object.entries(imputations).forEach(([targetTxId, amount]) => { 
           updateDocumentNonBlocking(doc(db, 'transactions', targetTxId), { pendingAmount: increment(Number(amount)) }); 
@@ -449,7 +489,7 @@ function TransactionsContent() {
     }
 
     if (tx.financialAccountId) {
-      const amountToRevert = ['cobro', 'adjustment', 'Expense'].includes(tx.type) ? -Number(tx.amount) : -Number(tx.paidAmount || 0);
+      const amountToRevert = tx.accountMovementAmount ? -Number(tx.accountMovementAmount) : (['cobro', 'adjustment', 'Expense'].includes(tx.type) ? -Number(tx.amount) : -Number(tx.paidAmount || 0));
       updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), { initialBalance: increment(amountToRevert) });
     }
 
@@ -698,12 +738,18 @@ function TransactionsContent() {
                       <Input type="date" value={operationDate} onChange={(e) => setOperationDate(e.target.value)} className="bg-white" />
                     </div>
                   </div>
-                  {activeTab === 'cobro' ? (
+                  {['cobro', 'adjustment', 'Expense'].includes(activeTab) ? (
                     <div className="space-y-6">
                       <div className="p-6 border rounded-xl space-y-4 bg-muted/5">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div className="space-y-2"><Label>Monto a Cobrar</Label><Input type="number" value={manualAmount} onChange={(e) => setManualAmount(Number(e.target.value))} className="bg-white font-black text-xl h-12" /></div>
-                          <div className="space-y-2"><Label>Moneda</Label>
+                          <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase">{activeTab === 'cobro' ? 'Monto a Cobrar' : 'Monto'}</Label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black opacity-40">{manualCurrency === 'USD' ? 'u$s' : '$'}</span>
+                              <Input type="number" value={manualAmount} onChange={(e) => setManualAmount(Number(e.target.value))} className="bg-white font-black text-xl h-12 pl-10" />
+                            </div>
+                          </div>
+                          <div className="space-y-2"><Label className="text-xs font-bold uppercase">Moneda Operación</Label>
                             <Tabs value={manualCurrency} onValueChange={setManualCurrency} className="w-full">
                               <TabsList className="grid grid-cols-2 h-12 p-1 border">
                                 <TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-blue-600 data-[state=active]:text-white uppercase">ARS</TabsTrigger>
@@ -711,14 +757,48 @@ function TransactionsContent() {
                               </TabsList>
                             </Tabs>
                           </div>
-                          <div className="space-y-2"><Label>Caja Destino</Label>
+                          <div className="space-y-2"><Label className="text-xs font-bold uppercase">Caja Destino</Label>
                             <Select value={manualAccountId} onValueChange={setManualAccountId}><SelectTrigger className="bg-white h-12"><SelectValue /></SelectTrigger>
-                              <SelectContent><SelectItem value="pending">A CUENTA</SelectItem>{accounts?.filter(a => a.currency === manualCurrency).map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent>
+                              <SelectContent>
+                                <SelectItem value="pending">A CUENTA</SelectItem>
+                                {accounts?.map(a => (<SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>))}
+                              </SelectContent>
                             </Select>
                           </div>
                         </div>
+
+                        {activeTab === 'adjustment' && (
+                          <div className="pt-4 border-t border-dashed">
+                            <Label className="text-xs font-bold uppercase mb-2 block">Sentido del Ajuste</Label>
+                            <Select value={adjustmentSign} onValueChange={(v: any) => setAdjustmentSign(v)}>
+                              <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                              <SelectContent><SelectItem value="1">Ingreso (+) / Reduce Deuda</SelectItem><SelectItem value="-1">Egreso (-) / Aumenta Deuda</SelectItem></SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
+                        {isCrossCurrency && selectedAccountForManual && (
+                          <div className="pt-6 border-t-2 border-primary/20 space-y-4 animate-in slide-in-from-top-2 duration-300">
+                            <div className="flex items-center gap-2 text-primary font-black uppercase text-[10px] tracking-widest bg-primary/5 p-2 rounded-lg">
+                              <ArrowRightLeft className="h-4 w-4" /> Pago con Conversión Detectado
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              <div className="space-y-2">
+                                <Label className="text-xs font-bold flex items-center gap-2">TIPO DE CAMBIO <Badge className="text-[8px] bg-emerald-600">SUGERIDO</Badge></Label>
+                                <div className="relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black opacity-40">$</span>
+                                  <Input type="number" value={exchangeRate} onChange={(e) => setExchangeRate(Number(e.target.value))} className="bg-white font-black text-lg h-12 pl-10 border-primary/30" />
+                                </div>
+                              </div>
+                              <div className="p-4 bg-primary text-white rounded-2xl flex flex-col justify-center shadow-lg">
+                                <p className="text-[10px] font-black uppercase opacity-70">SE DESCONTARÁ DE {selectedAccountForManual.name.toUpperCase()}</p>
+                                <p className="text-2xl font-black">{selectedAccountForManual.currency === 'USD' ? 'u$s' : '$'} {Math.abs(finalConvertedAmount).toLocaleString('es-AR')}</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      {customerPendingTxs.length > 0 && (
+                      {activeTab === 'cobro' && customerPendingTxs.length > 0 && (
                         <div className="space-y-3">
                           <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Imputar a Facturas Pendientes ({manualCurrency})</Label>
                           <div className="space-y-3 md:space-y-0">
@@ -805,31 +885,6 @@ function TransactionsContent() {
                         </div>
                       )}
                     </div>
-                  ) : activeTab === 'adjustment' ? (
-                    <div className="p-6 border rounded-xl space-y-4 bg-muted/5">
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div className="space-y-2"><Label>Signo</Label>
-                          <Select value={adjustmentSign} onValueChange={(v: any) => setAdjustmentSign(v)}>
-                            <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                            <SelectContent><SelectItem value="1">Ingreso (+) / Reduce Deuda</SelectItem><SelectItem value="-1">Egreso (-) / Aumenta Deuda</SelectItem></SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2"><Label>Monto</Label><Input type="number" value={manualAmount} onChange={(e) => setManualAmount(Number(e.target.value))} className="bg-white font-black" /></div>
-                        <div className="space-y-2"><Label>Moneda</Label>
-                          <Tabs value={manualCurrency} onValueChange={setManualCurrency}>
-                            <TabsList className="grid grid-cols-2 h-10 p-1 border">
-                              <TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
-                              <TabsTrigger value="USD" className="text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
-                            </TabsList>
-                          </Tabs>
-                        </div>
-                        <div className="space-y-2"><Label>Caja Destino</Label>
-                          <Select value={manualAccountId} onValueChange={setManualAccountId}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                            <SelectContent><SelectItem value="pending">A CUENTA</SelectItem>{accounts?.filter(a => a.currency === manualCurrency).map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent>
-                          </Select>
-                      </div>
-                    </div>
-                  </div>
                   ) : (
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -994,10 +1049,18 @@ function TransactionsContent() {
                       })}
                     </div>
                   )}
-                  {activeTab === 'cobro' && (
-                    <div className="p-5 rounded-2xl border bg-emerald-50 mb-4 shadow-inner">
-                      <p className="text-[10px] font-black uppercase text-emerald-700 tracking-widest mb-2">Total a registrar</p>
-                      <p className="text-4xl font-black text-emerald-800">{manualCurrency === 'USD' ? 'u$s' : '$'} {manualAmount.toLocaleString()}</p>
+                  {['cobro', 'adjustment', 'Expense'].includes(activeTab) && (
+                    <div className="p-5 rounded-2xl border bg-emerald-50 mb-4 shadow-inner space-y-4">
+                      <div>
+                        <p className="text-[10px] font-black uppercase text-emerald-700 tracking-widest mb-2">Total de Operación ({manualCurrency})</p>
+                        <p className="text-4xl font-black text-emerald-800">{manualCurrency === 'USD' ? 'u$s' : '$'} {manualAmount.toLocaleString()}</p>
+                      </div>
+                      {isCrossCurrency && selectedAccountForManual && (
+                        <div className="pt-3 border-t border-emerald-200">
+                          <p className="text-[10px] font-black uppercase text-primary tracking-widest mb-1">Monto a descontar de Caja ({selectedAccountForManual.currency})</p>
+                          <p className="text-2xl font-black text-primary">{selectedAccountForManual.currency === 'USD' ? 'u$s' : '$'} {Math.abs(finalConvertedAmount).toLocaleString('es-AR')}</p>
+                        </div>
+                      )}
                     </div>
                   )}
                   <Button className="w-full h-16 font-black shadow-xl text-xl uppercase tracking-tighter" onClick={handleSaveTransaction}>{editingTx ? 'GUARDAR CAMBIOS' : 'REGISTRAR OPERACIÓN'}</Button>
