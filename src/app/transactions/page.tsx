@@ -128,6 +128,7 @@ function TransactionsContent() {
   const [itemFilterCategory, setItemFilterCategory] = useState("all")
 
   const [exchangeRate, setExchangeRate] = useState(1)
+  const [convertedAmountOverride, setConvertedAmountOverride] = useState<number | null>(null)
 
   // Desbloqueador global de puntero (Evita congelamientos de Radix UI)
   useEffect(() => {
@@ -300,6 +301,10 @@ function TransactionsContent() {
     }
   }, [isCrossCurrency]);
 
+  useEffect(() => {
+    setConvertedAmountOverride(null);
+  }, [manualAmount, manualCurrency, manualAccountId, exchangeRate]);
+
   const finalConvertedAmount = useMemo(() => {
     if (!isCrossCurrency || !selectedAccountForManual) return manualAmount;
     const baseAmount = manualAmount * (activeTab === 'adjustment' ? Number(adjustmentSign) : activeTab === 'Expense' ? -1 : 1);
@@ -340,8 +345,14 @@ function TransactionsContent() {
     setTxDescription(tx.description || "");
     
     if (['cobro', 'adjustment', 'Expense'].includes(tx.type)) {
-      setManualAmount(Math.abs(tx.amount));
-      setManualCurrency(tx.currency);
+      if (tx.originalAmount && tx.originalCurrency) {
+        setManualAmount(Math.abs(tx.originalAmount));
+        setManualCurrency(tx.originalCurrency);
+        setConvertedAmountOverride(Math.abs(tx.amount));
+      } else {
+        setManualAmount(Math.abs(tx.amount));
+        setManualCurrency(tx.currency);
+      }
       setManualAccountId(tx.financialAccountId || "pending");
       setAdjustmentSign(tx.amount >= 0 ? "1" : "-1");
       setImputations(tx.imputations || {});
@@ -361,15 +372,15 @@ function TransactionsContent() {
     if (editingTx) {
       const tx = editingTx;
       if (tx.clientId) {
-        const field = tx.currency === 'USD' ? 'saldoUSD' : 'saldoActual';
+        const field = (tx.originalCurrency || tx.currency) === 'USD' ? 'saldoUSD' : 'saldoActual';
         const amountToRevert = ['cobro', 'adjustment', 'Expense'].includes(tx.type) 
-          ? -Number(tx.amount || 0) 
+          ? -Number(tx.originalAmount || tx.amount || 0) 
           : Number(tx.debtAmount || 0);
         
         updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [field]: increment(amountToRevert) });
       }
       if (tx.financialAccountId) {
-        const amountToRevert = editingTx.accountMovementAmount ? -Number(editingTx.accountMovementAmount) : (['cobro', 'adjustment', 'Expense'].includes(tx.type) ? -Number(tx.amount) : -Number(tx.paidAmount || 0));
+        const amountToRevert = -Number(tx.accountMovementAmount || tx.amount || 0);
         updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), { initialBalance: increment(amountToRevert) });
       }
       if (tx.type === 'cobro' && tx.imputations) {
@@ -385,14 +396,25 @@ function TransactionsContent() {
     if (['cobro', 'adjustment', 'Expense'].includes(activeTab)) {
       const txId = editingTx?.id || Math.random().toString(36).substring(2, 11)
       const baseManualAmount = Number(manualAmount) * (activeTab === 'adjustment' ? Number(adjustmentSign) : activeTab === 'Expense' ? -1 : 1);
+      const sign = (activeTab === 'adjustment' ? Number(adjustmentSign) : activeTab === 'Expense' ? -1 : 1);
       
       const acc = selectedAccountForManual;
-      const accountMovementAmount = isCrossCurrency ? finalConvertedAmount : baseManualAmount;
+      let finalAmountValue = baseManualAmount;
+      let finalCurrency = manualCurrency;
+      let accountMovementAmount = baseManualAmount;
+
+      if (isCrossCurrency && acc) {
+        const overrideVal = convertedAmountOverride !== null ? convertedAmountOverride * sign : finalConvertedAmount;
+        finalAmountValue = overrideVal;
+        finalCurrency = acc.currency;
+        accountMovementAmount = overrideVal;
+      }
+
       const accountBalanceAfter = (Number(acc?.initialBalance || 0)) + accountMovementAmount;
 
       let desc = txDescription || `${txTypeMap[activeTab].label} manual`;
       if (isCrossCurrency && acc) {
-        desc += ` (Convertido de ${manualCurrency} ${manualAmount} @ ${exchangeRate} a ${acc.currency})`;
+        desc += ` (Ref: ${manualCurrency} ${manualAmount} @ ${exchangeRate})`;
       }
 
       const txData = { 
@@ -400,15 +422,17 @@ function TransactionsContent() {
         date: finalDateStr, 
         clientId: selectedCustomerId === "none" ? null : selectedCustomerId, 
         type: activeTab, 
-        amount: baseManualAmount, 
-        currency: manualCurrency, 
+        amount: finalAmountValue, 
+        currency: finalCurrency, 
+        originalAmount: isCrossCurrency ? baseManualAmount : null,
+        originalCurrency: isCrossCurrency ? manualCurrency : null,
         description: desc, 
         financialAccountId: manualAccountId === "pending" ? null : manualAccountId, 
-        paidAmount: activeTab === 'cobro' ? baseManualAmount : 0, 
+        paidAmount: activeTab === 'cobro' ? Math.abs(finalAmountValue) : 0, 
         pendingAmount: (activeTab === 'adjustment' && baseManualAmount < 0) ? baseManualAmount : 0,
         imputations: activeTab === 'cobro' ? imputations : null,
         accountBalanceAfter,
-        accountMovementAmount: accountMovementAmount, // Guardamos el monto real que movió la caja
+        accountMovementAmount: accountMovementAmount,
         accountMovementCurrency: acc?.currency || manualCurrency
       }
 
@@ -473,6 +497,7 @@ function TransactionsContent() {
     setImputations({});
     setOperationDate(getLocalDateString());
     setHasAutoPopulated(false);
+    setConvertedAmountOverride(null);
   }
 
   const handleDeleteTx = () => {
@@ -480,16 +505,16 @@ function TransactionsContent() {
     const tx = txToDelete;
 
     if (tx.clientId) {
-      const field = tx.currency === 'USD' ? 'saldoUSD' : 'saldoActual';
+      const field = (tx.originalCurrency || tx.currency) === 'USD' ? 'saldoUSD' : 'saldoActual';
       const amountToRevert = ['cobro', 'adjustment', 'Expense'].includes(tx.type) 
-        ? -Number(tx.amount || 0) 
+        ? -Number(tx.originalAmount || tx.amount || 0) 
         : Number(tx.debtAmount || 0);
       
       updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [field]: increment(amountToRevert) });
     }
 
     if (tx.financialAccountId) {
-      const amountToRevert = tx.accountMovementAmount ? -Number(tx.accountMovementAmount) : (['cobro', 'adjustment', 'Expense'].includes(tx.type) ? -Number(tx.amount) : -Number(tx.paidAmount || 0));
+      const amountToRevert = -Number(tx.accountMovementAmount || tx.amount || 0);
       updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), { initialBalance: increment(amountToRevert) });
     }
 
@@ -792,7 +817,15 @@ function TransactionsContent() {
                               </div>
                               <div className="p-4 bg-primary text-white rounded-2xl flex flex-col justify-center shadow-lg">
                                 <p className="text-[10px] font-black uppercase opacity-70">SE DESCONTARÁ DE {selectedAccountForManual.name.toUpperCase()}</p>
-                                <p className="text-2xl font-black">{selectedAccountForManual.currency === 'USD' ? 'u$s' : '$'} {Math.abs(finalConvertedAmount).toLocaleString('es-AR')}</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-2xl font-black">{selectedAccountForManual.currency === 'USD' ? 'u$s' : '$'}</span>
+                                  <Input 
+                                    type="number" 
+                                    value={convertedAmountOverride !== null ? convertedAmountOverride : Math.abs(finalConvertedAmount)} 
+                                    onChange={(e) => setConvertedAmountOverride(Number(e.target.value))}
+                                    className="bg-white border-primary/30 text-2xl font-black text-primary h-12"
+                                  />
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -802,7 +835,6 @@ function TransactionsContent() {
                         <div className="space-y-3">
                           <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Imputar a Facturas Pendientes ({manualCurrency})</Label>
                           <div className="space-y-3 md:space-y-0">
-                            {/* Mobile View for Imputations */}
                             <div className="md:hidden space-y-3">
                               {customerPendingTxs.filter(tx => tx.currency === manualCurrency).map(tx => (
                                 <Card key={tx.id} className="p-4 border-emerald-100 shadow-sm">
@@ -839,7 +871,6 @@ function TransactionsContent() {
                                 </Card>
                               ))}
                             </div>
-                            {/* Desktop View for Imputations */}
                             <div className="hidden md:block border rounded-xl overflow-hidden bg-white shadow-sm">
                               <Table>
                                 <TableHeader className="bg-muted/30">
@@ -912,7 +943,6 @@ function TransactionsContent() {
                       </div>
 
                       <div className="space-y-3">
-                        {/* Desktop View for selected items */}
                         <div className="hidden md:block border rounded-xl overflow-hidden bg-white shadow-sm">
                           <Table>
                             <TableHeader className="bg-muted/30">
@@ -949,7 +979,6 @@ function TransactionsContent() {
                           </Table>
                         </div>
 
-                        {/* Mobile View for selected items: Large Cards */}
                         <div className="md:hidden space-y-4">
                           {selectedItems.map((item, i) => (
                             <Card key={i} className="p-4 border-primary/10 shadow-md bg-white">
@@ -1052,13 +1081,21 @@ function TransactionsContent() {
                   {['cobro', 'adjustment', 'Expense'].includes(activeTab) && (
                     <div className="p-5 rounded-2xl border bg-emerald-50 mb-4 shadow-inner space-y-4">
                       <div>
-                        <p className="text-[10px] font-black uppercase text-emerald-700 tracking-widest mb-2">Total de Operación ({manualCurrency})</p>
+                        <p className="text-[10px] font-black uppercase text-emerald-700 tracking-widest mb-2">Monto de Operación ({manualCurrency})</p>
                         <p className="text-4xl font-black text-emerald-800">{manualCurrency === 'USD' ? 'u$s' : '$'} {manualAmount.toLocaleString()}</p>
                       </div>
                       {isCrossCurrency && selectedAccountForManual && (
                         <div className="pt-3 border-t border-emerald-200">
-                          <p className="text-[10px] font-black uppercase text-primary tracking-widest mb-1">Monto a descontar de Caja ({selectedAccountForManual.currency})</p>
-                          <p className="text-2xl font-black text-primary">{selectedAccountForManual.currency === 'USD' ? 'u$s' : '$'} {Math.abs(finalConvertedAmount).toLocaleString('es-AR')}</p>
+                          <p className="text-[10px] font-black uppercase text-primary tracking-widest mb-1">Monto real a mover en Caja ({selectedAccountForManual.currency})</p>
+                          <div className="flex items-center gap-2">
+                            <span className="text-2xl font-black text-primary">{selectedAccountForManual.currency === 'USD' ? 'u$s' : '$'}</span>
+                            <Input 
+                              type="number" 
+                              value={convertedAmountOverride !== null ? convertedAmountOverride : Math.abs(finalConvertedAmount)} 
+                              onChange={(e) => setConvertedAmountOverride(Number(e.target.value))}
+                              className="bg-white border-primary/30 text-2xl font-black text-primary h-12"
+                            />
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1101,7 +1138,7 @@ function TransactionsContent() {
                         <TableHead className="text-[10px] font-black uppercase">Cliente</TableHead>
                         <TableHead className="text-[10px] font-black uppercase">Tipo</TableHead>
                         <TableHead className="text-[10px] font-black uppercase">Caja</TableHead>
-                        <TableHead className="text-right text-[10px] font-black uppercase">Monto</TableHead>
+                        <TableHead className="text-right text-[10px] font-black uppercase">Monto Real</TableHead>
                         <TableHead className="text-right text-[10px] font-black uppercase">Abonado</TableHead>
                         <TableHead className="text-right text-[10px] font-black uppercase">Pendiente</TableHead>
                         <TableHead className="text-right text-[10px] font-black uppercase">Saldo Caja</TableHead>
@@ -1218,7 +1255,7 @@ function TransactionsContent() {
 
                         <div className="grid grid-cols-2 gap-3 pt-2 border-t border-dashed">
                           <div>
-                            <p className="text-[8px] font-black uppercase text-slate-400">Total</p>
+                            <p className="text-[8px] font-black uppercase text-slate-400">Pagado Real</p>
                             <p className="text-lg font-black text-slate-800">{symbol} {Math.abs(tx.amount || 0).toLocaleString()}</p>
                           </div>
                           <div className="text-right">
@@ -1279,7 +1316,7 @@ function TransactionsContent() {
                 <div className="px-4 py-6 md:py-4 space-y-6">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="p-4 bg-muted/20 rounded-2xl border space-y-1 shadow-inner">
-                      <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Monto Total</p>
+                      <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Monto Pagado (Real)</p>
                       <p className="text-3xl font-black">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Math.abs(selectedTxDetails.amount).toLocaleString()}</p>
                     </div>
                     <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl space-y-1 shadow-inner">
@@ -1313,6 +1350,15 @@ function TransactionsContent() {
                       <Badge variant="secondary" className="w-fit font-black uppercase text-[10px] py-1 px-3 border-primary/10">{selectedTxDetails.financialAccountId ? (accounts?.find(a => a.id === selectedTxDetails.financialAccountId)?.name || 'Caja') : 'A CUENTA'}</Badge>
                     </div>
                   </div>
+
+                  {selectedTxDetails.originalAmount && (
+                    <div className="p-4 bg-primary/5 border rounded-2xl">
+                      <p className="text-[10px] font-black uppercase text-primary tracking-widest mb-1">Valor de Referencia (Original)</p>
+                      <p className="text-xl font-black text-primary">
+                        {selectedTxDetails.originalCurrency === 'USD' ? 'u$s' : '$'} {Math.abs(selectedTxDetails.originalAmount).toLocaleString()}
+                      </p>
+                    </div>
+                  )}
 
                   {selectedTxDetails.imputations && (
                     <div className="space-y-2">
@@ -1500,7 +1546,7 @@ function TransactionsContent() {
               <th className="border border-slate-900 p-2 text-left uppercase font-black">Cliente</th>
               <th className="border border-slate-900 p-2 text-left uppercase font-black">Operación</th>
               <th className="border border-slate-900 p-2 text-left uppercase font-black">Caja</th>
-              <th className="border border-slate-900 p-2 text-right uppercase font-black">Total</th>
+              <th className="border border-slate-900 p-2 text-right uppercase font-black">Total Pagado</th>
               <th className="border border-slate-900 p-2 text-right uppercase font-black">Abonado</th>
               <th className="border border-slate-900 p-2 text-right uppercase font-black">Pendiente</th>
             </tr>
