@@ -55,6 +55,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "../../hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, setDocumentNonBlocking, addDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from "../../firebase"
@@ -646,16 +647,13 @@ export default function AccountsPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Moneda</Label>
-                  <Select value={accountFormData.currency} onValueChange={(v) => setAccountFormData({...accountFormData, currency: v})}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar moneda..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ARS">Pesos (ARS)</SelectItem>
-                      <SelectItem value="USD">Dólares (USD)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Moneda</Label>
+                  <Tabs value={accountFormData.currency} onValueChange={(v) => setAccountFormData({...accountFormData, currency: v})} className="w-full">
+                    <TabsList className="grid grid-cols-2 h-10 p-1 border bg-muted/20">
+                      <TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-blue-600 data-[state=active]:text-white">PESOS (ARS)</TabsTrigger>
+                      <TabsTrigger value="USD" className="text-[10px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">DÓLARES (USD)</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
                 </div>
               </div>
               <div className="space-y-2">

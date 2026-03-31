@@ -227,6 +227,8 @@ function CatalogContent() {
   const [auditCategoryFilter, setAuditCategoryFilter] = useState("all")
   
   const [itemToDelete, setItemToDelete] = useState<any | null>(null)
+  const [supplierToDelete, setSupplierToDelete] = useState<any | null>(null)
+  const [categoryToDelete, setCategoryToDelete] = useState<any | null>(null)
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [selectedForAssembly, setSelectedForAssembly] = useState<any | null>(null)
   const [assemblyQty, setAssemblyQty] = useState(1)
@@ -307,7 +309,7 @@ function CatalogContent() {
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
-        const anyOpen = isDialogOpen || !!itemToDelete || isAssemblyOpen || isNewPurchaseOrderOpen || isCategoryManagerOpen || isSupplierManagerOpen || !!orderToView || !!purchaseOrderToView || !!orderToDelete || !!purchaseOrderToDelete || isAuditOpen || isExitAlertOpen || !!orderToFinalize || isPurchaseHistoryOpen || isSupplierHistoryOpen;
+        const anyOpen = isDialogOpen || !!itemToDelete || isAssemblyOpen || isNewPurchaseOrderOpen || isCategoryManagerOpen || isSupplierManagerOpen || !!orderToView || !!purchaseOrderToView || !!orderToDelete || !!purchaseOrderToDelete || isAuditOpen || isExitAlertOpen || !!orderToFinalize || isPurchaseHistoryOpen || isSupplierHistoryOpen || !!supplierToDelete || !!categoryToDelete;
         if (!anyOpen) {
           document.body.style.pointerEvents = 'auto';
         }
@@ -315,7 +317,7 @@ function CatalogContent() {
     });
     observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
     return () => observer.disconnect();
-  }, [isDialogOpen, itemToDelete, isAssemblyOpen, isNewPurchaseOrderOpen, isCategoryManagerOpen, isSupplierManagerOpen, orderToView, purchaseOrderToView, orderToDelete, purchaseOrderToDelete, isAuditOpen, isExitAlertOpen, orderToFinalize, isPurchaseHistoryOpen, isSupplierHistoryOpen]);
+  }, [isDialogOpen, itemToDelete, isAssemblyOpen, isNewPurchaseOrderOpen, isCategoryManagerOpen, isSupplierManagerOpen, orderToView, purchaseOrderToView, orderToDelete, purchaseOrderToDelete, isAuditOpen, isExitAlertOpen, orderToFinalize, isPurchaseHistoryOpen, isSupplierHistoryOpen, supplierToDelete, categoryToDelete]);
 
   const calculateCost = useCallback((itemData: any, allItems: any[], currentExchangeRate: number): { ars: number, usd: number } => {
     if (!itemData.isCompuesto) {
@@ -2430,7 +2432,7 @@ function CatalogContent() {
                                         className={cn("shrink-0 h-8", isLineLocked && "pointer-events-none opacity-50")}
                                       >
                                         <TabsList className="h-8 p-0 gap-0 border">
-                                          <TabsTrigger value="ARS" className="h-7 text-[8px] font-black px-2 data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
+                                          <TabsTrigger value="ARS" className="h-7 text-[8px] font-black px-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
                                           <TabsTrigger value="USD" className="h-7 text-[8px] font-black px-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
                                         </TabsList>
                                       </Tabs>
@@ -2612,7 +2614,12 @@ function CatalogContent() {
                     <TableCell className="py-1">
                       <div className="flex items-center gap-1.5">
                         <Input type="number" value={item.costCurrency === 'USD' ? item.costUSD : item.costARS} onChange={(e) => handleUpdateItemAudit(item.id, { costAmount: Number(e.target.value) })} className="h-8 text-center font-black text-xs text-emerald-700" />
-                        <Tabs value={item.costCurrency || 'ARS'} onValueChange={(v) => handleUpdateItemAudit(item.id, { costCurrency: v })} className="shrink-0"><TabsList className="h-8 p-0 gap-0 border"><TabsTrigger value="ARS" className="h-7 text-[8px] font-black px-2">ARS</TabsTrigger><TabsTrigger value="USD" className="h-7 text-[8px] font-black px-2">USD</TabsTrigger></TabsList></Tabs>
+                        <Tabs value={item.costCurrency || 'ARS'} onValueChange={(v) => handleUpdateItemAudit(item.id, { costCurrency: v })} className="shrink-0">
+                          <TabsList className="h-8 p-0 gap-0 border">
+                            <TabsTrigger value="ARS" className="h-7 text-[8px] font-black px-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
+                            <TabsTrigger value="USD" className="h-7 text-[8px] font-black px-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
+                          </TabsList>
+                        </Tabs>
                       </div>
                     </TableCell>
                     <TableCell className="py-1">
@@ -2644,7 +2651,7 @@ function CatalogContent() {
                   </div>
                   <div className="flex gap-1">
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-primary" onClick={() => handleEditCategory(cat)}><Edit className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteDocumentNonBlocking(doc(db, 'product_categories', cat.id))}><Trash2 className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setCategoryToDelete(cat)}><Trash2 className="h-4 w-4" /></Button>
                   </div>
                 </div>
               ))}
@@ -2677,13 +2684,21 @@ function CatalogContent() {
                     <div className="space-y-1">
                       <h4 className="font-black text-sm uppercase tracking-tight text-slate-800">{sup.name}</h4>
                       <div className="flex flex-wrap gap-x-4 gap-y-1">
-                        {sup.phone && <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1"><Phone className="h-2.5 w-2.5" /> {sup.phone}</p>}
-                        {sup.address && <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1"><MapPin className="h-2.5 w-2.5" /> {sup.address}</p>}
+                        {sup.phone ? (
+                          <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1"><Phone className="h-2.5 w-2.5" /> {sup.phone}</p>
+                        ) : (
+                          <p className="text-[10px] font-medium text-slate-400 italic">Sin teléfono</p>
+                        )}
+                        {sup.address ? (
+                          <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1"><MapPin className="h-2.5 w-2.5" /> {sup.address}</p>
+                        ) : (
+                          <p className="text-[10px] font-medium text-slate-400 italic">Sin dirección</p>
+                        )}
                       </div>
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => handleEditSupplier(sup)}><Edit className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeleteSupplier(sup.id)}><Trash2 className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setSupplierToDelete(sup)}><Trash2 className="h-4 w-4" /></Button>
                     </div>
                   </div>
                 ))}
@@ -2758,6 +2773,36 @@ function CatalogContent() {
         <AlertDialogContent>
           <AlertDialogHeader><AlertDialogTitle>Cambios sin guardar</AlertDialogTitle><AlertDialogDescription>Has realizado modificaciones en la orden de compra que no han sido guardadas. ¿Deseas salir de todas formas?</AlertDialogDescription></AlertDialogHeader>
           <AlertDialogFooter><AlertDialogCancel>Seguir editando</AlertDialogCancel><AlertDialogAction onClick={() => { setIsExitAlertOpen(false); setPurchaseOrderToView(null); setOrderToView(null); }} className="bg-destructive">Salir sin guardar</AlertDialogAction></AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!supplierToDelete} onOpenChange={(o) => !o && setSupplierToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar proveedor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se borrará a <b>{supplierToDelete?.name}</b>. Esto no afectará a los productos que ya lo tengan asignado, pero dejará de aparecer en las listas de selección.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { if(supplierToDelete) { deleteDocumentNonBlocking(doc(db, 'suppliers', supplierToDelete.id)); setSupplierToDelete(null); toast({ title: "Proveedor eliminado" }); } }} className="bg-destructive">Eliminar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!categoryToDelete} onOpenChange={(o) => !o && setCategoryToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar categoría?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se borrará la categoría <b>{categoryToDelete?.name}</b>. Los productos asignados a ella quedarán como "Sin Categoría".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { if(categoryToDelete) { deleteDocumentNonBlocking(doc(db, 'product_categories', categoryToDelete.id)); setCategoryToDelete(null); toast({ title: "Categoría eliminada" }); } }} className="bg-destructive">Eliminar</AlertDialogAction>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
