@@ -282,7 +282,7 @@ function CatalogContent() {
 
   // Grouping Counts
   const activeProdCount = useMemo(() => orders?.filter(o => o.status !== 'completed').length || 0, [orders]);
-  const activePurchCount = useMemo(() => purchaseOrders?.filter(po => po.status !== 'completed').length || 0, [purchaseOrders]);
+  const activePurchCount = useMemo(() => purchaseOrders?.filter(po => !po.items.every((i: any) => i.received)).length || 0, [purchaseOrders]);
 
   // Grouping Orders and Purchases
   const groupedOrders = useMemo(() => ({
@@ -947,22 +947,27 @@ function CatalogContent() {
   }
 
   const handleReceiveMaterials = (supplierName: string) => {
-    if (!purchaseOrderToView || !purchaseCalculations) return;
+    if (!purchaseOrderToView) return;
 
-    const itemsToProcess = purchaseCalculations.items.filter(i => (i.supplier || "Sin Proveedor") === supplierName);
+    const itemsBySup = displayItemsBySupplier[supplierName] || [];
+    const itemsToProcess = itemsBySup.filter(i => !i.received);
     
     itemsToProcess.forEach(item => {
-      if (item.manualQty > 0) {
-        const manualCurrency = manualPurchaseCurrencies[item.id] || (item.manualCurrency || 'ARS');
+      const lineId = item.id;
+      const qty = manualPurchaseQtys[lineId] ?? item.quantity;
+      const price = manualPurchasePrices[lineId] ?? item.price;
+      const currency = manualPurchaseCurrencies[lineId] ?? (item.currency || 'ARS');
+
+      if (qty > 0) {
         const purchaseId = Math.random().toString(36).substring(2, 11);
         const purchaseRecord = {
           id: purchaseId,
           productId: item.productId,
-          productName: item.name,
+          productName: item.productName,
           supplierName: supplierName,
-          quantity: item.manualQty,
-          price: item.manualPrice,
-          currency: manualCurrency,
+          quantity: qty,
+          price: price,
+          currency: currency,
           date: new Date().toISOString(),
           orderId: purchaseOrderToView.id,
           exchangeRate: currentRate,
@@ -971,16 +976,16 @@ function CatalogContent() {
         setDocumentNonBlocking(doc(db, 'purchases', purchaseId), purchaseRecord, { merge: true });
 
         updateDocumentNonBlocking(doc(db, 'products_services', item.productId), {
-          stock: increment(item.manualQty)
+          stock: increment(qty)
         });
         
-        if (item.manualPrice > 0) {
-          const costField = manualCurrency === 'USD' ? 'costUSD' : 'costARS';
-          const otherCostField = manualCurrency === 'USD' ? 'costARS' : 'costUSD';
+        if (price > 0) {
+          const costField = currency === 'USD' ? 'costUSD' : 'costARS';
+          const otherCostField = currency === 'USD' ? 'costARS' : 'costUSD';
           updateDocumentNonBlocking(doc(db, 'products_services', item.productId), {
-            [costField]: item.manualPrice,
+            [costField]: price,
             [otherCostField]: 0,
-            costCurrency: manualCurrency
+            costCurrency: currency
           });
         }
       }
@@ -1010,8 +1015,9 @@ function CatalogContent() {
     const next = current === 'pending' ? 'ordered' : 'pending';
     
     if (next === 'ordered') {
-      const itemsInSupplier = purchaseCalculations?.items.filter(i => (i.supplier || "Sin Proveedor") === supplierName) || [];
-      const hasZeroPrice = itemsInSupplier.some(i => i.manualPrice <= 0);
+      const itemsInSupplier = displayItemsBySupplier[supplierName] || [];
+      const pendingItems = itemsInSupplier.filter(i => !i.received);
+      const hasZeroPrice = pendingItems.some(i => (manualPurchasePrices[i.id] ?? i.price) <= 0);
       if (hasZeroPrice) {
         toast({ title: "Precios incompletos", description: "No puedes marcar como pedido si hay artículos con precio $0.", variant: "destructive" });
         return;
@@ -1250,7 +1256,7 @@ function CatalogContent() {
   }
 
   const handleCopyShoppingList = (supplierFilter: string) => {
-    if (!purchaseCalculations) return;
+    const itemsInGroup = displayItemsBySupplier[supplierFilter] || [];
     const dateStr = new Date().toLocaleDateString('es-AR');
     let text = `*LISTA DE COMPRAS - DOSIMAT PRO*\n`;
     text += `PROVEEDOR: ${supplierFilter.toUpperCase()}\n`;
@@ -1260,19 +1266,20 @@ function CatalogContent() {
       if (supObj.address) text += `Dir: ${supObj.address}\n`;
     }
     text += `Fecha: ${dateStr}\n\n`;
-    const itemsToInclude = purchaseCalculations.items.filter((i: any) => (i.supplier || "Sin Proveedor") === supplierFilter);
-    if (itemsToInclude.length === 0) {
-      toast({ title: "Sin ítems", description: "No hay faltantes para este proveedor." });
+    const pendingItems = itemsInGroup.filter((i: any) => !i.received);
+    if (pendingItems.length === 0) {
+      toast({ title: "Sin ítems", description: "No hay faltantes pendientes para este proveedor." });
       return;
     }
-    const sortedItemsToInclude = [...itemsToInclude].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-    sortedItemsToInclude.forEach(f => {
+    pendingItems.forEach(f => {
       const lineId = f.id;
-      const currency = manualPurchaseCurrencies[lineId] || (f.manualCurrency || 'ARS');
-      text += `- *${f.name}*: ${f.manualQty} unidades. (Precio Ref: ${currency === 'USD' ? 'u$s' : '$'}${f.manualPrice.toLocaleString('es-AR')})\n`;
+      const qty = manualPurchaseQtys[lineId] ?? f.quantity;
+      const price = manualPurchasePrices[lineId] ?? f.price;
+      const currency = manualPurchaseCurrencies[lineId] || (f.currency || 'ARS');
+      text += `- *${f.productName}*: ${qty} unidades. (Precio Ref: ${currency === 'USD' ? 'u$s' : '$'}${price.toLocaleString('es-AR')})\n`;
     });
-    const ars = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * (manualPurchaseCurrencies[i.id] === 'ARS' ? manualPurchasePrices[i.id] : 0)), 0);
-    const usd = itemsToInclude.reduce((sum, i) => sum + (i.manualQty * (manualPurchaseCurrencies[i.id] === 'USD' ? manualPurchasePrices[i.id] : 0)), 0);
+    const ars = pendingItems.reduce((sum, i) => sum + ((manualPurchaseQtys[i.id] ?? i.quantity) * (manualPurchaseCurrencies[i.id] === 'ARS' ? (manualPurchasePrices[i.id] ?? i.price) : 0)), 0);
+    const usd = pendingItems.reduce((sum, i) => sum + ((manualPurchaseQtys[i.id] ?? i.quantity) * (manualPurchaseCurrencies[i.id] === 'USD' ? (manualPurchasePrices[i.id] ?? i.price) : 0)), 0);
     text += `\n*INVERSIÓN ESTIMADA:*\n`;
     if (ars > 0) text += `ARS: $${ars.toLocaleString('es-AR')}\n`;
     if (usd > 0) text += `USD: u$s ${usd.toLocaleString('es-AR')}`;
@@ -1367,17 +1374,28 @@ function CatalogContent() {
     </div>
   )
 
-  const itemsBySupplier = useMemo(() => {
-    if (!purchaseCalculations) return {};
-    const groups: Record<string, typeof purchaseCalculations.items> = {};
-    purchaseCalculations.items.forEach(item => {
+  const displayItemsBySupplier = useMemo(() => {
+    if (!purchaseOrderToView) return {};
+    const groups: Record<string, any[]> = {};
+    purchaseOrderToView.items.forEach((item: any) => {
       const sup = item.supplier || "Sin Proveedor";
       if (!groups[sup]) groups[sup] = [];
-      groups[sup].push(item);
+      
+      const prod = items?.find(i => i.id === item.productId);
+      const lineId = item.id || item.productId;
+      
+      groups[sup].push({
+        ...item,
+        id: lineId,
+        available: prod?.stock || 0,
+        refCostARS: prod?.costARS || 0,
+        refCostUSD: prod?.costUSD || 0,
+        refCostCurrency: prod?.costCurrency || (prod?.costUSD > 0 && !prod?.costARS ? 'USD' : 'ARS')
+      });
     });
-    Object.keys(groups).forEach(sup => groups[sup].sort((a, b) => (a.name || "").localeCompare(b.name || "")));
+    Object.keys(groups).forEach(sup => groups[sup].sort((a, b) => (a.productName || "").localeCompare(b.productName || "")));
     return groups;
-  }, [purchaseCalculations]);
+  }, [purchaseOrderToView, items]);
 
   const renderProductionOrders = (ordersList: any[], isHistory: boolean = false) => (
     <div className={cn("grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6", isHistory && "opacity-75 grayscale-[0.2]")}>
@@ -1728,7 +1746,84 @@ function CatalogContent() {
         </SidebarInset>
       </div>
 
-      {/* MODALES Y DIÁLOGOS OMITIDOS PARA CONCISIÓN - SE MANTIENEN IGUAL QUE EN LA VERSIÓN ANTERIOR */}
+      <Dialog open={!!orderToView} onOpenChange={handleCloseOrderView}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 border-b shrink-0 bg-primary/5">
+            <div className="flex justify-between items-start pr-8">
+              <div className="flex items-center gap-3">
+                <Factory className="h-6 w-6 text-primary" />
+                <div>
+                  <DialogTitle className="text-xl font-black uppercase text-primary tracking-tighter">Plan de Producción #{liveOrderToView?.id.toUpperCase().slice(0, 6)}</DialogTitle>
+                  <DialogDescription className="text-[10px] font-bold uppercase text-slate-500">Gestión de armado de producto compuesto</DialogDescription>
+                </div>
+              </div>
+              <Badge variant="outline" className="font-black uppercase text-[10px] py-1 px-3 bg-white">{liveOrderToView?.status}</Badge>
+            </div>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto p-6 space-y-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Producto a Fabricar</Label>
+                <div className="p-4 border rounded-2xl bg-slate-50 font-black text-lg text-slate-800">{liveOrderToView?.productName}</div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Cantidad Planificada</Label>
+                <div className="p-4 border rounded-2xl bg-slate-50 font-black text-2xl text-primary">{liveOrderToView?.quantity}</div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex justify-between items-end">
+                <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2"><Layers className="h-4 w-4" /> Explosión de Materiales</h3>
+                {liveOrderToView?.status !== 'completed' && (
+                  <Button variant="outline" size="sm" className="h-8 font-bold text-[10px]" onClick={handleGeneratePOFromProduction}>
+                    <ShoppingCart className="h-3 w-3 mr-1.5" /> GENERAR/ACTUALIZAR COMPRA
+                  </Button>
+                )}
+              </div>
+              <div className="border rounded-2xl bg-white shadow-sm overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="text-[10px] font-black uppercase">Componente</TableHead>
+                      <TableHead className="text-center font-black text-[10px] uppercase w-24">Necesario</TableHead>
+                      <TableHead className="text-center font-black text-[10px] uppercase w-24">Disponible</TableHead>
+                      <TableHead className="text-center font-black text-[10px] uppercase w-24">Faltante</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {explosionSummary?.all.map((f: any) => {
+                      const deficit = Math.max(0, f.required - f.available);
+                      const isOk = deficit <= 0;
+                      return (
+                        <TableRow key={f.id} className="h-12">
+                          <TableCell className="text-xs font-bold">{f.name}</TableCell>
+                          <TableCell className="text-center font-black">{f.required}</TableCell>
+                          <TableCell className="text-center font-bold text-slate-500">{f.available}</TableCell>
+                          <TableCell className="text-center">
+                            <span className={cn("font-black px-2 py-0.5 rounded", isOk ? "text-emerald-600 bg-emerald-50" : "text-rose-600 bg-rose-50")}>
+                              {isOk ? "OK" : deficit}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="p-4 border-t bg-slate-50">
+            <div className="flex justify-between items-center w-full">
+              <Button variant="outline" onClick={handleCloseOrderView} className="font-bold">Cerrar</Button>
+              {liveOrderToView?.status === 'ready' && (
+                <Button onClick={handleAssembleFinal} className="bg-blue-600 hover:bg-blue-700 font-black px-8">FINALIZAR ARMADO E INGRESAR STOCK</Button>
+              )}
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={isNewPurchaseOrderOpen} onOpenChange={setIsNewPurchaseOrderOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-6 border-b shrink-0 bg-emerald-500/5">
@@ -1858,13 +1953,13 @@ function CatalogContent() {
                   <TableHeader className="bg-slate-50">
                     <TableRow>
                       <TableHead className="text-[10px] font-black uppercase">Componente</TableHead>
-                      <TableHead className="text-center font-black text-[10px] uppercase">Necesario</TableHead>
-                      <TableHead className="text-center font-black text-[10px] uppercase">Disponible</TableHead>
-                      <TableHead className="text-center font-black text-[10px] uppercase">Faltante</TableHead>
+                      <TableHead className="text-center font-black text-[10px] uppercase w-24">Necesario</TableHead>
+                      <TableHead className="text-center font-black text-[10px] uppercase w-24">Disponible</TableHead>
+                      <TableHead className="text-center font-black text-[10px] uppercase w-24">Faltante</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {explosionSummary?.all.map(f => {
+                    {explosionSummary?.all.map((f: any) => {
                       const deficit = f.required - f.available;
                       const hasMissing = deficit > 0;
                       return (
@@ -1953,134 +2048,156 @@ function CatalogContent() {
 
           <div className="flex-1 overflow-y-auto p-6 space-y-8">
             <div className="space-y-10">
-              {Object.keys(itemsBySupplier).length === 0 ? (
+              {Object.keys(displayItemsBySupplier).length === 0 ? (
                 <div className="p-12 text-center text-emerald-600 bg-white border rounded-xl space-y-2">
-                  <CheckCircle2 className="h-12 w-12 mx-auto" /><p className="font-black">PEDIDO COMPLETADO</p><p className="text-xs text-muted-foreground italic">Ya se recibieron todos los materiales de esta orden.</p>
+                  <AlertTriangle className="h-12 w-12 mx-auto" /><p className="font-black">SIN ÍTEMS</p><p className="text-xs text-muted-foreground italic">No se han agregado productos a esta orden.</p>
                 </div>
               ) : (
-                Object.keys(itemsBySupplier).sort().map(sup => {
-                  const itemsInGroup = itemsBySupplier[sup];
+                Object.keys(displayItemsBySupplier).sort().map(sup => {
+                  const itemsInGroup = displayItemsBySupplier[sup];
                   const isOrdered = supplierStatuses[sup] === 'ordered';
-                  const groupARS = itemsInGroup.reduce((sum, i) => sum + (i.manualQty * (manualPurchaseCurrencies[i.id] === 'ARS' ? manualPurchasePrices[i.id] : 0)), 0);
-                  const groupUSD = itemsInGroup.reduce((sum, i) => sum + (i.manualQty * (manualPurchaseCurrencies[i.id] === 'USD' ? manualPurchasePrices[i.id] : 0)), 0);
+                  const isCompleted = purchaseOrderToView?.status === 'completed';
+                  
+                  const groupARS = itemsInGroup.reduce((sum, i) => {
+                    const q = manualPurchaseQtys[i.id] ?? i.quantity;
+                    const p = manualPurchasePrices[i.id] ?? i.price;
+                    const c = manualPurchaseCurrencies[i.id] ?? (i.currency || 'ARS');
+                    return sum + (q * (c === 'ARS' ? p : 0));
+                  }, 0);
+                  
+                  const groupUSD = itemsInGroup.reduce((sum, i) => {
+                    const q = manualPurchaseQtys[i.id] ?? i.quantity;
+                    const p = manualPurchasePrices[i.id] ?? i.price;
+                    const c = manualPurchaseCurrencies[i.id] ?? (i.currency || 'ARS');
+                    return sum + (q * (c === 'USD' ? p : 0));
+                  }, 0);
                   
                   return (
-                    <div key={sup} className={cn("space-y-4 p-4 rounded-2xl border transition-all", isOrdered ? "bg-slate-50 border-slate-200" : "bg-white border-primary/10 shadow-sm")}>
+                    <div key={sup} className={cn("space-y-4 p-4 rounded-2xl border transition-all", (isOrdered || isCompleted) ? "bg-slate-50 border-slate-200" : "bg-white border-primary/10 shadow-sm")}>
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
-                          <div className={cn("p-2 rounded-lg text-white", isOrdered ? "bg-slate-400" : "bg-emerald-600")}>
-                            {isOrdered ? <Lock className="h-4 w-4" /> : <Truck className="h-4 w-4" />}
+                          <div className={cn("p-2 rounded-lg text-white", (isOrdered || isCompleted) ? "bg-slate-400" : "bg-emerald-600")}>
+                            {(isOrdered || isCompleted) ? <Lock className="h-4 w-4" /> : <Truck className="h-4 w-4" />}
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
                               <h4 className="text-sm font-black uppercase tracking-widest text-slate-900">{sup}</h4>
-                              {isOrdered && <Badge className="bg-slate-600 text-[8px] font-black uppercase">PEDIDO CONFIRMADO</Badge>}
+                              {(isOrdered || isCompleted) && <Badge className="bg-slate-600 text-[8px] font-black uppercase">PEDIDO CONFIRMADO</Badge>}
                             </div>
-                            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">{itemsInGroup.length} ÍTEMS • {isOrdered ? 'VALORES BLOQUEADOS' : 'VALORES EDITABLES'}</p>
+                            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">{itemsInGroup.length} ÍTEMS • {(isOrdered || isCompleted) ? 'VALORES BLOQUEADOS' : 'VALORES EDITABLES'}</p>
                           </div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs flex-1 md:flex-none" onClick={() => handleCopyShoppingList(sup)}>
-                            <Copy className="h-3.5 w-3.5" /> COPIAR
-                          </Button>
-                          
-                          <Button 
-                            variant={isOrdered ? "ghost" : "outline"} 
-                            size="sm" 
-                            className={cn("h-8 gap-2 font-bold text-xs flex-1 md:flex-none", isOrdered ? "text-amber-600 hover:bg-amber-50" : "border-emerald-600 text-emerald-700")}
-                            onClick={() => handleToggleSupplierStatus(sup)}
-                          >
-                            {isOrdered ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-                            {isOrdered ? "DESBLOQUEAR" : "MARCAR COMO PEDIDO"}
-                          </Button>
-                          
-                          <Button 
-                            size="sm" 
-                            className="h-8 gap-2 bg-emerald-600 hover:bg-emerald-700 font-bold text-xs flex-1 md:flex-none" 
-                            onClick={() => handleReceiveMaterials(sup)} 
-                            disabled={itemsInGroup.every(i => i.manualQty <= 0)}
-                          >
-                            <Save className="h-3.5 w-3.5" /> INGRESAR COMPRA
-                          </Button>
-                        </div>
+                        {!isCompleted && (
+                          <div className="flex flex-wrap gap-2">
+                            <Button variant="outline" size="sm" className="h-8 gap-2 font-bold text-xs flex-1 md:flex-none" onClick={() => handleCopyShoppingList(sup)}>
+                              <Copy className="h-3.5 w-3.5" /> COPIAR
+                            </Button>
+                            
+                            <Button 
+                              variant={isOrdered ? "ghost" : "outline"} 
+                              size="sm" 
+                              className={cn("h-8 gap-2 font-bold text-xs flex-1 md:flex-none", isOrdered ? "text-amber-600 hover:bg-amber-50" : "border-emerald-600 text-emerald-700")}
+                              onClick={() => handleToggleSupplierStatus(sup)}
+                            >
+                              {isOrdered ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                              {isOrdered ? "DESBLOQUEAR" : "MARCAR COMO PEDIDO"}
+                            </Button>
+                            
+                            <Button 
+                              size="sm" 
+                              className="h-8 gap-2 bg-emerald-600 hover:bg-emerald-700 font-bold text-xs flex-1 md:flex-none" 
+                              onClick={() => handleReceiveMaterials(sup)} 
+                              disabled={itemsInGroup.every(i => (manualPurchaseQtys[i.id] ?? i.quantity) <= 0)}
+                            >
+                              <Save className="h-3.5 w-3.5" /> INGRESAR COMPRA
+                            </Button>
+                          </div>
+                        )}
                       </div>
 
-                      {/* Los componentes PurchaseTable y PurchaseCard adaptados van aquí - Manteniendo la lógica anterior de visibilidad móvil */}
                       <div className="hidden md:block border-2 rounded-xl bg-white shadow-md overflow-hidden">
                         <Table className="min-w-[600px]">
                           <TableHeader className="bg-slate-50">
                             <TableRow>
                               <TableHead className="text-[9px] font-black uppercase">Material</TableHead>
-                              <TableHead className="text-center font-black text-[9px] uppercase w-20">Cantidad</TableHead>
-                              <TableHead className="text-center font-black text-[9px] uppercase w-48">Precio Compra</TableHead>
-                              <TableHead className="text-center font-black text-[9px] uppercase w-40">Proveedor</TableHead>
-                              <TableHead className="text-right font-black text-[9px] uppercase w-28">Subtotal</TableHead>
+                              <TableHead className="text-center font-black text-[9px] uppercase w-32">Cantidad</TableHead>
+                              <TableHead className="text-center font-black text-[9px] uppercase w-56">Precio Compra</TableHead>
+                              <TableHead className="text-center font-black text-[9px] uppercase w-48">Proveedor</TableHead>
+                              <TableHead className="text-right font-black text-[9px] uppercase w-36">Subtotal</TableHead>
                               <TableHead className="w-10"></TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {itemsInGroup.map(f => {
+                            {itemsInGroup.map((f: any) => {
                               const lineId = f.id;
-                              const isZero = manualPurchasePrices[lineId] <= 0;
-                              const currentCurrency = manualPurchaseCurrencies[lineId] || (f.manualCurrency || 'ARS');
+                              const currentQty = manualPurchaseQtys[lineId] ?? f.quantity;
+                              const currentPrice = manualPurchasePrices[lineId] ?? f.price;
+                              const currentCurrency = manualPurchaseCurrencies[lineId] || (f.currency || 'ARS');
+                              const isZero = currentPrice <= 0 && !f.received;
+                              const isLineLocked = isOrdered || isCompleted || f.received;
                               const refCost = f.refCostCurrency === 'USD' ? f.refCostUSD : f.refCostARS;
                               const refSymbol = f.refCostCurrency === 'USD' ? 'u$s' : '$';
                               
                               return (
-                                <TableRow key={lineId} className="hover:bg-muted/5 h-10">
+                                <TableRow key={lineId} className={cn("hover:bg-muted/5 h-12", f.received && "bg-emerald-50/20")}>
                                   <TableCell className="py-1">
-                                    <p className="font-bold text-xs">{f.name}</p>
-                                    <div className="flex gap-2 items-center">
-                                      <span className="text-[8px] text-muted-foreground uppercase font-black">Stock: {f.available}</span>
-                                      <span className="text-[8px] text-primary/60 uppercase font-black">Costo Ref: {refSymbol} {refCost.toLocaleString()}</span>
+                                    <div className="flex items-center gap-2">
+                                      {f.received && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />}
+                                      <div>
+                                        <p className="font-bold text-xs">{f.productName}</p>
+                                        <div className="flex gap-2 items-center">
+                                          <span className="text-[8px] text-muted-foreground uppercase font-black">Stock: {f.available}</span>
+                                          <span className="text-[8px] text-primary/60 uppercase font-black">Ref: {refSymbol} {refCost.toLocaleString()}</span>
+                                        </div>
+                                      </div>
                                     </div>
                                   </TableCell>
                                   <TableCell className="py-1">
                                     <Input 
                                       type="number" 
-                                      disabled={isOrdered} 
-                                      value={manualPurchaseQtys[lineId] ?? 0} 
+                                      disabled={isLineLocked} 
+                                      value={currentQty} 
                                       onChange={(e) => {
                                         const val = Number(e.target.value);
                                         setManualPurchaseQtys(prev => ({ ...prev, [lineId]: val }));
                                       }} 
-                                      className="w-full text-center font-black text-xs bg-muted/30 border-none rounded h-7 focus:ring-2 focus:ring-primary/20 focus:outline-none" 
+                                      className="w-full text-center font-black text-xs bg-muted/30 border-none rounded h-8 focus:ring-2 focus:ring-primary/20 focus:outline-none" 
                                     />
                                   </TableCell>
                                   <TableCell className="py-1">
                                     <div className="flex items-center gap-1.5">
                                       <Input 
                                         type="number" 
-                                        disabled={isOrdered} 
-                                        value={manualPurchasePrices[lineId] ?? 0} 
+                                        disabled={isLineLocked} 
+                                        value={currentPrice} 
                                         onChange={(e) => {
                                           const val = Number(e.target.value);
                                           setManualPurchasePrices(prev => ({ ...prev, [lineId]: val }));
                                         }} 
                                         className={cn(
-                                          "w-full text-center font-black text-xs h-7 border rounded transition-all focus:outline-none focus:ring-2",
+                                          "w-full text-center font-black text-xs h-8 border rounded transition-all focus:outline-none focus:ring-2",
                                           isZero ? "bg-rose-50 border-rose-300 text-rose-600 animate-pulse" : "bg-white border-emerald-100 text-emerald-700"
                                         )} 
                                       />
                                       <Tabs 
                                         value={currentCurrency} 
                                         onValueChange={(v: any) => setManualPurchaseCurrencies(prev => ({ ...prev, [lineId]: v }))}
-                                        className={cn("shrink-0 h-7", isOrdered && "pointer-events-none opacity-50")}
+                                        className={cn("shrink-0 h-8", isLineLocked && "pointer-events-none opacity-50")}
                                       >
-                                        <TabsList className="h-7 p-0 gap-0 border">
-                                          <TabsTrigger value="ARS" className="h-6 text-[8px] font-black px-1.5 data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
-                                          <TabsTrigger value="USD" className="h-6 text-[8px] font-black px-1.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
+                                        <TabsList className="h-8 p-0 gap-0 border">
+                                          <TabsTrigger value="ARS" className="h-7 text-[8px] font-black px-2 data-[state=active]:bg-primary data-[state=active]:text-white">ARS</TabsTrigger>
+                                          <TabsTrigger value="USD" className="h-7 text-[8px] font-black px-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
                                         </TabsList>
                                       </Tabs>
                                     </div>
                                   </TableCell>
                                   <TableCell className="py-1">
                                     <Select 
-                                      disabled={isOrdered}
-                                      value={manualSuppliers[lineId] || "Sin Proveedor"} 
+                                      disabled={isLineLocked}
+                                      value={manualSuppliers[lineId] || f.supplier || "Sin Proveedor"} 
                                       onValueChange={(v) => handleUpdateItemSupplierGlobally(lineId, f.productId, v)}
                                     >
-                                      <SelectTrigger className="h-7 text-[10px] font-bold border-none bg-transparent">
+                                      <SelectTrigger className="h-8 text-[10px] font-bold border-none bg-transparent">
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>
@@ -2090,14 +2207,14 @@ function CatalogContent() {
                                     </Select>
                                   </TableCell>
                                   <TableCell className="text-right py-1">
-                                    <p className="text-[10px] font-bold">{currentCurrency === 'USD' ? 'u$s' : '$'} {( (manualPurchaseQtys[lineId] ?? 0) * (manualPurchasePrices[lineId] ?? 0)).toLocaleString('es-AR')}</p>
+                                    <p className="text-[10px] font-bold">{currentCurrency === 'USD' ? 'u$s' : '$'} {(currentQty * currentPrice).toLocaleString('es-AR')}</p>
                                   </TableCell>
                                   <TableCell className="py-1">
                                     <Button 
                                       variant="ghost" 
                                       size="icon" 
-                                      className="h-7 w-7 text-destructive" 
-                                      disabled={isOrdered}
+                                      className="h-8 w-8 text-destructive" 
+                                      disabled={isLineLocked}
                                       onClick={() => handleRemoveItemFromPurchaseOrder(lineId)}
                                     >
                                       <X className="h-4 w-4" />
@@ -2111,42 +2228,50 @@ function CatalogContent() {
                       </div>
 
                       <div className="md:hidden space-y-4">
-                        {itemsInGroup.map(f => {
+                        {itemsInGroup.map((f: any) => {
                           const lineId = f.id;
-                          const currentCurrency = manualPurchaseCurrencies[lineId] || (f.manualCurrency || 'ARS');
-                          const isZero = manualPurchasePrices[lineId] <= 0;
+                          const currentQty = manualPurchaseQtys[lineId] ?? f.quantity;
+                          const currentPrice = manualPurchasePrices[lineId] ?? f.price;
+                          const currentCurrency = manualPurchaseCurrencies[lineId] || (f.currency || 'ARS');
+                          const isLineLocked = isOrdered || isCompleted || f.received;
+                          const isZero = currentPrice <= 0 && !f.received;
                           const refCost = f.refCostCurrency === 'USD' ? f.refCostUSD : f.refCostARS;
                           const refSymbol = f.refCostCurrency === 'USD' ? 'u$s' : '$';
                           
                           return (
-                            <Card key={lineId} className="p-4 border-muted shadow-sm">
+                            <Card key={lineId} className={cn("p-4 border shadow-sm", f.received ? "border-emerald-200 bg-emerald-50/10" : "border-muted shadow-sm bg-white")}>
                               <div className="flex justify-between items-start mb-4">
                                 <div className="space-y-1">
-                                  <h5 className="font-black text-xs uppercase tracking-tight">{f.name}</h5>
+                                  <div className="flex items-center gap-2">
+                                    {f.received && <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
+                                    <h5 className="font-black text-xs uppercase tracking-tight">{f.productName}</h5>
+                                  </div>
                                   <div className="flex flex-wrap gap-x-3 gap-y-1">
                                     <span className="text-[9px] text-muted-foreground font-black">STOCK: {f.available}</span>
                                     <span className="text-[9px] text-primary font-black uppercase">REF: {refSymbol} {refCost.toLocaleString()}</span>
                                   </div>
                                 </div>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" disabled={isOrdered} onClick={() => handleRemoveItemFromPurchaseOrder(lineId)}>
-                                  <X className="h-4 w-4" />
-                                </Button>
+                                {!isLineLocked && (
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveItemFromPurchaseOrder(lineId)}>
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                )}
                               </div>
                               <div className="grid grid-cols-1 gap-4 mb-4">
                                 <div className="space-y-1.5">
                                   <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1 tracking-widest">Cantidad</Label>
                                   <div className="flex items-center gap-2">
-                                    <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" disabled={isOrdered} onClick={() => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: Math.max(0, (prev[lineId] ?? 0) - 1) }))}>
+                                    <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" disabled={isLineLocked} onClick={() => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: Math.max(0, (prev[lineId] ?? f.quantity) - 1) }))}>
                                       <Minus className="h-4 w-4" />
                                     </Button>
                                     <Input 
                                       type="number" 
                                       className="h-11 flex-1 text-center font-black text-xl bg-slate-50 border-slate-200" 
-                                      disabled={isOrdered}
-                                      value={manualPurchaseQtys[lineId] ?? 0}
+                                      disabled={isLineLocked}
+                                      value={currentQty}
                                       onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: Number(e.target.value) }))}
                                     />
-                                    <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" disabled={isOrdered} onClick={() => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: (prev[lineId] ?? 0) + 1 }))}>
+                                    <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" disabled={isLineLocked} onClick={() => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: (prev[lineId] ?? f.quantity) + 1 }))}>
                                       <Plus className="h-4 w-4" />
                                     </Button>
                                   </div>
@@ -2158,8 +2283,8 @@ function CatalogContent() {
                                     <Input 
                                       type="number" 
                                       className={cn("h-11 pl-10 text-center font-black text-xl bg-white", isZero ? "bg-rose-50 border-rose-300" : "border-emerald-200")} 
-                                      disabled={isOrdered}
-                                      value={manualPurchasePrices[lineId] ?? 0}
+                                      disabled={isLineLocked}
+                                      value={currentPrice}
                                       onChange={(e) => setManualPurchasePrices(prev => ({ ...prev, [lineId]: Number(e.target.value) }))}
                                     />
                                   </div>
@@ -2171,7 +2296,7 @@ function CatalogContent() {
                                   <Tabs 
                                     value={currentCurrency} 
                                     onValueChange={(v: any) => setManualPurchaseCurrencies(prev => ({ ...prev, [lineId]: v }))}
-                                    className={cn("w-full", isOrdered && "pointer-events-none opacity-50")}
+                                    className={cn("w-full", isLineLocked && "pointer-events-none opacity-50")}
                                   >
                                     <TabsList className="grid grid-cols-2 h-10 p-1 border bg-muted/20">
                                       <TabsTrigger value="ARS" className="text-[10px] font-black data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
@@ -2182,7 +2307,7 @@ function CatalogContent() {
                                 <div className="space-y-1.5">
                                   <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1">Subtotal</Label>
                                   <div className="h-10 flex items-center justify-end px-3 bg-slate-50 border rounded-lg">
-                                    <span className="font-black text-base">{currentCurrency === 'USD' ? 'u$s' : '$'} {( (manualPurchaseQtys[lineId] ?? 0) * (manualPurchasePrices[lineId] ?? 0)).toLocaleString('es-AR')}</span>
+                                    <span className="font-black text-base">{currentCurrency === 'USD' ? 'u$s' : '$'} {(currentQty * currentPrice).toLocaleString('es-AR')}</span>
                                   </div>
                                 </div>
                               </div>
