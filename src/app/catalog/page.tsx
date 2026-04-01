@@ -2030,17 +2030,32 @@ function CatalogContent() {
               </div>
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Cantidad Planificada</Label>
-                <div className="relative group">
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    className="h-16 w-16 shrink-0 border-primary/20 bg-slate-50 text-primary"
+                    disabled={liveOrderToView?.status === 'completed'}
+                    onClick={() => setLocalProductionQty(prev => Math.max(1, (prev || 0) - 1))}
+                  >
+                    <Minus className="h-8 w-8" />
+                  </Button>
                   <Input 
                     type="number" 
                     value={localProductionQty ?? 0} 
                     disabled={liveOrderToView?.status === 'completed'}
                     onChange={(e) => setLocalProductionQty(Number(e.target.value))}
-                    className="h-16 text-3xl font-black text-primary bg-slate-50 border-primary/20 text-center"
+                    className="h-16 text-3xl font-black text-primary bg-slate-50 border-primary/20 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
-                  {liveOrderToView?.status !== 'completed' && (
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[8px] font-black uppercase text-muted-foreground opacity-40 group-hover:opacity-100 transition-opacity">Editar Local</span>
-                  )}
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    className="h-16 w-16 shrink-0 border-primary/20 bg-slate-50 text-primary"
+                    disabled={liveOrderToView?.status === 'completed'}
+                    onClick={() => setLocalProductionQty(prev => (prev || 0) + 1)}
+                  >
+                    <Plus className="h-8 w-8" />
+                  </Button>
                 </div>
               </div>
             </div>
