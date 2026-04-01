@@ -356,7 +356,8 @@ function CatalogContent() {
     if (!items) return []
     return items
       .filter((item: any) => {
-        const matchSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
+        const name = item.name ?? "";
+        const matchSearch = name.toLowerCase().includes(searchTerm.toLowerCase());
         const itemCat = item.categoryId || "uncategorized";
         const matchCategory = selectedCategories.length === 0 || selectedCategories.includes(itemCat);
         return matchSearch && matchCategory;
@@ -603,8 +604,24 @@ function CatalogContent() {
           quantity: comp?.quantity || 0
         };
       })
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
   }, [editingItemId, items]);
+
+  const generateFriendlyOrderId = useCallback((existingOrders: any[]) => {
+    const now = new Date();
+    const yy = now.getFullYear().toString().slice(-2);
+    const mm = (now.getMonth() + 1).toString().padStart(2, '0');
+    const dd = now.getDate().toString().padStart(2, '0');
+    const datePrefix = `${yy}${mm}${dd}`;
+    
+    const todayOrders = existingOrders.filter(o => {
+      const oDate = new Date(o.createdAt);
+      return oDate.toDateString() === now.toDateString();
+    });
+    
+    const nextSeq = (todayOrders.length + 1).toString().padStart(2, '0');
+    return `${datePrefix}_${nextSeq}`;
+  }, []);
 
   const loadItemIntoForm = useCallback((item: any) => {
     setEditingItemId(item.id)
@@ -748,6 +765,7 @@ function CatalogContent() {
   const handleCreatePurchaseOrder = () => {
     if (newPOItems.length === 0) return;
     const id = Math.random().toString(36).substring(2, 11);
+    const friendlyId = generateFriendlyOrderId(purchaseOrders || []);
     
     const itemsToSave = newPOItems.map(item => ({
       id: Math.random().toString(36).substring(2, 11),
@@ -762,7 +780,8 @@ function CatalogContent() {
 
     const newPO = {
       id,
-      description: newPOTitle || "Orden de Reposición Manual",
+      friendlyId,
+      description: newPOTitle || "Compra Manual",
       status: 'pending',
       createdAt: new Date().toISOString(),
       items: itemsToSave,
@@ -776,7 +795,7 @@ function CatalogContent() {
     setNewPurchaseOrderItems([]);
     setNewPOTitle("");
     setActiveTab("purchases");
-    toast({ title: "Orden de compra creada", description: "Ya puedes gestionarla en la pestaña de Compras." });
+    toast({ title: "Orden de compra creada", description: `ID: #${friendlyId}` });
   }
 
   const handleGeneratePOFromProduction = () => {
@@ -861,6 +880,8 @@ function CatalogContent() {
       // Crear nueva OC si no existía (basada en el nuevo plan)
       const missingItems = explosionSummary.all.filter(f => (f.required - f.available) > 0);
       const newPOId = Math.random().toString(36).substring(2, 11);
+      const friendlyId = generateFriendlyOrderId(purchaseOrders || []);
+      
       const newPOItems = missingItems.map(m => ({
         id: Math.random().toString(36).substring(2, 11),
         productId: m.id,
@@ -874,7 +895,8 @@ function CatalogContent() {
 
       const newPO = {
         id: newPOId,
-        description: `Faltantes: ${orderToView.productName} (#${orderToView.id.slice(0, 4)})`,
+        friendlyId,
+        description: `Faltantes: ${orderToView.productName}`,
         status: 'pending',
         createdAt: new Date().toISOString(),
         items: newPOItems,
@@ -884,7 +906,7 @@ function CatalogContent() {
 
       setDocumentNonBlocking(doc(db, 'purchase_orders', newPOId), newPO, { merge: true });
       updateDocumentNonBlocking(doc(db, 'production_orders', orderToView.id), { purchaseOrderId: newPOId });
-      toast({ title: "Orden de Compra generada", description: "Nueva orden vinculada al plan de producción." });
+      toast({ title: "Orden de Compra generada", description: `Vinculada al plan. ID: #${friendlyId}` });
     }
     
     setInitialProductionQty(localProductionQty);
@@ -1331,7 +1353,7 @@ function CatalogContent() {
 
     const amount = ars > 0 ? ars : usd;
     const currency = ars > 0 ? 'ARS' : 'USD';
-    const poRef = purchaseOrderToView.id.toUpperCase().slice(0, 6);
+    const poRef = purchaseOrderToView.friendlyId || purchaseOrderToView.id.toUpperCase().slice(0, 6);
     const desc = `Pago Compra OC #${poRef} - Prov: ${supplierName}`;
 
     router.push(`/transactions?mode=new&type=Expense&amount=${amount}&currency=${currency}&description=${encodeURIComponent(desc)}`);
@@ -1511,6 +1533,7 @@ function CatalogContent() {
     <div className={cn("grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6", isHistory && "opacity-75 grayscale-[0.2]")}>
       {poList.map((po: any) => {
         const allReceived = po.items.every((i: any) => i.received);
+        const friendlyId = po.friendlyId ? `#${po.friendlyId}` : `#${po.id.toUpperCase().slice(0, 6)}`;
         return (
           <Card 
             key={po.id} 
@@ -1522,15 +1545,18 @@ function CatalogContent() {
           >
             <CardHeader className="pb-3">
               <div className="flex justify-between items-start">
-                <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5", allReceived ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-blue-50 text-blue-700 border-blue-200")}>
-                  {allReceived ? <CheckCircle className="h-2.5 w-2.5 mr-1" /> : <Clock className="h-2.5 w-2.5 mr-1" />}
-                  {allReceived ? 'COMPLETADA' : 'PENDIENTE'}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5", allReceived ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-blue-50 text-blue-700 border-blue-200")}>
+                    {allReceived ? <CheckCircle className="h-2.5 w-2.5 mr-1" /> : <Clock className="h-2.5 w-2.5 mr-1" />}
+                    {allReceived ? 'COMPLETADA' : 'PENDIENTE'}
+                  </Badge>
+                  <span className="text-[10px] font-black text-primary bg-primary/5 px-2 py-0.5 rounded border border-primary/10">{friendlyId}</span>
+                </div>
                 {!isHistory && (
                   <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); setPurchaseOrderToDelete(po); }}><Trash2 className="h-4 w-4" /></Button>
                 )}
               </div>
-              <CardTitle className="text-lg mt-2 font-bold leading-tight">{po.description || "Orden de Reposición"}</CardTitle>
+              <CardTitle className="text-lg mt-2 font-bold leading-tight">{po.description || "Orden de Compra"}</CardTitle>
               <CardDescription className="text-[10px] font-bold uppercase">Creada el {new Date(po.createdAt).toLocaleDateString('es-AR')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -1937,7 +1963,7 @@ function CatalogContent() {
                       <Select onValueChange={addComponent}>
                         <SelectTrigger className="h-11 bg-white"><SelectValue placeholder="Buscar pieza..." /></SelectTrigger>
                         <SelectContent className="max-h-60">
-                          {items?.filter(i => i.id !== editingItemId && !i.isService && (bomFilterCategory === 'all' || i.categoryId === bomFilterCategory)).sort((a,b) => a.name.localeCompare(b.name)).map(i => (
+                          {items?.filter(i => i.id !== editingItemId && !i.isService && (bomFilterCategory === 'all' || i.categoryId === bomFilterCategory)).sort((a,b) => (a.name ?? "").localeCompare(b.name ?? "")).map(i => (
                             <SelectItem key={i.id} value={i.id}>{i.name} (Stock: {i.stock ?? 0})</SelectItem>
                           ))}
                         </SelectContent>
@@ -2128,7 +2154,7 @@ function CatalogContent() {
               <ShoppingCart className="h-6 w-6 text-emerald-600" />
               <DialogTitle className="text-xl font-black uppercase text-emerald-700 tracking-tighter">Nueva Orden de Compra</DialogTitle>
             </div>
-            <DialogDescription className="font-bold text-emerald-600/60 uppercase text-[10px]">REPOSICIÓN MANUAL DE INVENTARIO</DialogDescription>
+            <DialogDescription className="font-bold text-emerald-600/60 uppercase text-[10px]">COMPRA MANUAL DE INVENTARIO</DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
             <div className="space-y-2">
@@ -2156,7 +2182,7 @@ function CatalogContent() {
                 }}>
                   <SelectTrigger className="bg-white h-10 text-xs"><SelectValue placeholder="Buscar..." /></SelectTrigger>
                   <SelectContent className="max-h-60">
-                    {items?.filter(i => !i.isService && (newPOCatFilter === 'all' || i.categoryId === newPOCatFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(i => (
+                    {items?.filter(i => !i.isService && (newPOCatFilter === 'all' || i.categoryId === newPOCatFilter)).sort((a,b) => (a.name ?? "").localeCompare(b.name ?? "")).map(i => (
                       <SelectItem key={i.id} value={i.id}>{i.name} (Stock: {i.stock ?? 0})</SelectItem>
                     ))}
                   </SelectContent>
@@ -2291,8 +2317,11 @@ function CatalogContent() {
               <div className="flex items-center gap-3">
                 <ShoppingCart className="h-6 w-6 text-emerald-600" />
                 <div>
-                  <DialogTitle className="text-xl font-black uppercase text-emerald-700 tracking-tighter">Orden de Compra #{purchaseOrderToView?.id.toUpperCase().slice(0, 6)}</DialogTitle>
-                  <DialogDescription className="text-[10px] font-bold uppercase text-emerald-600/60">{purchaseOrderToView?.description || "Reposición manual de componentes"}</DialogDescription>
+                  <div className="flex items-center gap-2">
+                    <DialogTitle className="text-xl font-black uppercase text-emerald-700 tracking-tighter">Orden de Compra</DialogTitle>
+                    <Badge className="bg-primary text-white font-black">#{purchaseOrderToView?.friendlyId || purchaseOrderToView?.id.toUpperCase().slice(0, 6)}</Badge>
+                  </div>
+                  <DialogDescription className="text-[10px] font-bold uppercase text-emerald-600/60">{purchaseOrderToView?.description || "Compra manual de componentes"}</DialogDescription>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -2332,7 +2361,7 @@ function CatalogContent() {
                     <Select onValueChange={handleAddItemToPurchaseOrder}>
                       <SelectTrigger className="bg-white h-9 text-[10px]"><SelectValue placeholder="Añadir..." /></SelectTrigger>
                       <SelectContent className="max-h-60">
-                        {items?.filter(i => !i.isService && (newPOCatFilter === 'all' || i.categoryId === newPOCatFilter)).sort((a,b) => a.name.localeCompare(b.name)).map(i => (
+                        {items?.filter(i => !i.isService && (newPOCatFilter === 'all' || i.categoryId === newPOCatFilter)).sort((a,b) => (a.name ?? "").localeCompare(b.name ?? "")).map(i => (
                           <SelectItem key={i.id} value={i.id}>{i.name} (Stock: {i.stock ?? 0})</SelectItem>
                         ))}
                       </SelectContent>
@@ -2671,7 +2700,7 @@ function CatalogContent() {
             <Table>
               <TableHeader className="bg-slate-50 sticky top-0 z-10"><TableRow><TableHead className="text-[10px] font-black uppercase">Producto</TableHead><TableHead className="text-center font-black text-[10px] uppercase w-32">Stock</TableHead><TableHead className="text-center font-black text-[10px] uppercase w-32">Mínimo</TableHead><TableHead className="text-center font-black text-[10px] uppercase w-48">Costo Ref.</TableHead><TableHead className="text-center font-black text-[10px] uppercase w-48">Proveedor</TableHead></TableRow></TableHeader>
               <TableBody>
-                {items?.filter(i => !i.isService && (auditCategoryFilter === 'all' || i.categoryId === auditCategoryFilter) && (i.name.toLowerCase().includes(auditSearch.toLowerCase()))).sort((a,b) => a.name.localeCompare(b.name)).map(item => (
+                {items?.filter(i => !i.isService && (auditCategoryFilter === 'all' || i.categoryId === auditCategoryFilter) && ((i.name ?? "").toLowerCase().includes(auditSearch.toLowerCase()))).sort((a,b) => (a.name ?? "").localeCompare(b.name ?? "")).map(item => (
                   <TableRow key={item.id} className="hover:bg-muted/5 h-12">
                     <TableCell className="py-1"><p className="text-xs font-bold leading-tight">{item.name}</p><p className="text-[9px] text-muted-foreground font-medium uppercase">{categoryMap[item.categoryId] || 'S/C'}</p></TableCell>
                     <TableCell className="py-1"><Input type="number" value={item.stock ?? 0} onChange={(e) => handleUpdateItemAudit(item.id, { stock: Number(e.target.value) })} className="h-8 text-center font-black text-xs" /></TableCell>
