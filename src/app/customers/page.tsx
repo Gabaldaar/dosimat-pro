@@ -260,7 +260,7 @@ function CustomersContent() {
     
     text += `*RESUMEN DE SALDOS:*\n`;
     text += `ARS: $${Number(selectedCustomerForStatement.saldoActual || 0).toLocaleString('es-AR')} ${selectedCustomerForStatement.saldoActual < 0 ? '(Deuda)' : '(A favor)'}\n`;
-    text += `USD: u$s {Number(selectedCustomerForStatement.saldoUSD || 0).toLocaleString('es-AR')} ${selectedCustomerForStatement.saldoUSD < 0 ? '(Deuda)' : '(A favor)'}\n\n`;
+    text += `USD: u$s ${Number(selectedCustomerForStatement.saldoUSD || 0).toLocaleString('es-AR')} ${selectedCustomerForStatement.saldoUSD < 0 ? '(Deuda)' : '(A favor)'}\n\n`;
     
     if (pendingOperations.length > 0) {
       text += `*DETALLE DE COMPROBANTES PENDIENTES:* \n`;
@@ -602,7 +602,13 @@ function CustomersContent() {
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenMaps(customer.direccion, customer.localidad)} title="Mapa"><MapPinned className="h-3.5 w-3.5" /></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8 text-blue-700 border-blue-200 bg-blue-50" asChild title="Llamar"><a href={`tel:${customer.telefono}`}><Phone className="h-3.5 w-3.5" /></a></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8 text-emerald-700 border-emerald-200 bg-emerald-50" onClick={() => handleWhatsApp(customer.telefono)} title="WhatsApp"><MessageCircle className="h-3.5 w-3.5" /></Button>
-                        <Button variant="outline" size="icon" className="h-8 w-8 text-blue-700 border-blue-200 bg-blue-50" asChild title="Historial"><Link href={`/transactions?clientId=${customer.id}`}><History className="h-3.5 w-3.5" /></Link></Button>
+                        
+                        {!isCommunicator && (
+                          <Button variant="outline" size="icon" className="h-8 w-8 text-blue-700 border-blue-200 bg-blue-50" asChild title="Historial">
+                            <Link href={`/transactions?clientId=${customer.id}`}><History className="h-3.5 w-3.5" /></Link>
+                          </Button>
+                        )}
+                        
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenDialog(customer)} title="Editar"><Edit className="h-3.5 w-3.5" /></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => { if(customer.mail) { setSelectedCommCustomer(customer); setDynamicValues({}); setSelectedTemplateId(""); setIsSingleEmailOpen(true); } }} title="Mail"><Mail className="h-3.5 w-3.5" /></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8 text-emerald-600" onClick={() => { setSelectedCommCustomer(customer); setDynamicValues({}); setSelectedTemplateId(""); setIsSingleWsOpen(true); }} title="WS Plantilla"><MessageSquare className="h-3.5 w-3.5" /></Button>

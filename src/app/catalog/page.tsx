@@ -742,12 +742,14 @@ function CatalogContent() {
   const handleCreateOrder = () => {
     if (!selectedForAssembly) return;
     const id = Math.random().toString(36).substring(2, 11);
+    const friendlyId = generateFriendlyOrderId(orders || []);
     
     const anyMissing = explosionSummary?.all.some(f => (f.available - f.required) < 0);
     const status = anyMissing ? 'pending_purchase' : 'ready';
     
     const newOrder = {
       id,
+      friendlyId,
       productId: selectedForAssembly.id,
       productName: selectedForAssembly.name,
       quantity: assemblyQty,
@@ -759,7 +761,7 @@ function CatalogContent() {
     setDocumentNonBlocking(doc(db, 'production_orders', id), newOrder, { merge: true });
     setIsAssemblyOpen(false);
     setActiveTab("orders");
-    toast({ title: "Orden de producción creada", description: `Estado inicial: ${status === 'ready' ? 'Listo para armar' : 'Pendiente de compra'}` });
+    toast({ title: "Orden de producción creada", description: `ID: #${friendlyId}` });
   }
 
   const handleCreatePurchaseOrder = () => {
@@ -1383,7 +1385,7 @@ function CatalogContent() {
     if (!orderToDelete) return
     deleteDocumentNonBlocking(doc(db, 'production_orders', orderToDelete.id))
     setOrderToDelete(null)
-    toast({ title: "Orden eliminada" })
+    toast({ title: "Orden de producción eliminada" })
   }
 
   const confirmDeletePurchaseOrder = () => {
@@ -1484,6 +1486,8 @@ function CatalogContent() {
           completed: { label: "Completado", icon: CheckCircle, color: "text-emerald-700 bg-emerald-50 border-emerald-200" }
         }[order.status as keyof typeof statusInfo] || { label: order.status, icon: Factory, color: "bg-muted" };
         const StatusIcon = statusInfo.icon;
+        const friendlyId = order.friendlyId ? `#${order.friendlyId}` : `#${order.id.toUpperCase().slice(0, 6)}`;
+        
         return (
           <Card 
             key={order.id} 
@@ -1495,9 +1499,12 @@ function CatalogContent() {
           >
             <CardHeader className="pb-3">
               <div className="flex justify-between items-start">
-                <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5", statusInfo.color)}>
-                  <StatusIcon className="h-2.5 w-2.5 mr-1" /> {statusInfo.label}
-                </Badge>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5", statusInfo.color)}>
+                    <StatusIcon className="h-2.5 w-2.5 mr-1" /> {statusInfo.label}
+                  </Badge>
+                  <span className="text-[9px] font-black text-primary bg-primary/5 px-2 py-0.5 rounded border border-primary/10">{friendlyId}</span>
+                </div>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500" onClick={(e) => { e.stopPropagation(); handlePrintProductionOrder(order); }}><Printer className="h-4 w-4" /></Button>
                   {!isHistory && (
@@ -2038,7 +2045,10 @@ function CatalogContent() {
               <div className="flex items-center gap-3">
                 <Factory className="h-6 w-6 text-primary" />
                 <div>
-                  <DialogTitle className="text-xl font-black uppercase text-primary tracking-tighter">Plan de Producción #{liveOrderToView?.id.toUpperCase().slice(0, 6)}</DialogTitle>
+                  <div className="flex items-center gap-2">
+                    <DialogTitle className="text-xl font-black uppercase text-primary tracking-tighter">Plan de Producción</DialogTitle>
+                    <Badge className="bg-primary text-white font-black">#{liveOrderToView?.friendlyId || liveOrderToView?.id.toUpperCase().slice(0, 6)}</Badge>
+                  </div>
                   <DialogDescription className="text-[10px] font-bold uppercase text-slate-500">Gestión de armado de producto compuesto</DialogDescription>
                 </div>
               </div>
@@ -3027,7 +3037,7 @@ function CatalogContent() {
             <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
               <div>
                 <h1 className="text-2xl font-black uppercase tracking-tight">Plan de Armado / Producción</h1>
-                <p className="text-sm font-bold text-slate-600">#{orderToPrint.id.toUpperCase().slice(0, 6)} - {orderToPrint.productName}</p>
+                <p className="text-sm font-bold text-slate-600">#{orderToPrint.friendlyId || orderToPrint.id.toUpperCase().slice(0, 6)} - {orderToPrint.productName}</p>
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-black uppercase text-slate-400">Fecha de Plan</p>
