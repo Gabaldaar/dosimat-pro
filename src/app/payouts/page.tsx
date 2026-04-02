@@ -27,7 +27,8 @@ import {
   Loader2,
   FilterX,
   Settings2,
-  ListRestart
+  ListRestart,
+  X
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -274,6 +275,7 @@ export default function PayoutsPage() {
     setSelectedItems([])
     setExtras([])
     setAccountId("pending")
+    toast({ title: "Formulario reiniciado", description: "Se han descartado todos los cambios actuales." })
   }
 
   if (isUserLoading) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin" /></div>
@@ -469,6 +471,9 @@ export default function PayoutsPage() {
                     </div>
                     <Button className="w-full h-16 font-black shadow-xl text-xl uppercase tracking-tighter gap-3" disabled={!selectedCollab || totals.total <= 0 || accountId === 'pending'} onClick={handleProcessPayout}>
                       <Banknote className="h-6 w-6" /> LIQUIDAR Y PAGAR
+                    </Button>
+                    <Button variant="outline" className="w-full h-12 border-rose-600 text-rose-600 hover:bg-rose-50 font-bold uppercase text-xs gap-2" onClick={resetForm}>
+                      <X className="h-4 w-4" /> CANCELAR
                     </Button>
                   </div>
                 </CardContent>
