@@ -25,7 +25,7 @@
     "Payout": {
       "title": "Payout",
       "type": "object",
-      "description": "Registra una liquidación de haberes a un colaborador.",
+      "description": "Registra una liquidación de haberes a un colaborador con capacidad de reversión.",
       "properties": {
         "id": { "type": "string" },
         "userId": { "type": "string" },
@@ -36,6 +36,11 @@
         "currency": { "type": "string" },
         "financialAccountId": { "type": "string" },
         "transactionId": { "type": "string" },
+        "itemIds": { 
+          "type": "array", 
+          "items": { "type": "string" },
+          "description": "Lista de IDs de ítems de ruta liquidados para permitir reversión (format: sheetId_idx)"
+        },
         "items": {
           "type": "array",
           "items": {

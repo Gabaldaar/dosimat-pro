@@ -28,7 +28,8 @@ import {
   FilterX,
   Settings2,
   ListRestart,
-  X
+  X,
+  AlertTriangle
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -37,7 +38,24 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogFooter, 
+  DialogDescription 
+} from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { useToast } from "../../hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, setDocumentNonBlocking, deleteDocumentNonBlocking, useUser } from "../../firebase"
 import { collection, query, orderBy, where, doc, increment } from "firebase/firestore"
@@ -75,6 +93,9 @@ export default function PayoutsPage() {
   const [isConceptManagerOpen, setIsConceptManagerOpen] = useState(false)
   const [newConceptName, setNewConceptName] = useState("")
   const [newConceptType, setNewConceptType] = useState<"fixed" | "hourly" | "km">("fixed")
+  
+  // Estado para eliminación/reversión
+  const [payoutToDelete, setPayoutToDelete] = useState<any | null>(null)
 
   // Queries
   const usersQuery = useMemoFirebase(() => collection(db, 'users'), [db])
@@ -106,7 +127,6 @@ export default function PayoutsPage() {
         const isLiquidado = selectedCollab.role === 'Replenisher' ? item.liquidadoRepositor : item.liquidadoComunicador;
         
         if (!isLiquidado && (item.realChlorine > 0 || item.realAcid > 0)) {
-          // Buscar el nombre del cliente en el catálogo de clientes
           const client = clients.find(c => c.id === item.clientId);
           const clientName = client ? `${client.apellido}, ${client.nombre}` : "Cliente Desconocido";
 
@@ -211,8 +231,10 @@ export default function PayoutsPage() {
     }
 
     const payoutId = Math.random().toString(36).substring(2, 11)
+    const txId = Math.random().toString(36).substring(2, 11)
     const now = new Date().toISOString()
 
+    // 1. Crear el objeto de Liquidación
     const payoutData = {
       id: payoutId,
       userId: selectedCollab.id,
@@ -221,14 +243,17 @@ export default function PayoutsPage() {
       totalARS: totals.total,
       currency: "ARS",
       financialAccountId: accountId,
+      transactionId: txId, // Guardar vínculo con la transacción
+      itemIds: selectedItems, // Guardar vínculo con los ítems de ruta
       items: [
         { type: 'items', description: `Entrega de Bidones (${totals.cloro} CL, ${totals.acido} AC)`, amount: totals.subtotalItems, qty: 1, notes: "" },
         { type: 'base', description: 'Sueldo Base / Fijo', amount: totals.baseFija, qty: 1, notes: "" },
         ...extras.map(e => ({ type: e.type, conceptId: e.conceptId, description: e.description, amount: e.amount, qty: e.qty, notes: e.notes }))
       ]
     }
-    addDocumentNonBlocking(collection(db, 'payouts'), payoutData)
+    setDocumentNonBlocking(doc(db, 'payouts', payoutId), payoutData, { merge: true })
 
+    // 2. Marcar ítems de ruta como liquidados
     const fieldToUpdate = selectedCollab.role === 'Replenisher' ? 'liquidadoRepositor' : 'liquidadoComunicador';
     selectedItems.forEach(itemId => {
       const itemData = pendingDeliveries.find(d => d.id === itemId)
@@ -243,7 +268,7 @@ export default function PayoutsPage() {
       }
     })
 
-    const txId = Math.random().toString(36).substring(2, 11)
+    // 3. Crear la Transacción financiera
     const txData = {
       id: txId,
       date: now,
@@ -255,12 +280,56 @@ export default function PayoutsPage() {
       recordedByUserId: userData?.id || 'system',
       accountBalanceAfter: (Number(accounts?.find(a => a.id === accountId)?.initialBalance || 0)) - totals.total
     }
-    addDocumentNonBlocking(collection(db, 'transactions'), txData)
+    setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
+    
+    // 4. Actualizar saldo de caja
     updateDocumentNonBlocking(doc(db, 'financial_accounts', accountId), { initialBalance: increment(-totals.total) })
 
     toast({ title: "Liquidación procesada", description: `Se descontaron $${totals.total.toLocaleString()} de caja.` })
     resetForm()
   }
+
+  const handleDeletePayout = () => {
+    if (!payoutToDelete || !isAdmin) return;
+    const p = payoutToDelete;
+
+    // 1. Restaurar Hojas de Ruta
+    if (p.itemIds && p.itemIds.length > 0) {
+      // Necesitamos saber el rol del usuario en el momento de la liquidación
+      // Como no lo guardamos en el Payout, lo buscamos en la base actual
+      const collab = collaborators?.find(c => c.id === p.userId);
+      const fieldToRevert = collab?.role === 'Replenisher' ? 'liquidadoRepositor' : 'liquidadoComunicador';
+      
+      p.itemIds.forEach((itemId: string) => {
+        const [sheetId, idxStr] = itemId.split('_');
+        const idx = parseInt(idxStr);
+        const sheet = routeSheets?.find(s => s.id === sheetId);
+        if (sheet && sheet.items) {
+          const updatedItems = [...sheet.items];
+          if (updatedItems[idx]) {
+            updatedItems[idx][fieldToRevert] = false;
+            updateDocumentNonBlocking(doc(db, 'route_sheets', sheetId), { items: updatedItems });
+          }
+        }
+      });
+    }
+
+    // 2. Reembolsar Caja
+    if (p.financialAccountId && p.totalARS > 0) {
+      updateDocumentNonBlocking(doc(db, 'financial_accounts', p.financialAccountId), { initialBalance: increment(p.totalARS) });
+    }
+
+    // 3. Eliminar Transacción asociada
+    if (p.transactionId) {
+      deleteDocumentNonBlocking(doc(db, 'transactions', p.transactionId));
+    }
+
+    // 4. Eliminar el registro de Liquidación
+    deleteDocumentNonBlocking(doc(db, 'payouts', p.id));
+
+    setPayoutToDelete(null);
+    toast({ title: "Liquidación revertida", description: "Saldos de caja y estados de ruta restaurados." });
+  };
 
   const handleAddConcept = () => {
     if (!newConceptName.trim()) return
@@ -512,6 +581,7 @@ export default function PayoutsPage() {
                     <TableHead className="text-[10px] font-black uppercase">Colaborador</TableHead>
                     <TableHead className="text-[10px] font-black uppercase">Desglose de Conceptos</TableHead>
                     <TableHead className="text-right text-[10px] font-black uppercase">Total Pagado</TableHead>
+                    <TableHead className="w-12"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -539,9 +609,22 @@ export default function PayoutsPage() {
                       <TableCell className="text-right font-black text-emerald-700 text-sm">
                         ${Number(p.totalARS || 0).toLocaleString()}
                       </TableCell>
+                      <TableCell>
+                        {isAdmin && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-destructive hover:bg-rose-50" 
+                            onClick={() => setPayoutToDelete(p)}
+                            title="Eliminar y Revertir Pago"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
-                  {(!payouts || payouts.length === 0) && <TableRow><TableCell colSpan={4} className="text-center py-20 text-muted-foreground italic text-sm">No se registran liquidaciones históricas todavía.</TableCell></TableRow>}
+                  {(!payouts || payouts.length === 0) && <TableRow><TableCell colSpan={5} className="text-center py-20 text-muted-foreground italic text-sm">No se registran liquidaciones históricas todavía.</TableCell></TableRow>}
                 </TableBody>
               </Table>
             </div>
@@ -606,6 +689,31 @@ export default function PayoutsPage() {
             <DialogFooter><Button variant="outline" onClick={() => setIsConceptManagerOpen(false)} className="w-full font-bold">Cerrar Gestor</Button></DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Alerta de Eliminación/Reversión */}
+        <AlertDialog open={!!payoutToDelete} onOpenChange={(o) => !o && setPayoutToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <div className="flex items-center gap-2 text-destructive mb-2">
+                <AlertTriangle className="h-6 w-6" />
+                <AlertDialogTitle>¿Confirmar eliminación y reversión?</AlertDialogTitle>
+              </div>
+              <AlertDialogDescription className="space-y-4 font-medium text-slate-700">
+                Al confirmar, el sistema realizará las siguientes acciones automáticamente:
+                <ul className="list-disc pl-5 space-y-1 mt-2 text-xs font-bold">
+                  <li>Se devolverán <b>${payoutToDelete?.totalARS.toLocaleString()}</b> a la caja de origen.</li>
+                  <li>Las rutas liquidadas volverán a quedar como <b>pendientes de pago</b>.</li>
+                  <li>Se eliminará el registro de gasto en la pantalla de Operaciones.</li>
+                  <li>Se borrará permanentemente este recibo de liquidación.</li>
+                </ul>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="font-bold">Mantener Liquidación</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeletePayout} className="bg-destructive text-destructive-foreground font-black uppercase">REVERTIR Y BORRAR</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
       </SidebarInset>
       <MobileNav />
