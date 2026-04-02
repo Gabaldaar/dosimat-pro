@@ -163,7 +163,8 @@ export default function PayoutsPage() {
       type: concept.type,
       description: concept.name,
       qty: 1,
-      amount
+      amount,
+      notes: ""
     }
     setExtras([...extras, newExtra])
   }
@@ -176,7 +177,8 @@ export default function PayoutsPage() {
       type: "fixed",
       description: "Concepto manual",
       qty: 1,
-      amount: 0
+      amount: 0,
+      notes: ""
     }
     setExtras([...extras, newExtra])
   }
@@ -213,9 +215,9 @@ export default function PayoutsPage() {
       currency: "ARS",
       financialAccountId: accountId,
       items: [
-        { type: 'items', description: `Entrega de Bidones (${totals.cloro} CL, ${totals.acido} AC)`, amount: totals.subtotalItems, qty: 1 },
-        { type: 'base', description: 'Sueldo Base / Fijo', amount: totals.baseFija, qty: 1 },
-        ...extras.map(e => ({ type: e.type, conceptId: e.conceptId, description: e.description, amount: e.amount, qty: e.qty }))
+        { type: 'items', description: `Entrega de Bidones (${totals.cloro} CL, ${totals.acido} AC)`, amount: totals.subtotalItems, qty: 1, notes: "" },
+        { type: 'base', description: 'Sueldo Base / Fijo', amount: totals.baseFija, qty: 1, notes: "" },
+        ...extras.map(e => ({ type: e.type, conceptId: e.conceptId, description: e.description, amount: e.amount, qty: e.qty, notes: e.notes }))
       ]
     }
     addDocumentNonBlocking(collection(db, 'payouts'), payoutData)
@@ -405,22 +407,33 @@ export default function PayoutsPage() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {extras.map(extra => (
-                      <div key={extra.id} className="flex flex-col md:flex-row gap-4 items-end bg-muted/10 p-3 rounded-xl border border-dashed animate-in slide-in-from-left-2 duration-300">
-                        <div className="flex-1 w-full space-y-1">
-                          <Label className="text-[9px] font-bold uppercase text-muted-foreground">Concepto / Descripción</Label>
-                          <Input value={extra.description ?? ""} onChange={(e) => updateExtra(extra.id, 'description', e.target.value)} className="h-9 bg-white font-bold" />
-                        </div>
-                        {(extra.type === 'hourly' || extra.type === 'km') && (
-                          <div className="w-full md:w-24 space-y-1 text-center">
-                            <Label className="text-[9px] font-bold uppercase text-muted-foreground">{extra.type === 'hourly' ? 'Horas' : 'Kilómetros'}</Label>
-                            <Input type="number" value={extra.qty ?? 0} onChange={(e) => updateExtra(extra.id, 'qty', Number(e.target.value))} className="h-9 text-center font-black bg-white" />
+                      <div key={extra.id} className="bg-muted/10 p-4 rounded-xl border border-dashed animate-in slide-in-from-left-2 duration-300 space-y-3">
+                        <div className="flex flex-col md:flex-row gap-4 items-end">
+                          <div className="flex-1 w-full space-y-1">
+                            <Label className="text-[9px] font-bold uppercase text-muted-foreground">Concepto / Descripción</Label>
+                            <Input value={extra.description ?? ""} onChange={(e) => updateExtra(extra.id, 'description', e.target.value)} className="h-9 bg-white font-bold" />
                           </div>
-                        )}
-                        <div className="w-full md:w-32 space-y-1">
-                          <Label className="text-[9px] font-bold uppercase text-emerald-700">Monto ($)</Label>
-                          <Input type="number" value={extra.amount ?? 0} onChange={(e) => updateExtra(extra.id, 'amount', Number(e.target.value))} className="h-9 text-right font-black bg-white" />
+                          {(extra.type === 'hourly' || extra.type === 'km') && (
+                            <div className="w-full md:w-24 space-y-1 text-center">
+                              <Label className="text-[9px] font-bold uppercase text-muted-foreground">{extra.type === 'hourly' ? 'Horas' : 'Kilómetros'}</Label>
+                              <Input type="number" value={extra.qty ?? 0} onChange={(e) => updateExtra(extra.id, 'qty', Number(e.target.value))} className="h-9 text-center font-black bg-white" />
+                            </div>
+                          )}
+                          <div className="w-full md:w-32 space-y-1">
+                            <Label className="text-[9px] font-bold uppercase text-emerald-700">Monto ($)</Label>
+                            <Input type="number" value={extra.amount ?? 0} onChange={(e) => updateExtra(extra.id, 'amount', Number(e.target.value))} className="h-9 text-right font-black bg-white" />
+                          </div>
+                          <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive shrink-0" onClick={() => setExtras(extras.filter(e => e.id !== extra.id))}><Trash2 className="h-4 w-4" /></Button>
                         </div>
-                        <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive shrink-0" onClick={() => setExtras(extras.filter(e => e.id !== extra.id))}><Trash2 className="h-4 w-4" /></Button>
+                        <div className="space-y-1">
+                          <Label className="text-[9px] font-bold uppercase text-muted-foreground ml-1">Notas / Aclaraciones</Label>
+                          <Input 
+                            placeholder="Ej: Servicio en lo de Pérez, Zona crítica..." 
+                            value={extra.notes ?? ""} 
+                            onChange={(e) => updateExtra(extra.id, 'notes', e.target.value)} 
+                            className="h-8 bg-white text-xs italic" 
+                          />
+                        </div>
                       </div>
                     ))}
                     {extras.length === 0 && <p className="text-center py-8 text-xs text-muted-foreground italic bg-slate-50/50 rounded-xl border border-dashed">No hay conceptos adicionales agregados para esta liquidación.</p>}
@@ -503,9 +516,12 @@ export default function PayoutsPage() {
                       <TableCell>
                         <div className="flex flex-wrap gap-1.5">
                           {p.items?.map((it: any, idx: number) => it.amount !== 0 && (
-                            <Badge key={idx} variant="outline" className="text-[8px] font-bold uppercase bg-slate-50 text-slate-600 border-slate-200">
-                              {it.description}: ${Number(it.amount).toLocaleString()}
-                            </Badge>
+                            <div key={idx} className="flex flex-col gap-0.5">
+                              <Badge variant="outline" className="text-[8px] font-bold uppercase bg-slate-50 text-slate-600 border-slate-200">
+                                {it.description}: ${Number(it.amount).toLocaleString()}
+                              </Badge>
+                              {it.notes && <span className="text-[7px] text-muted-foreground italic px-1 truncate max-w-[150px]">Obs: {it.notes}</span>}
+                            </div>
                           ))}
                         </div>
                       </TableCell>
@@ -525,7 +541,7 @@ export default function PayoutsPage() {
         <Dialog open={isConceptManagerOpen} onOpenChange={setIsConceptManagerOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <div className="flex items-center gap-2 text-primary">
+              <div className="flex items-center gap-2 text-primary mb-2">
                 <Settings2 className="h-5 w-5" />
                 <DialogTitle>Conceptos de Liquidación</DialogTitle>
               </div>

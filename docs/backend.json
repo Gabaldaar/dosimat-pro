@@ -45,7 +45,8 @@
               "conceptId": { "type": "string" },
               "description": { "type": "string" },
               "amount": { "type": "number" },
-              "qty": { "type": "number" }
+              "qty": { "type": "number" },
+              "notes": { "type": "string" }
             }
           }
         }
