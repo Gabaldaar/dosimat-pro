@@ -42,6 +42,7 @@
             "type": "object",
             "properties": {
               "type": { "type": "string" },
+              "conceptId": { "type": "string" },
               "description": { "type": "string" },
               "amount": { "type": "number" },
               "qty": { "type": "number" }
@@ -50,6 +51,18 @@
         }
       },
       "required": ["id", "userId", "date", "totalARS", "financialAccountId"]
+    },
+    "PayoutConcept": {
+      "title": "PayoutConcept",
+      "type": "object",
+      "description": "Conceptos preconfigurados para ítems adicionales en liquidaciones.",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["fixed", "hourly", "km"] },
+        "defaultAmount": { "type": "number" }
+      },
+      "required": ["id", "name", "type"]
     }
   },
   "auth": {
@@ -67,6 +80,7 @@
       { "path": "/purchase_orders/{poId}", "definition": { "entityName": "PurchaseOrder", "description": "Órdenes de compra a proveedores." } },
       { "path": "/suppliers/{supId}", "definition": { "entityName": "Supplier", "description": "Registro de proveedores." } },
       { "path": "/payouts/{payoutId}", "definition": { "entityName": "Payout", "description": "Liquidaciones de sueldos y honorarios." } },
+      { "path": "/payout_concepts/{conceptId}", "definition": { "entityName": "PayoutConcept", "description": "Conceptos maestros de liquidación." } },
       { "path": "/zones/{zoneId}", "definition": { "entityName": "Zone", "description": "Zonas geográficas." } },
       { "path": "/email_templates/{tId}", "definition": { "entityName": "Template", "description": "Plantillas de correo." } },
       { "path": "/whatsapp_templates/{tId}", "definition": { "entityName": "Template", "description": "Plantillas de WhatsApp." } },

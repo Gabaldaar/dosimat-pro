@@ -25,89 +25,29 @@ service cloud.firestore {
       allow write: if isSignedIn() && (request.auth.uid == userId || hasRole('Admin'));
     }
 
-    // Reglas para colecciones operativas
-    // Permitimos lectura (get/list) a cualquier usuario autenticado para evitar bloqueos de la UI.
-    // La visibilidad de las funciones se maneja por programa (AuthGuard).
-    // La escritura (create/update/delete) queda estrictamente protegida por rol.
+    // Reglas universales de lectura para usuarios autenticados
+    // Esto previene errores de "Insufficient Permissions" durante la carga inicial del perfil
+    match /{collection}/{docId} {
+      allow read: if isSignedIn();
+    }
 
-    match /clients/{docId} { 
-      allow read: if isSignedIn(); 
-      allow write: if isStaff() || hasRole('Communicator'); 
-    }
-    
-    match /route_sheets/{docId} { 
-      allow read: if isSignedIn(); 
-      allow write: if isStaff() || hasRole('Communicator') || hasRole('Replenisher'); 
-    }
-    
-    match /financial_accounts/{docId} { 
-      allow read: if isSignedIn(); 
-      allow write: if isStaff(); 
-    }
-    
-    match /transactions/{docId} { 
-      allow read: if isSignedIn(); 
-      allow write: if isStaff(); 
-    }
-    
-    match /products_services/{docId} { 
-      allow read: if isSignedIn(); 
-      allow write: if isStaff(); 
-    }
-    
-    match /production_orders/{docId} { 
-      allow read: if isSignedIn(); 
-      allow write: if isStaff(); 
-    }
-    
-    match /purchase_orders/{docId} { 
-      allow read: if isSignedIn(); 
-      allow write: if isStaff(); 
-    }
-    
-    match /suppliers/{docId} { 
-      allow read: if isSignedIn(); 
-      allow write: if isStaff(); 
-    }
-    
-    match /payouts/{docId} { 
-      allow read: if isSignedIn(); 
-      allow write: if isStaff(); 
-    }
-    
-    match /zones/{docId} { 
-      allow read: if isSignedIn(); 
-      allow write: if isStaff() || hasRole('Communicator'); 
-    }
-    
-    match /product_categories/{docId} { 
-      allow read: if isSignedIn(); 
-      allow write: if isStaff(); 
-    }
-    
-    match /expense_categories/{docId} { 
-      allow read: if isSignedIn(); 
-      allow write: if isStaff(); 
-    }
-    
-    match /email_templates/{docId} { 
-      allow read: if isSignedIn(); 
-      allow write: if isStaff() || hasRole('Communicator'); 
-    }
-    
-    match /whatsapp_templates/{docId} { 
-      allow read: if isSignedIn(); 
-      allow write: if isStaff() || hasRole('Communicator'); 
-    }
-    
-    match /purchases/{docId} { 
-      allow read: if isSignedIn(); 
-      allow write: if isStaff(); 
-    }
-    
-    match /user_roles/{docId} { 
-      allow read: if isSignedIn(); 
-      allow write: if hasRole('Admin'); 
-    }
+    // Reglas de escritura restringidas por Rol
+    match /clients/{docId} { allow write: if isStaff() || hasRole('Communicator'); }
+    match /route_sheets/{docId} { allow write: if isStaff() || hasRole('Communicator') || hasRole('Replenisher'); }
+    match /financial_accounts/{docId} { allow write: if isStaff(); }
+    match /transactions/{docId} { allow write: if isStaff(); }
+    match /products_services/{docId} { allow write: if isStaff(); }
+    match /production_orders/{docId} { allow write: if isStaff(); }
+    match /purchase_orders/{docId} { allow write: if isStaff(); }
+    match /suppliers/{docId} { allow write: if isStaff(); }
+    match /payouts/{docId} { allow write: if isStaff(); }
+    match /payout_concepts/{docId} { allow write: if isStaff(); }
+    match /zones/{docId} { allow write: if isStaff() || hasRole('Communicator'); }
+    match /product_categories/{docId} { allow write: if isStaff(); }
+    match /expense_categories/{docId} { allow write: if isStaff(); }
+    match /email_templates/{docId} { allow write: if isStaff() || hasRole('Communicator'); }
+    match /whatsapp_templates/{docId} { allow write: if isStaff() || hasRole('Communicator'); }
+    match /purchases/{docId} { allow write: if isStaff(); }
+    match /user_roles/{docId} { allow write: if hasRole('Admin'); }
   }
 }
