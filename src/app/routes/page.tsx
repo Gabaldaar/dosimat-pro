@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect, Suspense, useCallback } from "react"
@@ -40,7 +41,8 @@ import {
   Coins,
   Mail,
   Lock,
-  History
+  History,
+  Settings2
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -259,7 +261,9 @@ function RoutesContent() {
       cashCollected: 0,
       notes: "",
       isDelivered: false,
-      processed: false
+      processed: false,
+      liquidadoRepositor: false,
+      liquidadoComunicador: false
     }
     updateSheet([...selectedSheet.items, newItem])
   }
@@ -833,28 +837,32 @@ function RoutesContent() {
                                       </div>
                                     ) : null}
                                     
-                                    {selectedSheet.status === 'completed' && isAdmin ? (
+                                    {selectedSheet.status === 'completed' && (
                                       <div className="flex flex-col gap-2">
                                         <div className="flex justify-between items-center px-2 py-1 bg-emerald-50 border border-emerald-100 rounded text-xs font-bold text-emerald-700">
                                           <span>Cobró:</span>
                                           <span className="text-sm">${item.cashCollected?.toLocaleString('es-AR')}</span>
                                         </div>
-                                        <div className="flex gap-2">
-                                          <Button 
-                                            className="flex-1 bg-primary font-black text-[10px]"
-                                            disabled={item.processed}
-                                            onClick={() => handleGenerateTransaction(item)}
-                                          >
-                                            {item.processed ? 'OPERADO' : 'OPERAR'}
-                                          </Button>
-                                          {!item.processed && (
-                                            <Button variant="outline" size="icon" onClick={() => markAsProcessed(item.clientId)}>
-                                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                                        {isAdmin && (
+                                          <div className="flex gap-2">
+                                            <Button 
+                                              className="flex-1 bg-primary font-black text-[10px]"
+                                              disabled={item.processed}
+                                              onClick={() => handleGenerateTransaction(item)}
+                                            >
+                                              {item.processed ? 'OPERADO' : 'OPERAR'}
                                             </Button>
-                                          )}
-                                        </div>
+                                            {!item.processed && (
+                                              <Button variant="outline" size="icon" onClick={() => markAsProcessed(item.clientId)}>
+                                                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                                              </Button>
+                                            )}
+                                          </div>
+                                        )}
                                       </div>
-                                    ) : selectedSheet.status === 'active' ? (
+                                    )}
+                                    
+                                    {selectedSheet.status === 'active' ? (
                                       <div className="flex flex-col gap-2 mt-4 md:mt-0">
                                         <div className="grid grid-cols-2 gap-2">
                                           <div className="space-y-1">
@@ -917,6 +925,50 @@ function RoutesContent() {
                                     ) : null}
                                   </div>
                                 </div>
+
+                                {selectedSheet.status === 'completed' && isAdmin && (
+                                  <div className="mt-4 pt-4 border-t border-dashed space-y-3">
+                                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest flex items-center gap-2">
+                                      <Settings2 className="h-3 w-3" /> Control de Liquidación (Manual)
+                                    </p>
+                                    <div className="flex gap-2">
+                                      <Button 
+                                        variant="outline" 
+                                        size="sm" 
+                                        className={cn(
+                                          "flex-1 text-[9px] font-bold h-8",
+                                          item.liquidadoRepositor ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "border-rose-200 text-rose-700"
+                                        )}
+                                        onClick={() => {
+                                          const newItems = selectedSheet.items.map((it: any, i: number) => 
+                                            i === idx ? { ...it, liquidadoRepositor: !it.liquidadoRepositor } : it
+                                          );
+                                          updateSheet(newItems);
+                                          toast({ title: item.liquidadoRepositor ? "Marcado como pendiente" : "Marcado como liquidado" });
+                                        }}
+                                      >
+                                        REPOSITOR: {item.liquidadoRepositor ? 'LIQUIDADO' : 'PENDIENTE'}
+                                      </Button>
+                                      <Button 
+                                        variant="outline" 
+                                        size="sm" 
+                                        className={cn(
+                                          "flex-1 text-[9px] font-bold h-8",
+                                          item.liquidadoComunicador ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "border-rose-200 text-rose-700"
+                                        )}
+                                        onClick={() => {
+                                          const newItems = selectedSheet.items.map((it: any, i: number) => 
+                                            i === idx ? { ...it, liquidadoComunicador: !it.liquidadoComunicador } : it
+                                          );
+                                          updateSheet(newItems);
+                                          toast({ title: item.liquidadoComunicador ? "Marcado como pendiente" : "Marcado como liquidado" });
+                                        }}
+                                      >
+                                        COMUNIC.: {item.liquidadoComunicador ? 'LIQUIDADO' : 'PENDIENTE'}
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
                               </CardContent>
                             </Card>
                           )

@@ -82,18 +82,20 @@ export default function PayoutsPage() {
   const payoutsQuery = useMemoFirebase(() => query(collection(db, 'payouts'), orderBy('date', 'desc')), [db])
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
   const conceptsQuery = useMemoFirebase(() => query(collection(db, 'payout_concepts'), orderBy('name', 'asc')), [db])
+  const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
 
   const { data: collaborators } = useCollection(usersQuery)
   const { data: routeSheets } = useCollection(routesQuery)
   const { data: payouts, isLoading: loadingPayouts } = useCollection(payoutsQuery)
   const { data: accounts } = useCollection(accountsQuery)
   const { data: concepts } = useCollection(conceptsQuery)
+  const { data: clients } = useCollection(clientsQuery)
 
   const selectedCollab = useMemo(() => collaborators?.find(c => c.id === selectedCollabId), [collaborators, selectedCollabId])
 
   // Filtrar ítems de rutas pendientes de liquidar
   const pendingDeliveries = useMemo(() => {
-    if (!selectedCollab || !routeSheets) return []
+    if (!selectedCollab || !routeSheets || !clients) return []
     const results: any[] = []
     
     routeSheets.forEach(sheet => {
@@ -104,6 +106,10 @@ export default function PayoutsPage() {
         const isLiquidado = selectedCollab.role === 'Replenisher' ? item.liquidadoRepositor : item.liquidadoComunicador;
         
         if (!isLiquidado && (item.realChlorine > 0 || item.realAcid > 0)) {
+          // Buscar el nombre del cliente en el catálogo de clientes
+          const client = clients.find(c => c.id === item.clientId);
+          const clientName = client ? `${client.apellido}, ${client.nombre}` : "Cliente Desconocido";
+
           results.push({
             id: `${sheet.id}_${idx}`,
             sheetId: sheet.id,
@@ -111,13 +117,13 @@ export default function PayoutsPage() {
             itemIdx: idx,
             cloro: item.realChlorine || 0,
             acido: item.realAcid || 0,
-            clientName: item.clientName || "Cliente"
+            clientName: clientName
           })
         }
       })
     })
     return results
-  }, [selectedCollab, routeSheets, startDate, endDate])
+  }, [selectedCollab, routeSheets, clients, startDate, endDate])
 
   const totals = useMemo(() => {
     const config = selectedCollab?.feesConfig || { valorCloro: 0, valorAcido: 0, valorHora: 0, valorKm: 0, baseFija: 0 }
