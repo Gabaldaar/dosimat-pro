@@ -254,7 +254,6 @@ export default function PayoutsPage() {
 
     toast({ title: "Liquidación procesada", description: `Se descontaron $${totals.total.toLocaleString()} de caja.` })
     resetForm()
-    setActiveTab("history")
   }
 
   const handleAddConcept = () => {
@@ -275,6 +274,7 @@ export default function PayoutsPage() {
     setSelectedItems([])
     setExtras([])
     setAccountId("pending")
+    setActiveTab("history")
     toast({ title: "Formulario reiniciado", description: "Se han descartado todos los cambios actuales." })
   }
 
