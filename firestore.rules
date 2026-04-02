@@ -1,19 +1,211 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // REGLAS ABIERTAS PARA DESARROLLO AGIL
-    // Permitir lectura de la colección de usuarios para el registro inicial
-    match /users {
-      allow read: if true;
+
+    /**
+     * CORE PHILOSOPHY:
+     * This ruleset implements a Database-Backed Access Control (DBAC) model for a professional service and 
+     * financial management application. It distinguishes between Administrators, Employees, and regular Users.
+     *
+     * DATA STRUCTURE:
+     * - Role identification is handled via existence checks in dedicated top-level collections (/roles_admin, /roles_employee).
+     * - Customer and Transaction data are top-level collections accessible by authorized staff.
+     * - User-specific data (like Notifications) is nested under /app_users/{userId} to enforce path-based ownership.
+     *
+     * KEY SECURITY DECISIONS:
+     * - Prototyping Mode: Schema validation is omitted to allow rapid data shape iteration, focusing strictly on authorization.
+     * - Relational Integrity: Key fields like 'recordedByUserId' are validated during creation and made immutable.
+     * - Staff-Only Access: As per requirements, core business data (Customers, Transactions, Financials) is restricted 
+     *   to users identified as Administrators or Employees.
+     * - Role Escalation Prevention: Only Administrators can modify the role-assignment collections.
+     *
+     * DENORMALIZATION FOR AUTHORIZATION:
+     * - Transactions and TransactionItems include 'recordedByUserId' and 'isAdjustment' flags to allow 
+     *   independent security checks without parent document lookups.
+     */
+
+    // --- Helper Functions ---
+
+    /** @description Checks if the user is authenticated. */
+    function isSignedIn() {
+      return request.auth != null;
     }
-    match /users/{userId} {
-      allow read: if true;
-      allow write: if request.auth != null;
+
+    /** @description Checks if the user exists in the Administrator role collection. */
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid));
     }
-    // El resto de la base requiere estar autenticado
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+
+    /** @description Checks if the user exists in the Employee role collection. */
+    function isEmployee() {
+      return isSignedIn() && exists(/databases/$(database)/documents/roles_employee/$(request.auth.uid));
+    }
+
+    /** @description General staff check (Admin or Employee). */
+    function isStaff() {
+      return isAdmin() || isEmployee();
+    }
+
+    /** @description Checks if the authenticated user's UID matches the provided ID. */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /** @description Checks if the current operation is an administrative adjustment. */
+    function isAdjustmentWrite() {
+      return request.resource.data.get('isAdjustment', false) == true;
+    }
+
+    // --- Collection Rules ---
+
+    /**
+     * @description System-wide role definitions.
+     * @path /roles/{roleId}
+     * @allow (get, list) Signed-in users. (create, update, delete) Administrators.
+     * @deny (write) Employees or unauthenticated users.
+     * @principle Restricts system configuration to admins.
+     */
+    match /roles/{roleId} {
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    /**
+     * @description Identification collection for Administrators. Presence of UID indicates role.
+     * @path /roles_admin/{userId}
+     * @allow (get, list) Signed-in users. (create, update, delete) Administrators.
+     * @principle DBAC role management.
+     */
+    match /roles_admin/{userId} {
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    /**
+     * @description Identification collection for Employees. Presence of UID indicates role.
+     * @path /roles_employee/{userId}
+     * @allow (get, list) Signed-in users. (create, update, delete) Administrators.
+     * @principle DBAC role management.
+     */
+    match /roles_employee/{userId} {
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    /**
+     * @description Internal application user profiles.
+     * @path /app_users/{userId}
+     * @allow (get) Owner or Admin. (list) Admin. (create, update) Owner or Admin. (delete) Admin.
+     * @principle Path-based ownership with administrative oversight.
+     */
+    match /app_users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) || isAdmin();
+      allow update: if (isOwner(userId) || isAdmin()) && resource != null;
+      allow delete: if isAdmin() && resource != null;
+
+      /**
+       * @description User-specific notifications.
+       * @path /app_users/{userId}/notifications/{notificationId}
+       * @allow (get, list, update) Owner or Admin. (create, delete) Admin.
+       * @principle Private data isolation with system-generated notifications.
+       */
+      match /notifications/{notificationId} {
+        allow get, list: if isOwner(userId) || isAdmin();
+        allow update: if (isOwner(userId) || isAdmin()) && resource != null;
+        allow create, delete: if isAdmin();
+      }
+    }
+
+    /**
+     * @description Customer records and contact information.
+     * @path /customers/{customerId}
+     * @allow (get, list, create, update, delete) Administrators or Employees.
+     * @deny (all) Regular customers or guest users.
+     * @principle Staff-only access to operational business data.
+     */
+    match /customers/{customerId} {
+      allow get, list, create: if isStaff();
+      allow update, delete: if isStaff() && resource != null;
+
+      /**
+       * @description Equipment associated with a specific customer.
+       * @path /customers/{customerId}/pool_equipment/{equipmentId}
+       * @allow (get, list, create, update, delete) Administrators or Employees.
+       */
+      match /pool_equipment/{equipmentId} {
+        allow get, list, create: if isStaff();
+        allow update, delete: if isStaff() && resource != null;
+      }
+    }
+
+    /**
+     * @description Catalog of products and services offered.
+     * @path /product_services/{productServiceId}
+     * @allow (get, list) Staff. (create, update, delete) Administrators.
+     * @principle Public/Employee viewing with Admin-only management.
+     */
+    match /product_services/{productServiceId} {
+      allow get, list: if isStaff();
+      allow create, update, delete: if isAdmin();
+    }
+
+    /**
+     * @description Business financial accounts and balances.
+     * @path /financial_accounts/{accountId}
+     * @allow (get, list) Staff. (create, update, delete) Administrators.
+     * @principle Sensitive financial structure restricted to admins.
+     */
+    match /financial_accounts/{accountId} {
+      allow get, list: if isStaff();
+      allow create, update, delete: if isAdmin();
+    }
+
+    /**
+     * @description Categories for expense tracking.
+     * @path /expense_categories/{categoryId}
+     * @allow (get, list) Staff. (create, update, delete) Administrators.
+     */
+    match /expense_categories/{categoryId} {
+      allow get, list: if isStaff();
+      allow create, update, delete: if isAdmin();
+    }
+
+    /**
+     * @description Global ledger of financial transactions.
+     * @path /transactions/{transactionId}
+     * @allow (get, list) Staff. (create) Staff if non-adjustment, otherwise Admin. (update, delete) Admin.
+     * @principle Validates recordedByUserId and restricts adjustments to Admins.
+     */
+    match /transactions/{transactionId} {
+      allow get, list: if isStaff();
+      allow create: if isStaff() && (request.resource.data.recordedByUserId == request.auth.uid) && (!isAdjustmentWrite() || isAdmin());
+      allow update: if isAdmin() && resource != null && (request.resource.data.recordedByUserId == resource.data.recordedByUserId);
+      allow delete: if isAdmin() && resource != null;
+
+      /**
+       * @description Line items for transactions.
+       * @path /transactions/{transactionId}/items/{transactionItemId}
+       * @allow (get, list) Staff. (create, update, delete) Same as parent Transaction.
+       * @principle Inherits transaction-level security via denormalized fields.
+       */
+      match /items/{transactionItemId} {
+        allow get, list: if isStaff();
+        allow create: if isStaff() && (request.resource.data.recordedByUserId == request.auth.uid) && (!isAdjustmentWrite() || isAdmin());
+        allow update: if isAdmin() && resource != null && (request.resource.data.recordedByUserId == resource.data.recordedByUserId);
+        allow delete: if isAdmin() && resource != null;
+      }
+    }
+
+    /**
+     * @description Automation rules for system notifications.
+     * @path /notification_rules/{ruleId}
+     * @allow (get, list, create, update, delete) Administrators.
+     * @principle Admin-only configuration.
+     */
+    match /notification_rules/{ruleId} {
+      allow get, list, create, update, delete: if isAdmin();
     }
   }
 }
