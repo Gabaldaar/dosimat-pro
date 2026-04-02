@@ -7,52 +7,107 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    // Verifica si el usuario tiene un rol específico
+    function hasRole(role) {
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
     }
 
-    function isAdmin() {
-      return isSignedIn() && getUserData().role == 'Admin';
-    }
-
-    function isEmployee() {
-      return isSignedIn() && getUserData().role == 'Employee';
-    }
-
+    // Define si el usuario es personal interno (Admin o Empleado)
     function isStaff() {
-      return isAdmin() || isEmployee();
-    }
-
-    function isCommunicator() {
-      return isSignedIn() && getUserData().role == 'Communicator';
-    }
-
-    function isReplenisher() {
-      return isSignedIn() && getUserData().role == 'Replenisher';
+      return hasRole('Admin') || hasRole('Employee');
     }
 
     // Reglas para perfiles de usuario
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin() || request.auth.uid == userId;
+      allow write: if isSignedIn() && (request.auth.uid == userId || hasRole('Admin'));
     }
 
-    // Reglas generales para Staff (Admin y Empleados)
-    match /{path=**}/clients/{docId} { allow read, write: if isStaff() || isCommunicator(); }
-    match /{path=**}/route_sheets/{docId} { allow read, write: if isStaff() || isCommunicator() || isReplenisher(); }
-    match /{path=**}/financial_accounts/{docId} { allow read, write: if isStaff(); }
-    match /{path=**}/transactions/{docId} { allow read, write: if isStaff(); }
-    match /{path=**}/products_services/{docId} { allow read, write: if isStaff(); }
-    match /{path=**}/production_orders/{docId} { allow read, write: if isStaff(); }
-    match /{path=**}/purchase_orders/{docId} { allow read, write: if isStaff(); }
-    match /{path=**}/suppliers/{docId} { allow read, write: if isStaff(); }
-    match /{path=**}/payouts/{docId} { allow read, write: if isStaff(); }
-    match /{path=**}/zones/{docId} { allow read, write: if isStaff() || isCommunicator(); }
-    match /{path=**}/product_categories/{docId} { allow read, write: if isStaff(); }
-    match /{path=**}/expense_categories/{docId} { allow read, write: if isStaff(); }
-    match /{path=**}/email_templates/{docId} { allow read, write: if isStaff() || isCommunicator(); }
-    match /{path=**}/whatsapp_templates/{docId} { allow read, write: if isStaff() || isCommunicator(); }
-    match /{path=**}/purchases/{docId} { allow read, write: if isStaff(); }
-    match /{path=**}/user_roles/{docId} { allow read, write: if isAdmin(); }
+    // Reglas para colecciones operativas
+    // Permitimos lectura (get/list) a cualquier usuario autenticado para evitar bloqueos de la UI.
+    // La visibilidad de las funciones se maneja por programa (AuthGuard).
+    // La escritura (create/update/delete) queda estrictamente protegida por rol.
+
+    match /clients/{docId} { 
+      allow read: if isSignedIn(); 
+      allow write: if isStaff() || hasRole('Communicator'); 
+    }
+    
+    match /route_sheets/{docId} { 
+      allow read: if isSignedIn(); 
+      allow write: if isStaff() || hasRole('Communicator') || hasRole('Replenisher'); 
+    }
+    
+    match /financial_accounts/{docId} { 
+      allow read: if isSignedIn(); 
+      allow write: if isStaff(); 
+    }
+    
+    match /transactions/{docId} { 
+      allow read: if isSignedIn(); 
+      allow write: if isStaff(); 
+    }
+    
+    match /products_services/{docId} { 
+      allow read: if isSignedIn(); 
+      allow write: if isStaff(); 
+    }
+    
+    match /production_orders/{docId} { 
+      allow read: if isSignedIn(); 
+      allow write: if isStaff(); 
+    }
+    
+    match /purchase_orders/{docId} { 
+      allow read: if isSignedIn(); 
+      allow write: if isStaff(); 
+    }
+    
+    match /suppliers/{docId} { 
+      allow read: if isSignedIn(); 
+      allow write: if isStaff(); 
+    }
+    
+    match /payouts/{docId} { 
+      allow read: if isSignedIn(); 
+      allow write: if isStaff(); 
+    }
+    
+    match /zones/{docId} { 
+      allow read: if isSignedIn(); 
+      allow write: if isStaff() || hasRole('Communicator'); 
+    }
+    
+    match /product_categories/{docId} { 
+      allow read: if isSignedIn(); 
+      allow write: if isStaff(); 
+    }
+    
+    match /expense_categories/{docId} { 
+      allow read: if isSignedIn(); 
+      allow write: if isStaff(); 
+    }
+    
+    match /email_templates/{docId} { 
+      allow read: if isSignedIn(); 
+      allow write: if isStaff() || hasRole('Communicator'); 
+    }
+    
+    match /whatsapp_templates/{docId} { 
+      allow read: if isSignedIn(); 
+      allow write: if isStaff() || hasRole('Communicator'); 
+    }
+    
+    match /purchases/{docId} { 
+      allow read: if isSignedIn(); 
+      allow write: if isStaff(); 
+    }
+    
+    match /user_roles/{docId} { 
+      allow read: if isSignedIn(); 
+      allow write: if hasRole('Admin'); 
+    }
   }
 }

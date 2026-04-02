@@ -50,21 +50,6 @@
         }
       },
       "required": ["id", "userId", "date", "totalARS", "financialAccountId"]
-    },
-    "Customer": {
-      "title": "Customer",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "apellido": { "type": "string" },
-        "email": { "type": "string" },
-        "phone": { "type": "string" },
-        "address": { "type": "string" },
-        "saldoActual": { "type": "number" },
-        "saldoUSD": { "type": "number" },
-        "esClienteReposicion": { "type": "boolean" }
-      }
     }
   },
   "auth": {
@@ -84,7 +69,10 @@
       { "path": "/payouts/{payoutId}", "definition": { "entityName": "Payout", "description": "Liquidaciones de sueldos y honorarios." } },
       { "path": "/zones/{zoneId}", "definition": { "entityName": "Zone", "description": "Zonas geográficas." } },
       { "path": "/email_templates/{tId}", "definition": { "entityName": "Template", "description": "Plantillas de correo." } },
-      { "path": "/whatsapp_templates/{tId}", "definition": { "entityName": "Template", "description": "Plantillas de WhatsApp." } }
+      { "path": "/whatsapp_templates/{tId}", "definition": { "entityName": "Template", "description": "Plantillas de WhatsApp." } },
+      { "path": "/product_categories/{catId}", "definition": { "entityName": "Category", "description": "Categorías de productos." } },
+      { "path": "/expense_categories/{catId}", "definition": { "entityName": "Category", "description": "Categorías de gastos." } },
+      { "path": "/purchases/{purchaseId}", "definition": { "entityName": "Purchase", "description": "Registros históricos de compras a proveedores." } }
     ]
   }
 }
