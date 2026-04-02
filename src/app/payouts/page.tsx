@@ -111,6 +111,7 @@ export default function PayoutsPage() {
   const accountsQuery = useMemoFirebase(() => collection(db, 'financial_accounts'), [db])
   const conceptsQuery = useMemoFirebase(() => query(collection(db, 'payout_concepts'), orderBy('name', 'asc')), [db])
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
+  const txQuery = useMemoFirebase(() => collection(db, 'transactions'), [db])
 
   const { data: collaborators } = useCollection(usersQuery)
   const { data: routeSheets } = useCollection(routesQuery)
@@ -118,6 +119,7 @@ export default function PayoutsPage() {
   const { data: accounts } = useCollection(accountsQuery)
   const { data: concepts } = useCollection(conceptsQuery)
   const { data: clients } = useCollection(clientsQuery)
+  const { data: transactions } = useCollection(txQuery)
 
   const selectedCollab = useMemo(() => collaborators?.find(c => c.id === selectedCollabId), [collaborators, selectedCollabId])
   const selectedAccount = useMemo(() => accounts?.find(a => a.id === accountId), [accounts, accountId])
@@ -784,8 +786,8 @@ export default function PayoutsPage() {
 
         {/* Detalle de Liquidación */}
         <Dialog open={!!payoutForDetails} onOpenChange={(o) => !o && setPayoutForDetails(null)}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 md:p-6">
+            <DialogHeader className="p-4 md:p-0">
               <div className="flex items-center gap-2 text-primary mb-1">
                 <FileText className="h-6 w-6" />
                 <DialogTitle>Detalle de Liquidación</DialogTitle>
@@ -794,7 +796,7 @@ export default function PayoutsPage() {
                 Colaborador: {payoutForDetails?.userName} • Fecha: {payoutForDetails && new Date(payoutForDetails.date).toLocaleDateString('es-AR')}
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-6 py-4">
+            <div className="space-y-6 py-4 px-4 md:px-0">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="p-3 bg-muted/20 rounded-xl border text-center">
                   <p className="text-[8px] font-black uppercase text-muted-foreground mb-1">Total Pagado</p>
@@ -851,6 +853,9 @@ export default function PayoutsPage() {
                 </div>
               </div>
             </div>
+            <DialogFooter className="p-4 border-t bg-slate-50 md:bg-transparent">
+              <Button onClick={() => setPayoutForDetails(null)} className="w-full font-black h-12 uppercase tracking-widest">Cerrar Ficha</Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
