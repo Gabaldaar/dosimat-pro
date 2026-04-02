@@ -25,7 +25,8 @@ import {
   Coins,
   Save,
   ChevronRight,
-  Settings2
+  Settings2,
+  Calculator
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -148,6 +149,13 @@ export default function TeamPage() {
           )}
         </header>
 
+        <div className="p-4 bg-primary/5 border border-primary/10 rounded-2xl flex gap-4 items-center">
+          <Info className="h-5 w-5 text-primary shrink-0" />
+          <p className="text-xs font-medium text-slate-700">
+            <b>Configuración de Pagos:</b> Pulsa el botón <b>"Honorarios"</b> en cada colaborador para definir cuánto se le abona por bidón entregado, por hora de servicio técnico o su sueldo base.
+          </p>
+        </div>
+
         <Tabs defaultValue="active" className="w-full">
           <TabsList className="bg-muted/50 p-1 mb-6">
             <TabsTrigger value="active" className="font-bold">Activos</TabsTrigger>
@@ -184,35 +192,35 @@ export default function TeamPage() {
                 <Coins className="h-5 w-5" />
                 <DialogTitle>Configurar Honorarios</DialogTitle>
               </div>
-              <DialogDescription>Valores de retribución para <b>{editingFees?.name}</b>.</DialogDescription>
+              <DialogDescription>Define los valores de retribución para <b>{editingFees?.name}</b>. Estos valores se usarán para calcular sus liquidaciones mensuales automáticamente.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-[10px] font-black uppercase text-muted-foreground">Bidón Cloro ($)</Label>
-                  <Input type="number" value={feesFormData.valorCloro} onChange={(e) => setFeesFormData({...feesFormData, valorCloro: Number(e.target.value)})} />
+                  <Input type="number" value={feesFormData.valorCloro} onChange={(e) => setFeesFormData({...feesFormData, valorCloro: Number(e.target.value)})} className="font-bold" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[10px] font-black uppercase text-muted-foreground">Bidón Ácido ($)</Label>
-                  <Input type="number" value={feesFormData.valorAcido} onChange={(e) => setFeesFormData({...feesFormData, valorAcido: Number(e.target.value)})} />
+                  <Input type="number" value={feesFormData.valorAcido} onChange={(e) => setFeesFormData({...feesFormData, valorAcido: Number(e.target.value)})} className="font-bold" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[10px] font-black uppercase text-muted-foreground">Valor Hora ($)</Label>
-                  <Input type="number" value={feesFormData.valorHora} onChange={(e) => setFeesFormData({...feesFormData, valorHora: Number(e.target.value)})} />
+                  <Input type="number" value={feesFormData.valorHora} onChange={(e) => setFeesFormData({...feesFormData, valorHora: Number(e.target.value)})} className="font-bold" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[10px] font-black uppercase text-muted-foreground">Valor KM ($)</Label>
-                  <Input type="number" value={feesFormData.valorKm} onChange={(e) => setFeesFormData({...feesFormData, valorKm: Number(e.target.value)})} />
+                  <Input type="number" value={feesFormData.valorKm} onChange={(e) => setFeesFormData({...feesFormData, valorKm: Number(e.target.value)})} className="font-bold" />
                 </div>
               </div>
               <div className="space-y-1.5 pt-2 border-t">
                 <Label className="text-[10px] font-black uppercase text-primary">Sueldo Base / Fijo Mensual ($)</Label>
-                <Input type="number" className="h-12 text-xl font-black" value={feesFormData.baseFija} onChange={(e) => setFeesFormData({...feesFormData, baseFija: Number(e.target.value)})} />
+                <Input type="number" className="h-12 text-xl font-black border-primary/30" value={feesFormData.baseFija} onChange={(e) => setFeesFormData({...feesFormData, baseFija: Number(e.target.value)})} />
               </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setEditingFees(null)}>Cancelar</Button>
-              <Button onClick={handleSaveFees} className="gap-2"><Save className="h-4 w-4" /> Guardar</Button>
+              <Button onClick={handleSaveFees} className="gap-2 bg-primary font-bold"><Save className="h-4 w-4" /> Guardar Configuración</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -240,41 +248,68 @@ function MemberCard({ member, isAdmin, currentUid, onUpdateRole, onDelete, onEdi
   const Icon = roleInfo.icon;
   const isMe = member.id === currentUid;
 
+  const hasFees = member.feesConfig && (
+    member.feesConfig.valorCloro > 0 || 
+    member.feesConfig.valorAcido > 0 || 
+    member.feesConfig.baseFija > 0
+  );
+
   return (
     <Card className={cn("glass-card border-l-4 transition-all hover:shadow-md", isMe ? "border-l-primary" : "border-l-muted")}>
       <CardContent className="p-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Avatar className="h-10 w-10 border border-muted">
+          <Avatar className="h-12 w-12 border border-muted shadow-sm">
             <AvatarImage src={`https://picsum.photos/seed/${member.id}/100/100`} />
-            <AvatarFallback className="bg-primary/5 text-primary font-bold">{member.name?.[0] || 'U'}</AvatarFallback>
+            <AvatarFallback className="bg-primary/5 text-primary font-bold text-lg">{member.name?.[0] || 'U'}</AvatarFallback>
           </Avatar>
-          <div>
+          <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <h3 className="font-bold text-sm">{member.name || member.email} {isMe && "(Tú)"}</h3>
-              <Badge variant={roleInfo.color as any} className="text-[9px] uppercase font-black tracking-widest h-5">
+              <h3 className="font-bold text-base leading-none">{member.name || member.email} {isMe && "(Tú)"}</h3>
+              <Badge variant={roleInfo.color as any} className="text-[9px] uppercase font-black tracking-widest h-5 px-2">
                 <Icon className="h-2.5 w-2.5 mr-1" />{roleInfo.label}
               </Badge>
             </div>
             <p className="text-[11px] text-muted-foreground font-medium">{member.email}</p>
+            
+            {hasFees && (
+              <div className="flex gap-2 mt-1">
+                <Badge variant="outline" className="text-[8px] font-black bg-blue-50/50 text-blue-700 border-blue-100">
+                  CL: ${member.feesConfig.valorCloro} | AC: ${member.feesConfig.valorAcido}
+                </Badge>
+                {member.feesConfig.baseFija > 0 && (
+                  <Badge variant="outline" className="text-[8px] font-black bg-emerald-50/50 text-emerald-700 border-emerald-100">
+                    FIJO: ${member.feesConfig.baseFija.toLocaleString()}
+                  </Badge>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           {isAdmin && (
-            <Button variant="ghost" size="sm" className="h-8 gap-2 font-bold text-[10px] uppercase text-primary hover:bg-primary/5" onClick={() => onEditFees(member)}>
-              <Settings2 className="h-3.5 w-3.5" /> Honorarios
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className={cn(
+                "h-9 gap-2 font-bold text-[10px] uppercase transition-all",
+                hasFees ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50" : "border-primary/30 text-primary hover:bg-primary/5"
+              )} 
+              onClick={() => onEditFees(member)}
+            >
+              <Settings2 className="h-3.5 w-3.5" /> {hasFees ? 'Honorarios' : 'Config. Honorarios'}
             </Button>
           )}
           {isAdmin && !isMe && (
             <DropdownMenu>
-              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-9 w-9"><MoreVertical className="h-4 w-4 text-muted-foreground" /></Button></DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 font-bold">
                 <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Replenisher')}><Truck className="mr-2 h-4 w-4" /> Hacer Repositor</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Communicator')}><MessageSquare className="mr-2 h-4 w-4" /> Hacer Comunicador</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Employee')}><UserCircle className="mr-2 h-4 w-4" /> Hacer Empleado</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Admin')}><ShieldCheck className="mr-2 h-4 w-4" /> Hacer Admin</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-destructive font-bold" onClick={() => onDelete(member)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem>
+                <DropdownMenuItem className="text-destructive font-black" onClick={() => onDelete(member)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           )}
