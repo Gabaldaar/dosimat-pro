@@ -29,7 +29,9 @@ import {
   Settings2,
   ListRestart,
   X,
-  AlertTriangle
+  AlertTriangle,
+  Eye,
+  FileText
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -96,6 +98,7 @@ export default function PayoutsPage() {
   
   // Estado para eliminación/reversión
   const [payoutToDelete, setPayoutToDelete] = useState<any | null>(null)
+  const [payoutForDetails, setPayoutForDetails] = useState<any | null>(null)
 
   // Queries
   const usersQuery = useMemoFirebase(() => collection(db, 'users'), [db])
@@ -234,17 +237,30 @@ export default function PayoutsPage() {
     const txId = Math.random().toString(36).substring(2, 11)
     const now = new Date().toISOString()
 
+    // Crear Snapshot de los ítems de ruta para trazabilidad histórica
+    const routeItemsSnapshot = selectedItems.map(id => {
+      const d = pendingDeliveries.find(item => item.id === id);
+      return {
+        sheetDate: d?.sheetDate || "",
+        clientName: d?.clientName || "",
+        cloro: d?.cloro || 0,
+        acido: d?.acido || 0
+      };
+    });
+
     // 1. Crear el objeto de Liquidación
     const payoutData = {
       id: payoutId,
       userId: selectedCollab.id,
       userName: selectedCollab.name,
+      userRole: selectedCollab.role,
       date: now,
       totalARS: totals.total,
       currency: "ARS",
       financialAccountId: accountId,
-      transactionId: txId, // Guardar vínculo con la transacción
-      itemIds: selectedItems, // Guardar vínculo con los ítems de ruta
+      transactionId: txId,
+      itemIds: selectedItems,
+      routeItemsSnapshot, // Trazabilidad de hojas de ruta
       items: [
         { type: 'items', description: `Entrega de Bidones (${totals.cloro} CL, ${totals.acido} AC)`, amount: totals.subtotalItems, qty: 1, notes: "" },
         { type: 'base', description: 'Sueldo Base / Fijo', amount: totals.baseFija, qty: 1, notes: "" },
@@ -295,10 +311,7 @@ export default function PayoutsPage() {
 
     // 1. Restaurar Hojas de Ruta
     if (p.itemIds && p.itemIds.length > 0) {
-      // Necesitamos saber el rol del usuario en el momento de la liquidación
-      // Como no lo guardamos en el Payout, lo buscamos en la base actual
-      const collab = collaborators?.find(c => c.id === p.userId);
-      const fieldToRevert = collab?.role === 'Replenisher' ? 'liquidadoRepositor' : 'liquidadoComunicador';
+      const fieldToRevert = p.userRole === 'Replenisher' ? 'liquidadoRepositor' : 'liquidadoComunicador';
       
       p.itemIds.forEach((itemId: string) => {
         const [sheetId, idxStr] = itemId.split('_');
@@ -581,7 +594,7 @@ export default function PayoutsPage() {
                     <TableHead className="text-[10px] font-black uppercase">Colaborador</TableHead>
                     <TableHead className="text-[10px] font-black uppercase">Desglose de Conceptos</TableHead>
                     <TableHead className="text-right text-[10px] font-black uppercase">Total Pagado</TableHead>
-                    <TableHead className="w-12"></TableHead>
+                    <TableHead className="w-24"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -610,17 +623,28 @@ export default function PayoutsPage() {
                         ${Number(p.totalARS || 0).toLocaleString()}
                       </TableCell>
                       <TableCell>
-                        {isAdmin && (
+                        <div className="flex items-center gap-1">
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            className="h-8 w-8 text-destructive hover:bg-rose-50" 
-                            onClick={() => setPayoutToDelete(p)}
-                            title="Eliminar y Revertir Pago"
+                            className="h-8 w-8 text-primary hover:bg-primary/5" 
+                            onClick={() => setPayoutForDetails(p)}
+                            title="Ver Detalle de Entregas"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Eye className="h-4 w-4" />
                           </Button>
-                        )}
+                          {isAdmin && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-destructive hover:bg-rose-50" 
+                              onClick={() => setPayoutToDelete(p)}
+                              title="Eliminar y Revertir Pago"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -630,6 +654,103 @@ export default function PayoutsPage() {
             </div>
           </div>
         )}
+
+        {/* Diálogo de Detalles de la Liquidación */}
+        <Dialog open={!!payoutForDetails} onOpenChange={(o) => !o && setPayoutForDetails(null)}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <div className="flex items-center gap-2 text-primary mb-1">
+                <FileText className="h-6 w-6" />
+                <DialogTitle>Detalle de Liquidación</DialogTitle>
+              </div>
+              <DialogDescription className="font-bold text-slate-800">
+                Colaborador: {payoutForDetails?.userName} • Fecha: {payoutForDetails && new Date(payoutForDetails.date).toLocaleDateString('es-AR')}
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-6 py-4">
+              {/* Resumen Económico */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="p-3 bg-muted/20 rounded-xl border text-center">
+                  <p className="text-[8px] font-black uppercase text-muted-foreground mb-1">Total Pagado</p>
+                  <p className="text-lg font-black text-primary">${payoutForDetails?.totalARS.toLocaleString()}</p>
+                </div>
+                <div className="p-3 bg-muted/20 rounded-xl border text-center">
+                  <p className="text-[8px] font-black uppercase text-muted-foreground mb-1">Caja Origen</p>
+                  <p className="text-xs font-bold uppercase truncate">{accounts?.find(a => a.id === payoutForDetails?.financialAccountId)?.name || 'S/D'}</p>
+                </div>
+                <div className="p-3 bg-muted/20 rounded-xl border text-center">
+                  <p className="text-[8px] font-black uppercase text-muted-foreground mb-1">ID Pago</p>
+                  <p className="text-[10px] font-mono font-bold">#{payoutForDetails?.id.toUpperCase().slice(0, 8)}</p>
+                </div>
+                <div className="p-3 bg-muted/20 rounded-xl border text-center">
+                  <p className="text-[8px] font-black uppercase text-muted-foreground mb-1">Cant. Entregas</p>
+                  <p className="text-lg font-black">{payoutForDetails?.routeItemsSnapshot?.length || 0}</p>
+                </div>
+              </div>
+
+              {/* Detalle de Hojas de Ruta */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-black uppercase text-slate-500 tracking-widest flex items-center gap-2">
+                  <Truck className="h-3.5 w-3.5" /> Desglose de Entregas Liquidadas
+                </h4>
+                <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
+                  <Table>
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="text-[9px] font-black uppercase">Fecha Ruta</TableHead>
+                        <TableHead className="text-[9px] font-black uppercase">Cliente</TableHead>
+                        <TableHead className="text-center text-[9px] font-black uppercase">Cloro</TableHead>
+                        <TableHead className="text-center text-[9px] font-black uppercase">Ácido</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {payoutForDetails?.routeItemsSnapshot ? payoutForDetails.routeItemsSnapshot.map((item: any, i: number) => (
+                        <TableRow key={i}>
+                          <TableCell className="text-[10px] font-bold text-slate-600">{new Date(item.sheetDate + 'T12:00:00').toLocaleDateString('es-AR')}</TableCell>
+                          <TableCell className="text-xs font-black">{item.clientName}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="outline" className="text-[9px] font-bold bg-blue-50 text-blue-700 border-blue-100">{item.cloro} CL</Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="outline" className="text-[9px] font-bold bg-rose-50 text-rose-700 border-rose-100">{item.acido} AC</Badge>
+                          </TableCell>
+                        </TableRow>
+                      )) : (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center py-8 text-xs italic text-muted-foreground">
+                            Detalle no disponible para liquidaciones antiguas.
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+
+              {/* Conceptos Adicionales */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-black uppercase text-slate-500 tracking-widest flex items-center gap-2">
+                  <Coins className="h-3.5 w-3.5" /> Otros Conceptos y Extras
+                </h4>
+                <div className="space-y-2">
+                  {payoutForDetails?.items?.filter((it: any) => it.amount !== 0).map((it: any, i: number) => (
+                    <div key={i} className="flex justify-between items-start p-3 bg-slate-50 rounded-lg border border-slate-200">
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-black uppercase text-slate-800">{it.description}</p>
+                        {it.notes && <p className="text-[10px] text-muted-foreground italic leading-tight">"{it.notes}"</p>}
+                      </div>
+                      <span className="font-black text-sm text-primary">${it.amount.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <DialogFooter className="border-t pt-4">
+              <Button onClick={() => setPayoutForDetails(null)} className="w-full font-bold">Cerrar Detalle</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Gestor de Conceptos Maestros */}
         <Dialog open={isConceptManagerOpen} onOpenChange={setIsConceptManagerOpen}>
