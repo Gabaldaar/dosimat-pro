@@ -1,732 +1,90 @@
+
 {
   "entities": {
-    "Role": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Role",
-      "type": "object",
-      "description": "Defines user roles within the application, controlling access and permissions to different features and data.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Role entity."
-        },
-        "name": {
-          "type": "string",
-          "description": "The name of the role (e.g., 'Administrator', 'Employee', 'Customer')."
-        },
-        "description": {
-          "type": "string",
-          "description": "A detailed description of the role's responsibilities and permissions."
-        }
-      },
-      "required": [
-        "id",
-        "name",
-        "description"
-      ]
-    },
     "User": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "User",
       "type": "object",
-      "description": "Represents an internal user of the application with access to specific functionalities based on their assigned role.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the User entity."
-        },
-        "email": {
-          "type": "string",
-          "description": "The user's email address, used for login and communication.",
-          "format": "email"
-        },
-        "name": {
-          "type": "string",
-          "description": "The full name of the user."
-        },
-        "roleId": {
-          "type": "string",
-          "description": "Reference to the Role assigned to this user. (Relationship: Role 1:N User)"
+        "id": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "feesConfig": {
+          "type": "object",
+          "properties": {
+            "valorCloro": { "type": "number" },
+            "valorAcido": { "type": "number" },
+            "valorHora": { "type": "number" },
+            "valorKm": { "type": "number" },
+            "baseFija": { "type": "number" }
+          }
         }
       },
-      "required": [
-        "id",
-        "email",
-        "name",
-        "roleId"
-      ]
+      "required": ["id", "email", "name", "role"]
+    },
+    "Payout": {
+      "title": "Payout",
+      "type": "object",
+      "description": "Registra una liquidación de haberes a un colaborador.",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "totalARS": { "type": "number" },
+        "totalUSD": { "type": "number" },
+        "currency": { "type": "string" },
+        "financialAccountId": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string" },
+              "description": { "type": "string" },
+              "amount": { "type": "number" },
+              "qty": { "type": "number" }
+            }
+          }
+        }
+      },
+      "required": ["id", "userId", "date", "totalARS", "financialAccountId"]
     },
     "Customer": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Customer",
       "type": "object",
-      "description": "Stores detailed information about a client, including contact details and financial status.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Customer entity."
-        },
-        "name": {
-          "type": "string",
-          "description": "The customer's full name or company name."
-        },
-        "contactPerson": {
-          "type": "string",
-          "description": "The name of the primary contact person for the customer (if applicable)."
-        },
-        "email": {
-          "type": "string",
-          "description": "The customer's email address for communication.",
-          "format": "email"
-        },
-        "phone": {
-          "type": "string",
-          "description": "The customer's primary phone number."
-        },
-        "address": {
-          "type": "string",
-          "description": "The physical address of the customer or service location."
-        },
-        "latitude": {
-          "type": "number",
-          "description": "Geographical latitude of the customer's address for map integration."
-        },
-        "longitude": {
-          "type": "number",
-          "description": "Geographical longitude of the customer's address for map integration."
-        },
-        "notes": {
-          "type": "string",
-          "description": "Any additional notes or specific details about the customer."
-        },
-        "balanceOutstandingARS": {
-          "type": "number",
-          "description": "The current outstanding balance owed by the customer in Argentine Pesos."
-        },
-        "balanceOutstandingUSD": {
-          "type": "number",
-          "description": "The current outstanding balance owed by the customer in US Dollars."
-        }
-      },
-      "required": [
-        "id",
-        "name",
-        "email",
-        "phone",
-        "address",
-        "balanceOutstandingARS",
-        "balanceOutstandingUSD"
-      ]
-    },
-    "PoolEquipment": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "PoolEquipment",
-      "type": "object",
-      "description": "Records details about a customer's swimming pool or related equipment requiring service or management.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the PoolEquipment entity."
-        },
-        "customerId": {
-          "type": "string",
-          "description": "Reference to the Customer who owns this pool or equipment. (Relationship: Customer 1:N PoolEquipment)"
-        },
-        "name": {
-          "type": "string",
-          "description": "A descriptive name or identifier for the pool or equipment (e.g., 'Main Pool', 'Guest House Spa')."
-        },
-        "type": {
-          "type": "string",
-          "description": "The type of pool or equipment (e.g., 'Residential Pool', 'Commercial Pool', 'Filter System')."
-        },
-        "volumeCubicMeters": {
-          "type": "number",
-          "description": "The volume of the pool in cubic meters, crucial for chemical calculations."
-        },
-        "filtrationSystemType": {
-          "type": "string",
-          "description": "The type of filtration system installed (e.g., 'Sand Filter', 'Cartridge Filter')."
-        },
-        "lastServiceDate": {
-          "type": "string",
-          "description": "The date and time of the last maintenance service performed on this equipment.",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "customerId",
-        "name",
-        "type",
-        "volumeCubicMeters",
-        "filtrationSystemType"
-      ]
-    },
-    "ProductService": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "ProductService",
-      "type": "object",
-      "description": "Manages the catalog of products sold and services offered by the business, including pricing in multiple currencies.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the ProductService entity."
-        },
-        "name": {
-          "type": "string",
-          "description": "The name of the product or service."
-        },
-        "description": {
-          "type": "string",
-          "description": "A detailed description of the product or service."
-        },
-        "type": {
-          "type": "string",
-          "description": "Categorization of the item (e.g., 'Product', 'Service')."
-        },
-        "priceARS": {
-          "type": "number",
-          "description": "The price of the product or service in Argentine Pesos (ARS)."
-        },
-        "priceUSD": {
-          "type": "number",
-          "description": "The price of the product or service in US Dollars (USD)."
-        },
-        "imageUrl": {
-          "type": "string",
-          "description": "URL to an image of the product, if available.",
-          "format": "uri"
-        },
-        "isActive": {
-          "type": "boolean",
-          "description": "Indicates if the product or service is currently active and available for sale/provision."
-        }
-      },
-      "required": [
-        "id",
-        "name",
-        "description",
-        "type",
-        "priceARS",
-        "priceUSD",
-        "isActive"
-      ]
-    },
-    "FinancialAccount": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "FinancialAccount",
-      "type": "object",
-      "description": "Represents different financial accounts (bank accounts, cash boxes) used by the business, tracking their balances.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the FinancialAccount entity."
-        },
-        "name": {
-          "type": "string",
-          "description": "The descriptive name of the financial account (e.g., 'Banco Galicia ARS', 'Caja Chica USD')."
-        },
-        "currency": {
-          "type": "string",
-          "description": "The currency in which this account operates (e.g., 'ARS', 'USD')."
-        },
-        "initialBalance": {
-          "type": "number",
-          "description": "The starting balance of the account when it was first recorded."
-        },
-        "currentBalance": {
-          "type": "number",
-          "description": "The current calculated balance of the account."
-        },
-        "type": {
-          "type": "string",
-          "description": "The type of financial account (e.g., 'Bank Account', 'Cash Box', 'Credit Card')."
-        }
-      },
-      "required": [
-        "id",
-        "name",
-        "currency",
-        "initialBalance",
-        "currentBalance",
-        "type"
-      ]
-    },
-    "ExpenseCategory": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "ExpenseCategory",
-      "type": "object",
-      "description": "Categorizes business expenses for better financial tracking and reporting.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the ExpenseCategory entity."
-        },
-        "name": {
-          "type": "string",
-          "description": "The name of the expense category (e.g., 'Transportation', 'Office Supplies', 'Rent')."
-        },
-        "description": {
-          "type": "string",
-          "description": "A description of the types of expenses that fall under this category."
-        }
-      },
-      "required": [
-        "id",
-        "name",
-        "description"
-      ]
-    },
-    "Transaction": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Transaction",
-      "type": "object",
-      "description": "Records all financial movements, including sales, expenses, payments, and transfers, to maintain an accurate ledger.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Transaction entity."
-        },
-        "date": {
-          "type": "string",
-          "description": "The date and time when the transaction occurred.",
-          "format": "date-time"
-        },
-        "type": {
-          "type": "string",
-          "description": "The type of transaction (e.g., 'Sale', 'Customer Payment', 'Expense', 'Account Transfer In', 'Account Transfer Out', 'Adjustment')."
-        },
-        "description": {
-          "type": "string",
-          "description": "A brief description or summary of the transaction."
-        },
-        "financialAccountId": {
-          "type": "string",
-          "description": "Reference to the FinancialAccount impacted by this transaction. (Relationship: FinancialAccount 1:N Transaction)"
-        },
-        "amount": {
-          "type": "number",
-          "description": "The total monetary amount of the transaction. Positive for inflows, negative for outflows."
-        },
-        "currency": {
-          "type": "string",
-          "description": "The currency of the transaction amount (e.g., 'ARS', 'USD')."
-        },
-        "customerId": {
-          "type": "string",
-          "description": "Optional reference to the Customer involved in this transaction, if applicable. (Relationship: Customer 1:N Transaction)"
-        },
-        "expenseCategoryId": {
-          "type": "string",
-          "description": "Optional reference to the ExpenseCategory if this transaction is an expense. (Relationship: ExpenseCategory 1:N Transaction)"
-        },
-        "relatedTransactionId": {
-          "type": "string",
-          "description": "Optional reference to a linked transaction (e.g., for matching the other side of an account transfer). (Relationship: Transaction 1:1 Transaction)"
-        },
-        "recordedByUserId": {
-          "type": "string",
-          "description": "Reference to the User who recorded this transaction. (Relationship: User 1:N Transaction)"
-        },
-        "isAdjustment": {
-          "type": "boolean",
-          "description": "A boolean indicating if this transaction is a financial adjustment, often requiring specific permissions."
-        }
-      },
-      "required": [
-        "id",
-        "date",
-        "type",
-        "description",
-        "financialAccountId",
-        "amount",
-        "currency",
-        "recordedByUserId",
-        "isAdjustment"
-      ]
-    },
-    "TransactionItem": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "TransactionItem",
-      "type": "object",
-      "description": "Details individual products or services included within a larger transaction, allowing for multi-item transactions.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the TransactionItem entity."
-        },
-        "transactionId": {
-          "type": "string",
-          "description": "Reference to the Transaction this item belongs to. (Relationship: Transaction 1:N TransactionItem)"
-        },
-        "productServiceId": {
-          "type": "string",
-          "description": "Reference to the ProductService sold or provided in this item. (Relationship: ProductService 1:N TransactionItem)"
-        },
-        "quantity": {
-          "type": "number",
-          "description": "The quantity of the product or service included in this transaction item."
-        },
-        "unitPrice": {
-          "type": "number",
-          "description": "The price per unit of the product/service at the time of the transaction."
-        },
-        "totalAmount": {
-          "type": "number",
-          "description": "The total amount for this specific item (quantity * unitPrice)."
-        },
-        "currency": {
-          "type": "string",
-          "description": "The currency of the unit price and total amount, consistent with the parent transaction."
-        }
-      },
-      "required": [
-        "id",
-        "transactionId",
-        "productServiceId",
-        "quantity",
-        "unitPrice",
-        "totalAmount",
-        "currency"
-      ]
-    },
-    "Notification": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Notification",
-      "type": "object",
-      "description": "Represents an individual notification message generated by the system, sent to a user or customer.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Notification entity."
-        },
-        "message": {
-          "type": "string",
-          "description": "The full text content of the notification message."
-        },
-        "type": {
-          "type": "string",
-          "description": "The categorization of the notification (e.g., 'Overdue Payment Alert', 'Service Reminder', 'System Update')."
-        },
-        "targetUserId": {
-          "type": "string",
-          "description": "Reference to the internal User who is the primary recipient of this notification. (Relationship: User 1:N Notification)"
-        },
-        "targetCustomerId": {
-          "type": "string",
-          "description": "Optional reference to the Customer if the notification is specifically about a customer (e.g., an overdue payment reminder sent to the customer). (Relationship: Customer 1:N Notification)"
-        },
-        "scheduledDate": {
-          "type": "string",
-          "description": "The date and time when the notification is scheduled to be sent.",
-          "format": "date-time"
-        },
-        "sentDate": {
-          "type": "string",
-          "description": "The date and time when the notification was actually sent. Null if not yet sent.",
-          "format": "date-time"
-        },
-        "status": {
-          "type": "string",
-          "description": "The current status of the notification (e.g., 'Scheduled', 'Sent', 'Failed', 'Read', 'Dismissed')."
-        },
-        "isRead": {
-          "type": "boolean",
-          "description": "Boolean indicating if the notification has been read by the recipient."
-        }
-      },
-      "required": [
-        "id",
-        "message",
-        "type",
-        "targetUserId",
-        "scheduledDate",
-        "status",
-        "isRead"
-      ]
-    },
-    "NotificationRule": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "NotificationRule",
-      "type": "object",
-      "description": "Defines automated rules for generating and sending personalized notifications based on specific events and conditions.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the NotificationRule entity."
-        },
-        "name": {
-          "type": "string",
-          "description": "A descriptive name for the notification rule (e.g., 'Overdue Payment Reminder')."
-        },
-        "eventType": {
-          "type": "string",
-          "description": "The type of event that triggers this rule (e.g., 'CustomerPaymentOverdue', 'PoolServiceDue')."
-        },
-        "triggerCondition": {
-          "type": "string",
-          "description": "A description or definition of the conditions that must be met to trigger the notification."
-        },
-        "templateMessage": {
-          "type": "string",
-          "description": "A template string for the notification message, which may include placeholders for dynamic data."
-        },
-        "targetAudience": {
-          "type": "string",
-          "description": "Specifies who should receive the notification generated by this rule (e.g., 'Customer', 'InternalUser')."
-        },
-        "targetUserIds": {
-          "type": "array",
-          "description": "An array of references to User entities who should receive this notification if the target audience is 'InternalUser'. (Relationship: User N:N NotificationRule)",
-          "items": {
-            "type": "string"
-          }
-        },
-        "deliveryChannel": {
-          "type": "string",
-          "description": "The method through which the notification should be delivered (e.g., 'Email', 'In-App Alert', 'SMS')."
-        },
-        "isActive": {
-          "type": "boolean",
-          "description": "Boolean indicating if this notification rule is currently active and should generate notifications."
-        }
-      },
-      "required": [
-        "id",
-        "name",
-        "eventType",
-        "triggerCondition",
-        "templateMessage",
-        "targetAudience",
-        "deliveryChannel",
-        "isActive"
-      ]
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "apellido": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "saldoActual": { "type": "number" },
+        "saldoUSD": { "type": "number" },
+        "esClienteReposicion": { "type": "boolean" }
+      }
     }
   },
   "auth": {
-    "providers": [
-      "password",
-      "anonymous"
-    ]
+    "providers": ["password"]
   },
   "firestore": {
     "structure": [
-      {
-        "path": "/roles/{roleId}",
-        "definition": {
-          "entityName": "Role",
-          "schema": {
-            "$ref": "#/backend/entities/Role"
-          },
-          "description": "Top-level collection defining the types of roles available in the application (e.g., 'Administrator', 'Employee'). Read/Write access restricted to Administrators. Does not contain user-role assignments directly."
-        }
-      },
-      {
-        "path": "/app_users/{userId}",
-        "definition": {
-          "entityName": "User",
-          "schema": {
-            "$ref": "#/backend/entities/User"
-          },
-          "description": "Collection for internal application user profiles. Users can read their own profile. Administrators have full CRUD access. Includes `roleId` to reference the role definition, but access control is managed via separate role-assignment collections for authorization independence.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique ID of the internal application user, typically matching `request.auth.uid`."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/roles_admin/{userId}",
-        "definition": {
-          "entityName": "User",
-          "schema": {
-            "$ref": "#/backend/entities/User"
-          },
-          "description": "Dedicated collection for identifying Administrators. The existence of a document for a `userId` in this collection grants 'admin' privileges. Used for `exists()` checks in security rules for authorization independence (DBAC). Only Administrators can create/delete documents here to assign/revoke admin roles.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique ID of a user assigned the 'Administrator' role."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/roles_employee/{userId}",
-        "definition": {
-          "entityName": "User",
-          "schema": {
-            "$ref": "#/backend/entities/User"
-          },
-          "description": "Dedicated collection for identifying Employees. The existence of a document for a `userId` in this collection grants 'employee' privileges. Used for `exists()` checks in security rules for authorization independence (DBAC). Only Administrators can create/delete documents here to assign/revoke employee roles.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique ID of a user assigned the 'Employee' role."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/customers/{customerId}",
-        "definition": {
-          "entityName": "Customer",
-          "schema": {
-            "$ref": "#/backend/entities/Customer"
-          },
-          "description": "Collection for managing customer details. Accessible (Read/Write) by both Administrators and Employees. Supports QAPs by allowing full listing for authorized roles.",
-          "params": [
-            {
-              "name": "customerId",
-              "description": "The unique ID of the customer."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/customers/{customerId}/pool_equipment/{equipmentId}",
-        "definition": {
-          "entityName": "PoolEquipment",
-          "schema": {
-            "$ref": "#/backend/entities/PoolEquipment"
-          },
-          "description": "Subcollection for pool equipment associated with a specific customer. Access (Read/Write) is granted to Administrators and Employees, inherited from the customer collection's access posture. No denormalized authorization fields required as access is role-based.",
-          "params": [
-            {
-              "name": "customerId",
-              "description": "The unique ID of the parent customer."
-            },
-            {
-              "name": "equipmentId",
-              "description": "The unique ID of the pool equipment."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/product_services/{productServiceId}",
-        "definition": {
-          "entityName": "ProductService",
-          "schema": {
-            "$ref": "#/backend/entities/ProductService"
-          },
-          "description": "Collection for the catalog of products and services. Access (Read/Write) is exclusively restricted to Administrators. Supports QAPs by allowing full listing for Administrators.",
-          "params": [
-            {
-              "name": "productServiceId",
-              "description": "The unique ID of the product or service."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/financial_accounts/{accountId}",
-        "definition": {
-          "entityName": "FinancialAccount",
-          "schema": {
-            "$ref": "#/backend/entities/FinancialAccount"
-          },
-          "description": "Collection for managing financial accounts. Administrators have full CRUD access. Employees can read accounts for transaction entry purposes. Supports QAPs by allowing full listing for authorized roles.",
-          "params": [
-            {
-              "name": "accountId",
-              "description": "The unique ID of the financial account."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/expense_categories/{categoryId}",
-        "definition": {
-          "entityName": "ExpenseCategory",
-          "schema": {
-            "$ref": "#/backend/entities/ExpenseCategory"
-          },
-          "description": "Collection for categorizing business expenses. Administrators have full CRUD access. Employees can read categories for transaction entry purposes. Supports QAPs by allowing full listing for authorized roles.",
-          "params": [
-            {
-              "name": "categoryId",
-              "description": "The unique ID of the expense category."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/transactions/{transactionId}",
-        "definition": {
-          "entityName": "Transaction",
-          "schema": {
-            "$ref": "#/backend/entities/Transaction"
-          },
-          "description": "Collection for recording all financial transactions. Accessible (Read/Write) by Administrators and Employees. The `isAdjustment` field restricts specific types of transactions to Administrators. Denormalized `recordedByUserId` for direct ownership checks.",
-          "params": [
-            {
-              "name": "transactionId",
-              "description": "The unique ID of the transaction."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/transactions/{transactionId}/items/{transactionItemId}",
-        "definition": {
-          "entityName": "TransactionItem",
-          "schema": {
-            "$ref": "#/backend/entities/TransactionItem"
-          },
-          "description": "Subcollection detailing individual products/services within a transaction. Includes denormalized 'recordedByUserId' and 'isAdjustment' from the parent Transaction for authorization independence. Access (Read/Write) for Administrators and Employees, with 'isAdjustment' specific restrictions for Admins.",
-          "params": [
-            {
-              "name": "transactionId",
-              "description": "The unique ID of the parent transaction."
-            },
-            {
-              "name": "transactionItemId",
-              "description": "The unique ID of the transaction item."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/app_users/{userId}/notifications/{notificationId}",
-        "definition": {
-          "entityName": "Notification",
-          "schema": {
-            "$ref": "#/backend/entities/Notification"
-          },
-          "description": "Subcollection storing individual notifications for internal users. Users can read and update their own notifications (`userId` matches `request.auth.uid`). Administrators have full CRUD access to all notifications. This path structure ensures private data access (path-based ownership).",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique ID of the user who is the target recipient of the notification."
-            },
-            {
-              "name": "notificationId",
-              "description": "The unique ID of the notification."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/notification_rules/{ruleId}",
-        "definition": {
-          "entityName": "NotificationRule",
-          "schema": {
-            "$ref": "#/backend/entities/NotificationRule"
-          },
-          "description": "Collection defining automated rules for generating notifications. Access (Read/Write) is exclusively restricted to Administrators. Supports QAPs by allowing full listing for Administrators.",
-          "params": [
-            {
-              "name": "ruleId",
-              "description": "The unique ID of the notification rule."
-            }
-          ]
-        }
-      }
-    ],
-    "reasoning": "The Firestore structure prioritizes secure, scalable, and debuggable access control by strictly adhering to the core design principles and strategy mandates. \n\n**Authorization Independence (CRITICAL) and Denormalization Strategy (Mandate A):**\n\n1.  **Role-Based Access:** Instead of relying on a `roleId` field within the `/app_users/{userId}` document and performing a `get()` operation to check the user's role, we introduce dedicated top-level collections for role assignment: `/roles_admin/{userId}` and `/roles_employee/{userId}`. The mere existence of a document in these collections signifies that the `userId` possesses that role. This design enables security rules to perform quick and atomic `exists()` checks (e.g., `allow read: if exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid));`) without incurring `get()` call costs or breaking atomicity, thereby achieving authorization independence for most collection access.\n\n2.  **Transaction Items:** For `TransactionItem` documents stored in `/transactions/{transactionId}/items/{transactionItemId}`, access control depends on the parent `Transaction`'s `recordedByUserId` and its `isAdjustment` status. To avoid `get()` calls on the parent `Transaction` document, these critical authorization fields (`recordedByUserId` and `isAdjustment`) are denormalized and copied directly into each `TransactionItem` document. This allows security rules on `TransactionItem` to evaluate access based solely on its own data, ensuring atomic operations and simplifying rule logic.\n\n**Queryable Access Patterns (QAPs - Rules are not Filters) (Mandate B & C):**\n\n1.  **Structural Segregation (Mandate B):** Collections are designed with a homogeneous security posture. For example, the `/product_services` and `/notification_rules` collections are exclusively for administrators. This means that a `list` operation on these collections by an authorized administrator will return all documents, without requiring complex rule-based filtering on document fields. Similarly, `/customers` is for both admins and employees, allowing them to list all customers without filtering.\n\n2.  **Path-Based Ownership (Mandate C):** For user-specific private data, such as notifications, a hierarchical path like `/app_users/{userId}/notifications/{notificationId}` is used. This structure inherently scopes `list` and `get` operations to the authenticated user (`request.auth.uid` must match `userId`), making rules simple and efficient: `allow read: if request.auth.uid == userId;`. Admins can override this with their explicit `exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid))` check for full access.\n\n3.  **DBAC (Database-Backed Access Control - Mandate C):** The global role collections (`/roles_admin`, `/roles_employee`) enable efficient role checks for all `list` operations across the application. When an admin or employee attempts to list documents from a general collection (e.g., `/customers`), the rules can simply check if the user's UID exists in the respective role collection, allowing full access to the collection without server-side filtering based on document content. This aligns with the principle that rules are not filters.\n\nBy implementing these strategies, the Firestore structure ensures that security rules are straightforward, maintainable, and highly performant, preventing common pitfalls like excessive `get()` calls or inefficient client-side filtering."
+      { "path": "/users/{userId}", "definition": { "entityName": "User", "description": "Perfiles de usuario interno con configuración de honorarios." } },
+      { "path": "/clients/{clientId}", "definition": { "entityName": "Customer", "description": "Cartera de clientes." } },
+      { "path": "/route_sheets/{sheetId}", "definition": { "entityName": "RouteSheet", "description": "Planillas de entrega diaria." } },
+      { "path": "/transactions/{txId}", "definition": { "entityName": "Transaction", "description": "Movimientos de caja y cuenta corriente." } },
+      { "path": "/financial_accounts/{accountId}", "definition": { "entityName": "FinancialAccount", "description": "Cajas y bancos." } },
+      { "path": "/products_services/{itemId}", "definition": { "entityName": "ProductService", "description": "Catálogo de productos e insumos." } },
+      { "path": "/production_orders/{orderId}", "definition": { "entityName": "ProductionOrder", "description": "Planes de armado." } },
+      { "path": "/purchase_orders/{poId}", "definition": { "entityName": "PurchaseOrder", "description": "Órdenes de compra a proveedores." } },
+      { "path": "/suppliers/{supId}", "definition": { "entityName": "Supplier", "description": "Registro de proveedores." } },
+      { "path": "/payouts/{payoutId}", "definition": { "entityName": "Payout", "description": "Liquidaciones de sueldos y honorarios." } },
+      { "path": "/zones/{zoneId}", "definition": { "entityName": "Zone", "description": "Zonas geográficas." } },
+      { "path": "/email_templates/{tId}", "definition": { "entityName": "Template", "description": "Plantillas de correo." } },
+      { "path": "/whatsapp_templates/{tId}", "definition": { "entityName": "Template", "description": "Plantillas de WhatsApp." } }
+    ]
   }
 }

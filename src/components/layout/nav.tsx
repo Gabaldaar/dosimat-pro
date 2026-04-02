@@ -15,7 +15,8 @@ import {
   Shield,
   FileText,
   BarChart3,
-  Truck
+  Truck,
+  Banknote
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -41,6 +42,7 @@ const navItems = [
   { href: "/transactions", label: "Operaciones", icon: ArrowLeftRight },
   { href: "/analysis", label: "Análisis", icon: BarChart3 },
   { href: "/accounts", label: "Cajas", icon: Wallet },
+  { href: "/payouts", label: "Liquidaciones", icon: Banknote },
   { href: "/catalog", label: "Catálogo", icon: Package },
   { href: "/templates", label: "Plantillas", icon: FileText },
   { href: "/team", label: "Equipo", icon: Shield },
@@ -77,6 +79,9 @@ export function Sidebar({ className }: { className?: string }) {
     }
     if (userData.role === 'Replenisher') {
       return navItems.filter(item => item.href === '/routes');
+    }
+    if (userData.role === 'Employee') {
+      return navItems.filter(item => item.href !== '/team'); // Empleados no gestionan equipo
     }
     return navItems;
   }, [userData]);
@@ -149,13 +154,14 @@ export function MobileNav() {
       { href: "/customers", label: "Clientes", icon: Users },
       { href: "/routes", label: "Rutas", icon: Truck }
     ];
-    return [
+    const base = [
       { href: "/", label: "Dashboard", icon: LayoutDashboard },
       { href: "/customers", label: "Clientes", icon: Users },
       { href: "/routes", label: "Rutas", icon: Truck },
       { href: "/transactions", label: "Operaciones", icon: ArrowLeftRight },
-      { href: "/accounts", label: "Cajas", icon: Wallet },
+      { href: "/payouts", label: "Pagos", icon: Banknote },
     ];
+    return base;
   }, [userData]);
 
   return (

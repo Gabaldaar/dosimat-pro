@@ -4,7 +4,7 @@
 import { useEffect, useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { 
@@ -17,12 +17,15 @@ import {
   UserPlus,
   Clock,
   Ban,
-  CheckCircle2,
   Droplets,
   Loader2,
   MessageSquare,
   Truck,
-  Info
+  Info,
+  Coins,
+  Save,
+  ChevronRight,
+  Settings2
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -55,6 +58,8 @@ import { useToast } from "../../hooks/use-toast"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
 const roleDisplay: Record<string, { label: string, icon: any, color: string }> = {
@@ -73,55 +78,49 @@ export default function TeamPage() {
   const { user: currentUser, userData, isUserLoading } = useUser()
   const isAdmin = userData?.role === 'Admin'
 
-  // Redirecciones por Rol
-  useEffect(() => {
-    if (!isUserLoading && userData) {
-      if (userData.role === 'Replenisher') {
-        router.replace('/routes')
-      } else if (userData.role === 'Communicator') {
-        router.replace('/customers')
-      }
-    }
-  }, [userData, isUserLoading, router])
-
   const [isInviteOpen, setIsInviteOpen] = useState(false)
   const [memberToDelete, setMemberToDelete] = useState<any | null>(null)
+  const [editingFees, setEditingFees] = useState<any | null>(null)
   
   const usersQuery = useMemoFirebase(() => collection(db, 'users'), [db])
   const { data: team, isLoading } = useCollection(usersQuery)
 
-  const handleUpdateRole = (userId: string, newRole: string) => {
-    if (!isAdmin) {
-      toast({ title: "Acceso denegado", variant: "destructive" })
-      return
-    }
+  const [feesFormData, setFeesFormData] = useState({
+    valorCloro: 0,
+    valorAcido: 0,
+    valorHora: 0,
+    valorKm: 0,
+    baseFija: 0
+  })
 
+  const handleUpdateRole = (userId: string, newRole: string) => {
+    if (!isAdmin) return
     updateDocumentNonBlocking(doc(db, 'users', userId), { 
       role: newRole,
       updatedAt: new Date().toISOString()
     })
-    setDocumentNonBlocking(doc(db, 'user_roles', userId), { 
-      roleIds: [newRole.toLowerCase()] 
-    }, { merge: true })
-
-    toast({ title: `Rol actualizado a ${roleDisplay[newRole]?.label || newRole}` })
+    toast({ title: `Rol actualizado` })
   }
 
-  const handleBlockUser = (userId: string) => {
-    if (!isAdmin || userId === currentUser?.uid) return;
-    handleUpdateRole(userId, 'Blocked');
+  const handleOpenFees = (member: any) => {
+    setEditingFees(member)
+    setFeesFormData({
+      valorCloro: member.feesConfig?.valorCloro ?? 0,
+      valorAcido: member.feesConfig?.valorAcido ?? 0,
+      valorHora: member.feesConfig?.valorHora ?? 0,
+      valorKm: member.feesConfig?.valorKm ?? 0,
+      baseFija: member.feesConfig?.baseFija ?? 0
+    })
   }
 
-  const confirmDeleteMember = () => {
-    if (!isAdmin || !memberToDelete) return
-    
-    // Eliminar de perfiles de usuario
-    deleteDocumentNonBlocking(doc(db, 'users', memberToDelete.id))
-    // Eliminar de asignación de roles/seguridad
-    deleteDocumentNonBlocking(doc(db, 'user_roles', memberToDelete.id))
-    
-    setMemberToDelete(null)
-    toast({ title: "Miembro eliminado", description: "El acceso y el perfil han sido borrados." })
+  const handleSaveFees = () => {
+    if (!editingFees) return
+    updateDocumentNonBlocking(doc(db, 'users', editingFees.id), {
+      feesConfig: feesFormData,
+      updatedAt: new Date().toISOString()
+    })
+    setEditingFees(null)
+    toast({ title: "Honorarios configurados" })
   }
 
   const sortedTeam = useMemo(() => {
@@ -131,18 +130,7 @@ export default function TeamPage() {
 
   const pendingCount = useMemo(() => team?.filter(m => m.role === 'Pending').length || 0, [team]);
 
-  if (isUserLoading || userData?.role === 'Replenisher' || userData?.role === 'Communicator') {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="mt-4 text-sm text-muted-foreground">
-          {userData?.role === 'Replenisher' ? 'Redirigiendo a Rutas...' : 
-           userData?.role === 'Communicator' ? 'Redirigiendo a Clientes...' : 
-           'Accediendo...'}
-        </p>
-      </div>
-    )
-  }
+  if (isUserLoading) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin" /></div>
 
   return (
     <div className="flex min-h-screen w-full">
@@ -172,70 +160,82 @@ export default function TeamPage() {
 
           <TabsContent value="active" className="space-y-4">
             {sortedTeam.filter(m => ['Admin', 'Employee', 'Communicator', 'Replenisher'].includes(m.role)).map((member: any) => (
-              <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onBlock={handleBlockUser} onDelete={setMemberToDelete} />
+              <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onDelete={setMemberToDelete} onEditFees={handleOpenFees} />
             ))}
           </TabsContent>
 
           <TabsContent value="pending" className="space-y-4">
             {sortedTeam.filter(m => m.role === 'Pending').map((member: any) => (
-              <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onBlock={handleBlockUser} onDelete={setMemberToDelete} />
+              <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onDelete={setMemberToDelete} onEditFees={handleOpenFees} />
             ))}
           </TabsContent>
 
           <TabsContent value="blocked" className="space-y-4">
             {sortedTeam.filter(m => m.role === 'Blocked').map((member: any) => (
-              <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onBlock={handleBlockUser} onDelete={setMemberToDelete} />
+              <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onDelete={setMemberToDelete} onEditFees={handleOpenFees} />
             ))}
           </TabsContent>
         </Tabs>
 
-        <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
-          <DialogContent>
+        <Dialog open={!!editingFees} onOpenChange={(o) => !o && setEditingFees(null)}>
+          <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Agregar colaborador</DialogTitle>
-              <DialogDescription className="pt-4 space-y-4 text-sm leading-relaxed">
-                Pide a tu colaborador que se registre con su email en la pantalla de inicio. Luego aparecerá en tu pestaña de <b>"Pendientes"</b> para que le asignes un rol.
-              </DialogDescription>
+              <div className="flex items-center gap-2 text-primary mb-2">
+                <Coins className="h-5 w-5" />
+                <DialogTitle>Configurar Honorarios</DialogTitle>
+              </div>
+              <DialogDescription>Valores de retribución para <b>{editingFees?.name}</b>.</DialogDescription>
             </DialogHeader>
-            <DialogFooter><Button onClick={() => setIsInviteOpen(false)} className="w-full font-bold">Entendido</Button></DialogFooter>
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground">Bidón Cloro ($)</Label>
+                  <Input type="number" value={feesFormData.valorCloro} onChange={(e) => setFeesFormData({...feesFormData, valorCloro: Number(e.target.value)})} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground">Bidón Ácido ($)</Label>
+                  <Input type="number" value={feesFormData.valorAcido} onChange={(e) => setFeesFormData({...feesFormData, valorAcido: Number(e.target.value)})} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground">Valor Hora ($)</Label>
+                  <Input type="number" value={feesFormData.valorHora} onChange={(e) => setFeesFormData({...feesFormData, valorHora: Number(e.target.value)})} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground">Valor KM ($)</Label>
+                  <Input type="number" value={feesFormData.valorKm} onChange={(e) => setFeesFormData({...feesFormData, valorKm: Number(e.target.value)})} />
+                </div>
+              </div>
+              <div className="space-y-1.5 pt-2 border-t">
+                <Label className="text-[10px] font-black uppercase text-primary">Sueldo Base / Fijo Mensual ($)</Label>
+                <Input type="number" className="h-12 text-xl font-black" value={feesFormData.baseFija} onChange={(e) => setFeesFormData({...feesFormData, baseFija: Number(e.target.value)})} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingFees(null)}>Cancelar</Button>
+              <Button onClick={handleSaveFees} className="gap-2"><Save className="h-4 w-4" /> Guardar</Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
         <AlertDialog open={!!memberToDelete} onOpenChange={(o) => !o && setMemberToDelete(null)}>
-          <AlertDialogContent className="max-w-md">
+          <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
-                <ShieldAlert className="h-5 w-5" /> ¿Confirmar eliminación de acceso?
-              </AlertDialogTitle>
-              <AlertDialogDescription className="space-y-4 text-sm">
-                <p>Se borrará el perfil y los permisos de <b>{memberToDelete?.name || memberToDelete?.email}</b>. Perderá acceso inmediato al sistema.</p>
-                
-                <div className="p-4 bg-amber-50 text-amber-800 rounded-xl border border-amber-200 flex gap-3">
-                  <Info className="h-5 w-5 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="font-bold">Aviso sobre el email:</p>
-                    <p className="italic text-[11px] leading-relaxed">
-                      El registro de login (email/password) permanecerá en la base de datos de seguridad. Si el usuario intenta entrar de nuevo, el sistema le pedirá solicitar acceso otra vez. <br/><br/>
-                      Si deseas liberar el email por completo o borrar su contraseña permanentemente, deberás hacerlo manualmente desde la <b>Consola de Firebase</b>.
-                    </p>
-                  </div>
-                </div>
-              </AlertDialogDescription>
+              <AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle>
+              <AlertDialogDescription>Se borrará el acceso de {memberToDelete?.name}.</AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter className="mt-4">
-              <AlertDialogCancel className="font-bold">Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmDeleteMember} className="bg-destructive text-destructive-foreground font-bold">Eliminar definitivamente</AlertDialogAction>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={() => { deleteDocumentNonBlocking(doc(db, 'users', memberToDelete.id)); setMemberToDelete(null); }} className="bg-destructive">Eliminar</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-
       </SidebarInset>
       <MobileNav />
     </div>
   )
 }
 
-function MemberCard({ member, isAdmin, currentUid, onUpdateRole, onBlock, onDelete }: any) {
+function MemberCard({ member, isAdmin, currentUid, onUpdateRole, onDelete, onEditFees }: any) {
   const roleInfo = roleDisplay[member.role] || { label: member.role, icon: UserCircle, color: 'secondary' };
   const Icon = roleInfo.icon;
   const isMe = member.id === currentUid;
@@ -259,20 +259,26 @@ function MemberCard({ member, isAdmin, currentUid, onUpdateRole, onBlock, onDele
           </div>
         </div>
 
-        {isAdmin && !isMe && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Replenisher')} className="text-xs font-medium"><Truck className="mr-2 h-4 w-4" /> Hacer Repositor</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Communicator')} className="text-xs font-medium"><MessageSquare className="mr-2 h-4 w-4" /> Hacer Comunicador</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Employee')} className="text-xs font-medium"><UserCircle className="mr-2 h-4 w-4" /> Hacer Empleado</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Admin')} className="text-xs font-medium"><ShieldCheck className="mr-2 h-4 w-4" /> Hacer Admin</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-amber-600 text-xs font-medium" onClick={() => onBlock(member.id)}><Ban className="mr-2 h-4 w-4" /> Bloquear acceso</DropdownMenuItem>
-              <DropdownMenuItem className="text-destructive font-bold text-xs" onClick={() => onDelete(member)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar definitivamente</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Button variant="ghost" size="sm" className="h-8 gap-2 font-bold text-[10px] uppercase text-primary hover:bg-primary/5" onClick={() => onEditFees(member)}>
+              <Settings2 className="h-3.5 w-3.5" /> Honorarios
+            </Button>
+          )}
+          {isAdmin && !isMe && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Replenisher')}><Truck className="mr-2 h-4 w-4" /> Hacer Repositor</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Communicator')}><MessageSquare className="mr-2 h-4 w-4" /> Hacer Comunicador</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Employee')}><UserCircle className="mr-2 h-4 w-4" /> Hacer Empleado</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Admin')}><ShieldCheck className="mr-2 h-4 w-4" /> Hacer Admin</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="text-destructive font-bold" onClick={() => onDelete(member)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
