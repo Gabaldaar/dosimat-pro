@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -33,6 +32,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useToast } from "../../hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, useUser } from "../../firebase"
 import { collection, query, orderBy, where, doc, increment } from "firebase/firestore"
@@ -89,8 +89,7 @@ export default function PayoutsPage() {
       if (sheetDate < startDate || sheetDate > endDate) return;
 
       sheet.items?.forEach((item: any, idx: number) => {
-        // En un sistema real, aquí filtraríamos por quién hizo la ruta. 
-        // Para este MVP, asumimos que si seleccionas Repositor, ves todas las entregas reales pendientes.
+        // Determinamos si ya fue liquidado para el rol correspondiente
         const isLiquidado = selectedCollab.role === 'Replenisher' ? item.liquidadoRepositor : item.liquidadoComunicador;
         
         if (!isLiquidado && (item.realChlorine > 0 || item.realAcid > 0)) {
@@ -101,7 +100,7 @@ export default function PayoutsPage() {
             itemIdx: idx,
             cloro: item.realChlorine || 0,
             acido: item.realAcid || 0,
-            clientName: item.clientName || "Cliente" // En un sistema real vendría de la ruta
+            clientName: item.clientName || "Cliente"
           })
         }
       })
@@ -310,7 +309,7 @@ export default function PayoutsPage() {
                           <TableBody>
                             {pendingDeliveries.map(d => {
                               const config = selectedCollab.feesConfig || { valorCloro: 0, valorAcido: 0 }
-                              const sub = (d.cloro * config.valorCloro) + (d.acido * config.valorAcido)
+                              const sub = (d.cloro * (config.valorCloro || 0)) + (d.acido * (config.valorAcido || 0))
                               return (
                                 <TableRow key={d.id} className="hover:bg-primary/5 cursor-pointer" onClick={() => setSelectedItems(prev => prev.includes(d.id) ? prev.filter(i => i !== d.id) : [...prev, d.id])}>
                                   <TableCell onClick={(e) => e.stopPropagation()}><Checkbox checked={selectedItems.includes(d.id)} onCheckedChange={(checked) => setSelectedItems(prev => checked ? [...prev, d.id] : prev.filter(i => i !== d.id))} /></TableCell>
@@ -350,17 +349,17 @@ export default function PayoutsPage() {
                       <div key={extra.id} className="flex gap-4 items-end bg-muted/10 p-3 rounded-xl border border-dashed animate-in slide-in-from-left-2 duration-300">
                         <div className="flex-1 space-y-1">
                           <Label className="text-[9px] font-bold uppercase text-muted-foreground">Descripción</Label>
-                          <Input value={extra.description} onChange={(e) => updateExtra(extra.id, 'description', e.target.value)} className="h-9 bg-white" />
+                          <Input value={extra.description ?? ""} onChange={(e) => updateExtra(extra.id, 'description', e.target.value)} className="h-9 bg-white" />
                         </div>
                         {(extra.type === 'hours' || extra.type === 'km') && (
                           <div className="w-24 space-y-1 text-center">
                             <Label className="text-[9px] font-bold uppercase text-muted-foreground">{extra.type === 'hours' ? 'Horas' : 'Kilómetros'}</Label>
-                            <Input type="number" value={extra.qty} onChange={(e) => updateExtra(extra.id, 'qty', Number(e.target.value))} className="h-9 text-center font-black bg-white" />
+                            <Input type="number" value={extra.qty ?? 0} onChange={(e) => updateExtra(extra.id, 'qty', Number(e.target.value))} className="h-9 text-center font-black bg-white" />
                           </div>
                         )}
                         <div className="w-32 space-y-1">
                           <Label className="text-[9px] font-bold uppercase text-emerald-700">Monto ($)</Label>
-                          <Input type="number" value={extra.amount} onChange={(e) => updateExtra(extra.id, 'amount', Number(e.target.value))} className="h-9 text-right font-black bg-white" />
+                          <Input type="number" value={extra.amount ?? 0} onChange={(e) => updateExtra(extra.id, 'amount', Number(e.target.value))} className="h-9 text-right font-black bg-white" />
                         </div>
                         <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive" onClick={() => setExtras(extras.filter(e => e.id !== extra.id))}><Trash2 className="h-4 w-4" /></Button>
                       </div>
@@ -392,7 +391,7 @@ export default function PayoutsPage() {
                         <SelectTrigger className="h-12 bg-white border-emerald-200"><SelectValue placeholder="Elegir caja..." /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="pending">--- SELECCIONAR CAJA ---</SelectItem>
-                          {accounts?.filter(a => a.currency === 'ARS').map(a => (<SelectItem key={a.id} value={a.id}>{a.name} (${Number(a.initialBalance).toLocaleString()})</SelectItem>))}
+                          {accounts?.filter(a => a.currency === 'ARS').map(a => (<SelectItem key={a.id} value={a.id}>{a.name} (${Number(a.initialBalance || 0).toLocaleString()})</SelectItem>))}
                         </SelectContent>
                       </Select>
                     </div>
