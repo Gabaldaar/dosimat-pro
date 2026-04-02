@@ -30,9 +30,11 @@
         "id": { "type": "string" },
         "userId": { "type": "string" },
         "userName": { "type": "string" },
+        "userRole": { "type": "string" },
         "date": { "type": "string", "format": "date-time" },
         "totalARS": { "type": "number" },
         "totalUSD": { "type": "number" },
+        "exchangeRate": { "type": "number" },
         "currency": { "type": "string" },
         "financialAccountId": { "type": "string" },
         "transactionId": { "type": "string" },
@@ -40,6 +42,18 @@
           "type": "array", 
           "items": { "type": "string" },
           "description": "Lista de IDs de ítems de ruta liquidados para permitir reversión (format: sheetId_idx)"
+        },
+        "routeItemsSnapshot": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sheetDate": { "type": "string" },
+              "clientName": { "type": "string" },
+              "cloro": { "type": "number" },
+              "acido": { "type": "number" }
+            }
+          }
         },
         "items": {
           "type": "array",
@@ -50,13 +64,14 @@
               "conceptId": { "type": "string" },
               "description": { "type": "string" },
               "amount": { "type": "number" },
+              "currency": { "type": "string" },
               "qty": { "type": "number" },
               "notes": { "type": "string" }
             }
           }
         }
       },
-      "required": ["id", "userId", "date", "totalARS", "financialAccountId"]
+      "required": ["id", "userId", "date", "financialAccountId"]
     },
     "PayoutConcept": {
       "title": "PayoutConcept",
@@ -66,6 +81,7 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "type": { "type": "string", "enum": ["fixed", "hourly", "km"] },
+        "currency": { "type": "string", "enum": ["ARS", "USD"] },
         "defaultAmount": { "type": "number" }
       },
       "required": ["id", "name", "type"]

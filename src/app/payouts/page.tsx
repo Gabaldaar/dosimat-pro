@@ -32,7 +32,8 @@ import {
   AlertTriangle,
   Eye,
   FileText,
-  Truck
+  Truck,
+  ArrowRightLeft
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -91,11 +92,13 @@ export default function PayoutsPage() {
   const [selectedItems, setSelectedItems] = useState<string[]>([])
   const [extras, setExtras] = useState<any[]>([])
   const [accountId, setAccountId] = useState("pending")
+  const [exchangeRate, setExchangeRate] = useState(1)
 
   // Estado para gestión de conceptos
   const [isConceptManagerOpen, setIsConceptManagerOpen] = useState(false)
   const [newConceptName, setNewConceptName] = useState("")
   const [newConceptType, setNewConceptType] = useState<"fixed" | "hourly" | "km">("fixed")
+  const [newConceptCurrency, setNewConceptCurrency] = useState<"ARS" | "USD">("ARS")
   
   // Estado para eliminación/reversión
   const [payoutToDelete, setPayoutToDelete] = useState<any | null>(null)
@@ -117,6 +120,19 @@ export default function PayoutsPage() {
   const { data: clients } = useCollection(clientsQuery)
 
   const selectedCollab = useMemo(() => collaborators?.find(c => c.id === selectedCollabId), [collaborators, selectedCollabId])
+  const selectedAccount = useMemo(() => accounts?.find(a => a.id === accountId), [accounts, accountId])
+
+  // Obtener tipo de cambio si hay multimoneda
+  useEffect(() => {
+    if (activeTab === 'new') {
+      fetch('https://dolarapi.com/v1/dolares/oficial')
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.venta) setExchangeRate(data.venta);
+        })
+        .catch(err => console.error("Error fetching rate:", err));
+    }
+  }, [activeTab]);
 
   // Filtrar ítems de rutas pendientes de liquidar
   const pendingDeliveries = useMemo(() => {
@@ -151,30 +167,56 @@ export default function PayoutsPage() {
 
   const totals = useMemo(() => {
     const config = selectedCollab?.feesConfig || { valorCloro: 0, valorAcido: 0, valorHora: 0, valorKm: 0, baseFija: 0 }
-    let subtotalItems = 0
     let totalCloro = 0
     let totalAcido = 0
+    let subtotalItemsARS = 0
 
     pendingDeliveries.forEach(d => {
       if (selectedItems.includes(d.id)) {
         totalCloro += d.cloro
         totalAcido += d.acido
-        subtotalItems += (d.cloro * (config.valorCloro || 0)) + (d.acido * (config.valorAcido || 0))
+        subtotalItemsARS += (d.cloro * (config.valorCloro || 0)) + (d.acido * (config.valorAcido || 0))
       }
     })
 
-    const subtotalExtras = extras.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0)
-    const baseFija = Number(config.baseFija || 0)
+    const baseFijaARS = Number(config.baseFija || 0)
+    
+    let subtotalExtrasARS = 0
+    let subtotalExtrasUSD = 0
+
+    extras.forEach(e => {
+      if (e.currency === 'USD') subtotalExtrasUSD += Number(e.amount) || 0;
+      else subtotalExtrasARS += Number(e.amount) || 0;
+    })
+
+    const totalARS = subtotalItemsARS + baseFijaARS + subtotalExtrasARS;
+    const totalUSD = subtotalExtrasUSD;
 
     return {
       cloro: totalCloro,
       acido: totalAcido,
-      subtotalItems,
-      subtotalExtras,
-      baseFija,
-      total: subtotalItems + subtotalExtras + baseFija
+      subtotalItemsARS,
+      subtotalExtrasARS,
+      subtotalExtrasUSD,
+      baseFijaARS,
+      totalARS,
+      totalUSD
     }
   }, [selectedItems, pendingDeliveries, selectedCollab, extras])
+
+  // Cálculo del monto real a descontar de la caja seleccionada
+  const finalTotalInAccountCurrency = useMemo(() => {
+    if (!selectedAccount) return 0;
+    const { totalARS, totalUSD } = totals;
+    
+    if (selectedAccount.currency === 'ARS') {
+      // Si la caja es ARS, convertimos los USD a ARS usando el tipo de cambio
+      return totalARS + (totalUSD * exchangeRate);
+    } else {
+      // Si la caja es USD, convertimos los ARS a USD
+      return totalUSD + (totalARS / exchangeRate);
+    }
+  }, [selectedAccount, totals, exchangeRate]);
 
   const handleAddExtraFromConcept = (conceptId: string) => {
     const concept = concepts?.find(c => c.id === conceptId)
@@ -193,6 +235,7 @@ export default function PayoutsPage() {
       conceptId: concept.id,
       type: concept.type,
       description: concept.name,
+      currency: concept.currency || "ARS",
       qty: 1,
       amount,
       notes: ""
@@ -207,6 +250,7 @@ export default function PayoutsPage() {
       conceptId: "manual",
       type: "fixed",
       description: "Concepto manual",
+      currency: "ARS",
       qty: 1,
       amount: 0,
       notes: ""
@@ -229,7 +273,7 @@ export default function PayoutsPage() {
   }
 
   const handleProcessPayout = () => {
-    if (!selectedCollab || totals.total <= 0 || accountId === 'pending') {
+    if (!selectedCollab || (totals.totalARS <= 0 && totals.totalUSD <= 0) || accountId === 'pending') {
       toast({ title: "Datos incompletos", description: "Selecciona un colaborador, ítems y la caja de pago.", variant: "destructive" });
       return;
     }
@@ -238,7 +282,7 @@ export default function PayoutsPage() {
     const txId = Math.random().toString(36).substring(2, 11)
     const now = new Date().toISOString()
 
-    // Crear Snapshot de los ítems de ruta para trazabilidad histórica
+    // Snapshot de ítems de ruta
     const routeItemsSnapshot = selectedItems.map(id => {
       const d = pendingDeliveries.find(item => item.id === id);
       return {
@@ -256,16 +300,18 @@ export default function PayoutsPage() {
       userName: selectedCollab.name,
       userRole: selectedCollab.role,
       date: now,
-      totalARS: totals.total,
-      currency: "ARS",
+      totalARS: totals.totalARS,
+      totalUSD: totals.totalUSD,
+      exchangeRate: exchangeRate,
+      currency: selectedAccount?.currency || "ARS",
       financialAccountId: accountId,
       transactionId: txId,
       itemIds: selectedItems,
-      routeItemsSnapshot, // Trazabilidad de hojas de ruta
+      routeItemsSnapshot,
       items: [
-        { type: 'items', description: `Entrega de Bidones (${totals.cloro} CL, ${totals.acido} AC)`, amount: totals.subtotalItems, qty: 1, notes: "" },
-        { type: 'base', description: 'Sueldo Base / Fijo', amount: totals.baseFija, qty: 1, notes: "" },
-        ...extras.map(e => ({ type: e.type, conceptId: e.conceptId, description: e.description, amount: e.amount, qty: e.qty, notes: e.notes }))
+        { type: 'items', description: `Entrega de Bidones (${totals.cloro} CL, ${totals.acido} AC)`, amount: totals.subtotalItemsARS, currency: "ARS", qty: 1, notes: "" },
+        { type: 'base', description: 'Sueldo Base / Fijo', amount: totals.baseFijaARS, currency: "ARS", qty: 1, notes: "" },
+        ...extras.map(e => ({ type: e.type, conceptId: e.conceptId, description: e.description, amount: e.amount, currency: e.currency, qty: e.qty, notes: e.notes }))
       ]
     }
     setDocumentNonBlocking(doc(db, 'payouts', payoutId), payoutData, { merge: true })
@@ -285,24 +331,24 @@ export default function PayoutsPage() {
       }
     })
 
-    // 3. Crear la Transacción financiera
+    // 3. Crear la Transacción financiera en la moneda de la CAJA
     const txData = {
       id: txId,
       date: now,
       type: 'Expense',
-      amount: -totals.total,
-      currency: 'ARS',
+      amount: -finalTotalInAccountCurrency,
+      currency: selectedAccount?.currency || 'ARS',
       description: `Liquidación de haberes: ${selectedCollab.name} (#${payoutId.toUpperCase().slice(0,6)})`,
       financialAccountId: accountId,
       recordedByUserId: userData?.id || 'system',
-      accountBalanceAfter: (Number(accounts?.find(a => a.id === accountId)?.initialBalance || 0)) - totals.total
+      accountBalanceAfter: (Number(selectedAccount?.initialBalance || 0)) - finalTotalInAccountCurrency
     }
     setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
     
     // 4. Actualizar saldo de caja
-    updateDocumentNonBlocking(doc(db, 'financial_accounts', accountId), { initialBalance: increment(-totals.total) })
+    updateDocumentNonBlocking(doc(db, 'financial_accounts', accountId), { initialBalance: increment(-finalTotalInAccountCurrency) })
 
-    toast({ title: "Liquidación procesada", description: `Se descontaron $${totals.total.toLocaleString()} de caja.` })
+    toast({ title: "Liquidación procesada", description: `Se descontaron ${selectedAccount?.currency} ${finalTotalInAccountCurrency.toLocaleString()} de caja.` })
     resetForm()
   }
 
@@ -310,10 +356,8 @@ export default function PayoutsPage() {
     if (!payoutToDelete || !isAdmin) return;
     const p = payoutToDelete;
 
-    // 1. Restaurar Hojas de Ruta
     if (p.itemIds && p.itemIds.length > 0) {
       const fieldToRevert = p.userRole === 'Replenisher' ? 'liquidadoRepositor' : 'liquidadoComunicador';
-      
       p.itemIds.forEach((itemId: string) => {
         const [sheetId, idxStr] = itemId.split('_');
         const idx = parseInt(idxStr);
@@ -328,21 +372,19 @@ export default function PayoutsPage() {
       });
     }
 
-    // 2. Reembolsar Caja
-    if (p.financialAccountId && p.totalARS > 0) {
-      updateDocumentNonBlocking(doc(db, 'financial_accounts', p.financialAccountId), { initialBalance: increment(p.totalARS) });
+    if (p.financialAccountId) {
+      const tx = transactions?.find(t => t.id === p.transactionId);
+      const amountToRevert = Math.abs(tx?.amount || 0);
+      updateDocumentNonBlocking(doc(db, 'financial_accounts', p.financialAccountId), { initialBalance: increment(amountToRevert) });
     }
 
-    // 3. Eliminar Transacción asociada
     if (p.transactionId) {
       deleteDocumentNonBlocking(doc(db, 'transactions', p.transactionId));
     }
 
-    // 4. Eliminar el registro de Liquidación
     deleteDocumentNonBlocking(doc(db, 'payouts', p.id));
-
     setPayoutToDelete(null);
-    toast({ title: "Liquidación revertida", description: "Saldos de caja y estados de ruta restaurados." });
+    toast({ title: "Liquidación revertida" });
   };
 
   const handleAddConcept = () => {
@@ -352,6 +394,7 @@ export default function PayoutsPage() {
       id,
       name: newConceptName,
       type: newConceptType,
+      currency: newConceptCurrency,
       defaultAmount: 0
     }, { merge: true })
     setNewConceptName("")
@@ -364,7 +407,6 @@ export default function PayoutsPage() {
     setExtras([])
     setAccountId("pending")
     setActiveTab("history")
-    toast({ title: "Formulario reiniciado", description: "Se han descartado todos los cambios actuales." })
   }
 
   if (isUserLoading) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin" /></div>
@@ -425,7 +467,7 @@ export default function PayoutsPage() {
                 <Card className="glass-card">
                   <CardHeader className="pb-2">
                     <div className="flex justify-between items-center">
-                      <CardTitle className="text-sm font-black uppercase text-muted-foreground tracking-widest">2. Reposiciones Pendientes</CardTitle>
+                      <CardTitle className="text-sm font-black uppercase text-muted-foreground tracking-widest">2. Reposiciones Pendientes (ARS)</CardTitle>
                       <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20">{pendingDeliveries.length} disponibles</Badge>
                     </div>
                   </CardHeader>
@@ -484,9 +526,8 @@ export default function PayoutsPage() {
                           <SelectContent>
                             <ScrollArea className="h-48">
                               {concepts?.map(c => (
-                                <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>
+                                <SelectItem key={c.id} value={c.id} className="text-xs">{c.name} ({c.currency || 'ARS'})</SelectItem>
                               ))}
-                              {(!concepts || concepts.length === 0) && <p className="p-2 text-[10px] text-muted-foreground italic text-center">Sin conceptos maestros.</p>}
                             </ScrollArea>
                           </SelectContent>
                         </Select>
@@ -510,16 +551,24 @@ export default function PayoutsPage() {
                               <Input type="number" value={extra.qty ?? 0} onChange={(e) => updateExtra(extra.id, 'qty', Number(e.target.value))} className="h-9 text-center font-black bg-white" />
                             </div>
                           )}
-                          <div className="w-full md:w-32 space-y-1">
-                            <Label className="text-[9px] font-bold uppercase text-emerald-700">Monto ($)</Label>
-                            <Input type="number" value={extra.amount ?? 0} onChange={(e) => updateExtra(extra.id, 'amount', Number(e.target.value))} className="h-9 text-right font-black bg-white" />
+                          <div className="w-full md:w-36 space-y-1">
+                            <Label className="text-[9px] font-bold uppercase text-emerald-700">Monto</Label>
+                            <div className="flex gap-1">
+                              <Input type="number" value={extra.amount ?? 0} onChange={(e) => updateExtra(extra.id, 'amount', Number(e.target.value))} className="h-9 text-right font-black bg-white" />
+                              <Tabs value={extra.currency} onValueChange={(v: any) => updateExtra(extra.id, 'currency', v)} className="h-9">
+                                <TabsList className="h-9 p-0.5 border">
+                                  <TabsTrigger value="ARS" className="h-8 text-[8px] font-black px-2">ARS</TabsTrigger>
+                                  <TabsTrigger value="USD" className="h-8 text-[8px] font-black px-2">USD</TabsTrigger>
+                                </TabsList>
+                              </Tabs>
+                            </div>
                           </div>
                           <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive shrink-0" onClick={() => setExtras(extras.filter(e => e.id !== extra.id))}><Trash2 className="h-4 w-4" /></Button>
                         </div>
                         <div className="space-y-1">
                           <Label className="text-[9px] font-bold uppercase text-muted-foreground ml-1">Notas / Aclaraciones</Label>
                           <Input 
-                            placeholder="Ej: Servicio en lo de Pérez, Zona crítica..." 
+                            placeholder="Ej: Servicio en lo de Pérez, Pago pactado en USD..." 
                             value={extra.notes ?? ""} 
                             onChange={(e) => updateExtra(extra.id, 'notes', e.target.value)} 
                             className="h-8 bg-white text-xs italic" 
@@ -527,7 +576,6 @@ export default function PayoutsPage() {
                         </div>
                       </div>
                     ))}
-                    {extras.length === 0 && <p className="text-center py-8 text-xs text-muted-foreground italic bg-slate-50/50 rounded-xl border border-dashed">No hay conceptos adicionales agregados para esta liquidación.</p>}
                   </CardContent>
                 </Card>
               )}
@@ -538,27 +586,55 @@ export default function PayoutsPage() {
                 <CardHeader className="bg-primary/5 border-b"><CardTitle className="text-xs uppercase font-black tracking-widest text-primary">Resumen de Liquidación</CardTitle></CardHeader>
                 <CardContent className="space-y-6 pt-6">
                   <div className="space-y-3">
-                    <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground font-medium">Honorarios por Bidones:</span><span className="font-black">${totals.subtotalItems.toLocaleString()}</span></div>
-                    <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground font-medium">Conceptos Adicionales:</span><span className="font-black">${totals.subtotalExtras.toLocaleString()}</span></div>
-                    <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground font-medium">Sueldo Base / Fijo:</span><span className="font-black">${totals.baseFija.toLocaleString()}</span></div>
-                    <div className="pt-3 border-t border-dashed flex justify-between items-end">
-                      <p className="text-[10px] font-black uppercase text-primary tracking-widest">TOTAL A ABONAR</p>
-                      <p className="text-4xl font-black text-primary">${totals.total.toLocaleString()}</p>
+                    <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground font-medium">Honorarios y Base (ARS):</span><span className="font-black">${(totals.subtotalItemsARS + totals.baseFijaARS).toLocaleString()}</span></div>
+                    <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground font-medium">Extras en Pesos:</span><span className="font-black">${totals.subtotalExtrasARS.toLocaleString()}</span></div>
+                    <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground font-medium">Extras en Dólares:</span><span className="font-black text-emerald-700">u$s {totals.subtotalExtrasUSD.toLocaleString()}</span></div>
+                    
+                    <div className="pt-3 border-t border-dashed space-y-2">
+                      <div className="flex justify-between items-end">
+                        <p className="text-[10px] font-black uppercase text-muted-foreground">TOTAL ARS</p>
+                        <p className="text-2xl font-black">${totals.totalARS.toLocaleString()}</p>
+                      </div>
+                      <div className="flex justify-between items-end">
+                        <p className="text-[10px] font-black uppercase text-emerald-700">TOTAL USD</p>
+                        <p className="text-2xl font-black text-emerald-700">u$s {totals.totalUSD.toLocaleString()}</p>
+                      </div>
                     </div>
                   </div>
 
                   <div className="space-y-4 pt-4 border-t">
                     <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Caja de Pago (Origen)</Label>
+                      <Label className="text-[10px] font-black uppercase tracking-widest text-slate-700">Caja de Pago</Label>
                       <Select value={accountId} onValueChange={setAccountId}>
-                        <SelectTrigger className="h-12 bg-white border-emerald-200"><SelectValue placeholder="Elegir caja..." /></SelectTrigger>
+                        <SelectTrigger className="h-12 bg-white"><SelectValue placeholder="Elegir caja..." /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="pending">--- SELECCIONAR CAJA ---</SelectItem>
-                          {accounts?.filter(a => a.currency === 'ARS').map(a => (<SelectItem key={a.id} value={a.id}>{a.name} (${Number(a.initialBalance || 0).toLocaleString()})</SelectItem>))}
+                          {accounts?.map(a => (<SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>))}
                         </SelectContent>
                       </Select>
                     </div>
-                    <Button className="w-full h-16 font-black shadow-xl text-xl uppercase tracking-tighter gap-3" disabled={!selectedCollab || totals.total <= 0 || accountId === 'pending'} onClick={handleProcessPayout}>
+
+                    {selectedAccount && (
+                      <div className="p-4 bg-muted/20 rounded-xl border border-dashed space-y-4">
+                        {((selectedAccount.currency === 'ARS' && totals.totalUSD > 0) || (selectedAccount.currency === 'USD' && totals.totalARS > 0)) && (
+                          <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-primary flex items-center gap-2">
+                              <ArrowRightLeft className="h-3 w-3" /> Tipo de Cambio Conversión
+                            </Label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black opacity-40">$</span>
+                              <Input type="number" value={exchangeRate} onChange={(e) => setExchangeRate(Number(e.target.value))} className="h-10 pl-8 bg-white font-black" />
+                            </div>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center bg-primary text-white p-3 rounded-lg shadow-lg">
+                          <span className="text-[9px] font-black uppercase tracking-widest">Descontará de Caja:</span>
+                          <span className="text-xl font-black">{selectedAccount.currency === 'USD' ? 'u$s' : '$'} {finalTotalInAccountCurrency.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <Button className="w-full h-16 font-black shadow-xl text-xl uppercase tracking-tighter gap-3" disabled={!selectedCollab || (totals.totalARS <= 0 && totals.totalUSD <= 0) || accountId === 'pending'} onClick={handleProcessPayout}>
                       <Banknote className="h-6 w-6" /> LIQUIDAR Y PAGAR
                     </Button>
                     <Button variant="outline" className="w-full h-12 border-rose-600 text-rose-600 hover:bg-rose-50 font-bold uppercase text-xs gap-2" onClick={resetForm}>
@@ -582,7 +658,7 @@ export default function PayoutsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => { setSelectedCollabId("all"); setStartDate(""); }} title="Limpiar filtros">
+              <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => { setSelectedCollabId("all"); }} title="Limpiar filtros">
                 <FilterX className="h-4 w-4" />
               </Button>
             </div>
@@ -593,70 +669,120 @@ export default function PayoutsPage() {
                   <TableRow>
                     <TableHead className="text-[10px] font-black uppercase">Fecha</TableHead>
                     <TableHead className="text-[10px] font-black uppercase">Colaborador</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase">Desglose de Conceptos</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase">Conceptos</TableHead>
                     <TableHead className="text-right text-[10px] font-black uppercase">Total Pagado</TableHead>
                     <TableHead className="w-24"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {payouts?.filter(p => selectedCollabId === "all" || p.userId === selectedCollabId).map(p => (
-                    <TableRow key={p.id}>
-                      <TableCell className="text-xs font-bold text-slate-600">{new Date(p.date).toLocaleDateString('es-AR')}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary border border-primary/20">{p.userName?.[0]}</div>
-                          <span className="font-black text-xs text-slate-800">{p.userName}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1.5">
-                          {p.items?.map((it: any, idx: number) => it.amount !== 0 && (
-                            <div key={idx} className="flex flex-col gap-0.5">
-                              <Badge variant="outline" className="text-[8px] font-bold uppercase bg-slate-50 text-slate-600 border-slate-200">
-                                {it.description}: ${Number(it.amount).toLocaleString()}
+                  {payouts?.filter(p => selectedCollabId === "all" || p.userId === selectedCollabId).map(p => {
+                    const acc = accounts?.find(a => a.id === p.financialAccountId);
+                    const tx = transactions?.find(t => t.id === p.transactionId);
+                    const symbol = p.currency === 'USD' ? 'u$s' : '$';
+                    return (
+                      <TableRow key={p.id}>
+                        <TableCell className="text-xs font-bold text-slate-600">{new Date(p.date).toLocaleDateString('es-AR')}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary border border-primary/20">{p.userName?.[0]}</div>
+                            <span className="font-black text-xs text-slate-800">{p.userName}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1.5">
+                            {p.items?.map((it: any, idx: number) => it.amount !== 0 && (
+                              <Badge key={idx} variant="outline" className="text-[8px] font-bold uppercase bg-slate-50 text-slate-600">
+                                {it.description}: {it.currency === 'USD' ? 'u$s' : '$'}{Number(it.amount).toLocaleString()}
                               </Badge>
-                              {it.notes && <span className="text-[7px] text-muted-foreground italic px-1 truncate max-w-[150px]">Obs: {it.notes}</span>}
-                            </div>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-black text-emerald-700 text-sm">
-                        ${Number(p.totalARS || 0).toLocaleString()}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-primary hover:bg-primary/5" 
-                            onClick={() => setPayoutForDetails(p)}
-                            title="Ver Detalle de Entregas"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          {isAdmin && (
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-8 w-8 text-destructive hover:bg-rose-50" 
-                              onClick={() => setPayoutToDelete(p)}
-                              title="Eliminar y Revertir Pago"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {(!payouts || payouts.length === 0) && <TableRow><TableCell colSpan={5} className="text-center py-20 text-muted-foreground italic text-sm">No se registran liquidaciones históricas todavía.</TableCell></TableRow>}
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <p className="font-black text-emerald-700 text-sm">{symbol} {Math.abs(tx?.amount || 0).toLocaleString()}</p>
+                          <p className="text-[8px] font-black text-muted-foreground uppercase">{acc?.name}</p>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => setPayoutForDetails(p)} title="Ver Detalle"><Eye className="h-4 w-4" /></Button>
+                            {isAdmin && (
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setPayoutToDelete(p)} title="Revertir Pago"><Trash2 className="h-4 w-4" /></Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             </div>
           </div>
         )}
 
-        {/* Diálogo de Detalles de la Liquidación */}
+        {/* Gestor de Conceptos */}
+        <Dialog open={isConceptManagerOpen} onOpenChange={setIsConceptManagerOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <div className="flex items-center gap-2 text-primary mb-2">
+                <Settings2 className="h-5 w-5" />
+                <DialogTitle>Conceptos de Liquidación</DialogTitle>
+              </div>
+            </DialogHeader>
+            <div className="space-y-6 py-4">
+              <div className="p-4 bg-muted/20 rounded-xl border border-dashed space-y-4">
+                <p className="text-[10px] font-black uppercase text-primary tracking-widest">Nuevo Concepto Maestro</p>
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-bold">Nombre del Ítem</Label>
+                    <Input value={newConceptName} onChange={(e) => setNewConceptName(e.target.value)} placeholder="Ej: Bono productividad" className="bg-white h-9" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold">Tipo</Label>
+                      <Select value={newConceptType} onValueChange={(v: any) => setNewConceptType(v)}>
+                        <SelectTrigger className="bg-white h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="fixed">Monto Fijo</SelectItem>
+                          <SelectItem value="hourly">Horas</SelectItem>
+                          <SelectItem value="km">KM</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold">Moneda</Label>
+                      <Select value={newConceptCurrency} onValueChange={(v: any) => setNewConceptCurrency(v)}>
+                        <SelectTrigger className="bg-white h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ARS">ARS ($)</SelectItem>
+                          <SelectItem value="USD">USD (u$s)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <Button onClick={handleAddConcept} className="w-full h-9 font-bold"><Plus className="h-4 w-4 mr-2" /> Crear Concepto</Button>
+                </div>
+              </div>
+
+              <ScrollArea className="h-64 border rounded-xl bg-slate-50/50 p-2">
+                <div className="space-y-2">
+                  {concepts?.map(c => (
+                    <div key={c.id} className="flex items-center justify-between p-3 bg-white border rounded-lg shadow-sm">
+                      <div>
+                        <p className="text-xs font-black text-slate-800 uppercase">{c.name}</p>
+                        <div className="flex gap-1.5 mt-1">
+                          <Badge variant="secondary" className="text-[7px] font-bold uppercase h-4">{c.type}</Badge>
+                          <Badge variant="outline" className={cn("text-[7px] font-black uppercase h-4", c.currency === 'USD' ? "border-emerald-200 text-emerald-700" : "border-blue-200 text-blue-700")}>{c.currency}</Badge>
+                        </div>
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => deleteDocumentNonBlocking(doc(db, 'payout_concepts', c.id))}><Trash2 className="h-4 w-4" /></Button>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Detalle de Liquidación */}
         <Dialog open={!!payoutForDetails} onOpenChange={(o) => !o && setPayoutForDetails(null)}>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -668,171 +794,76 @@ export default function PayoutsPage() {
                 Colaborador: {payoutForDetails?.userName} • Fecha: {payoutForDetails && new Date(payoutForDetails.date).toLocaleDateString('es-AR')}
               </DialogDescription>
             </DialogHeader>
-            
             <div className="space-y-6 py-4">
-              {/* Resumen Económico */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="p-3 bg-muted/20 rounded-xl border text-center">
                   <p className="text-[8px] font-black uppercase text-muted-foreground mb-1">Total Pagado</p>
-                  <p className="text-lg font-black text-primary">${payoutForDetails?.totalARS.toLocaleString()}</p>
+                  <p className="text-lg font-black text-primary">{payoutForDetails?.currency === 'USD' ? 'u$s' : '$'} {Math.abs(transactions?.find(t => t.id === payoutForDetails?.transactionId)?.amount || 0).toLocaleString()}</p>
                 </div>
                 <div className="p-3 bg-muted/20 rounded-xl border text-center">
-                  <p className="text-[8px] font-black uppercase text-muted-foreground mb-1">Caja Origen</p>
-                  <p className="text-xs font-bold uppercase truncate">{accounts?.find(a => a.id === payoutForDetails?.financialAccountId)?.name || 'S/D'}</p>
+                  <p className="text-[8px] font-black uppercase text-muted-foreground mb-1">Tipo Cambio</p>
+                  <p className="text-sm font-bold">${payoutForDetails?.exchangeRate || '1'}</p>
                 </div>
                 <div className="p-3 bg-muted/20 rounded-xl border text-center">
-                  <p className="text-[8px] font-black uppercase text-muted-foreground mb-1">ID Pago</p>
-                  <p className="text-[10px] font-mono font-bold">#{payoutForDetails?.id.toUpperCase().slice(0, 8)}</p>
+                  <p className="text-[8px] font-black uppercase text-muted-foreground mb-1">Original ARS</p>
+                  <p className="text-sm font-bold">${payoutForDetails?.totalARS.toLocaleString()}</p>
                 </div>
                 <div className="p-3 bg-muted/20 rounded-xl border text-center">
-                  <p className="text-[8px] font-black uppercase text-muted-foreground mb-1">Cant. Entregas</p>
-                  <p className="text-lg font-black">{payoutForDetails?.routeItemsSnapshot?.length || 0}</p>
+                  <p className="text-[8px] font-black uppercase text-muted-foreground mb-1">Original USD</p>
+                  <p className="text-sm font-bold text-emerald-700">u$s {payoutForDetails?.totalUSD.toLocaleString()}</p>
                 </div>
               </div>
 
-              {/* Detalle de Hojas de Ruta */}
               <div className="space-y-2">
-                <h4 className="text-xs font-black uppercase text-slate-500 tracking-widest flex items-center gap-2">
-                  <Truck className="h-3.5 w-3.5" /> Desglose de Entregas Liquidadas
-                </h4>
+                <h4 className="text-xs font-black uppercase text-slate-500 tracking-widest flex items-center gap-2"><Truck className="h-3.5 w-3.5" /> Entregas Liquidadas</h4>
                 <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
                   <Table>
-                    <TableHeader className="bg-slate-50">
-                      <TableRow>
-                        <TableHead className="text-[9px] font-black uppercase">Fecha Ruta</TableHead>
-                        <TableHead className="text-[9px] font-black uppercase">Cliente</TableHead>
-                        <TableHead className="text-center text-[9px] font-black uppercase">Cloro</TableHead>
-                        <TableHead className="text-center text-[9px] font-black uppercase">Ácido</TableHead>
-                      </TableRow>
-                    </TableHeader>
+                    <TableHeader className="bg-slate-50"><TableRow><TableHead className="text-[9px] font-black uppercase">Fecha</TableHead><TableHead className="text-[9px] font-black uppercase">Cliente</TableHead><TableHead className="text-center text-[9px] font-black uppercase">Entrega</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {payoutForDetails?.routeItemsSnapshot ? payoutForDetails.routeItemsSnapshot.map((item: any, i: number) => (
+                      {payoutForDetails?.routeItemsSnapshot?.map((item: any, i: number) => (
                         <TableRow key={i}>
-                          <TableCell className="text-[10px] font-bold text-slate-600">{new Date(item.sheetDate + 'T12:00:00').toLocaleDateString('es-AR')}</TableCell>
+                          <TableCell className="text-[10px] font-bold">{new Date(item.sheetDate + 'T12:00:00').toLocaleDateString('es-AR')}</TableCell>
                           <TableCell className="text-xs font-black">{item.clientName}</TableCell>
                           <TableCell className="text-center">
-                            <Badge variant="outline" className="text-[9px] font-bold bg-blue-50 text-blue-700 border-blue-100">{item.cloro} CL</Badge>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant="outline" className="text-[9px] font-bold bg-rose-50 text-rose-700 border-rose-100">{item.acido} AC</Badge>
+                            <Badge variant="outline" className="text-[8px] font-bold bg-blue-50 text-blue-700">{item.cloro} CL | {item.acido} AC</Badge>
                           </TableCell>
                         </TableRow>
-                      )) : (
-                        <TableRow>
-                          <TableCell colSpan={4} className="text-center py-8 text-xs italic text-muted-foreground">
-                            Detalle no disponible para liquidaciones antiguas.
-                          </TableCell>
-                        </TableRow>
-                      )}
+                      ))}
                     </TableBody>
                   </Table>
                 </div>
               </div>
 
-              {/* Conceptos Adicionales */}
               <div className="space-y-2">
-                <h4 className="text-xs font-black uppercase text-slate-500 tracking-widest flex items-center gap-2">
-                  <Coins className="h-3.5 w-3.5" /> Otros Conceptos y Extras
-                </h4>
+                <h4 className="text-xs font-black uppercase text-slate-500 tracking-widest flex items-center gap-2"><Coins className="h-3.5 w-3.5" /> Desglose de Conceptos</h4>
                 <div className="space-y-2">
                   {payoutForDetails?.items?.filter((it: any) => it.amount !== 0).map((it: any, i: number) => (
                     <div key={i} className="flex justify-between items-start p-3 bg-slate-50 rounded-lg border border-slate-200">
-                      <div className="space-y-0.5">
+                      <div>
                         <p className="text-xs font-black uppercase text-slate-800">{it.description}</p>
-                        {it.notes && <p className="text-[10px] text-muted-foreground italic leading-tight">"{it.notes}"</p>}
+                        {it.notes && <p className="text-[10px] text-muted-foreground italic">"{it.notes}"</p>}
                       </div>
-                      <span className="font-black text-sm text-primary">${it.amount.toLocaleString()}</span>
+                      <span className={cn("font-black text-sm", it.currency === 'USD' ? "text-emerald-700" : "text-primary")}>
+                        {it.currency === 'USD' ? 'u$s' : '$'} {it.amount.toLocaleString()}
+                      </span>
                     </div>
                   ))}
                 </div>
               </div>
             </div>
-            <DialogFooter className="border-t pt-4">
-              <Button onClick={() => setPayoutForDetails(null)} className="w-full font-bold">Cerrar Detalle</Button>
-            </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Gestor de Conceptos Maestros */}
-        <Dialog open={isConceptManagerOpen} onOpenChange={setIsConceptManagerOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <div className="flex items-center gap-2 text-primary mb-2">
-                <Settings2 className="h-5 w-5" />
-                <DialogTitle>Conceptos de Liquidación</DialogTitle>
-              </div>
-              <DialogDescription>Configura los ítems recurrentes para estandarizar las liquidaciones y obtener estadísticas precisas.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-6 py-4">
-              <div className="p-4 bg-muted/20 rounded-xl border border-dashed space-y-4">
-                <p className="text-[10px] font-black uppercase text-primary tracking-widest">Nuevo Concepto Maestro</p>
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <Label className="text-[10px] font-bold">Nombre del Ítem</Label>
-                    <Input value={newConceptName} onChange={(e) => setNewConceptName(e.target.value)} placeholder="Ej: Adicional por distancia" className="bg-white h-9" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] font-bold">Tipo de Cálculo</Label>
-                    <Select value={newConceptType} onValueChange={(v: any) => setNewConceptType(v)}>
-                      <SelectTrigger className="bg-white h-9"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="fixed">Monto Fijo / Directo</SelectItem>
-                        <SelectItem value="hourly">Basado en Horas (Perfil)</SelectItem>
-                        <SelectItem value="km">Basado en KM (Perfil)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button onClick={handleAddConcept} className="w-full h-9 font-bold"><Plus className="h-4 w-4 mr-2" /> Crear Concepto</Button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest px-1">Conceptos Configurados</p>
-                <ScrollArea className="h-64 border rounded-xl bg-slate-50/50 p-2">
-                  <div className="space-y-2">
-                    {concepts?.map(c => (
-                      <div key={c.id} className="flex items-center justify-between p-3 bg-white border rounded-lg shadow-sm group">
-                        <div className="space-y-0.5">
-                          <p className="text-xs font-black text-slate-800 uppercase leading-tight">{c.name}</p>
-                          <Badge variant="secondary" className="text-[8px] font-bold uppercase px-1.5 h-4">
-                            {c.type === 'fixed' ? 'Fijo' : c.type === 'hourly' ? 'Horas' : 'Kilometraje'}
-                          </Badge>
-                        </div>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => deleteDocumentNonBlocking(doc(db, 'payout_concepts', c.id))}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                    {(!concepts || concepts.length === 0) && <p className="text-center py-12 text-[10px] text-muted-foreground italic">No hay conceptos preconfigurados todavía.</p>}
-                  </div>
-                </ScrollArea>
-              </div>
-            </div>
-            <DialogFooter><Button variant="outline" onClick={() => setIsConceptManagerOpen(false)} className="w-full font-bold">Cerrar Gestor</Button></DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Alerta de Eliminación/Reversión */}
+        {/* Alerta de Reversión */}
         <AlertDialog open={!!payoutToDelete} onOpenChange={(o) => !o && setPayoutToDelete(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <div className="flex items-center gap-2 text-destructive mb-2">
-                <AlertTriangle className="h-6 w-6" />
-                <AlertDialogTitle>¿Confirmar eliminación y reversión?</AlertDialogTitle>
-              </div>
-              <AlertDialogDescription className="space-y-4 font-medium text-slate-700">
-                Al confirmar, el sistema realizará las siguientes acciones automáticamente:
-                <ul className="list-disc pl-5 space-y-1 mt-2 text-xs font-bold">
-                  <li>Se devolverán <b>${payoutToDelete?.totalARS.toLocaleString()}</b> a la caja de origen.</li>
-                  <li>Las rutas liquidadas volverán a quedar como <b>pendientes de pago</b>.</li>
-                  <li>Se eliminará el registro de gasto en la pantalla de Operaciones.</li>
-                  <li>Se borrará permanentemente este recibo de liquidación.</li>
-                </ul>
-              </AlertDialogDescription>
+              <div className="flex items-center gap-2 text-destructive mb-2"><AlertTriangle className="h-6 w-6" /><AlertDialogTitle>¿Confirmar reversión?</AlertDialogTitle></div>
+              <AlertDialogDescription className="text-xs font-bold text-slate-700">Se restaurarán los saldos de caja y las hojas de ruta volverán a quedar pendientes de pago.</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel className="font-bold">Mantener Liquidación</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDeletePayout} className="bg-destructive text-destructive-foreground font-black uppercase">REVERTIR Y BORRAR</AlertDialogAction>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeletePayout} className="bg-destructive font-black uppercase">REVERTIR Y BORRAR</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
