@@ -559,8 +559,8 @@ export default function PayoutsPage() {
                               <Input type="number" value={extra.amount ?? 0} onChange={(e) => updateExtra(extra.id, 'amount', Number(e.target.value))} className="h-9 text-right font-black bg-white" />
                               <Tabs value={extra.currency} onValueChange={(v: any) => updateExtra(extra.id, 'currency', v)} className="h-9">
                                 <TabsList className="h-9 p-0.5 border">
-                                  <TabsTrigger value="ARS" className="h-8 text-[8px] font-black px-2">ARS</TabsTrigger>
-                                  <TabsTrigger value="USD" className="h-8 text-[8px] font-black px-2">USD</TabsTrigger>
+                                  <TabsTrigger value="ARS" className="h-8 text-[8px] font-black px-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
+                                  <TabsTrigger value="USD" className="h-8 text-[8px] font-black px-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
                                 </TabsList>
                               </Tabs>
                             </div>
@@ -588,17 +588,17 @@ export default function PayoutsPage() {
                 <CardHeader className="bg-primary/5 border-b"><CardTitle className="text-xs uppercase font-black tracking-widest text-primary">Resumen de Liquidación</CardTitle></CardHeader>
                 <CardContent className="space-y-6 pt-6">
                   <div className="space-y-3">
-                    <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground font-medium">Honorarios y Base (ARS):</span><span className="font-black">${(totals.subtotalItemsARS + totals.baseFijaARS).toLocaleString()}</span></div>
-                    <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground font-medium">Extras en Pesos:</span><span className="font-black">${totals.subtotalExtrasARS.toLocaleString()}</span></div>
+                    <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground font-medium">Honorarios y Base (ARS):</span><span className="font-black text-blue-700">${(totals.subtotalItemsARS + totals.baseFijaARS).toLocaleString()}</span></div>
+                    <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground font-medium">Extras en Pesos:</span><span className="font-black text-blue-700">${totals.subtotalExtrasARS.toLocaleString()}</span></div>
                     <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground font-medium">Extras en Dólares:</span><span className="font-black text-emerald-700">u$s {totals.subtotalExtrasUSD.toLocaleString()}</span></div>
                     
                     <div className="pt-3 border-t border-dashed space-y-2">
                       <div className="flex justify-between items-end">
-                        <p className="text-[10px] font-black uppercase text-muted-foreground">TOTAL ARS</p>
-                        <p className="text-2xl font-black">${totals.totalARS.toLocaleString()}</p>
+                        <p className="text-[10px] font-black uppercase text-blue-600 tracking-wider">TOTAL ARS</p>
+                        <p className="text-2xl font-black text-blue-700">${totals.totalARS.toLocaleString()}</p>
                       </div>
                       <div className="flex justify-between items-end">
-                        <p className="text-[10px] font-black uppercase text-emerald-700">TOTAL USD</p>
+                        <p className="text-[10px] font-black uppercase text-emerald-600 tracking-wider">TOTAL USD</p>
                         <p className="text-2xl font-black text-emerald-700">u$s {totals.totalUSD.toLocaleString()}</p>
                       </div>
                     </div>
@@ -629,7 +629,7 @@ export default function PayoutsPage() {
                             </div>
                           </div>
                         )}
-                        <div className="flex justify-between items-center bg-primary text-white p-3 rounded-lg shadow-lg">
+                        <div className={cn("flex justify-between items-center text-white p-3 rounded-lg shadow-lg", selectedAccount.currency === 'USD' ? 'bg-emerald-600' : 'bg-blue-600')}>
                           <span className="text-[9px] font-black uppercase tracking-widest">Descontará de Caja:</span>
                           <span className="text-xl font-black">{selectedAccount.currency === 'USD' ? 'u$s' : '$'} {finalTotalInAccountCurrency.toLocaleString()}</span>
                         </div>
@@ -693,14 +693,14 @@ export default function PayoutsPage() {
                         <TableCell>
                           <div className="flex flex-wrap gap-1.5">
                             {p.items?.map((it: any, idx: number) => it.amount !== 0 && (
-                              <Badge key={idx} variant="outline" className="text-[8px] font-bold uppercase bg-slate-50 text-slate-600">
+                              <Badge key={idx} variant="outline" className={cn("text-[8px] font-bold uppercase", it.currency === 'USD' ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-blue-50 text-blue-700 border-blue-200")}>
                                 {it.description}: {it.currency === 'USD' ? 'u$s' : '$'}{Number(it.amount).toLocaleString()}
                               </Badge>
                             ))}
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
-                          <p className="font-black text-emerald-700 text-sm">{symbol} {Math.abs(tx?.amount || 0).toLocaleString()}</p>
+                          <p className={cn("font-black text-sm", p.currency === 'USD' ? 'text-emerald-700' : 'text-blue-700')}>{symbol} {Math.abs(tx?.amount || 0).toLocaleString()}</p>
                           <p className="text-[8px] font-black text-muted-foreground uppercase">{acc?.name}</p>
                         </TableCell>
                         <TableCell>
@@ -737,11 +737,11 @@ export default function PayoutsPage() {
                     <Label className="text-[10px] font-bold">Nombre del Ítem</Label>
                     <Input value={newConceptName} onChange={(e) => setNewConceptName(e.target.value)} placeholder="Ej: Bono productividad" className="bg-white h-9" />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <Label className="text-[10px] font-bold">Tipo</Label>
+                      <Label className="text-[10px] font-bold">Tipo de Cálculo</Label>
                       <Select value={newConceptType} onValueChange={(v: any) => setNewConceptType(v)}>
-                        <SelectTrigger className="bg-white h-9"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="bg-white h-9 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="fixed">Monto Fijo</SelectItem>
                           <SelectItem value="hourly">Horas</SelectItem>
@@ -751,16 +751,15 @@ export default function PayoutsPage() {
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[10px] font-bold">Moneda</Label>
-                      <Select value={newConceptCurrency} onValueChange={(v: any) => setNewConceptCurrency(v)}>
-                        <SelectTrigger className="bg-white h-9"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ARS">ARS ($)</SelectItem>
-                          <SelectItem value="USD">USD (u$s)</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <Tabs value={newConceptCurrency} onValueChange={(v: any) => setNewConceptCurrency(v)} className="w-full">
+                        <TabsList className="grid grid-cols-2 h-9 p-0.5 border bg-muted/20">
+                          <TabsTrigger value="ARS" className="text-[9px] font-black data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
+                          <TabsTrigger value="USD" className="text-[9px] font-black data-[state=active]:bg-emerald-600 data-[state=active]:text-white">USD</TabsTrigger>
+                        </TabsList>
+                      </Tabs>
                     </div>
                   </div>
-                  <Button onClick={handleAddConcept} className="w-full h-9 font-bold"><Plus className="h-4 w-4 mr-2" /> Crear Concepto</Button>
+                  <Button onClick={handleAddConcept} className="w-full h-10 font-bold"><Plus className="h-4 w-4 mr-2" /> Crear Concepto</Button>
                 </div>
               </div>
 
@@ -800,7 +799,9 @@ export default function PayoutsPage() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="p-3 bg-muted/20 rounded-xl border text-center">
                   <p className="text-[8px] font-black uppercase text-muted-foreground mb-1">Total Pagado</p>
-                  <p className="text-lg font-black text-primary">{payoutForDetails?.currency === 'USD' ? 'u$s' : '$'} {Math.abs(transactions?.find(t => t.id === payoutForDetails?.transactionId)?.amount || 0).toLocaleString()}</p>
+                  <p className={cn("text-lg font-black", payoutForDetails?.currency === 'USD' ? 'text-emerald-700' : 'text-blue-700')}>
+                    {payoutForDetails?.currency === 'USD' ? 'u$s' : '$'} {Math.abs(transactions?.find(t => t.id === payoutForDetails?.transactionId)?.amount || 0).toLocaleString()}
+                  </p>
                 </div>
                 <div className="p-3 bg-muted/20 rounded-xl border text-center">
                   <p className="text-[8px] font-black uppercase text-muted-foreground mb-1">Tipo Cambio</p>
@@ -808,7 +809,7 @@ export default function PayoutsPage() {
                 </div>
                 <div className="p-3 bg-muted/20 rounded-xl border text-center">
                   <p className="text-[8px] font-black uppercase text-muted-foreground mb-1">Original ARS</p>
-                  <p className="text-sm font-bold">${payoutForDetails?.totalARS.toLocaleString()}</p>
+                  <p className="text-sm font-bold text-blue-700">${payoutForDetails?.totalARS.toLocaleString()}</p>
                 </div>
                 <div className="p-3 bg-muted/20 rounded-xl border text-center">
                   <p className="text-[8px] font-black uppercase text-muted-foreground mb-1">Original USD</p>
@@ -845,7 +846,7 @@ export default function PayoutsPage() {
                         <p className="text-xs font-black uppercase text-slate-800">{it.description}</p>
                         {it.notes && <p className="text-[10px] text-muted-foreground italic">"{it.notes}"</p>}
                       </div>
-                      <span className={cn("font-black text-sm", it.currency === 'USD' ? "text-emerald-700" : "text-primary")}>
+                      <span className={cn("font-black text-sm", it.currency === 'USD' ? "text-emerald-700" : "text-blue-700")}>
                         {it.currency === 'USD' ? 'u$s' : '$'} {it.amount.toLocaleString()}
                       </span>
                     </div>
