@@ -1983,6 +1983,29 @@ function CatalogContent() {
                         <div className="space-y-1"><Label className="text-[9px] font-bold uppercase">Dólares (USD)</Label><Input type="number" value={formData.laborCostUSD ?? 0} onChange={(e) => setFormData({...formData, laborCostUSD: Number(e.target.value)})} className="bg-white" /></div>
                       </div>
                     </div>
+                    <div className="p-4 border rounded-2xl bg-slate-50 space-y-4">
+                      <Label className="text-[10px] font-black uppercase text-slate-500">Inventario de Producto Terminado</Label>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <Label className="text-[9px] font-bold uppercase">Stock Actual</Label>
+                          <Input 
+                            type="number" 
+                            value={formData.stock ?? 0} 
+                            onChange={(e) => setFormData({...formData, stock: Number(e.target.value)})} 
+                            className="bg-white font-black text-center" 
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[9px] font-bold uppercase text-rose-600">Stock Mínimo</Label>
+                          <Input 
+                            type="number" 
+                            value={formData.minStock ?? 0} 
+                            onChange={(e) => setFormData({...formData, minStock: Number(e.target.value)})} 
+                            className="bg-white font-black text-center border-rose-100 text-rose-700" 
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   <div className="space-y-4">
                     <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Lista de Materiales</Label>
