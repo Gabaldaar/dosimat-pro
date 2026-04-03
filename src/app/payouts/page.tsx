@@ -33,7 +33,9 @@ import {
   Eye,
   FileText,
   Truck,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Edit,
+  Save
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -99,6 +101,7 @@ export default function PayoutsPage() {
   const [newConceptName, setNewConceptName] = useState("")
   const [newConceptType, setNewConceptType] = useState<"fixed" | "hourly" | "km">("fixed")
   const [newConceptCurrency, setNewConceptCurrency] = useState<"ARS" | "USD">("ARS")
+  const [editingConceptId, setEditingConceptId] = useState<string | null>(null)
   
   // Estado para eliminación/reversión
   const [payoutToDelete, setPayoutToDelete] = useState<any | null>(null)
@@ -391,7 +394,7 @@ export default function PayoutsPage() {
 
   const handleAddConcept = () => {
     if (!newConceptName.trim()) return
-    const id = Math.random().toString(36).substring(2, 9)
+    const id = editingConceptId || Math.random().toString(36).substring(2, 9)
     setDocumentNonBlocking(doc(db, 'payout_concepts', id), {
       id,
       name: newConceptName,
@@ -400,7 +403,15 @@ export default function PayoutsPage() {
       defaultAmount: 0
     }, { merge: true })
     setNewConceptName("")
-    toast({ title: "Concepto creado" })
+    setEditingConceptId(null)
+    toast({ title: editingConceptId ? "Concepto actualizado" : "Concepto creado" })
+  }
+
+  const handleStartEditConcept = (c: any) => {
+    setEditingConceptId(c.id);
+    setNewConceptName(c.name);
+    setNewConceptType(c.type);
+    setNewConceptCurrency(c.currency || "ARS");
   }
 
   const resetForm = () => {
@@ -721,7 +732,7 @@ export default function PayoutsPage() {
         )}
 
         {/* Gestor de Conceptos */}
-        <Dialog open={isConceptManagerOpen} onOpenChange={setIsConceptManagerOpen}>
+        <Dialog open={isConceptManagerOpen} onOpenChange={(o) => { if(!o) { setEditingConceptId(null); setNewConceptName(""); } setIsConceptManagerOpen(o); }}>
           <DialogContent className="max-w-md">
             <DialogHeader>
               <div className="flex items-center gap-2 text-primary mb-2">
@@ -731,7 +742,7 @@ export default function PayoutsPage() {
             </DialogHeader>
             <div className="space-y-6 py-4">
               <div className="p-4 bg-muted/20 rounded-xl border border-dashed space-y-4">
-                <p className="text-[10px] font-black uppercase text-primary tracking-widest">Nuevo Concepto Maestro</p>
+                <p className="text-[10px] font-black uppercase text-primary tracking-widest">{editingConceptId ? 'Editando Concepto' : 'Nuevo Concepto Maestro'}</p>
                 <div className="space-y-3">
                   <div className="space-y-1">
                     <Label className="text-[10px] font-bold">Nombre del Ítem</Label>
@@ -759,7 +770,15 @@ export default function PayoutsPage() {
                       </Tabs>
                     </div>
                   </div>
-                  <Button onClick={handleAddConcept} className="w-full h-10 font-bold"><Plus className="h-4 w-4 mr-2" /> Crear Concepto</Button>
+                  <div className="flex gap-2">
+                    {editingConceptId && (
+                      <Button variant="outline" onClick={() => { setEditingConceptId(null); setNewConceptName(""); }} className="flex-1">Cancelar</Button>
+                    )}
+                    <Button onClick={handleAddConcept} className="flex-1 h-10 font-bold">
+                      {editingConceptId ? <Save className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+                      {editingConceptId ? 'Guardar' : 'Crear Concepto'}
+                    </Button>
+                  </div>
                 </div>
               </div>
 
@@ -774,7 +793,10 @@ export default function PayoutsPage() {
                           <Badge variant="outline" className={cn("text-[7px] font-black uppercase h-4", c.currency === 'USD' ? "border-emerald-200 text-emerald-700" : "border-blue-200 text-blue-700")}>{c.currency}</Badge>
                         </div>
                       </div>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => deleteDocumentNonBlocking(doc(db, 'payout_concepts', c.id))}><Trash2 className="h-4 w-4" /></Button>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => handleStartEditConcept(c)}><Edit className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => deleteDocumentNonBlocking(doc(db, 'payout_concepts', c.id))}><Trash2 className="h-4 w-4" /></Button>
+                      </div>
                     </div>
                   ))}
                 </div>
