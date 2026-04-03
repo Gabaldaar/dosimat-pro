@@ -93,7 +93,7 @@ function CustomersContent() {
   const wsTemplatesQuery = useMemoFirebase(() => collection(db, 'whatsapp_templates'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   
-  const { data: customers } = useCollection(clientsQuery)
+  const { data: customers, isLoading: loadingCustomers } = useCollection(clientsQuery)
   const { data: zones } = useCollection(zonesQuery)
   const { data: transactions } = useCollection(txQuery)
   const { data: emailTemplates } = useCollection(emailTemplatesQuery)
