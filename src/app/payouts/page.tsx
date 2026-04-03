@@ -369,12 +369,12 @@ export default function PayoutsPage() {
       }
     })
 
-    // Crear la Transacción financiera con flag isPayout
+    // Crear la Transacción financiera con flag isPayout ROBUSTO
     const txData = {
       id: txId,
       date: now,
       type: 'Expense',
-      isPayout: true, // NUEVO: Identificador exacto para el Análisis
+      isPayout: true, // FLAG CLAVE: Identificador exacto para el Análisis estructural
       amount: -finalTotalInAccountCurrency,
       currency: selectedAccount?.currency || 'ARS',
       description: `Liquidación de haberes: ${selectedCollab.name} (#${payoutId.toUpperCase().slice(0,6)})`,
@@ -501,7 +501,7 @@ export default function PayoutsPage() {
                       <Select value={selectedCollabId} onValueChange={setSelectedCollabId}>
                         <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
                         <SelectContent>
-                          {collaborators?.filter(c => ['Admin', 'Employee', 'Communicator', 'Replenisher'].includes(c.role)).map(c => (
+                          {collaborators?.filter(c => ['Admin', 'Employee', 'Communicator', 'Replenisher', 'Socio', 'Colaborador'].includes(c.role)).map(c => (
                             <SelectItem key={c.id} value={c.id}>{c.name} ({c.role})</SelectItem>
                           ))}
                         </SelectContent>
@@ -607,7 +607,7 @@ export default function PayoutsPage() {
                               </div>
                             )}
                             <div className="w-full md:w-36 space-y-1">
-                              <Label className="text-[9px] font-bold uppercase text-emerald-700">Monto</Label>
+                              <Label className={cn("text-[9px] font-bold uppercase", extra.currency === 'USD' ? "text-emerald-700" : "text-blue-700")}>Monto</Label>
                               <div className="flex gap-1">
                                 <Input type="number" value={extra.amount ?? 0} onChange={(e) => updateExtra(extra.id, 'amount', Number(e.target.value))} className="h-9 text-right font-black bg-white" />
                                 <Tabs value={extra.currency} onValueChange={(v: any) => updateExtra(extra.id, 'currency', v)} className="h-9">

@@ -154,8 +154,10 @@ export default function AnalysisPage() {
     filteredTxsForSummary.forEach(tx => {
       const curr = tx.currency === 'USD' ? 'USD' : 'ARS'
       
-      // Identificación robusta de honorarios
-      const isPayoutTx = tx.isPayout === true || tx.description?.toLowerCase().includes('liquidación')
+      // Identificación ROBUSTA de honorarios:
+      // 1. Debe tener la marca isPayout (Generada por el módulo de liquidaciones)
+      // 2. O ser un gasto sin cliente asociado y con palabra clave (Para datos antiguos)
+      const isPayoutTx = tx.isPayout === true || (tx.type === 'Expense' && !tx.clientId && tx.description?.toLowerCase().includes('liquidación'))
       
       if (tx.type === 'cobro') {
         result[curr].income += Math.abs(tx.amount)
@@ -198,7 +200,8 @@ export default function AnalysisPage() {
       const txDate = new Date(tx.date)
       const point = last12.find(p => p.month === txDate.getMonth() && p.year === txDate.getFullYear())
       if (point && tx.currency === analysisCurrency) {
-        const isPayoutTx = tx.isPayout === true || tx.description?.toLowerCase().includes('liquidación')
+        // Misma lógica robusta para el gráfico anual
+        const isPayoutTx = tx.isPayout === true || (tx.type === 'Expense' && !tx.clientId && tx.description?.toLowerCase().includes('liquidación'))
 
         if (tx.type === 'cobro') point.ingresos += Math.abs(tx.amount)
         else if (['sale', 'refill', 'service', 'Reposición'].includes(tx.type)) point.ingresos += Number(tx.paidAmount || 0)
@@ -218,7 +221,10 @@ export default function AnalysisPage() {
   // Desglose de transacciones de honorarios para auditoría del usuario
   const honorariosTransactions = useMemo(() => {
     return filteredTxsForSummary
-      .filter(tx => (tx.isPayout === true || tx.description?.toLowerCase().includes('liquidación')) && tx.currency === analysisCurrency)
+      .filter(tx => {
+        const isPayout = tx.isPayout === true || (tx.type === 'Expense' && !tx.clientId && tx.description?.toLowerCase().includes('liquidación'))
+        return isPayout && tx.currency === analysisCurrency
+      })
       .sort((a, b) => b.date.localeCompare(a.date))
   }, [filteredTxsForSummary, analysisCurrency])
 
@@ -501,13 +507,13 @@ export default function AnalysisPage() {
           </Card>
         </div>
 
-        {/* Sección de Auditoría Detallada (NUEVO para resolver dudas de montos) */}
+        {/* Sección de Auditoría Detallada (ROBUSTA) */}
         <Card className="glass-card">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div className="space-y-1">
                 <CardTitle className="text-lg flex items-center gap-2"><TableIcon className="h-5 w-5 text-blue-600" /> Auditoría de Honorarios</CardTitle>
-                <CardDescription>Listado exacto de transacciones clasificadas como Honorarios para el periodo seleccionado</CardDescription>
+                <CardDescription>Listado exacto de transacciones clasificadas estructuralmente como Honorarios (Sin clientes asociados)</CardDescription>
               </div>
               <Badge variant="outline" className="bg-blue-50 text-blue-700">{honorariosTransactions.length} Movimientos</Badge>
             </div>
@@ -534,7 +540,7 @@ export default function AnalysisPage() {
                       <TableCell className="text-xs font-bold text-slate-600">{new Date(tx.date).toLocaleDateString('es-AR')}</TableCell>
                       <TableCell>
                         <p className="text-xs font-bold">{tx.description}</p>
-                        <p className="text-[9px] text-muted-foreground uppercase">{tx.isPayout ? 'LIQUIDACIÓN SISTEMA' : 'AJUSTE MANUAL'}</p>
+                        <p className="text-[9px] text-muted-foreground uppercase">{tx.isPayout ? 'LIQUIDACIÓN SISTEMA' : 'AJUSTE MANUAL INTERNO'}</p>
                       </TableCell>
                       <TableCell className="text-right font-black text-blue-700">
                         {currencySymbol} {Math.abs(tx.amount).toLocaleString('es-AR')}
