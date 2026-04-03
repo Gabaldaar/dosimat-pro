@@ -132,12 +132,20 @@ export default function PayoutsPage() {
   // Obtener tipo de cambio si hay multimoneda
   useEffect(() => {
     if (activeTab === 'new') {
-      fetch('https://dolarapi.com/v1/dolares/oficial')
+      fetch('https://dolares.oficial.blue/v1/dolares/oficial')
         .then(res => res.json())
         .then(data => {
           if (data && data.venta) setExchangeRate(data.venta);
         })
-        .catch(err => console.error("Error fetching rate:", err));
+        .catch(err => {
+          // Fallback if the specific API fails, using official dolar API
+          fetch('https://dolarapi.com/v1/dolares/oficial')
+            .then(res => res.json())
+            .then(data => {
+              if (data && data.venta) setExchangeRate(data.venta);
+            })
+            .catch(e => console.error("Error fetching rate:", e));
+        });
     }
   }, [activeTab]);
 
@@ -217,10 +225,8 @@ export default function PayoutsPage() {
     const { totalARS, totalUSD } = totals;
     
     if (selectedAccount.currency === 'ARS') {
-      // Si la caja es ARS, convertimos los USD a ARS usando el tipo de cambio
       return totalARS + (totalUSD * exchangeRate);
     } else {
-      // Si la caja es USD, convertimos los ARS a USD
       return totalUSD + (totalARS / exchangeRate);
     }
   }, [selectedAccount, totals, exchangeRate]);
@@ -300,7 +306,7 @@ export default function PayoutsPage() {
       };
     });
 
-    // 1. Crear el objeto de Liquidación
+    // Crear el objeto de Liquidación con descripciones limpias (sin valor unitario)
     const payoutData = {
       id: payoutId,
       userId: selectedCollab.id,
@@ -316,14 +322,38 @@ export default function PayoutsPage() {
       itemIds: selectedItems,
       routeItemsSnapshot,
       items: [
-        { type: 'items', description: `Entrega de Bidones (${totals.cloro} CL, ${totals.acido} AC)`, amount: totals.subtotalItemsARS, currency: "ARS", qty: 1, notes: "" },
-        { type: 'base', description: 'Sueldo Base / Fijo', amount: totals.baseFijaARS, currency: "ARS", qty: 1, notes: "" },
-        ...extras.map(e => ({ type: e.type, conceptId: e.conceptId, description: e.description, amount: e.amount, currency: e.currency, qty: e.qty, notes: e.notes }))
+        { 
+          type: 'items', 
+          description: `Entrega de Bidones (${totals.cloro} CL, ${totals.acido} AC)`, 
+          amount: totals.subtotalItemsARS, 
+          currency: "ARS", 
+          qty: 1, 
+          notes: "" 
+        },
+        { 
+          type: 'base', 
+          description: 'Sueldo Base / Fijo', 
+          amount: totals.baseFijaARS, 
+          currency: "ARS", 
+          qty: 1, 
+          notes: "" 
+        },
+        ...extras.map(e => ({ 
+          type: e.type, 
+          conceptId: e.conceptId, 
+          description: (e.type === 'hourly' || e.type === 'km') 
+            ? `${e.description} (${e.qty} ${e.type === 'hourly' ? 'hs' : 'km'})` 
+            : e.description, 
+          amount: e.amount, 
+          currency: e.currency, 
+          qty: e.qty, 
+          notes: e.notes 
+        }))
       ]
     }
     setDocumentNonBlocking(doc(db, 'payouts', payoutId), payoutData, { merge: true })
 
-    // 2. Marcar ítems de ruta como liquidados
+    // Marcar ítems de ruta como liquidados
     const fieldToUpdate = selectedCollab.role === 'Replenisher' ? 'liquidadoRepositor' : 'liquidadoComunicador';
     selectedItems.forEach(itemId => {
       const itemData = pendingDeliveries.find(d => d.id === itemId)
@@ -338,7 +368,7 @@ export default function PayoutsPage() {
       }
     })
 
-    // 3. Crear la Transacción financiera en la moneda de la CAJA
+    // Crear la Transacción financiera en la moneda de la CAJA
     const txData = {
       id: txId,
       date: now,
@@ -352,7 +382,7 @@ export default function PayoutsPage() {
     }
     setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
     
-    // 4. Actualizar saldo de caja
+    // Actualizar saldo de caja
     updateDocumentNonBlocking(doc(db, 'financial_accounts', accountId), { initialBalance: increment(-finalTotalInAccountCurrency) })
 
     toast({ title: "Liquidación procesada", description: `Se descontaron ${selectedAccount?.currency} ${finalTotalInAccountCurrency.toLocaleString()} de caja.` })
@@ -982,7 +1012,7 @@ export default function PayoutsPage() {
                   <tr className="bg-slate-900 text-white">
                     <th className="p-2 text-left uppercase font-black">Concepto</th>
                     <th className="p-2 text-left uppercase font-black">Notas</th>
-                    <th className="p-2 text-right uppercase font-black">Monto</th>
+                    <th className="p-2 text-right uppercase font-black">Monto Total</th>
                   </tr>
                 </thead>
                 <tbody>
