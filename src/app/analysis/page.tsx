@@ -22,7 +22,9 @@ import {
   Cell, 
   Pie, 
   PieChart,
-  Legend
+  Legend,
+  Line,
+  LineChart
 } from "recharts"
 import { 
   TrendingUp, 
@@ -43,7 +45,10 @@ import {
   HandCoins,
   AlertCircle,
   Clock,
-  Award
+  Award,
+  Users,
+  ShieldCheck,
+  Zap
 } from "lucide-react"
 import { useFirestore, useCollection, useMemoFirebase, useUser } from "../../firebase"
 import { collection, query, orderBy } from "firebase/firestore"
@@ -59,7 +64,7 @@ const LABEL_MAP: Record<string, string> = {
   service: 'Servicio Técnico',
   adjustment: 'Ajustes / Otros',
   Adjustment: 'Ajustes / Otros',
-  Expense: 'Gastos Generales',
+  Expense: 'Gastos Operativos',
   cobro_saldo: 'Cobro de Saldo Histórico'
 }
 
@@ -85,12 +90,14 @@ export default function AnalysisPage() {
   const expenseCatsQuery = useMemoFirebase(() => collection(db, 'expense_categories'), [db])
   const zonesQuery = useMemoFirebase(() => collection(db, 'zones'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
+  const payoutsQuery = useMemoFirebase(() => query(collection(db, 'payouts'), orderBy('date', 'desc')), [db])
 
   const { data: transactions, isLoading: loadingTx } = useCollection(txQuery)
   const { data: clients } = useCollection(clientsQuery)
   const { data: expenseCategories } = useCollection(expenseCatsQuery)
   const { data: zones } = useCollection(zonesQuery)
   const { data: catalog } = useCollection(catalogQuery)
+  const { data: payouts } = useCollection(payoutsQuery)
 
   // Filters State
   const [startDate, setStartDate] = useState("")
@@ -126,105 +133,45 @@ export default function AnalysisPage() {
     })
   }, [transactions, startDate, endDate])
 
-  const filteredTxsByCurrency = useMemo(() => {
-    return filteredTxsForSummary.filter(tx => {
-      if (tx.currency !== analysisCurrency) return false
-      
-      const isIncome = (tx.type !== 'Expense' && tx.type !== 'adjustment' && tx.type !== 'Adjustment') || tx.type === 'cobro'
-      const isExpense = tx.type === 'Expense' || (tx.type === 'adjustment' && tx.amount < 0)
-
-      let matchCategory = true
-      if (isIncome) {
-        const source = tx.type === 'cobro' ? (tx.relatedType || 'sale') : tx.type
-        matchCategory = incomeTypeFilter === 'all' || source === incomeTypeFilter
-      } else if (isExpense) {
-        matchCategory = expenseCatFilter === 'all' || tx.expenseCategoryId === expenseCatFilter
-      }
-
-      return matchCategory
+  const filteredPayouts = useMemo(() => {
+    if (!payouts) return []
+    return payouts.filter(p => {
+      const pDate = p.date.split('T')[0]
+      const matchStart = !startDate || pDate >= startDate
+      const matchEnd = !endDate || pDate <= endDate
+      return matchStart && matchEnd
     })
-  }, [filteredTxsForSummary, analysisCurrency, incomeTypeFilter, expenseCatFilter])
+  }, [payouts, startDate, endDate])
 
   const summary = useMemo(() => {
-    return filteredTxsForSummary.reduce((acc, tx) => {
+    const result = { 
+      ARS: { income: 0, expense: 0, honorarios: 0 }, 
+      USD: { income: 0, expense: 0, honorarios: 0 } 
+    }
+
+    filteredTxsForSummary.forEach(tx => {
       const curr = tx.currency === 'USD' ? 'USD' : 'ARS'
       
-      if (tx.type === 'cobro') {
-        acc[curr].income += Math.abs(tx.amount)
-      } else if (['sale', 'refill', 'service', 'Reposición'].includes(tx.type)) {
-        acc[curr].income += Number(tx.paidAmount || 0)
-      } else if ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount > 0) {
-        acc[curr].income += tx.amount
-      }
-
-      if (tx.type === 'Expense' || ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount < 0)) {
-        acc[curr].expense += Math.abs(tx.amount)
-      }
+      // Identificar si es un pago de honorarios (viene del módulo payouts)
+      const isPayoutTx = tx.description?.toLowerCase().includes('liquidación')
       
-      return acc
-    }, { 
-      ARS: { income: 0, expense: 0 }, 
-      USD: { income: 0, expense: 0 } 
+      if (tx.type === 'cobro') {
+        result[curr].income += Math.abs(tx.amount)
+      } else if (['sale', 'refill', 'service', 'Reposición'].includes(tx.type)) {
+        result[curr].income += Number(tx.paidAmount || 0)
+      } else if ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount > 0) {
+        result[curr].income += tx.amount
+      }
+
+      if (isPayoutTx) {
+        result[curr].honorarios += Math.abs(tx.amount)
+      } else if (tx.type === 'Expense' || ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount < 0)) {
+        result[curr].expense += Math.abs(tx.amount)
+      }
     })
+
+    return result
   }, [filteredTxsForSummary])
-
-  // Month-over-Month Comparison
-  const momComparison = useMemo(() => {
-    if (!transactions) return { ARS: { income: 0, expense: 0 }, USD: { income: 0, expense: 0 } }
-    
-    const now = new Date()
-    const currentMonth = now.getMonth()
-    const currentYear = now.getFullYear()
-    
-    const prevMonthDate = new Date(currentYear, currentMonth - 1, 1)
-    const prevMonth = prevMonthDate.getMonth()
-    const prevYear = prevMonthDate.getFullYear()
-
-    const lastMonthData = transactions.reduce((acc, tx) => {
-      const txDate = new Date(tx.date)
-      if (txDate.getMonth() === prevMonth && txDate.getFullYear() === prevYear) {
-        const curr = tx.currency === 'USD' ? 'USD' : 'ARS'
-        if (tx.type === 'cobro') acc[curr].income += Math.abs(tx.amount)
-        else if (['sale', 'refill', 'service', 'Reposición'].includes(tx.type)) acc[curr].income += Number(tx.paidAmount || 0)
-        else if ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount > 0) acc[curr].income += tx.amount
-        
-        if (tx.type === 'Expense' || ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount < 0)) {
-          acc[curr].expense += Math.abs(tx.amount)
-        }
-      }
-      return acc
-    }, { 
-      ARS: { income: 0, expense: 0 }, 
-      USD: { income: 0, expense: 0 } 
-    })
-
-    const calculateChange = (current: number, previous: number) => {
-      if (previous === 0) return current > 0 ? 100 : 0
-      return ((current - previous) / previous) * 100
-    }
-
-    return {
-      ARS: {
-        income: calculateChange(summary.ARS.income, lastMonthData.ARS.income),
-        expense: calculateChange(summary.ARS.expense, lastMonthData.ARS.expense)
-      },
-      USD: {
-        income: calculateChange(summary.USD.income, lastMonthData.USD.income),
-        expense: calculateChange(summary.USD.expense, lastMonthData.USD.expense)
-      }
-    }
-  }, [transactions, summary])
-
-  const totalDebt = useMemo(() => {
-    if (!clients) return { ARS: 0, USD: 0 };
-    return clients.reduce((acc, c) => {
-      const ars = Number(c.saldoActual || 0);
-      const usd = Number(c.saldoUSD || 0);
-      if (ars < 0) acc.ARS += Math.abs(ars);
-      if (usd < 0) acc.USD += Math.abs(usd);
-      return acc;
-    }, { ARS: 0, USD: 0 });
-  }, [clients]);
 
   const annualData = useMemo(() => {
     if (!transactions) return []
@@ -238,6 +185,7 @@ export default function AnalysisPage() {
         year: d.getFullYear(), 
         ingresos: 0, 
         gastos: 0,
+        honorarios: 0,
         saldo: 0
       }
     })
@@ -246,27 +194,98 @@ export default function AnalysisPage() {
       const txDate = new Date(tx.date)
       const point = last12.find(p => p.month === txDate.getMonth() && p.year === txDate.getFullYear())
       if (point && tx.currency === analysisCurrency) {
+        const isPayoutTx = tx.description?.toLowerCase().includes('liquidación')
+
         if (tx.type === 'cobro') point.ingresos += Math.abs(tx.amount)
         else if (['sale', 'refill', 'service', 'Reposición'].includes(tx.type)) point.ingresos += Number(tx.paidAmount || 0)
         else if ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount > 0) point.ingresos += tx.amount
         
-        if (tx.type === 'Expense' || ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount < 0)) {
+        if (isPayoutTx) {
+          point.honorarios += Math.abs(tx.amount)
+        } else if (tx.type === 'Expense' || ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount < 0)) {
           point.gastos += Math.abs(tx.amount)
         }
       }
     })
 
-    return last12.map(p => ({ ...p, saldo: p.ingresos - p.gastos }))
+    return last12.map(p => ({ ...p, saldo: p.ingresos - (p.gastos + p.honorarios) }))
   }, [transactions, analysisCurrency])
+
+  // Rentabilidad por Producto (Facturado vs Honorarios)
+  const productProfitability = useMemo(() => {
+    const data: Record<string, { facturado: number, honorarios: number, unidades: number }> = {
+      'Cloro': { facturado: 0, honorarios: 0, unidades: 0 },
+      'Ácido': { facturado: 0, honorarios: 0, unidades: 0 }
+    }
+
+    // Facturación (de Transacciones)
+    filteredTxsForSummary.forEach(tx => {
+      if (tx.currency !== analysisCurrency) return
+      if (['sale', 'refill', 'Reposición'].includes(tx.type) && tx.items) {
+        tx.items.forEach((item: any) => {
+          const name = item.name.toLowerCase()
+          let key = ""
+          if (name.includes('cloro')) key = 'Cloro'
+          else if (name.includes('acido') || name.includes('ácido')) key = 'Ácido'
+          
+          if (key) {
+            const subtotal = item.price * item.qty * (1 - (item.discount || 0) / 100)
+            data[key].facturado += subtotal
+            data[key].unidades += item.qty
+          }
+        })
+      }
+    })
+
+    // Honorarios (de Payouts)
+    filteredPayouts.forEach(p => {
+      // Payouts usualmente son en ARS para honorarios base
+      if (analysisCurrency !== 'ARS') return 
+      
+      p.routeItemsSnapshot?.forEach((item: any) => {
+        // Aquí necesitamos saber cuánto se pagó por cada bidón en ese momento.
+        // Como no tenemos el valor histórico exacto por item en el snapshot, estimamos 
+        // usando la proporción del total de honorarios de items vs total de bidones en ese payout.
+        const itemPayment = p.items?.find((i: any) => i.type === 'items')
+        if (itemPayment) {
+          const totalBidones = p.routeItemsSnapshot.reduce((sum: number, it: any) => sum + (it.cloro || 0) + (it.acido || 0), 0)
+          const paymentPerBidon = itemPayment.amount / (totalBidones || 1)
+          
+          data['Cloro'].honorarios += (item.cloro || 0) * paymentPerBidon
+          data['Ácido'].honorarios += (item.acido || 0) * paymentPerBidon
+        }
+      })
+    })
+
+    return Object.entries(data).map(([name, vals]) => ({
+      name,
+      ...vals,
+      margen: vals.facturado - vals.honorarios
+    }))
+  }, [filteredTxsForSummary, filteredPayouts, analysisCurrency])
+
+  // Desglose de Honorarios por Concepto
+  const honorsByConcept = useMemo(() => {
+    const counts: Record<string, number> = {}
+    filteredPayouts.forEach(p => {
+      p.items?.forEach((it: any) => {
+        if (it.currency === analysisCurrency) {
+          const label = it.type === 'items' ? 'Por Bidones' : it.type === 'base' ? 'Sueldo Base' : it.description
+          counts[label] = (counts[label] || 0) + Number(it.amount)
+        }
+      })
+    })
+    return Object.entries(counts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+  }, [filteredPayouts, analysisCurrency])
 
   const incomePieData = useMemo(() => {
     const counts: Record<string, number> = {}
-    
-    filteredTxsByCurrency.forEach(tx => {
+    filteredTxsForSummary.filter(tx => tx.currency === analysisCurrency).forEach(tx => {
       if (tx.type === 'cobro') {
         const totalCobro = Math.abs(tx.amount);
         let distributedAmount = 0;
-
         if (tx.imputations) {
           Object.entries(tx.imputations).forEach(([targetId, amount]) => {
             const targetTx = transactions?.find(t => t.id === targetId);
@@ -276,7 +295,6 @@ export default function AnalysisPage() {
             distributedAmount += Number(amount);
           });
         }
-
         const remaining = totalCobro - distributedAmount;
         if (remaining > 0.01) {
           const label = LABEL_MAP['cobro_saldo'];
@@ -294,128 +312,34 @@ export default function AnalysisPage() {
       }
     })
     return Object.entries(counts).map(([name, value]) => ({ name, value }))
-  }, [filteredTxsByCurrency, transactions])
-
-  // Ranking de Productos por Recaudación Real
-  const productRanking = useMemo(() => {
-    if (!transactions) return []
-    const ranking: Record<string, number> = {}
-
-    filteredTxsByCurrency.forEach(tx => {
-      // Si es una venta/reposición con items, sumamos el pagado proporcionalmente
-      if (['sale', 'refill', 'service', 'Reposición'].includes(tx.type) && tx.items) {
-        const totalTx = Math.abs(tx.amount)
-        const paidRatio = (tx.paidAmount || 0) / (totalTx || 1)
-        
-        tx.items.forEach((item: any) => {
-          const itemSubtotal = item.price * item.qty * (1 - (item.discount || 0) / 100)
-          ranking[item.name] = (ranking[item.name] || 0) + (itemSubtotal * paidRatio)
-        })
-      }
-      
-      // Si es un cobro, rastreamos imputaciones para ver qué productos se están pagando realmente
-      if (tx.type === 'cobro' && tx.imputations) {
-        Object.entries(tx.imputations).forEach(([targetId, imputedAmount]) => {
-          const targetTx = transactions.find(t => t.id === targetId)
-          if (targetTx && targetTx.items) {
-            const totalTarget = Math.abs(targetTx.amount)
-            const itemRatio = Number(imputedAmount) / (totalTarget || 1)
-            
-            targetTx.items.forEach((item: any) => {
-              const itemSubtotal = item.price * item.qty * (1 - (item.discount || 0) / 100)
-              ranking[item.name] = (ranking[item.name] || 0) + (itemSubtotal * itemRatio)
-            })
-          }
-        })
-      }
-    })
-
-    return Object.entries(ranking)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5)
-  }, [filteredTxsByCurrency, transactions])
-
-  // Eficiencia de Cobro (Días promedio entre factura y cobro)
-  const collectionEfficiency = useMemo(() => {
-    if (!transactions) return 0
-    let totalDays = 0
-    let count = 0
-
-    transactions.forEach(tx => {
-      if (tx.type === 'cobro' && tx.imputations) {
-        Object.entries(tx.imputations).forEach(([targetId]) => {
-          const targetTx = transactions.find(t => t.id === targetId)
-          if (targetTx) {
-            const diffTime = Math.abs(new Date(tx.date).getTime() - new Date(targetTx.date).getTime())
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-            totalDays += diffDays
-            count++
-          }
-        })
-      }
-    })
-
-    return count > 0 ? Math.round(totalDays / count) : 0
-  }, [transactions])
+  }, [filteredTxsForSummary, transactions, analysisCurrency])
 
   const expensePieData = useMemo(() => {
     const counts: Record<string, number> = {}
-    filteredTxsByCurrency.forEach(tx => {
+    filteredTxsForSummary.filter(tx => tx.currency === analysisCurrency).forEach(tx => {
+      const isPayoutTx = tx.description?.toLowerCase().includes('liquidación')
+      if (isPayoutTx) return // Excluir honorarios de este gráfico para mayor claridad operativa
+
       if (tx.type === 'Expense' || ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount < 0)) {
         const cat = expenseCategories?.find(c => c.id === tx.expenseCategoryId)
-        const label = cat ? cat.name : 'Ajustes / General'
+        const label = cat ? cat.name : 'Operativos / Varios'
         counts[label] = (counts[label] || 0) + Math.abs(tx.amount)
       }
     })
     return Object.entries(counts).map(([name, value]) => ({ name, value }))
-  }, [filteredTxsByCurrency, expenseCategories])
-
-  const zoneRevenue = useMemo(() => {
-    const revenue: Record<string, number> = {}
-    filteredTxsByCurrency.forEach(tx => {
-      let amount = 0
-      if (tx.type === 'cobro') amount = Math.abs(tx.amount)
-      else if (['sale', 'refill', 'service', 'Reposición'].includes(tx.type)) amount = Number(tx.paidAmount || 0)
-
-      if (amount > 0) {
-        const client = clients?.find(c => c.id === tx.clientId)
-        const zone = zones?.find(z => z.id === client?.zonaId)
-        const label = zone ? zone.name : 'Sin Zona'
-        revenue[label] = (revenue[label] || 0) + amount
-      }
-    })
-    return Object.entries(revenue)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5)
-  }, [filteredTxsByCurrency, clients, zones])
+  }, [filteredTxsForSummary, expenseCategories, analysisCurrency])
 
   if (isUserLoading || userData?.role === 'Communicator' || userData?.role === 'Replenisher') {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="mt-4 text-sm text-muted-foreground font-medium">
-          {userData?.role === 'Replenisher' ? 'Redirigiendo a Rutas...' : 
-           userData?.role === 'Communicator' ? 'Redirigiendo a Clientes...' : 
-           'Accediendo...'}
-        </p>
-      </div>
-    )
-  }
-
-  if (loadingTx) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="mt-4 text-sm text-muted-foreground">Accediendo...</p>
       </div>
     )
   }
 
   const currencySymbol = analysisCurrency === 'ARS' ? '$' : 'u$s';
-  const otherCurrency = analysisCurrency === 'ARS' ? 'USD' : 'ARS';
-  const otherSymbol = otherCurrency === 'ARS' ? '$' : 'u$s';
-  const currentMoM = momComparison[analysisCurrency as 'ARS' | 'USD'];
+  const currentSummary = summary[analysisCurrency as 'ARS' | 'USD'];
 
   return (
     <div className="flex min-h-screen bg-background w-full">
@@ -428,26 +352,16 @@ export default function AnalysisPage() {
                <div className="bg-primary p-1.5 rounded-lg shadow-sm shadow-primary/20"><Droplets className="h-4 w-4 text-white" /></div>
                <span className="font-headline font-black text-primary text-sm tracking-tight uppercase">DosimatPro</span>
             </div>
-            <div className="flex flex-col">
-              <h1 className="text-xl md:text-3xl font-bold text-primary font-headline flex items-center gap-2">
-                <BarChart3 className="h-7 w-7" /> Análisis Financiero
-              </h1>
-              <div className="flex items-center gap-2 mt-1">
-                <Badge variant="outline" className={cn(
-                  "text-[10px] font-black uppercase tracking-widest",
-                  analysisCurrency === 'ARS' ? "border-blue-500 text-blue-700 bg-blue-50" : "border-emerald-500 text-emerald-700 bg-emerald-50"
-                )}>
-                  MODO: {analysisCurrency === 'ARS' ? 'PESOS' : 'DÓLARES'}
-                </Badge>
-              </div>
-            </div>
+            <h1 className="text-xl md:text-3xl font-bold text-primary font-headline flex items-center gap-2">
+              <BarChart3 className="h-7 w-7" /> Análisis Estratégico
+            </h1>
           </div>
           <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-2xl border shadow-inner">
             <Coins className="h-4 w-4 text-muted-foreground ml-2" />
             <Tabs value={analysisCurrency} onValueChange={setAnalysisCurrency} className="w-auto">
               <TabsList className="bg-transparent h-9 p-0 gap-1">
-                <TabsTrigger value="ARS" className="text-[10px] font-black h-7 px-5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-md transition-all uppercase">PESOS (ARS)</TabsTrigger>
-                <TabsTrigger value="USD" className="text-[10px] font-black h-7 px-5 rounded-lg data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all uppercase">DÓLARES (USD)</TabsTrigger>
+                <TabsTrigger value="ARS" className="text-[10px] font-black h-7 px-5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white">PESOS</TabsTrigger>
+                <TabsTrigger value="USD" className="text-[10px] font-black h-7 px-5 rounded-lg data-[state=active]:bg-emerald-600 data-[state=active]:text-white">DÓLARES</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -473,7 +387,6 @@ export default function AnalysisPage() {
                   <SelectItem value="sale">Ventas</SelectItem>
                   <SelectItem value="refill">Reposiciones</SelectItem>
                   <SelectItem value="service">Servicio Técnico</SelectItem>
-                  <SelectItem value="adjustment">Ajustes / Otros</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -495,87 +408,45 @@ export default function AnalysisPage() {
 
         {/* Totals Section */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Card className="glass-card bg-emerald-50/30 border-l-4 border-l-emerald-500 relative overflow-hidden">
-            <div className="absolute top-2 right-2 opacity-10"><TrendingUp className="h-12 w-12 text-emerald-600" /></div>
+          <Card className="glass-card bg-emerald-50/30 border-l-4 border-l-emerald-500">
             <CardContent className="pt-6">
-              <div className="flex justify-between items-start mb-4">
-                <p className="text-[10px] font-black uppercase text-emerald-700 tracking-widest">Ingresos Reales (Caja)</p>
-                <Badge variant="outline" className={cn(
-                  "text-[9px] font-black",
-                  currentMoM.income >= 0 ? "border-emerald-500 text-emerald-700 bg-emerald-50" : "border-rose-500 text-rose-700 bg-rose-50"
-                )}>
-                  {currentMoM.income >= 0 ? '+' : ''}{currentMoM.income.toFixed(1)}% vs mes ant.
-                </Badge>
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-3xl font-black text-emerald-800">
-                  {currencySymbol} {summary[analysisCurrency as 'ARS' | 'USD'].income.toLocaleString('es-AR')}
-                </h3>
-                <p className="text-xs font-bold text-emerald-600 opacity-60">
-                  Ref. {otherSymbol} {summary[otherCurrency as 'ARS' | 'USD'].income.toLocaleString('es-AR')}
-                </p>
-              </div>
+              <p className="text-[10px] font-black uppercase text-emerald-700 tracking-widest mb-4">Ingresos Totales ({analysisCurrency})</p>
+              <h3 className="text-3xl font-black text-emerald-800">
+                {currencySymbol} {currentSummary.income.toLocaleString('es-AR')}
+              </h3>
             </CardContent>
           </Card>
 
-          <Card className="glass-card bg-rose-50/30 border-l-4 border-l-rose-500 relative overflow-hidden">
-            <div className="absolute top-2 right-2 opacity-10"><TrendingDown className="h-12 w-12 text-rose-600" /></div>
+          <Card className="glass-card bg-rose-50/30 border-l-4 border-l-rose-500">
             <CardContent className="pt-6">
-              <div className="flex justify-between items-start mb-4">
-                <p className="text-[10px] font-black uppercase text-rose-700 tracking-widest">Gastos Reales</p>
-                <Badge variant="outline" className={cn(
-                  "text-[9px] font-black",
-                  currentMoM.expense <= 0 ? "border-emerald-500 text-emerald-700 bg-emerald-50" : "border-rose-500 text-rose-700 bg-rose-50"
-                )}>
-                  {currentMoM.expense >= 0 ? '+' : ''}{currentMoM.expense.toFixed(1)}% vs mes ant.
-                </Badge>
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-3xl font-black text-rose-800">
-                  {currencySymbol} {summary[analysisCurrency as 'ARS' | 'USD'].expense.toLocaleString('es-AR')}
-                </h3>
-                <p className="text-xs font-bold text-rose-600 opacity-60">
-                  Ref. {otherSymbol} {summary[otherCurrency as 'ARS' | 'USD'].expense.toLocaleString('es-AR')}
-                </p>
-              </div>
+              <p className="text-[10px] font-black uppercase text-rose-700 tracking-widest mb-4">Gastos Operativos</p>
+              <h3 className="text-3xl font-black text-rose-800">
+                {currencySymbol} {currentSummary.expense.toLocaleString('es-AR')}
+              </h3>
+            </CardContent>
+          </Card>
+
+          <Card className="glass-card bg-blue-50/30 border-l-4 border-l-blue-500">
+            <CardContent className="pt-6">
+              <p className="text-[10px] font-black uppercase text-blue-700 tracking-widest mb-4">Honorarios Personal</p>
+              <h3 className="text-3xl font-black text-blue-800">
+                {currencySymbol} {currentSummary.honorarios.toLocaleString('es-AR')}
+              </h3>
             </CardContent>
           </Card>
 
           <Card className={cn(
             "glass-card border-l-4 relative overflow-hidden",
-            (summary[analysisCurrency as 'ARS'|'USD'].income - summary[analysisCurrency as 'ARS'|'USD'].expense) >= 0 
-              ? "bg-primary/5 border-l-primary" 
-              : "bg-rose-100/20 border-l-rose-600"
+            (currentSummary.income - currentSummary.expense - currentSummary.honorarios) >= 0 ? "bg-primary/5 border-l-primary" : "bg-rose-100/20 border-l-rose-600"
           )}>
-            <div className="absolute top-2 right-2 opacity-10"><Wallet className="h-12 w-12" /></div>
             <CardContent className="pt-6">
-              <p className="text-[10px] font-black uppercase text-slate-600 tracking-widest mb-4">Resultado Operativo</p>
-              <div className="space-y-1">
-                <h3 className={cn(
-                  "text-3xl font-black",
-                  (summary[analysisCurrency as 'ARS'|'USD'].income - summary[analysisCurrency as 'ARS'|'USD'].expense) >= 0 ? "text-primary" : "text-rose-600"
-                )}>
-                  {currencySymbol} {(summary[analysisCurrency as 'ARS' | 'USD'].income - summary[analysisCurrency as 'ARS' | 'USD'].expense).toLocaleString('es-AR')}
-                </h3>
-                <p className="text-xs font-bold opacity-60">
-                  Ref. {otherSymbol} {(summary[otherCurrency as 'ARS' | 'USD'].income - summary[otherCurrency as 'ARS' | 'USD'].expense).toLocaleString('es-AR')}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="glass-card bg-amber-50/30 border-l-4 border-l-amber-500 relative overflow-hidden">
-            <div className="absolute top-2 right-2 opacity-10"><HandCoins className="h-12 w-12 text-amber-600" /></div>
-            <CardContent className="pt-6">
-              <p className="text-[10px] font-black uppercase text-amber-700 tracking-widest mb-4">Cuentas a Cobrar (Deuda)</p>
-              <div className="space-y-1">
-                <h3 className="text-3xl font-black text-amber-800">
-                  {currencySymbol} {totalDebt[analysisCurrency as 'ARS' | 'USD'].toLocaleString('es-AR')}
-                </h3>
-                <p className="text-xs font-bold text-amber-600 opacity-60">
-                  Ref. {otherSymbol} {totalDebt[otherCurrency as 'ARS' | 'USD'].toLocaleString('es-AR')}
-                </p>
-              </div>
+              <p className="text-[10px] font-black uppercase text-slate-600 tracking-widest mb-4">Margen Neto Real</p>
+              <h3 className={cn(
+                "text-3xl font-black",
+                (currentSummary.income - currentSummary.expense - currentSummary.honorarios) >= 0 ? "text-primary" : "text-rose-600"
+              )}>
+                {currencySymbol} {(currentSummary.income - currentSummary.expense - currentSummary.honorarios).toLocaleString('es-AR')}
+              </h3>
             </CardContent>
           </Card>
         </div>
@@ -583,14 +454,11 @@ export default function AnalysisPage() {
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <Card className="glass-card col-span-1 lg:col-span-2">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div className="space-y-1">
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5 text-primary" /> Evolución Anual ({analysisCurrency})
-                </CardTitle>
-                <CardDescription>Comparativa de flujos reales de dinero en {analysisCurrency === 'ARS' ? 'Pesos' : 'Dólares'}</CardDescription>
-              </div>
-              <Badge variant="outline" className={cn("font-bold border-2", analysisCurrency === 'ARS' ? "border-primary/30 text-primary" : "border-emerald-500/30 text-emerald-700")}>{analysisCurrency}</Badge>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-primary" /> Evolución Financiera Detallada ({analysisCurrency})
+              </CardTitle>
+              <CardDescription>Análisis del flujo mensual separando honorarios de gastos operativos</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[400px] w-full">
@@ -604,68 +472,55 @@ export default function AnalysisPage() {
                       contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                     />
                     <Legend verticalAlign="top" align="right" iconType="circle" />
-                    <Bar dataKey="ingresos" name="Ingresos" fill={analysisCurrency === 'ARS' ? "#3b82f6" : "#10b981"} radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="gastos" name="Gastos" fill="#f43f5e" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="saldo" name="Saldo" fill={analysisCurrency === 'ARS' ? "#0ea5e9" : "#059669"} radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="ingresos" name="Ingresos" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="honorarios" name="Honorarios" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="gastos" name="Gastos Operativos" fill="#f43f5e" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
 
+          {/* Comparativa Facturado vs Honorarios */}
           <Card className="glass-card">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-emerald-700">
-                <PieChartIcon className="h-5 w-5" /> Ingresos Reales por Rubro ({analysisCurrency})
+              <CardTitle className="flex items-center gap-2 text-primary">
+                <Zap className="h-5 w-5" /> Margen por Producto (Honorarios)
               </CardTitle>
-              <CardDescription>Origen del dinero según imputaciones en {analysisCurrency}</CardDescription>
+              <CardDescription>Comparación entre el total facturado y el honorario pagado por la entrega</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[300px] w-full">
-                {incomePieData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={incomePieData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={5}
-                        dataKey="value"
-                      >
-                        {incomePieData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <RechartsTooltip formatter={(v: any) => `${currencySymbol} ${v.toLocaleString('es-AR')}`} />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center italic text-muted-foreground gap-2">
-                    <Info className="h-8 w-8 opacity-20" />
-                    No hay datos en {analysisCurrency} para este periodo.
-                  </div>
-                )}
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={productProfitability} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.3} />
+                    <XAxis type="number" axisLine={false} tickLine={false} fontSize={10} />
+                    <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={60} fontSize={12} fontStyle="bold" />
+                    <RechartsTooltip formatter={(v: any) => `${currencySymbol} ${v.toLocaleString()}`} />
+                    <Legend />
+                    <Bar dataKey="facturado" name="Total Facturado" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="honorarios" name="Honorarios Pagados" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
 
+          {/* Desglose de Honorarios por Concepto */}
           <Card className="glass-card">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-rose-700">
-                <PieChartIcon className="h-5 w-5" /> Gastos Reales por Categoría ({analysisCurrency})
+              <CardTitle className="flex items-center gap-2 text-blue-700">
+                <Users className="h-5 w-5" /> Distribución de Costos de Personal
               </CardTitle>
-              <CardDescription>Distribución de egresos en {analysisCurrency}</CardDescription>
+              <CardDescription>En qué conceptos se invierte el presupuesto de honorarios en {analysisCurrency}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[300px] w-full">
-                {expensePieData.length > 0 ? (
+                {honorsByConcept.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={expensePieData}
+                        data={honorsByConcept}
                         cx="50%"
                         cy="50%"
                         innerRadius={60}
@@ -673,7 +528,7 @@ export default function AnalysisPage() {
                         paddingAngle={5}
                         dataKey="value"
                       >
-                        {expensePieData.map((entry, index) => (
+                        {honorsByConcept.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
@@ -684,7 +539,7 @@ export default function AnalysisPage() {
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center italic text-muted-foreground gap-2">
                     <Info className="h-8 w-8 opacity-20" />
-                    No hay gastos en {analysisCurrency} para este periodo.
+                    No hay liquidaciones registradas en este periodo.
                   </div>
                 )}
               </div>
@@ -692,92 +547,107 @@ export default function AnalysisPage() {
           </Card>
         </div>
 
-        {/* Extra Insights Section */}
+        {/* Inteligencia de Personal Section */}
         <section className="grid grid-cols-1 md:grid-cols-3 gap-8">
-           <Card className="glass-card">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Award className="h-5 w-5 text-amber-500" /> Top Productos (Cobro Real)
-                </CardTitle>
-                <CardDescription>Los 5 productos que más dinero ingresaron en {analysisCurrency}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[250px] w-full">
-                  {productRanking.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={productRanking} layout="vertical">
-                        <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.3} />
-                        <XAxis type="number" hide />
-                        <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={100} fontSize={10} />
-                        <RechartsTooltip formatter={(v: any) => `${currencySymbol} ${v.toLocaleString('es-AR')}`} />
-                        <Bar dataKey="value" fill="#f59e0b" radius={[0, 4, 4, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <p className="text-center italic text-muted-foreground py-10">Sin datos de productos.</p>
-                  )}
-                </div>
-              </CardContent>
-           </Card>
-
-           <Card className="glass-card">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <MapPin className="h-5 w-5 text-primary" /> Top 5 Zonas Recaudación ({analysisCurrency})
-                </CardTitle>
-                <CardDescription>Recaudación real por ubicación geográfica</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {zoneRevenue.length > 0 ? zoneRevenue.map((z, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-muted/20 rounded-xl border border-white">
-                      <div className="flex items-center gap-3">
-                        <span className="font-black text-primary/40">#{idx + 1}</span>
-                        <span className="font-bold text-sm">{z.name}</span>
-                      </div>
-                      <span className="font-black text-sm">{currencySymbol} {z.value.toLocaleString('es-AR')}</span>
-                    </div>
-                  )) : (
-                    <p className="text-center italic text-muted-foreground py-10">Sin datos de zonas en {analysisCurrency}.</p>
-                  )}
-                </div>
-              </CardContent>
-           </Card>
-
            <Card className="glass-card bg-primary text-primary-foreground border-none overflow-hidden relative group">
-              <Target className="absolute -right-4 -bottom-4 h-32 w-32 opacity-10 group-hover:scale-110 transition-transform" />
+              <Target className="absolute -right-4 -bottom-4 h-32 w-32 opacity-10" />
               <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2">Inteligencia Financiera</CardTitle>
+                <CardTitle className="text-white flex items-center gap-2">Inteligencia de Personal</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-white/10 p-3 rounded-2xl">
-                    <p className="text-[10px] font-black uppercase opacity-70 tracking-widest">Ticket Promedio</p>
+                    <p className="text-[10px] font-black uppercase opacity-70 tracking-widest">Costo Entrega Avg.</p>
                     <h3 className="text-xl font-black mt-1">
-                      {currencySymbol} {filteredTxsByCurrency.length > 0 ? (summary[analysisCurrency as 'ARS'|'USD'].income / (filteredTxsByCurrency.filter(t => t.amount > 0).length || 1)).toLocaleString('es-AR') : '0'}
+                      {currencySymbol} {filteredPayouts.length > 0 ? (currentSummary.honorarios / (filteredPayouts.reduce((sum, p) => sum + p.routeItemsSnapshot?.length || 0, 0) || 1)).toFixed(0) : '0'}
                     </h3>
                   </div>
                   <div className="bg-white/10 p-3 rounded-2xl">
-                    <p className="text-[10px] font-black uppercase opacity-70 tracking-widest">Eficiencia Cobro</p>
-                    <h3 className="text-xl font-black mt-1 flex items-center gap-1">
-                      <Clock className="h-4 w-4" /> {collectionEfficiency} días
+                    <p className="text-[10px] font-black uppercase opacity-70 tracking-widest">Ratios de Comis.</p>
+                    <h3 className="text-xl font-black mt-1">
+                      {currentSummary.income > 0 ? ((currentSummary.honorarios / currentSummary.income) * 100).toFixed(1) : '0'}%
                     </h3>
                   </div>
                 </div>
                 <div className="pt-4 border-t border-white/10 space-y-3">
                    <div className="flex gap-3">
-                     <div className="bg-white/20 p-2 rounded-lg h-fit"><AlertCircle className="h-4 w-4" /></div>
+                     <div className="bg-white/20 p-2 rounded-lg h-fit"><Award className="h-4 w-4" /></div>
                      <p className="text-xs leading-relaxed">
-                       <b>Eficiencia de Cobro:</b> Representa el tiempo promedio que transcurre desde que emites una factura hasta que el dinero ingresa efectivamente a tu caja.
+                       <b>Eficiencia de Costo:</b> El costo promedio por entrega incluye honorarios base + extras (KM/Horas) divididos por los bidones entregados.
                      </p>
                    </div>
                    <div className="flex gap-3">
-                     <div className="bg-white/20 p-2 rounded-lg h-fit"><Award className="h-4 w-4" /></div>
+                     <div className="bg-white/20 p-2 rounded-lg h-fit"><AlertCircle className="h-4 w-4" /></div>
                      <p className="text-xs leading-relaxed">
-                       <b>Top Productos:</b> Este ranking ignora la facturación teórica y solo muestra productos por los cuales ya has recibido el pago.
+                       <b>Ratio de Honorarios:</b> Representa qué porcentaje de lo facturado se destina a pagar al personal. Lo ideal es mantenerlo bajo el 30%.
                      </p>
                    </div>
                 </div>
+              </CardContent>
+           </Card>
+
+           <Card className="glass-card">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5 text-emerald-600" /> Control de Márgenes
+                </CardTitle>
+                <CardDescription>Alertas de rentabilidad por producto</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {productProfitability.map((p, idx) => {
+                  const ratio = (p.honorarios / (p.facturado || 1)) * 100;
+                  const isHigh = ratio > 25;
+                  return (
+                    <div key={idx} className="p-3 bg-muted/20 rounded-xl border border-white space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-sm">{p.name}</span>
+                        <Badge variant={isHigh ? "destructive" : "secondary"} className="text-[9px]">
+                          Honorarios: {ratio.toFixed(1)}%
+                        </Badge>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-500">
+                        <span>Margen Bruto:</span>
+                        <span className={cn(isHigh ? "text-rose-600" : "text-emerald-600")}>
+                          {currencySymbol} {p.margen.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+           </Card>
+
+           <Card className="glass-card">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Droplets className="h-5 w-5 text-primary" /> Eficiencia por Colaborador
+                </CardTitle>
+                <CardDescription>Top 3 colaboradores por volumen de entrega</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {filteredPayouts.length > 0 ? (
+                  (() => {
+                    const collabData: Record<string, number> = {}
+                    filteredPayouts.forEach(p => {
+                      const units = p.routeItemsSnapshot?.reduce((sum: number, it: any) => sum + (it.cloro || 0) + (it.acido || 0), 0) || 0
+                      collabData[p.userName] = (collabData[p.userName] || 0) + units
+                    })
+                    return Object.entries(collabData)
+                      .sort((a, b) => b[1] - a[1])
+                      .slice(0, 3)
+                      .map(([name, units], idx) => (
+                        <div key={idx} className="flex items-center justify-between p-3 bg-primary/5 rounded-xl border border-primary/10">
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center font-black text-primary text-xs">#{idx+1}</div>
+                            <span className="font-bold text-sm">{name}</span>
+                          </div>
+                          <span className="font-black text-sm text-primary">{units} <span className="text-[10px] opacity-60">UNID.</span></span>
+                        </div>
+                      ))
+                  })()
+                ) : (
+                  <p className="text-center italic text-muted-foreground py-10">Sin datos de actividad.</p>
+                )}
               </CardContent>
            </Card>
         </section>
