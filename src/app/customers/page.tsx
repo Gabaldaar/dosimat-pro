@@ -93,7 +93,7 @@ function CustomersContent() {
   const wsTemplatesQuery = useMemoFirebase(() => collection(db, 'whatsapp_templates'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   
-  const { data: customers, isLoading: loadingCustomers } = useCollection(clientsQuery)
+  const { data: customers } = useCollection(clientsQuery)
   const { data: zones } = useCollection(zonesQuery)
   const { data: transactions } = useCollection(txQuery)
   const { data: emailTemplates } = useCollection(emailTemplatesQuery)
@@ -469,7 +469,6 @@ function CustomersContent() {
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={handleBulkEmail} className="h-9 gap-2 font-bold"><Mail className="h-4 w-4" /> Mail Masivo</Button>
                 <Button variant="outline" size="sm" onClick={() => { setBulkStep(0); setDynamicValues({}); setSelectedTemplateId(""); setIsBulkWsOpen(true); }} className="h-9 gap-2 font-bold border-emerald-200 text-emerald-700 bg-emerald-50"><MessageCircle className="h-4 w-4" /> WhatsApp Masivo</Button>
-                {/* Admin, Socio, Comunicador y Colaborador pueden crear clientes */}
                 <Button onClick={() => handleOpenDialog()} className="shadow-lg font-bold bg-primary h-9"><Plus className="mr-2 h-5 w-5" /> Nuevo Cliente</Button>
               </div>
             </div>
@@ -595,7 +594,6 @@ function CustomersContent() {
                         <span className="truncate">{customer.direccion}, {customer.localidad}</span>
                       </div>
                       <div className="flex flex-wrap gap-1.5">
-                        {/* El Colaborador NO puede OPERAR */}
                         {!isCommunicator && !isCollaborator && (
                           <Button variant="default" size="sm" className="h-8 gap-1.5 font-bold px-4" asChild>
                             <Link href={`/transactions?clientId=${customer.id}&mode=new`}><PlusCircle className="h-3.5 w-3.5" /> OPERAR</Link>
@@ -606,7 +604,6 @@ function CustomersContent() {
                         <Button variant="outline" size="icon" className="h-8 w-8 text-blue-700 border-blue-200 bg-blue-50" asChild title="Llamar"><a href={`tel:${customer.telefono}`}><Phone className="h-3.5 w-3.5" /></a></Button>
                         <Button variant="outline" size="icon" className="h-8 w-8 text-emerald-700 border-emerald-200 bg-emerald-50" onClick={() => handleWhatsApp(customer.telefono)} title="WhatsApp"><MessageCircle className="h-3.5 w-3.5" /></Button>
                         
-                        {/* El Comunicador y Repositor no ven historial financiero, pero Colaborador SÍ (solo lectura) */}
                         {!isCommunicator && (
                           <Button variant="outline" size="icon" className="h-8 w-8 text-blue-700 border-blue-200 bg-blue-50" asChild title="Historial">
                             <Link href={`/transactions?clientId=${customer.id}`}><History className="h-3.5 w-3.5" /></Link>
@@ -675,7 +672,6 @@ function CustomersContent() {
             </DialogContent>
           </Dialog>
 
-          {/* Resto de los diálogos permanecen igual */}
           <Dialog open={isStatementOpen} onOpenChange={setIsStatementOpen}>
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
@@ -768,7 +764,6 @@ function CustomersContent() {
       </div>
 
       <div className="print-only w-full p-8 bg-white text-slate-900 font-sans">
-        {/* Vista de impresión permanece igual */}
         <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
           <div>
             <h1 className="text-2xl font-black uppercase tracking-tight">Reporte de Clientes</h1>
