@@ -251,36 +251,45 @@ function MemberCard({ member, isAdmin, currentUid, onUpdateRole, onDelete, onEdi
   const isMe = member.id === currentUid;
 
   const hasFees = member.feesConfig && (
-    member.feesConfig.valorCloro > 0 || 
-    member.feesConfig.valorAcido > 0 || 
-    member.feesConfig.baseFija > 0
+    (member.feesConfig.valorCloro || 0) > 0 || 
+    (member.feesConfig.valorAcido || 0) > 0 || 
+    (member.feesConfig.baseFija || 0) > 0 ||
+    (member.feesConfig.valorHora || 0) > 0 ||
+    (member.feesConfig.valorKm || 0) > 0
   );
 
   return (
     <Card className={cn("glass-card border-l-4 transition-all hover:shadow-md", isMe ? "border-l-primary" : "border-l-muted")}>
-      <CardContent className="p-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Avatar className="h-12 w-12 border border-muted shadow-sm">
+      <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-start gap-4 flex-1">
+          <Avatar className="h-12 w-12 border border-muted shadow-sm shrink-0">
             <AvatarImage src={`https://picsum.photos/seed/${member.id}/100/100`} />
             <AvatarFallback className="bg-primary/5 text-primary font-bold text-lg">{member.name?.[0] || 'U'}</AvatarFallback>
           </Avatar>
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-base leading-none">{member.name || member.email} {isMe && "(Tú)"}</h3>
-              <Badge variant={roleInfo.color as any} className="text-[9px] uppercase font-black tracking-widest h-5 px-2">
+          <div className="space-y-1.5 min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-bold text-base leading-none truncate">{member.name || member.email} {isMe && "(Tú)"}</h3>
+              <Badge variant={roleInfo.color as any} className="text-[9px] uppercase font-black tracking-widest h-5 px-2 shrink-0">
                 <Icon className="h-2.5 w-2.5 mr-1" />{roleInfo.label}
               </Badge>
             </div>
-            <p className="text-[11px] text-muted-foreground font-medium">{member.email}</p>
+            <p className="text-[11px] text-muted-foreground font-medium truncate">{member.email}</p>
             
             {hasFees && (
-              <div className="flex gap-2 mt-1">
-                <Badge variant="outline" className="text-[8px] font-black bg-blue-50/50 text-blue-700 border-blue-100">
-                  CL: ${member.feesConfig.valorCloro} | AC: ${member.feesConfig.valorAcido}
-                </Badge>
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {(member.feesConfig.valorCloro > 0 || member.feesConfig.valorAcido > 0) && (
+                  <Badge variant="outline" className="text-[8px] font-black bg-blue-50/50 text-blue-700 border-blue-100 px-1.5 h-4">
+                    CL: ${member.feesConfig.valorCloro} | AC: ${member.feesConfig.valorAcido}
+                  </Badge>
+                )}
                 {member.feesConfig.baseFija > 0 && (
-                  <Badge variant="outline" className="text-[8px] font-black bg-emerald-50/50 text-emerald-700 border-emerald-100">
+                  <Badge variant="outline" className="text-[8px] font-black bg-emerald-50/50 text-emerald-700 border-emerald-100 px-1.5 h-4">
                     FIJO: ${member.feesConfig.baseFija.toLocaleString()}
+                  </Badge>
+                )}
+                {(member.feesConfig.valorHora > 0 || member.feesConfig.valorKm > 0) && (
+                  <Badge variant="outline" className="text-[8px] font-black bg-slate-50 text-slate-600 border-slate-200 px-1.5 h-4">
+                    H: ${member.feesConfig.valorHora} | KM: ${member.feesConfig.valorKm}
                   </Badge>
                 )}
               </div>
@@ -288,23 +297,27 @@ function MemberCard({ member, isAdmin, currentUid, onUpdateRole, onDelete, onEdi
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-none">
           {isAdmin && (
             <Button 
               variant="outline" 
               size="sm" 
               className={cn(
-                "h-9 gap-2 font-bold text-[10px] uppercase transition-all",
+                "h-9 sm:h-8 gap-2 font-bold text-[10px] uppercase transition-all flex-1 sm:flex-none",
                 hasFees ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50" : "border-primary/30 text-primary hover:bg-primary/5"
               )} 
               onClick={() => onEditFees(member)}
             >
-              <Settings2 className="h-3.5 w-3.5" /> {hasFees ? 'Honorarios' : 'Config. Honorarios'}
+              <Settings2 className="h-3.5 w-3.5" /> {hasFees ? 'Honorarios' : 'Honorarios'}
             </Button>
           )}
           {isAdmin && !isMe && (
             <DropdownMenu>
-              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-9 w-9"><MoreVertical className="h-4 w-4 text-muted-foreground" /></Button></DropdownMenuTrigger>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8 shrink-0">
+                  <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56 font-bold">
                 <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Replenisher')}><Truck className="mr-2 h-4 w-4" /> Hacer Repositor</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Communicator')}><MessageSquare className="mr-2 h-4 w-4" /> Hacer Comunicador</DropdownMenuItem>
