@@ -132,20 +132,12 @@ export default function PayoutsPage() {
   // Obtener tipo de cambio si hay multimoneda
   useEffect(() => {
     if (activeTab === 'new') {
-      fetch('https://dolares.oficial.blue/v1/dolares/oficial')
+      fetch('https://dolarapi.com/v1/dolares/oficial')
         .then(res => res.json())
         .then(data => {
           if (data && data.venta) setExchangeRate(data.venta);
         })
-        .catch(err => {
-          // Fallback if the specific API fails, using official dolar API
-          fetch('https://dolarapi.com/v1/dolares/oficial')
-            .then(res => res.json())
-            .then(data => {
-              if (data && data.venta) setExchangeRate(data.venta);
-            })
-            .catch(e => console.error("Error fetching rate:", e));
-        });
+        .catch(err => console.error("Error fetching rate:", err));
     }
   }, [activeTab]);
 
@@ -291,6 +283,7 @@ export default function PayoutsPage() {
       return;
     }
 
+    const config = selectedCollab.feesConfig || { valorCloro: 0, valorAcido: 0, valorHora: 0, valorKm: 0, baseFija: 0 };
     const payoutId = Math.random().toString(36).substring(2, 11)
     const txId = Math.random().toString(36).substring(2, 11)
     const now = new Date().toISOString()
@@ -306,7 +299,8 @@ export default function PayoutsPage() {
       };
     });
 
-    // Crear el objeto de Liquidación con descripciones limpias (sin valor unitario)
+    // Crear el objeto de Liquidación con descripciones que incluyan unitarios para la UI
+    // Pero guardamos un campo adicional 'shortDescription' para el PDF
     const payoutData = {
       id: payoutId,
       userId: selectedCollab.id,
@@ -324,7 +318,8 @@ export default function PayoutsPage() {
       items: [
         { 
           type: 'items', 
-          description: `Entrega de Bidones (${totals.cloro} CL, ${totals.acido} AC)`, 
+          description: `Entrega de Bidones (${totals.cloro} CL @ $${config.valorCloro}, ${totals.acido} AC @ $${config.valorAcido})`, 
+          shortDescription: `Entrega de Bidones (${totals.cloro} CL, ${totals.acido} AC)`,
           amount: totals.subtotalItemsARS, 
           currency: "ARS", 
           qty: 1, 
@@ -332,23 +327,30 @@ export default function PayoutsPage() {
         },
         { 
           type: 'base', 
-          description: 'Sueldo Base / Fijo', 
+          description: `Sueldo Base / Fijo ($${config.baseFija})`, 
+          shortDescription: 'Sueldo Base / Fijo',
           amount: totals.baseFijaARS, 
           currency: "ARS", 
           qty: 1, 
           notes: "" 
         },
-        ...extras.map(e => ({ 
-          type: e.type, 
-          conceptId: e.conceptId, 
-          description: (e.type === 'hourly' || e.type === 'km') 
-            ? `${e.description} (${e.qty} ${e.type === 'hourly' ? 'hs' : 'km'})` 
-            : e.description, 
-          amount: e.amount, 
-          currency: e.currency, 
-          qty: e.qty, 
-          notes: e.notes 
-        }))
+        ...extras.map(e => {
+          const unitValue = (e.type === 'hourly' ? config.valorHora : e.type === 'km' ? config.valorKm : 0);
+          return { 
+            type: e.type, 
+            conceptId: e.conceptId, 
+            description: (e.type === 'hourly' || e.type === 'km') 
+              ? `${e.description} (${e.qty} ${e.type === 'hourly' ? 'hs' : 'km'} @ $${unitValue})` 
+              : e.description, 
+            shortDescription: (e.type === 'hourly' || e.type === 'km') 
+              ? `${e.description} (${e.qty} ${e.type === 'hourly' ? 'hs' : 'km'})` 
+              : e.description,
+            amount: e.amount, 
+            currency: e.currency, 
+            qty: e.qty, 
+            notes: e.notes 
+          };
+        })
       ]
     }
     setDocumentNonBlocking(doc(db, 'payouts', payoutId), payoutData, { merge: true })
@@ -745,7 +747,7 @@ export default function PayoutsPage() {
                             <div className="flex flex-wrap gap-1.5">
                               {p.items?.map((it: any, idx: number) => it.amount !== 0 && (
                                 <Badge key={idx} variant="outline" className={cn("text-[8px] font-bold uppercase", it.currency === 'USD' ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-blue-50 text-blue-700 border-blue-200")}>
-                                  {it.description}: {it.currency === 'USD' ? 'u$s' : '$'}{Number(it.amount).toLocaleString()}
+                                  {it.shortDescription || it.description}: {it.currency === 'USD' ? 'u$s' : '$'}{Number(it.amount).toLocaleString()}
                                 </Badge>
                               ))}
                             </div>
@@ -1018,7 +1020,7 @@ export default function PayoutsPage() {
                 <tbody>
                   {payoutToPrint.items?.filter((it: any) => it.amount !== 0).map((it: any, i: number) => (
                     <tr key={i} className="border-b border-slate-200">
-                      <td className="p-2 font-black uppercase">{it.description}</td>
+                      <td className="p-2 font-black uppercase">{it.shortDescription || it.description}</td>
                       <td className="p-2 italic text-slate-500">{it.notes || '---'}</td>
                       <td className="p-2 text-right font-black">
                         {it.currency === 'USD' ? 'u$s' : '$'} {Number(it.amount).toLocaleString()}
