@@ -299,8 +299,7 @@ export default function PayoutsPage() {
       };
     });
 
-    // Crear el objeto de Liquidación con descripciones que incluyan unitarios para la UI
-    // Pero guardamos un campo adicional 'shortDescription' para el PDF
+    // Crear el objeto de Liquidación
     const payoutData = {
       id: payoutId,
       userId: selectedCollab.id,
@@ -370,11 +369,12 @@ export default function PayoutsPage() {
       }
     })
 
-    // Crear la Transacción financiera en la moneda de la CAJA
+    // Crear la Transacción financiera con flag isPayout
     const txData = {
       id: txId,
       date: now,
       type: 'Expense',
+      isPayout: true, // NUEVO: Identificador exacto para el Análisis
       amount: -finalTotalInAccountCurrency,
       currency: selectedAccount?.currency || 'ARS',
       description: `Liquidación de haberes: ${selectedCollab.name} (#${payoutId.toUpperCase().slice(0,6)})`,

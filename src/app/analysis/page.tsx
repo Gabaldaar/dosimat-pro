@@ -48,12 +48,16 @@ import {
   Award,
   Users,
   ShieldCheck,
-  Zap
+  Zap,
+  Search,
+  ChevronRight,
+  Table as TableIcon
 } from "lucide-react"
 import { useFirestore, useCollection, useMemoFirebase, useUser } from "../../firebase"
 import { collection, query, orderBy } from "firebase/firestore"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
@@ -88,14 +92,12 @@ export default function AnalysisPage() {
   const txQuery = useMemoFirebase(() => query(collection(db, 'transactions'), orderBy('date', 'desc')), [db])
   const clientsQuery = useMemoFirebase(() => collection(db, 'clients'), [db])
   const expenseCatsQuery = useMemoFirebase(() => collection(db, 'expense_categories'), [db])
-  const zonesQuery = useMemoFirebase(() => collection(db, 'zones'), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   const payoutsQuery = useMemoFirebase(() => query(collection(db, 'payouts'), orderBy('date', 'desc')), [db])
 
   const { data: transactions, isLoading: loadingTx } = useCollection(txQuery)
   const { data: clients } = useCollection(clientsQuery)
   const { data: expenseCategories } = useCollection(expenseCatsQuery)
-  const { data: zones } = useCollection(zonesQuery)
   const { data: catalog } = useCollection(catalogQuery)
   const { data: payouts } = useCollection(payoutsQuery)
 
@@ -152,8 +154,8 @@ export default function AnalysisPage() {
     filteredTxsForSummary.forEach(tx => {
       const curr = tx.currency === 'USD' ? 'USD' : 'ARS'
       
-      // Identificar si es un pago de honorarios (viene del módulo payouts)
-      const isPayoutTx = tx.description?.toLowerCase().includes('liquidación')
+      // Identificación robusta de honorarios
+      const isPayoutTx = tx.isPayout === true || tx.description?.toLowerCase().includes('liquidación')
       
       if (tx.type === 'cobro') {
         result[curr].income += Math.abs(tx.amount)
@@ -176,8 +178,10 @@ export default function AnalysisPage() {
   const annualData = useMemo(() => {
     if (!transactions) return []
     const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+    
     const last12 = Array.from({ length: 12 }, (_, i) => {
       const d = new Date()
+      d.setDate(1) // Fix para evitar saltos de mes en días 31
       d.setMonth(d.getMonth() - (11 - i))
       return { 
         name: months[d.getMonth()], 
@@ -194,7 +198,7 @@ export default function AnalysisPage() {
       const txDate = new Date(tx.date)
       const point = last12.find(p => p.month === txDate.getMonth() && p.year === txDate.getFullYear())
       if (point && tx.currency === analysisCurrency) {
-        const isPayoutTx = tx.description?.toLowerCase().includes('liquidación')
+        const isPayoutTx = tx.isPayout === true || tx.description?.toLowerCase().includes('liquidación')
 
         if (tx.type === 'cobro') point.ingresos += Math.abs(tx.amount)
         else if (['sale', 'refill', 'service', 'Reposición'].includes(tx.type)) point.ingresos += Number(tx.paidAmount || 0)
@@ -211,14 +215,19 @@ export default function AnalysisPage() {
     return last12.map(p => ({ ...p, saldo: p.ingresos - (p.gastos + p.honorarios) }))
   }, [transactions, analysisCurrency])
 
-  // Rentabilidad por Producto (Facturado vs Honorarios)
+  // Desglose de transacciones de honorarios para auditoría del usuario
+  const honorariosTransactions = useMemo(() => {
+    return filteredTxsForSummary
+      .filter(tx => (tx.isPayout === true || tx.description?.toLowerCase().includes('liquidación')) && tx.currency === analysisCurrency)
+      .sort((a, b) => b.date.localeCompare(a.date))
+  }, [filteredTxsForSummary, analysisCurrency])
+
   const productProfitability = useMemo(() => {
     const data: Record<string, { facturado: number, honorarios: number, unidades: number }> = {
       'Cloro': { facturado: 0, honorarios: 0, unidades: 0 },
       'Ácido': { facturado: 0, honorarios: 0, unidades: 0 }
     }
 
-    // Facturación (de Transacciones)
     filteredTxsForSummary.forEach(tx => {
       if (tx.currency !== analysisCurrency) return
       if (['sale', 'refill', 'Reposición'].includes(tx.type) && tx.items) {
@@ -237,15 +246,10 @@ export default function AnalysisPage() {
       }
     })
 
-    // Honorarios (de Payouts)
     filteredPayouts.forEach(p => {
-      // Payouts usualmente son en ARS para honorarios base
       if (analysisCurrency !== 'ARS') return 
       
       p.routeItemsSnapshot?.forEach((item: any) => {
-        // Aquí necesitamos saber cuánto se pagó por cada bidón en ese momento.
-        // Como no tenemos el valor histórico exacto por item en el snapshot, estimamos 
-        // usando la proporción del total de honorarios de items vs total de bidones en ese payout.
         const itemPayment = p.items?.find((i: any) => i.type === 'items')
         if (itemPayment) {
           const totalBidones = p.routeItemsSnapshot.reduce((sum: number, it: any) => sum + (it.cloro || 0) + (it.acido || 0), 0)
@@ -264,7 +268,6 @@ export default function AnalysisPage() {
     }))
   }, [filteredTxsForSummary, filteredPayouts, analysisCurrency])
 
-  // Desglose de Honorarios por Concepto
   const honorsByConcept = useMemo(() => {
     const counts: Record<string, number> = {}
     filteredPayouts.forEach(p => {
@@ -280,60 +283,11 @@ export default function AnalysisPage() {
       .sort((a, b) => b.value - a.value)
   }, [filteredPayouts, analysisCurrency])
 
-  const incomePieData = useMemo(() => {
-    const counts: Record<string, number> = {}
-    filteredTxsForSummary.filter(tx => tx.currency === analysisCurrency).forEach(tx => {
-      if (tx.type === 'cobro') {
-        const totalCobro = Math.abs(tx.amount);
-        let distributedAmount = 0;
-        if (tx.imputations) {
-          Object.entries(tx.imputations).forEach(([targetId, amount]) => {
-            const targetTx = transactions?.find(t => t.id === targetId);
-            const sourceKey = targetTx?.type || 'adjustment';
-            const label = LABEL_MAP[sourceKey] || sourceKey;
-            counts[label] = (counts[label] || 0) + Number(amount);
-            distributedAmount += Number(amount);
-          });
-        }
-        const remaining = totalCobro - distributedAmount;
-        if (remaining > 0.01) {
-          const label = LABEL_MAP['cobro_saldo'];
-          counts[label] = (counts[label] || 0) + remaining;
-        }
-      } else if (['sale', 'refill', 'service', 'Reposición'].includes(tx.type)) {
-        const amount = Number(tx.paidAmount || 0);
-        if (amount > 0) {
-          const label = LABEL_MAP[tx.type] || tx.type;
-          counts[label] = (counts[label] || 0) + amount;
-        }
-      } else if ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount > 0) {
-        const label = LABEL_MAP['adjustment'];
-        counts[label] = (counts[label] || 0) + tx.amount;
-      }
-    })
-    return Object.entries(counts).map(([name, value]) => ({ name, value }))
-  }, [filteredTxsForSummary, transactions, analysisCurrency])
-
-  const expensePieData = useMemo(() => {
-    const counts: Record<string, number> = {}
-    filteredTxsForSummary.filter(tx => tx.currency === analysisCurrency).forEach(tx => {
-      const isPayoutTx = tx.description?.toLowerCase().includes('liquidación')
-      if (isPayoutTx) return // Excluir honorarios de este gráfico para mayor claridad operativa
-
-      if (tx.type === 'Expense' || ((tx.type === 'adjustment' || tx.type === 'Adjustment') && tx.amount < 0)) {
-        const cat = expenseCategories?.find(c => c.id === tx.expenseCategoryId)
-        const label = cat ? cat.name : 'Operativos / Varios'
-        counts[label] = (counts[label] || 0) + Math.abs(tx.amount)
-      }
-    })
-    return Object.entries(counts).map(([name, value]) => ({ name, value }))
-  }, [filteredTxsForSummary, expenseCategories, analysisCurrency])
-
   if (isUserLoading || userData?.role === 'Communicator' || userData?.role === 'Replenisher') {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="mt-4 text-sm text-muted-foreground">Accediendo...</p>
+        <p className="mt-4 text-sm text-muted-foreground font-medium">Accediendo...</p>
       </div>
     )
   }
@@ -372,11 +326,11 @@ export default function AnalysisPage() {
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
             <div className="space-y-1">
               <Label className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> Desde</Label>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10 bg-white" />
+              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm" />
             </div>
             <div className="space-y-1">
               <Label className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> Hasta</Label>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-10 bg-white" />
+              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm" />
             </div>
             <div className="space-y-1">
               <Label className="text-[10px] font-bold uppercase text-muted-foreground">Rubro Ingresos</Label>
@@ -546,6 +500,52 @@ export default function AnalysisPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Sección de Auditoría Detallada (NUEVO para resolver dudas de montos) */}
+        <Card className="glass-card">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <CardTitle className="text-lg flex items-center gap-2"><TableIcon className="h-5 w-5 text-blue-600" /> Auditoría de Honorarios</CardTitle>
+                <CardDescription>Listado exacto de transacciones clasificadas como Honorarios para el periodo seleccionado</CardDescription>
+              </div>
+              <Badge variant="outline" className="bg-blue-50 text-blue-700">{honorariosTransactions.length} Movimientos</Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="border rounded-xl overflow-hidden bg-white">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="text-[10px] font-black uppercase">Fecha</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase">Descripción / Nota</TableHead>
+                    <TableHead className="text-right text-[10px] font-black uppercase">Monto ({analysisCurrency})</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {honorariosTransactions.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center py-12 italic text-muted-foreground">
+                        No se encontraron transacciones de honorarios en este rango de fechas.
+                      </TableCell>
+                    </TableRow>
+                  ) : honorariosTransactions.map(tx => (
+                    <TableRow key={tx.id} className="hover:bg-muted/5 transition-colors">
+                      <TableCell className="text-xs font-bold text-slate-600">{new Date(tx.date).toLocaleDateString('es-AR')}</TableCell>
+                      <TableCell>
+                        <p className="text-xs font-bold">{tx.description}</p>
+                        <p className="text-[9px] text-muted-foreground uppercase">{tx.isPayout ? 'LIQUIDACIÓN SISTEMA' : 'AJUSTE MANUAL'}</p>
+                      </TableCell>
+                      <TableCell className="text-right font-black text-blue-700">
+                        {currencySymbol} {Math.abs(tx.amount).toLocaleString('es-AR')}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Inteligencia de Personal Section */}
         <section className="grid grid-cols-1 md:grid-cols-3 gap-8">
