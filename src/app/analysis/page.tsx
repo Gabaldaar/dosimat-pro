@@ -51,7 +51,8 @@ import {
   Zap,
   Search,
   ChevronRight,
-  Table as TableIcon
+  Table as TableIcon,
+  Receipt
 } from "lucide-react"
 import { useFirestore, useCollection, useMemoFirebase, useUser } from "../../firebase"
 import { collection, query, orderBy } from "firebase/firestore"
@@ -145,6 +146,19 @@ export default function AnalysisPage() {
     })
   }, [payouts, startDate, endDate])
 
+  // Cálculo de Deudas a Cobrar (Créditos de Clientes)
+  const accountsReceivable = useMemo(() => {
+    if (!clients) return { ARS: 0, USD: 0 }
+    return clients.reduce((acc, curr) => {
+      const ars = Number(curr.saldoActual || 0)
+      const usd = Number(curr.saldoUSD || 0)
+      // Si el saldo es negativo, el cliente debe dinero (es deuda a cobrar)
+      if (ars < 0) acc.ARS += Math.abs(ars)
+      if (usd < 0) acc.USD += Math.abs(usd)
+      return acc
+    }, { ARS: 0, USD: 0 })
+  }, [clients])
+
   const summary = useMemo(() => {
     const result = { 
       ARS: { income: 0, expense: 0, honorarios: 0 }, 
@@ -154,9 +168,6 @@ export default function AnalysisPage() {
     filteredTxsForSummary.forEach(tx => {
       const curr = tx.currency === 'USD' ? 'USD' : 'ARS'
       
-      // Identificación ROBUSTA de honorarios:
-      // 1. Debe tener la marca isPayout (Generada por el módulo de liquidaciones)
-      // 2. O ser un gasto sin cliente asociado y con palabra clave (Para datos antiguos)
       const isPayoutTx = tx.isPayout === true || (tx.type === 'Expense' && !tx.clientId && tx.description?.toLowerCase().includes('liquidación'))
       
       if (tx.type === 'cobro') {
@@ -183,7 +194,7 @@ export default function AnalysisPage() {
     
     const last12 = Array.from({ length: 12 }, (_, i) => {
       const d = new Date()
-      d.setDate(1) // Fix para evitar saltos de mes en días 31
+      d.setDate(1)
       d.setMonth(d.getMonth() - (11 - i))
       return { 
         name: months[d.getMonth()], 
@@ -200,7 +211,6 @@ export default function AnalysisPage() {
       const txDate = new Date(tx.date)
       const point = last12.find(p => p.month === txDate.getMonth() && p.year === txDate.getFullYear())
       if (point && tx.currency === analysisCurrency) {
-        // Misma lógica robusta para el gráfico anual
         const isPayoutTx = tx.isPayout === true || (tx.type === 'Expense' && !tx.clientId && tx.description?.toLowerCase().includes('liquidación'))
 
         if (tx.type === 'cobro') point.ingresos += Math.abs(tx.amount)
@@ -218,7 +228,6 @@ export default function AnalysisPage() {
     return last12.map(p => ({ ...p, saldo: p.ingresos - (p.gastos + p.honorarios) }))
   }, [transactions, analysisCurrency])
 
-  // Desglose de transacciones de honorarios para auditoría del usuario
   const honorariosTransactions = useMemo(() => {
     return filteredTxsForSummary
       .filter(tx => {
@@ -411,6 +420,51 @@ export default function AnalysisPage() {
           </Card>
         </div>
 
+        {/* Sección de Deudas a Cobrar (NUEVO) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Card className="glass-card bg-rose-50 border-l-4 border-l-rose-600 overflow-hidden relative">
+            <Receipt className="absolute right-4 top-1/2 -translate-y-1/2 h-16 w-16 text-rose-600/10 -rotate-12" />
+            <CardContent className="pt-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-[10px] font-black uppercase text-rose-700 tracking-widest mb-2">Deuda Total Clientes (ARS)</p>
+                  <h3 className="text-4xl font-black text-rose-800">
+                    $ {accountsReceivable.ARS.toLocaleString('es-AR')}
+                  </h3>
+                  <Button 
+                    variant="link" 
+                    className="p-0 h-auto text-[10px] font-black text-rose-600 uppercase mt-2 gap-1"
+                    onClick={() => router.push('/customers?filterBalance=debt')}
+                  >
+                    GESTIONAR COBROS <ChevronRight className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="glass-card bg-rose-50 border-l-4 border-l-rose-600 overflow-hidden relative">
+            <Coins className="absolute right-4 top-1/2 -translate-y-1/2 h-16 w-16 text-rose-600/10 -rotate-12" />
+            <CardContent className="pt-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-[10px] font-black uppercase text-rose-700 tracking-widest mb-2">Deuda Total Clientes (USD)</p>
+                  <h3 className="text-4xl font-black text-rose-800">
+                    u$s {accountsReceivable.USD.toLocaleString('es-AR')}
+                  </h3>
+                  <Button 
+                    variant="link" 
+                    className="p-0 h-auto text-[10px] font-black text-rose-600 uppercase mt-2 gap-1"
+                    onClick={() => router.push('/customers?filterBalance=debt')}
+                  >
+                    GESTIONAR COBROS <ChevronRight className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <Card className="glass-card col-span-1 lg:col-span-2">
@@ -441,7 +495,6 @@ export default function AnalysisPage() {
             </CardContent>
           </Card>
 
-          {/* Comparativa Facturado vs Honorarios */}
           <Card className="glass-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-primary">
@@ -466,7 +519,6 @@ export default function AnalysisPage() {
             </CardContent>
           </Card>
 
-          {/* Desglose de Honorarios por Concepto */}
           <Card className="glass-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-blue-700">
@@ -507,7 +559,7 @@ export default function AnalysisPage() {
           </Card>
         </div>
 
-        {/* Sección de Auditoría Detallada (ROBUSTA) */}
+        {/* Sección de Auditoría Detallada */}
         <Card className="glass-card">
           <CardHeader>
             <div className="flex items-center justify-between">
