@@ -26,7 +26,8 @@ import {
   Save,
   ChevronRight,
   Settings2,
-  Calculator
+  Calculator,
+  Eye
 } from "lucide-react"
 import { 
   DropdownMenu, 
@@ -65,7 +66,8 @@ import { cn } from "@/lib/utils"
 
 const roleDisplay: Record<string, { label: string, icon: any, color: string }> = {
   'Admin': { label: 'Administrador', icon: ShieldCheck, color: 'default' },
-  'Employee': { label: 'Empleado', icon: UserCircle, color: 'secondary' },
+  'Employee': { label: 'Socio', icon: UserCircle, color: 'secondary' },
+  'Collaborator': { label: 'Colaborador', icon: Eye, color: 'outline' },
   'Communicator': { label: 'Comunicador', icon: MessageSquare, color: 'outline' },
   'Replenisher': { label: 'Repositor', icon: Truck, color: 'secondary' },
   'Pending': { label: 'Pendiente', icon: Clock, color: 'outline' },
@@ -167,7 +169,7 @@ export default function TeamPage() {
           </TabsList>
 
           <TabsContent value="active" className="space-y-4">
-            {sortedTeam.filter(m => ['Admin', 'Employee', 'Communicator', 'Replenisher'].includes(m.role)).map((member: any) => (
+            {sortedTeam.filter(m => ['Admin', 'Employee', 'Collaborator', 'Communicator', 'Replenisher'].includes(m.role)).map((member: any) => (
               <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onDelete={setMemberToDelete} onEditFees={handleOpenFees} />
             ))}
           </TabsContent>
@@ -306,7 +308,8 @@ function MemberCard({ member, isAdmin, currentUid, onUpdateRole, onDelete, onEdi
               <DropdownMenuContent align="end" className="w-56 font-bold">
                 <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Replenisher')}><Truck className="mr-2 h-4 w-4" /> Hacer Repositor</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Communicator')}><MessageSquare className="mr-2 h-4 w-4" /> Hacer Comunicador</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Employee')}><UserCircle className="mr-2 h-4 w-4" /> Hacer Empleado</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Collaborator')}><Eye className="mr-2 h-4 w-4" /> Hacer Colaborador</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Employee')}><UserCircle className="mr-2 h-4 w-4" /> Hacer Socio</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Admin')}><ShieldCheck className="mr-2 h-4 w-4" /> Hacer Admin</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem className="text-destructive font-black" onClick={() => onDelete(member)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem>

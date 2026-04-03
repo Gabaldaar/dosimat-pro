@@ -173,7 +173,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (role === 'Admin' || role === 'Employee' || role === 'Communicator' || role === 'Replenisher') {
+  const AUTHORIZED_ROLES = ['Admin', 'Employee', 'Collaborator', 'Communicator', 'Replenisher'];
+  if (AUTHORIZED_ROLES.includes(role)) {
     return <>{children}</>;
   }
 

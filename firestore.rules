@@ -14,9 +14,14 @@ service cloud.firestore {
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
     }
 
-    // Define si el usuario es personal interno (Admin o Empleado)
-    function isStaff() {
+    // Define si el usuario es personal con permisos de gestión total (Admin o Socio/Employee)
+    function isManagement() {
       return hasRole('Admin') || hasRole('Employee');
+    }
+
+    // Define si el usuario es personal autorizado para ver información (Staff extendido)
+    function isStaff() {
+      return isManagement() || hasRole('Collaborator') || hasRole('Communicator') || hasRole('Replenisher');
     }
 
     // Reglas para perfiles de usuario
@@ -25,29 +30,40 @@ service cloud.firestore {
       allow write: if isSignedIn() && (request.auth.uid == userId || hasRole('Admin'));
     }
 
-    // Reglas universales de lectura para usuarios autenticados
-    // Esto previene errores de "Insufficient Permissions" durante la carga inicial del perfil
+    // Reglas universales de lectura para personal autorizado
     match /{collection}/{docId} {
-      allow read: if isSignedIn();
+      allow read: if isStaff();
     }
 
-    // Reglas de escritura restringidas por Rol
-    match /clients/{docId} { allow write: if isStaff() || hasRole('Communicator'); }
-    match /route_sheets/{docId} { allow write: if isStaff() || hasRole('Communicator') || hasRole('Replenisher'); }
-    match /financial_accounts/{docId} { allow write: if isStaff(); }
-    match /transactions/{docId} { allow write: if isStaff(); }
-    match /products_services/{docId} { allow write: if isStaff(); }
-    match /production_orders/{docId} { allow write: if isStaff(); }
-    match /purchase_orders/{docId} { allow write: if isStaff(); }
-    match /suppliers/{docId} { allow write: if isStaff(); }
-    match /payouts/{docId} { allow write: if isStaff(); }
-    match /payout_concepts/{docId} { allow write: if isStaff(); }
-    match /zones/{docId} { allow write: if isStaff() || hasRole('Communicator'); }
-    match /product_categories/{docId} { allow write: if isStaff(); }
-    match /expense_categories/{docId} { allow write: if isStaff(); }
-    match /email_templates/{docId} { allow write: if isStaff() || hasRole('Communicator'); }
-    match /whatsapp_templates/{docId} { allow write: if isStaff() || hasRole('Communicator'); }
-    match /purchases/{docId} { allow write: if isStaff(); }
+    // Reglas de escritura específicas
+    // Clientes: Admin, Socio, Comunicador y el nuevo Colaborador pueden editar
+    match /clients/{docId} { 
+      allow write: if isManagement() || hasRole('Collaborator') || hasRole('Communicator'); 
+    }
+    
+    // Hojas de Ruta: Admin, Socio, Comunicador y Repositor
+    match /route_sheets/{docId} { 
+      allow write: if isManagement() || hasRole('Communicator') || hasRole('Replenisher'); 
+    }
+
+    // Finanzas y Operaciones: Solo Admin y Socio (Management)
+    match /financial_accounts/{docId} { allow write: if isManagement(); }
+    match /transactions/{docId} { allow write: if isManagement(); }
+    match /payouts/{docId} { allow write: if isManagement(); }
+    match /payout_concepts/{docId} { allow write: if isManagement(); }
+    
+    // Configuración y Catálogo: Solo Admin y Socio
+    match /products_services/{docId} { allow write: if isManagement(); }
+    match /production_orders/{docId} { allow write: if isManagement(); }
+    match /purchase_orders/{docId} { allow write: if isManagement(); }
+    match /suppliers/{docId} { allow write: if isManagement(); }
+    match /zones/{docId} { allow write: if isManagement() || hasRole('Communicator'); }
+    match /product_categories/{docId} { allow write: if isManagement(); }
+    match /expense_categories/{docId} { allow write: if isManagement(); }
+    match /email_templates/{docId} { allow write: if isManagement() || hasRole('Communicator'); }
+    match /whatsapp_templates/{docId} { allow write: if isManagement() || hasRole('Communicator'); }
+    match /purchases/{docId} { allow write: if isManagement(); }
+    
     match /user_roles/{docId} { allow write: if hasRole('Admin'); }
   }
 }

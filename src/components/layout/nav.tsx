@@ -74,16 +74,24 @@ export function Sidebar({ className }: { className?: string }) {
 
   const filteredNavItems = React.useMemo(() => {
     if (!userData) return [];
-    if (userData.role === 'Communicator') {
+    
+    const role = userData.role;
+
+    if (role === 'Communicator') {
       return navItems.filter(item => ['/customers', '/routes'].includes(item.href));
     }
-    if (userData.role === 'Replenisher') {
+    if (role === 'Replenisher') {
       return navItems.filter(item => item.href === '/routes');
     }
-    if (userData.role === 'Employee') {
-      return navItems.filter(item => item.href !== '/team'); // Empleados no gestionan equipo
+    if (role === 'Employee' || role === 'Admin' || role === 'Collaborator') {
+      // El Colaborador y Socio pueden ver todo. 
+      // Pero el Socio (Employee) no gestiona el equipo en sí, solo Admin.
+      if (role === 'Employee' || role === 'Collaborator') {
+        return navItems.filter(item => item.href !== '/team');
+      }
+      return navItems;
     }
-    return navItems;
+    return [];
   }, [userData]);
 
   return (
@@ -129,7 +137,11 @@ export function Sidebar({ className }: { className?: string }) {
             {state === "expanded" && (
               <div className="flex flex-col overflow-hidden">
                 <span className="text-sm font-semibold truncate">{userData?.name || 'Usuario'}</span>
-                <span className="text-[10px] text-muted-foreground truncate uppercase font-bold">{userData?.role || 'Sin Rol'}</span>
+                <span className="text-[10px] text-muted-foreground truncate uppercase font-bold">
+                  {userData?.role === 'Employee' ? 'Socio' : 
+                   userData?.role === 'Collaborator' ? 'Colaborador' : 
+                   userData?.role || 'Sin Rol'}
+                </span>
               </div>
             )}
           </div>
@@ -149,8 +161,10 @@ export function MobileNav() {
   
   const mobileItems = React.useMemo(() => {
     if (!userData) return [];
-    if (userData.role === 'Replenisher') return [{ href: "/routes", label: "Rutas", icon: Truck }];
-    if (userData.role === 'Communicator') return [
+    const role = userData.role;
+
+    if (role === 'Replenisher') return [{ href: "/routes", label: "Rutas", icon: Truck }];
+    if (role === 'Communicator') return [
       { href: "/customers", label: "Clientes", icon: Users },
       { href: "/routes", label: "Rutas", icon: Truck }
     ];
