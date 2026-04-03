@@ -80,7 +80,7 @@ export default function PayoutsPage() {
   // Redirección por Rol
   useEffect(() => {
     if (!isUserLoading && userData) {
-      if (!['Admin', 'Employee'].includes(userData.role)) {
+      if (!['Admin', 'Employee', 'Collaborator'].includes(userData.role)) {
         router.replace('/')
       }
     }
@@ -718,7 +718,8 @@ export default function PayoutsPage() {
                 </Button>
               </div>
 
-              <div className="border rounded-2xl overflow-hidden bg-white shadow-md">
+              {/* Vista para Escritorio */}
+              <div className="hidden md:block border rounded-2xl overflow-hidden bg-white shadow-md">
                 <Table>
                   <TableHeader className="bg-slate-50">
                     <TableRow>
@@ -770,6 +771,58 @@ export default function PayoutsPage() {
                     })}
                   </TableBody>
                 </Table>
+              </div>
+
+              {/* Vista para Móvil */}
+              <div className="md:hidden space-y-4">
+                {payouts?.filter(p => selectedCollabId === "all" || p.userId === selectedCollabId).map(p => {
+                  const acc = accounts?.find(a => a.id === p.financialAccountId);
+                  const tx = transactions?.find(t => t.id === p.transactionId);
+                  const symbol = p.currency === 'USD' ? 'u$s' : '$';
+                  return (
+                    <Card key={p.id} className="glass-card shadow-md">
+                      <CardContent className="p-4 space-y-4">
+                        <div className="flex justify-between items-start">
+                          <div className="space-y-1">
+                            <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">{new Date(p.date).toLocaleDateString('es-AR')}</p>
+                            <div className="flex items-center gap-2">
+                              <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[9px] font-bold text-primary">{p.userName?.[0]}</div>
+                              <h4 className="font-black text-slate-800 text-sm uppercase">{p.userName}</h4>
+                            </div>
+                          </div>
+                          <div className="flex gap-1">
+                             <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => setPayoutForDetails(p)} title="Ver Detalle"><Eye className="h-4 w-4" /></Button>
+                             <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => handlePrintPayout(p)} title="Imprimir"><Printer className="h-4 w-4" /></Button>
+                             {isAdmin && (
+                               <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setPayoutToDelete(p)} title="Eliminar"><Trash2 className="h-4 w-4" /></Button>
+                             )}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-1.5">
+                          {p.items?.map((it: any, idx: number) => it.amount !== 0 && (
+                            <Badge key={idx} variant="outline" className={cn("text-[8px] font-bold uppercase", it.currency === 'USD' ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-blue-50 text-blue-700 border-blue-200")}>
+                              {it.shortDescription || it.description}: {it.currency === 'USD' ? 'u$s' : '$'}{Number(it.amount).toLocaleString()}
+                            </Badge>
+                          ))}
+                        </div>
+
+                        <div className="flex justify-between items-end pt-3 border-t border-dashed">
+                          <div className="space-y-0.5">
+                            <p className="text-[8px] font-black text-muted-foreground uppercase">Caja de Pago</p>
+                            <p className="text-[10px] font-bold text-slate-700 uppercase">{acc?.name || "---"}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[8px] font-black text-muted-foreground uppercase">Total Liquidado</p>
+                            <p className={cn("text-xl font-black", p.currency === 'USD' ? 'text-emerald-700' : 'text-blue-700')}>
+                              {symbol} {Math.abs(tx?.amount || 0).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
               </div>
             </div>
           )}
