@@ -451,19 +451,6 @@ function CustomersContent() {
     }
   };
 
-  const activeFilters = useMemo(() => {
-    const list: { label: string, value: string }[] = [];
-    if (searchTerm) list.push({ label: 'Búsqueda', value: searchTerm });
-    if (filterBalance !== 'all') list.push({ label: 'Saldo', value: filterBalance === 'debt' ? 'Sólo Deuda' : 'Sólo a Favor' });
-    if (filterComodato !== 'all') list.push({ label: 'Comodato', value: filterComodato === 'yes' ? 'Sí' : 'No' });
-    if (filterReposicion !== 'all') list.push({ label: 'Reposición', value: filterReposicion === 'yes' ? 'Sí' : 'No' });
-    if (filterZone !== 'all') {
-      const z = zones?.find(zone => zone.id === filterZone);
-      list.push({ label: 'Zona', value: z ? z.name : filterZone });
-    }
-    return list;
-  }, [searchTerm, filterBalance, filterComodato, filterReposicion, filterZone, zones]);
-
   if (isUserLoading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
 
   return (
