@@ -77,7 +77,7 @@ import {
   TabsContent, 
   TabsList, 
   TabsTrigger 
-} from "@/tabs"
+} from "@/components/ui/tabs"
 import { useToast } from "../../hooks/use-toast"
 import { 
   useFirestore, 
