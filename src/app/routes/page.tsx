@@ -42,7 +42,8 @@ import {
   Mail,
   Lock,
   History,
-  Settings2
+  Settings2,
+  Banknote
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -76,7 +77,7 @@ import {
   TabsContent, 
   TabsList, 
   TabsTrigger 
-} from "@/components/ui/tabs"
+} from "@/tabs"
 import { useToast } from "../../hooks/use-toast"
 import { 
   useFirestore, 
@@ -474,6 +475,21 @@ function RoutesContent() {
           return acc;
         }, { cloro: 0, acido: 0 }) || { cloro: 0, acido: 0 };
 
+        // Lógica de Liquidación
+        const deliveredItems = sheet.items?.filter((i: any) => (Number(i.realChlorine || 0) > 0 || Number(i.realAcid || 0) > 0)) || [];
+        const itemsWithPayouts = deliveredItems.filter((i: any) => i.liquidadoRepositor && i.liquidadoComunicador);
+        
+        let payoutBadge = null;
+        if (deliveredItems.length > 0) {
+          if (itemsWithPayouts.length === deliveredItems.length) {
+            payoutBadge = <Badge variant="outline" className="text-[8px] font-black uppercase bg-emerald-50 text-emerald-700 border-emerald-200">Liquidación Total</Badge>
+          } else if (itemsWithPayouts.length > 0 || deliveredItems.some((i: any) => i.liquidadoRepositor || i.liquidadoComunicador)) {
+            payoutBadge = <Badge variant="outline" className="text-[8px] font-black uppercase bg-amber-50 text-amber-700 border-amber-200">Liq. Parcial</Badge>
+          } else {
+            payoutBadge = <Badge variant="outline" className="text-[8px] font-black uppercase bg-slate-100 text-slate-500 border-slate-200">Liq. Pendiente</Badge>
+          }
+        }
+
         return (
           <Card 
             key={sheet.id} 
@@ -493,9 +509,12 @@ function RoutesContent() {
           >
             <CardHeader className="pb-3">
               <div className="flex justify-between items-start">
-                <Badge variant="outline" className={cn("text-[10px] font-black uppercase tracking-wider", statusInfo.color)}>
-                  <Icon className="h-3 w-3 mr-1" /> {statusInfo.label}
-                </Badge>
+                <div className="flex flex-col gap-1">
+                  <Badge variant="outline" className={cn("text-[10px] font-black uppercase tracking-wider w-fit", statusInfo.color)}>
+                    <Icon className="h-3 w-3 mr-1" /> {statusInfo.label}
+                  </Badge>
+                  {payoutBadge}
+                </div>
                 {(isAdmin || (isCommunicator && sheet.status === 'planned')) && !isCompleted && (
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); setSheetToDelete(sheet); }}>
                     <Trash2 className="h-4 w-4" />
