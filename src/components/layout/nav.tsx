@@ -95,7 +95,7 @@ export function Sidebar({ className }: { className?: string }) {
   }, [userData]);
 
   return (
-    <SidebarUI collapsible="icon" className={cn("border-r", className)}>
+    <SidebarUI collapsible="icon" className={cn("border-r no-print", className)}>
       <SidebarHeader className="p-4 flex flex-row items-center gap-2 overflow-hidden">
         <div className="bg-primary p-2 rounded-lg shrink-0">
           <Droplets className="h-6 w-6 text-white" />
@@ -179,13 +179,13 @@ export function MobileNav() {
   }, [userData]);
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 bg-background/60 backdrop-blur-xl border-t flex items-center justify-around px-4 py-3 pb-[calc(1rem+env(safe-area-inset-bottom))] md:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-background/60 backdrop-blur-xl border-t flex items-center justify-around px-4 py-3 pb-[calc(1rem+env(safe-area-inset-bottom))] md:hidden no-print">
       {mobileItems.map((item) => (
         <Link key={item.href} href={item.href} className={cn("flex flex-col items-center gap-1.5", pathname === item.href ? "text-primary font-bold" : "text-muted-foreground")}>
           <item.icon className="h-6 w-6" />
           <span className="text-[9px] uppercase tracking-wider font-bold">{item.label}</span>
         </Link>
       ))}
-    </div>
+    </nav>
   )
 }

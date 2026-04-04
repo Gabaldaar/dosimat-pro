@@ -87,7 +87,7 @@ export default function PayoutsPage() {
   }, [userData, isUserLoading, router])
 
   const [activeTab, setActiveTab] = useState("new")
-  const [selectedCollabId, setSelectedCollabId] = useState("")
+  const [selectedCollabId, setSelectedCollabId] = useState("all")
   const [startDate, setStartDate] = useState(() => {
     const d = new Date(); d.setDate(1); return d.toISOString().split('T')[0];
   })
@@ -456,7 +456,7 @@ export default function PayoutsPage() {
   }, []);
 
   const resetForm = () => {
-    setSelectedCollabId("")
+    setSelectedCollabId("all")
     setSelectedItems([])
     setExtras([])
     setAccountId("pending")
@@ -498,7 +498,7 @@ export default function PayoutsPage() {
                   <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                     <div className="space-y-2">
                       <Label className="text-xs font-bold">Colaborador</Label>
-                      <Select value={selectedCollabId} onValueChange={setSelectedCollabId}>
+                      <Select value={selectedCollabId === "all" ? "" : selectedCollabId} onValueChange={setSelectedCollabId}>
                         <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
                         <SelectContent>
                           {collaborators?.filter(c => ['Admin', 'Employee', 'Communicator', 'Replenisher', 'Socio', 'Colaborador'].includes(c.role)).map(c => (
@@ -705,7 +705,7 @@ export default function PayoutsPage() {
               <div className="flex flex-wrap gap-4 items-end bg-muted/20 p-4 rounded-xl border border-dashed">
                 <div className="space-y-1">
                   <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Filtrar por Colaborador</Label>
-                  <Select value={selectedCollabId || "all"} onValueChange={setSelectedCollabId}>
+                  <Select value={selectedCollabId} onValueChange={setSelectedCollabId}>
                     <SelectTrigger className="w-[200px] bg-white h-10 font-bold"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos los miembros</SelectItem>

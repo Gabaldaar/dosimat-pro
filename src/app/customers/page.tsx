@@ -451,6 +451,19 @@ function CustomersContent() {
     }
   };
 
+  const activeFilters = useMemo(() => {
+    const list: { label: string, value: string }[] = [];
+    if (searchTerm) list.push({ label: 'Búsqueda', value: searchTerm });
+    if (filterBalance !== 'all') list.push({ label: 'Saldo', value: filterBalance === 'debt' ? 'Sólo Deuda' : 'Sólo a Favor' });
+    if (filterComodato !== 'all') list.push({ label: 'Comodato', value: filterComodato === 'yes' ? 'Sí' : 'No' });
+    if (filterReposicion !== 'all') list.push({ label: 'Reposición', value: filterReposicion === 'yes' ? 'Sí' : 'No' });
+    if (filterZone !== 'all') {
+      const z = zones?.find(zone => zone.id === filterZone);
+      list.push({ label: 'Zona', value: z ? z.name : filterZone });
+    }
+    return list;
+  }, [searchTerm, filterBalance, filterComodato, filterReposicion, filterZone, zones]);
+
   if (isUserLoading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
 
   return (
@@ -578,6 +591,7 @@ function CustomersContent() {
                       <div className="flex justify-between items-start gap-4 mb-4">
                         <div className="flex-1 min-w-0">
                           <h3 className="text-xl font-bold truncate leading-tight">{customer.apellido}, {customer.nombre}</h3>
+                          {customer.cuit_dni && <p className="text-[10px] font-black text-muted-foreground mt-0.5 tracking-wider">ID: {customer.cuit_dni}</p>}
                           <div className="flex gap-1.5 mt-2 flex-wrap">
                             <Badge variant={customer.esClienteReposicion ? "default" : "secondary"} className="text-[9px] h-5 font-bold">{customer.esClienteReposicion ? 'REPO' : 'OCASIONAL'}</Badge>
                             {customer.equipoInstalado?.enComodato && <Badge variant="outline" className="text-[9px] h-5 font-bold border-amber-500 text-amber-700 bg-amber-50">COMODATO</Badge>}
@@ -747,7 +761,10 @@ function CustomersContent() {
               <div className="space-y-4 py-4">
                 {bulkStep === 0 || isSingleWsOpen ? (
                   <>
-                    <div className="space-y-2"><Label>Plantilla</Label><Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}><SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger><SelectContent>{wsTemplates?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select></div>
+                    <div className="space-y-2"><Label>Plantilla</Label><Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                      <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                      <SelectContent>{wsTemplates?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+                    </Select></div>
                     {dynamicKeys.length > 0 && (<div className="p-4 border border-dashed rounded-xl space-y-4 bg-muted/5"><p className="text-[10px] font-black uppercase text-primary">Datos Manuales</p><div className="grid grid-cols-1 gap-4">{dynamicKeys.map(key => (<div key={key} className="space-y-1"><Label className="text-xs font-bold">{key}</Label><Input value={dynamicValues[key] || ""} onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})} className="bg-white h-9" /></div>))}</div></div>)}
                     {activeTemplate && (<div className="space-y-2"><Label className="text-[10px] font-black uppercase text-muted-foreground">Vista Previa</Label><div className="p-4 border rounded-xl bg-white italic text-sm text-slate-700 shadow-inner whitespace-pre-wrap">{replaceMarkers(activeTemplate.body, selectedCommCustomer || filteredCustomers[0], dynamicValues)}</div></div>)}
                   </>

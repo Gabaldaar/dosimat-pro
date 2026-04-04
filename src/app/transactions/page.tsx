@@ -1157,7 +1157,12 @@ function TransactionsContent() {
                         return (
                           <TableRow key={tx.id} className="cursor-pointer hover:bg-primary/5 transition-colors group" onClick={() => setSelectedTxDetails(tx)}>
                             <TableCell className="text-xs font-bold text-slate-600">{formatLocalDate(tx.date)}</TableCell>
-                            <TableCell><span className="font-black text-slate-800">{cust ? `${cust.apellido}, ${cust.nombre}` : 'Global'}</span></TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-black text-slate-800">{cust ? `${cust.apellido}, ${cust.nombre}` : 'Global'}</span>
+                                {cust?.cuit_dni && <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-tighter">ID: {cust.cuit_dni}</span>}
+                              </div>
+                            </TableCell>
                             <TableCell><Badge variant="outline" className={cn("text-[9px] gap-1 px-2 font-black uppercase", info.color)}><Icon className="h-3 w-3" />{info.label}</Badge></TableCell>
                             <TableCell><span className="text-[10px] font-black text-muted-foreground uppercase">{acc?.name || "---"}</span></TableCell>
                             <TableCell className="text-right font-black text-slate-800">{tx.currency==='USD'?'u$s':'$'} {Math.abs(tx.amount || 0).toLocaleString()}</TableCell>
@@ -1222,6 +1227,7 @@ function TransactionsContent() {
                             <h4 className="font-black text-slate-800 leading-tight truncate max-w-[200px] text-base">
                               {cust ? `${cust.apellido}, ${cust.nombre}` : 'Global'}
                             </h4>
+                            {cust?.cuit_dni && <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-tighter">ID: {cust.cuit_dni}</p>}
                           </div>
                           <div onClick={(e) => e.stopPropagation()}>
                             <DropdownMenu>
@@ -1348,7 +1354,10 @@ function TransactionsContent() {
                   <div className="space-y-2">
                     <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest flex items-center gap-2"><User className="h-3 w-3" /> Cliente y Caja</p>
                     <div className="p-4 border rounded-2xl bg-white flex flex-col md:flex-row md:justify-between md:items-center gap-3 shadow-sm">
-                      <span className="font-black text-slate-800 text-lg">{customers?.find(c => c.id === selectedTxDetails.clientId)?.apellido || 'Global'}, {customers?.find(c => c.id === selectedTxDetails.clientId)?.nombre || ''}</span>
+                      <div className="flex flex-col">
+                        <span className="font-black text-slate-800 text-lg">{customers?.find(c => c.id === selectedTxDetails.clientId)?.apellido || 'Global'}, {customers?.find(c => c.id === selectedTxDetails.clientId)?.nombre || ''}</span>
+                        {customers?.find(c => c.id === selectedTxDetails.clientId)?.cuit_dni && <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">CUIT/DNI: {customers?.find(c => c.id === selectedTxDetails.clientId)?.cuit_dni}</span>}
+                      </div>
                       <Badge variant="secondary" className="w-fit font-black uppercase text-[10px] py-1 px-3 border-primary/10">{selectedTxDetails.financialAccountId ? (accounts?.find(a => a.id === selectedTxDetails.financialAccountId)?.name || 'Caja') : 'A CUENTA'}</Badge>
                     </div>
                   </div>
