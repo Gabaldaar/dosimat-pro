@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react"
@@ -63,25 +62,13 @@ export function Sidebar({ className }: { className?: string }) {
   const routesQ = useMemoFirebase(() => query(collection(db, 'route_sheets'), where('status', '==', 'active')), [db])
   const prodQ = useMemoFirebase(() => query(collection(db, 'production_orders'), where('status', '!=', 'completed')), [db])
   const purchQ = useMemoFirebase(() => query(collection(db, 'purchase_orders'), where('status', '!=', 'completed')), [db])
-  const allRoutesQ = useMemoFirebase(() => collection(db, 'route_sheets'), [db])
 
   const { data: activeRoutes } = useCollection(routesQ)
   const { data: openProd } = useCollection(prodQ)
   const { data: openPurch } = useCollection(purchQ)
-  const { data: allRoutes } = useCollection(allRoutesQ)
 
   const activeRoutesCount = activeRoutes?.length || 0;
   const catalogCount = (openProd?.length || 0) + (openPurch?.length || 0);
-  
-  // Calcular Liquidaciones Pendientes
-  const pendingPayoutsCount = React.useMemo(() => {
-    if (!allRoutes) return 0;
-    return allRoutes.filter(sheet => {
-      const deliveredItems = sheet.items?.filter((i: any) => (Number(i.realChlorine || 0) > 0 || Number(i.realAcid || 0) > 0)) || [];
-      if (deliveredItems.length === 0) return false;
-      return deliveredItems.some((i: any) => !i.liquidadoRepositor || !i.liquidadoComunicador);
-    }).length;
-  }, [allRoutes]);
   
   const handleLogout = async () => {
     try {
@@ -120,10 +107,10 @@ export function Sidebar({ className }: { className?: string }) {
       let badgeCount = 0;
       if (item.href === '/routes') badgeCount = activeRoutesCount;
       if (item.href === '/catalog') badgeCount = catalogCount;
-      if (item.href === '/payouts') badgeCount = pendingPayoutsCount;
+      // Eliminado el badge de liquidaciones
       return { ...item, badgeCount };
     });
-  }, [userData, activeRoutesCount, catalogCount, pendingPayoutsCount]);
+  }, [userData, activeRoutesCount, catalogCount]);
 
   return (
     <SidebarUI collapsible="icon" className={cn("border-r no-print", className)}>
@@ -201,22 +188,12 @@ export function MobileNav() {
   const routesQ = useMemoFirebase(() => query(collection(db, 'route_sheets'), where('status', '==', 'active')), [db])
   const prodQ = useMemoFirebase(() => query(collection(db, 'production_orders'), where('status', '!=', 'completed')), [db])
   const purchQ = useMemoFirebase(() => query(collection(db, 'purchase_orders'), where('status', '!=', 'completed')), [db])
-  const allRoutesQ = useMemoFirebase(() => collection(db, 'route_sheets'), [db])
 
   const { data: activeRoutes } = useCollection(routesQ)
   const { data: openProd } = useCollection(prodQ)
   const { data: openPurch } = useCollection(purchQ)
-  const { data: allRoutes } = useCollection(allRoutesQ)
 
   const activeRoutesCount = activeRoutes?.length || 0;
-  const catalogCount = (openProd?.length || 0) + (openPurch?.length || 0);
-  const pendingPayoutsCount = React.useMemo(() => {
-    if (!allRoutes) return 0;
-    return allRoutes.filter(sheet => {
-      const deliveredItems = sheet.items?.filter((i: any) => (Number(i.realChlorine || 0) > 0 || Number(i.realAcid || 0) > 0)) || [];
-      return deliveredItems.length > 0 && deliveredItems.some((i: any) => !i.liquidadoRepositor || !i.liquidadoComunicador);
-    }).length;
-  }, [allRoutes]);
   
   const mobileItems = React.useMemo(() => {
     if (!userData) return [];
@@ -243,10 +220,10 @@ export function MobileNav() {
     return base.map(item => {
       let count = 0;
       if (item.href === '/routes') count = activeRoutesCount;
-      if (item.href === '/payouts') count = pendingPayoutsCount;
+      // Eliminado el badge de liquidaciones
       return { ...item, count };
     });
-  }, [userData, activeRoutesCount, pendingPayoutsCount]);
+  }, [userData, activeRoutesCount]);
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-background/60 backdrop-blur-xl border-t flex items-center justify-around px-4 py-3 pb-[calc(1rem+env(safe-area-inset-bottom))] md:hidden no-print">
