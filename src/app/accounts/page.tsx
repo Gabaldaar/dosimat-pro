@@ -180,7 +180,8 @@ export default function AccountsPage() {
     fromId: "",
     toId: "",
     amount: 0,
-    description: ""
+    description: "",
+    date: new Date().toISOString().split('T')[0]
   })
 
   const fromAcc = useMemo(() => accounts?.find(a => a.id === transferFormData.fromId), [accounts, transferFormData.fromId]);
@@ -295,10 +296,12 @@ export default function AccountsPage() {
   }
 
   const handleTransfer = () => {
-    const { fromId, toId, amount, description } = transferFormData
+    const { fromId, toId, amount, description, date } = transferFormData
     if (!fromAcc || !toAcc || amount <= 0) return
 
     setIsTransferDialogOpen(false)
+
+    const finalDate = new Date(date + 'T12:00:00').toISOString();
 
     let finalAmountTo = Number(amount);
     if (fromAcc.currency !== toAcc.currency) {
@@ -313,7 +316,7 @@ export default function AccountsPage() {
     updateDocumentNonBlocking(doc(db, 'financial_accounts', toId), { initialBalance: increment(finalAmountTo) })
 
     addDocumentNonBlocking(collection(db, 'transactions'), {
-      date: new Date().toISOString(),
+      date: finalDate,
       type: 'FinancialTransferOut',
       amount: -Number(amount),
       currency: fromAcc.currency,
@@ -323,7 +326,7 @@ export default function AccountsPage() {
     })
 
     addDocumentNonBlocking(collection(db, 'transactions'), {
-      date: new Date().toISOString(),
+      date: finalDate,
       type: 'FinancialTransferIn',
       amount: finalAmountTo,
       currency: toAcc.currency,
@@ -719,6 +722,10 @@ export default function AccountsPage() {
           <DialogContent>
             <DialogHeader><DialogTitle>Transferencia entre Cajas</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Fecha de Transferencia</Label>
+                <Input type="date" value={transferFormData.date} onChange={(e) => setTransferFormData({...transferFormData, date: e.target.value})} />
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Origen</Label>
