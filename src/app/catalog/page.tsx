@@ -1335,7 +1335,7 @@ function CatalogContent() {
     const usd = pendingItems.reduce((sum, i) => sum + ((manualPurchaseQtys[i.id] ?? i.quantity) * (manualPurchaseCurrencies[i.id] === 'USD' ? (manualPurchasePrices[i.id] ?? i.price) : 0)), 0);
     text += `\n*INVERSIÓN ESTIMADA:*\n`;
     if (ars > 0) text += `ARS: $${ars.toLocaleString('es-AR')}\n`;
-    if (usd > 0) text += `USD: u$s {usd.toLocaleString('es-AR')}`;
+    if (usd > 0) text += `USD: u$s ${usd.toLocaleString('es-AR')}`;
     navigator.clipboard.writeText(text);
     toast({ title: "Lista de compras copiada", description: `Lista filtrada para ${supplierFilter}.` });
   }
@@ -2645,7 +2645,7 @@ function CatalogContent() {
                                       value={currentQty ?? 0}
                                       onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: Number(e.target.value) }))}
                                     />
-                                    <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" disabled={isLineLocked} onClick={() => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: (prev[lineId] ?? f.quantity || 0) + 1 }))}>
+                                    <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" disabled={isLineLocked} onClick={() => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: (prev[lineId] ?? f.quantity ?? 0) + 1 }))}>
                                       <Plus className="h-4 w-4" />
                                     </Button>
                                   </div>
