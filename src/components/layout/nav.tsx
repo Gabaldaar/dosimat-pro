@@ -21,9 +21,9 @@ import {
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { useFirebase, useDoc, useMemoFirebase, useUser } from "../../firebase"
+import { useFirebase, useDoc, useMemoFirebase, useUser, useCollection } from "../../firebase"
 import { signOut } from "firebase/auth"
-import { doc } from "firebase/firestore"
+import { doc, collection, query, where } from "firebase/firestore"
 import {
   Sidebar as SidebarUI,
   SidebarContent,
@@ -33,6 +33,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   useSidebar,
+  SidebarMenuBadge,
 } from "@/components/ui/sidebar"
 
 const navItems = [
@@ -51,11 +52,36 @@ const navItems = [
 export function Sidebar({ className }: { className?: string }) {
   const pathname = usePathname()
   const { auth, firestore, user } = useFirebase()
+  const db = firestore!
   const router = useRouter()
   const { state, isMobile, setOpenMobile } = useSidebar()
 
-  const userDocRef = useMemoFirebase(() => user ? doc(firestore, 'users', user.uid) : null, [user, firestore])
+  const userDocRef = useMemoFirebase(() => user ? doc(db, 'users', user.uid) : null, [user, db])
   const { data: userData } = useDoc(userDocRef)
+
+  // Consultas para Badges de Notificación
+  const routesQ = useMemoFirebase(() => query(collection(db, 'route_sheets'), where('status', '==', 'active')), [db])
+  const prodQ = useMemoFirebase(() => query(collection(db, 'production_orders'), where('status', '!=', 'completed')), [db])
+  const purchQ = useMemoFirebase(() => query(collection(db, 'purchase_orders'), where('status', '!=', 'completed')), [db])
+  const allRoutesQ = useMemoFirebase(() => collection(db, 'route_sheets'), [db])
+
+  const { data: activeRoutes } = useCollection(routesQ)
+  const { data: openProd } = useCollection(prodQ)
+  const { data: openPurch } = useCollection(purchQ)
+  const { data: allRoutes } = useCollection(allRoutesQ)
+
+  const activeRoutesCount = activeRoutes?.length || 0;
+  const catalogCount = (openProd?.length || 0) + (openPurch?.length || 0);
+  
+  // Calcular Liquidaciones Pendientes
+  const pendingPayoutsCount = React.useMemo(() => {
+    if (!allRoutes) return 0;
+    return allRoutes.filter(sheet => {
+      const deliveredItems = sheet.items?.filter((i: any) => (Number(i.realChlorine || 0) > 0 || Number(i.realAcid || 0) > 0)) || [];
+      if (deliveredItems.length === 0) return false;
+      return deliveredItems.some((i: any) => !i.liquidadoRepositor || !i.liquidadoComunicador);
+    }).length;
+  }, [allRoutes]);
   
   const handleLogout = async () => {
     try {
@@ -77,22 +103,27 @@ export function Sidebar({ className }: { className?: string }) {
     
     const role = userData.role;
 
+    let items = [];
     if (role === 'Communicator') {
-      return navItems.filter(item => ['/customers', '/routes'].includes(item.href));
-    }
-    if (role === 'Replenisher') {
-      return navItems.filter(item => item.href === '/routes');
-    }
-    if (role === 'Employee' || role === 'Admin' || role === 'Collaborator') {
-      // El Colaborador y Socio pueden ver todo. 
-      // Pero el Socio (Employee) no gestiona el equipo en sí, solo Admin.
+      items = navItems.filter(item => ['/customers', '/routes'].includes(item.href));
+    } else if (role === 'Replenisher') {
+      items = navItems.filter(item => item.href === '/routes');
+    } else if (role === 'Employee' || role === 'Admin' || role === 'Collaborator') {
       if (role === 'Employee' || role === 'Collaborator') {
-        return navItems.filter(item => item.href !== '/team');
+        items = navItems.filter(item => item.href !== '/team');
+      } else {
+        items = navItems;
       }
-      return navItems;
     }
-    return [];
-  }, [userData]);
+
+    return items.map(item => {
+      let badgeCount = 0;
+      if (item.href === '/routes') badgeCount = activeRoutesCount;
+      if (item.href === '/catalog') badgeCount = catalogCount;
+      if (item.href === '/payouts') badgeCount = pendingPayoutsCount;
+      return { ...item, badgeCount };
+    });
+  }, [userData, activeRoutesCount, catalogCount, pendingPayoutsCount]);
 
   return (
     <SidebarUI collapsible="icon" className={cn("border-r no-print", className)}>
@@ -122,6 +153,11 @@ export function Sidebar({ className }: { className?: string }) {
                   <span>{item.label}</span>
                 </Link>
               </SidebarMenuButton>
+              {item.badgeCount > 0 && (
+                <SidebarMenuBadge className="bg-rose-500 text-white rounded-full text-[9px] min-w-4 h-4 flex items-center justify-center p-0 font-black animate-in fade-in zoom-in">
+                  {item.badgeCount}
+                </SidebarMenuBadge>
+              )}
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
@@ -158,32 +194,71 @@ export function Sidebar({ className }: { className?: string }) {
 export function MobileNav() {
   const pathname = usePathname()
   const { userData } = useUser()
+  const { firestore } = useFirebase()
+  const db = firestore!
+
+  // Consultas para Badges
+  const routesQ = useMemoFirebase(() => query(collection(db, 'route_sheets'), where('status', '==', 'active')), [db])
+  const prodQ = useMemoFirebase(() => query(collection(db, 'production_orders'), where('status', '!=', 'completed')), [db])
+  const purchQ = useMemoFirebase(() => query(collection(db, 'purchase_orders'), where('status', '!=', 'completed')), [db])
+  const allRoutesQ = useMemoFirebase(() => collection(db, 'route_sheets'), [db])
+
+  const { data: activeRoutes } = useCollection(routesQ)
+  const { data: openProd } = useCollection(prodQ)
+  const { data: openPurch } = useCollection(purchQ)
+  const { data: allRoutes } = useCollection(allRoutesQ)
+
+  const activeRoutesCount = activeRoutes?.length || 0;
+  const catalogCount = (openProd?.length || 0) + (openPurch?.length || 0);
+  const pendingPayoutsCount = React.useMemo(() => {
+    if (!allRoutes) return 0;
+    return allRoutes.filter(sheet => {
+      const deliveredItems = sheet.items?.filter((i: any) => (Number(i.realChlorine || 0) > 0 || Number(i.realAcid || 0) > 0)) || [];
+      return deliveredItems.length > 0 && deliveredItems.some((i: any) => !i.liquidadoRepositor || !i.liquidadoComunicador);
+    }).length;
+  }, [allRoutes]);
   
   const mobileItems = React.useMemo(() => {
     if (!userData) return [];
     const role = userData.role;
 
-    if (role === 'Replenisher') return [{ href: "/routes", label: "Rutas", icon: Truck }];
-    if (role === 'Communicator') return [
-      { href: "/customers", label: "Clientes", icon: Users },
-      { href: "/routes", label: "Rutas", icon: Truck }
-    ];
-    const base = [
-      { href: "/", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/customers", label: "Clientes", icon: Users },
-      { href: "/routes", label: "Rutas", icon: Truck },
-      { href: "/transactions", label: "Operaciones", icon: ArrowLeftRight },
-      { href: "/payouts", label: "Pagos", icon: Banknote },
-    ];
-    return base;
-  }, [userData]);
+    let base = [];
+    if (role === 'Replenisher') {
+      base = [{ href: "/routes", label: "Rutas", icon: Truck }];
+    } else if (role === 'Communicator') {
+      base = [
+        { href: "/customers", label: "Clientes", icon: Users },
+        { href: "/routes", label: "Rutas", icon: Truck }
+      ];
+    } else {
+      base = [
+        { href: "/", label: "Dashboard", icon: LayoutDashboard },
+        { href: "/customers", label: "Clientes", icon: Users },
+        { href: "/routes", label: "Rutas", icon: Truck },
+        { href: "/transactions", label: "Operaciones", icon: ArrowLeftRight },
+        { href: "/payouts", label: "Pagos", icon: Banknote },
+      ];
+    }
+
+    return base.map(item => {
+      let count = 0;
+      if (item.href === '/routes') count = activeRoutesCount;
+      if (item.href === '/payouts') count = pendingPayoutsCount;
+      return { ...item, count };
+    });
+  }, [userData, activeRoutesCount, pendingPayoutsCount]);
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-background/60 backdrop-blur-xl border-t flex items-center justify-around px-4 py-3 pb-[calc(1rem+env(safe-area-inset-bottom))] md:hidden no-print">
       {mobileItems.map((item) => (
-        <Link key={item.href} href={item.href} className={cn("flex flex-col items-center gap-1.5", pathname === item.href ? "text-primary font-bold" : "text-muted-foreground")}>
+        <Link key={item.href} href={item.href} className={cn("flex flex-col items-center gap-1.5 relative", pathname === item.href ? "text-primary font-bold" : "text-muted-foreground")}>
           <item.icon className="h-6 w-6" />
           <span className="text-[9px] uppercase tracking-wider font-bold">{item.label}</span>
+          {item.count > 0 && (
+            <span className="absolute top-0 right-0 -mr-1 -mt-1 bg-rose-500 text-white text-[8px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center animate-pulse">
+              !
+            </span>
+          )}
         </Link>
       ))}
     </nav>
