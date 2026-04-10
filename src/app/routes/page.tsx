@@ -447,7 +447,8 @@ function RoutesContent() {
     if (!template || !selectedCommCustomer) return;
     const body = replaceMarkers(template.body, selectedCommCustomer, dynamicValues);
     const subject = replaceMarkers(template.subject || "", selectedCommCustomer, dynamicValues);
-    const mailtoUrl = `mailto:${selectedCommCustomer.mail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body).replace(/%0A/g, '%0D%0A')}`;
+    const bcc = template.bcc || "";
+    const mailtoUrl = `mailto:${selectedCommCustomer.mail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body).replace(/%0A/g, '%0D%0A')}${bcc ? `&bcc=${encodeURIComponent(bcc)}` : ''}`;
     window.open(mailtoUrl, '_blank');
     setIsEmailDialogOpen(false);
   };

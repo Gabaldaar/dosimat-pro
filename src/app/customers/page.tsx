@@ -382,7 +382,8 @@ function CustomersContent() {
     if (!template || !selectedCommCustomer) return;
     const body = replaceMarkers(template.body, selectedCommCustomer, dynamicValues);
     const subject = replaceMarkers(template.subject || "", selectedCommCustomer, dynamicValues);
-    const mailtoUrl = `mailto:${selectedCommCustomer.mail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body).replace(/%0A/g, '%0D%0A')}`;
+    const bcc = template.bcc || "";
+    const mailtoUrl = `mailto:${selectedCommCustomer.mail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body).replace(/%0A/g, '%0D%0A')}${bcc ? `&bcc=${encodeURIComponent(bcc)}` : ''}`;
     window.open(mailtoUrl, '_blank');
     setIsSingleEmailOpen(false);
   };
@@ -409,10 +410,17 @@ function CustomersContent() {
       });
     });
 
-    const bcc = Array.from(uniqueEmails).join(';');
+    if (template.bcc) {
+      template.bcc.split(/[;, ]+/).forEach((e: string) => {
+        const cleaned = e.trim().toLowerCase();
+        if (cleaned) uniqueEmails.add(cleaned);
+      });
+    }
+
+    const bccList = Array.from(uniqueEmails).join(';');
     const body = replaceMarkers(template.body, null, dynamicValues);
     const subject = replaceMarkers(template.subject || "", null, dynamicValues);
-    const mailtoUrl = `mailto:?bcc=${bcc}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body).replace(/%0A/g, '%0D%0A')}`;
+    const mailtoUrl = `mailto:?bcc=${encodeURIComponent(bccList)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body).replace(/%0A/g, '%0D%0A')}`;
     window.open(mailtoUrl, '_blank');
     setIsBulkEmailOpen(false);
   };

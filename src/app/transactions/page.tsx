@@ -609,7 +609,8 @@ function TransactionsContent() {
       setIsWsDialogOpen(false);
     } else {
       const subject = replaceMarkers(activeTemplate.subject || "", selectedTxForComm, dynamicValues);
-      const mailtoUrl = `mailto:${client?.mail || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body).replace(/%0A/g, '%0D%0A')}`;
+      const bcc = activeTemplate.bcc || "";
+      const mailtoUrl = `mailto:${client?.mail || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body).replace(/%0A/g, '%0D%0A')}${bcc ? `&bcc=${encodeURIComponent(bcc)}` : ''}`;
       window.open(mailtoUrl, '_blank');
       setIsEmailDialogOpen(false);
     }
