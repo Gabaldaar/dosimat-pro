@@ -566,9 +566,35 @@ function CatalogContent() {
     };
   }, [manualPurchaseQtys, manualPurchasePrices, manualPurchaseCurrencies, manualSuppliers, items, purchaseOrderToView]);
 
-  const currentEditingCosts = useMemo(() => {
-    if (!items || !formData.isCompuesto) return { ars: 0, usd: 0 };
-    return calculateCost(formData, items, currentRate);
+  const detailedBOMCosts = useMemo(() => {
+    if (!items || !formData.isCompuesto) return { arsBase: 0, usdBase: 0, laborTotalARS: 0, totalARS: 0, totalUSD: 0 };
+    
+    let arsBase = 0;
+    let usdBase = 0;
+
+    formData.components?.forEach((comp: any) => {
+      const child = items.find(i => i.id === comp.productId);
+      if (child) {
+        const childIsARS = child.costCurrency === 'ARS' || (!child.costCurrency && (child.costARS > 0 || !child.costUSD));
+        const childCosts = calculateCost(child, items, currentRate);
+        const qty = Number(comp.quantity) || 0;
+
+        if (childIsARS) {
+          arsBase += childCosts.ars * qty;
+        } else {
+          usdBase += childCosts.usd * qty;
+        }
+      }
+    });
+
+    const laborARS = (Number(formData.laborCostARS) || 0);
+    const laborUSD = (Number(formData.laborCostUSD) || 0);
+    const laborTotalARS = laborARS + (laborUSD * currentRate);
+
+    const totalARS = arsBase + (usdBase * currentRate) + laborTotalARS;
+    const totalUSD = usdBase + (arsBase / currentRate) + (laborUSD + (laborARS / currentRate));
+
+    return { arsBase, usdBase, laborTotalARS, totalARS, totalUSD };
   }, [formData, items, currentRate, calculateCost]);
 
   const totalLaborARS = useMemo(() => {
@@ -1984,11 +2010,33 @@ function CatalogContent() {
             ) : (
               <section className="space-y-6">
                 <div className="p-6 bg-slate-900 text-white rounded-3xl space-y-6 shadow-xl">
-                  <div className="flex justify-between items-center"><h3 className="text-sm font-black uppercase tracking-[0.2em] flex items-center gap-2"><Layers className="h-5 w-5 text-primary" /> Estructura de Materiales (BOM)</h3><Badge variant="outline" className="text-white border-white/20">COSTOS CALCULADOS</Badge></div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="p-4 bg-white/5 rounded-2xl border border-white/10"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Costo Materiales (ARS)</p><p className="text-2xl font-black">${(currentEditingCosts.ars - totalLaborARS).toLocaleString('es-AR')}</p></div>
-                    <div className="p-4 bg-white/5 rounded-2xl border border-white/10"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Mano de Obra (ARS)</p><p className="text-2xl font-black">${totalLaborARS.toLocaleString('es-AR')}</p></div>
-                    <div className="p-4 bg-primary rounded-2xl shadow-lg"><p className="text-[10px] font-black text-white/70 uppercase tracking-widest mb-1">Costo Total Final (ARS)</p><p className="text-3xl font-black">${currentEditingCosts.ars.toLocaleString('es-AR')}</p></div>
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-sm font-black uppercase tracking-[0.2em] flex items-center gap-2">
+                      <Layers className="h-5 w-5 text-primary" /> Estructura de Materiales (BOM)
+                    </h3>
+                    <Badge variant="outline" className="text-white border-white/20">COSTOS CALCULADOS</Badge>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Insumos Base ARS</p>
+                      <p className="text-xl font-black">${detailedBOMCosts.arsBase.toLocaleString('es-AR')}</p>
+                    </div>
+                    <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Insumos Base USD</p>
+                      <p className="text-xl font-black">u$s {detailedBOMCosts.usdBase.toLocaleString('es-AR')}</p>
+                    </div>
+                    <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Mano de Obra (ARS)</p>
+                      <p className="text-xl font-black">${detailedBOMCosts.laborTotalARS.toLocaleString('es-AR')}</p>
+                    </div>
+                    <div className="p-4 bg-primary rounded-2xl shadow-lg">
+                      <p className="text-[10px] font-black text-white/70 uppercase tracking-widest mb-1">Total Final ARS</p>
+                      <p className="text-2xl font-black">${detailedBOMCosts.totalARS.toLocaleString('es-AR')}</p>
+                    </div>
+                    <div className="p-4 bg-emerald-600 rounded-2xl shadow-lg">
+                      <p className="text-[10px] font-black text-white/70 uppercase tracking-widest mb-1">Total Final USD</p>
+                      <p className="text-2xl font-black">u$s {detailedBOMCosts.totalUSD.toLocaleString('es-AR')}</p>
+                    </div>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -2734,7 +2782,7 @@ function CatalogContent() {
                                 <div className="space-y-1.5">
                                   <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1">Subtotal</Label>
                                   <div className="h-10 flex items-center justify-end px-3 bg-slate-50 border rounded-lg">
-                                    <span className="font-black text-base">{currentCurrency === 'USD' ? 'u$s' : '$'} {(currentQty * currentPrice).toLocaleString('es-AR')}</span>
+                                    <span className="font-black text-base">{currentCurrency === 'USD' ? 'u$s' : '$'} {((currentQty ?? 0) * (currentPrice ?? 0)).toLocaleString('es-AR')}</span>
                                   </div>
                                 </div>
                               </div>
@@ -3090,7 +3138,7 @@ function CatalogContent() {
                       const detail = items?.find(it => it.id === comp.productId);
                       const cost = calculateCost(detail || {}, items || [], currentRate).ars;
                       return (
-                        <tr key={i} className="border-b border-slate-300">
+                        <tr key={i} className="border-b border-slate-200">
                           <td className="p-2 font-bold">{detail?.name || 'Desconocido'}</td>
                           <td className="p-2 text-center font-black">{comp.quantity}</td>
                           <td className="p-2 text-right">${(cost * comp.quantity).toLocaleString('es-AR')}</td>
@@ -3145,7 +3193,7 @@ function CatalogContent() {
                 </thead>
                 <tbody>
                   {explosionSummary?.all.map((f: any, i: number) => (
-                    <tr key={i} className="border-b border-slate-300 h-12">
+                    <tr key={i} className="border-b border-slate-200 h-12">
                       <td className="p-2 font-bold">{f.name}</td>
                       <td className="p-2 text-center font-black text-lg">{f.required}</td>
                       <td className="p-2 text-center">
