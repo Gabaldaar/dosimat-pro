@@ -1335,7 +1335,7 @@ function CatalogContent() {
     const usd = pendingItems.reduce((sum, i) => sum + ((manualPurchaseQtys[i.id] ?? i.quantity) * (manualPurchaseCurrencies[i.id] === 'USD' ? (manualPurchasePrices[i.id] ?? i.price) : 0)), 0);
     text += `\n*INVERSIÓN ESTIMADA:*\n`;
     if (ars > 0) text += `ARS: $${ars.toLocaleString('es-AR')}\n`;
-    if (usd > 0) text += `USD: u$s ${usd.toLocaleString('es-AR')}`;
+    if (usd > 0) text += `USD: u$s {usd.toLocaleString('es-AR')}`;
     navigator.clipboard.writeText(text);
     toast({ title: "Lista de compras copiada", description: `Lista filtrada para ${supplierFilter}.` });
   }
@@ -1759,6 +1759,13 @@ function CatalogContent() {
                                   )}
                                 </div>
                               </div>
+                              {item.description && (
+                                <div className="p-2 bg-muted/10 rounded-lg border border-dashed">
+                                  <p className="text-[10px] font-medium text-muted-foreground italic line-clamp-2">
+                                    {item.description}
+                                  </p>
+                                </div>
+                              )}
                             </CardContent>
                           </Card>
                         ); 
@@ -1915,6 +1922,15 @@ function CatalogContent() {
                     <p className="text-[9px] text-muted-foreground uppercase font-bold">SE FABRICA A PARTIR DE OTROS COMPONENTES</p>
                   </div>
                 </div>
+              </div>
+              <div className="space-y-2 col-span-full">
+                <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Notas / Observaciones</Label>
+                <Textarea 
+                  value={formData.description ?? ""} 
+                  onChange={(e) => setFormData({...formData, description: e.target.value})} 
+                  placeholder="Comentarios adicionales, especificaciones, etc."
+                  className="min-h-[80px] bg-white"
+                />
               </div>
             </div>
 
