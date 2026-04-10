@@ -65,7 +65,8 @@ import {
   ChevronDown,
   LinkIcon,
   Archive,
-  CreditCard
+  CreditCard,
+  StickyNote
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -95,6 +96,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -1713,6 +1719,26 @@ function CatalogContent() {
                                   <Badge variant="outline" className="text-[9px] font-bold bg-white text-muted-foreground border-muted-foreground/20">{catName}</Badge>
                                 </div>
                                 <div className="flex items-center gap-1">
+                                  {item.description && (
+                                    <Popover>
+                                      <PopoverTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-500 hover:bg-amber-50 transition-colors" title="Ver Notas">
+                                          <StickyNote className="h-4 w-4" />
+                                        </Button>
+                                      </PopoverTrigger>
+                                      <PopoverContent className="w-80 shadow-2xl border-amber-100 bg-white">
+                                        <div className="space-y-3">
+                                          <div className="flex items-center gap-2 border-b border-amber-50 pb-2">
+                                            <StickyNote className="h-3 w-3 text-amber-600" />
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-amber-700">Notas y Observaciones</span>
+                                          </div>
+                                          <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap italic">
+                                            {item.description}
+                                          </p>
+                                        </div>
+                                      </PopoverContent>
+                                    </Popover>
+                                  )}
                                   <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 group-hover:text-primary transition-colors" onClick={() => { setSelectedProductForHistory(item); setIsPurchaseHistoryOpen(true); }} title="Ver Historial de Compras"><History className="h-4 w-4" /></Button>
                                   <DropdownMenuUI>
                                     <DropdownMenuTriggerUI asChild><Button variant="ghost" size="icon" className="h-8 w-8 opacity-40 group-hover:opacity-100"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTriggerUI>
@@ -1759,13 +1785,6 @@ function CatalogContent() {
                                   )}
                                 </div>
                               </div>
-                              {item.description && (
-                                <div className="p-2 bg-muted/10 rounded-lg border border-dashed">
-                                  <p className="text-[10px] font-medium text-muted-foreground italic line-clamp-2">
-                                    {item.description}
-                                  </p>
-                                </div>
-                              )}
                             </CardContent>
                           </Card>
                         ); 
@@ -1929,7 +1948,7 @@ function CatalogContent() {
                   value={formData.description ?? ""} 
                   onChange={(e) => setFormData({...formData, description: e.target.value})} 
                   placeholder="Comentarios adicionales, especificaciones, etc."
-                  className="min-h-[80px] bg-white"
+                  className="min-h-[120px] bg-white"
                 />
               </div>
             </div>
@@ -2430,7 +2449,7 @@ function CatalogContent() {
               ) : (
                 Object.keys(displayItemsBySupplier).sort().map(sup => {
                   const itemsInGroup = displayItemsBySupplier[sup];
-                  const isOrdered = supplierStatuses[sup] === 'ordered';
+                  const isOrdered = (supplierStatuses[sup] || 'pending') === 'ordered';
                   const isCompleted = purchaseOrderToView?.status === 'completed';
                   const receivedItemsCount = itemsInGroup.filter(i => i.received).length;
                   const hasSomeReceived = receivedItemsCount > 0;
