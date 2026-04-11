@@ -1578,7 +1578,9 @@ function CatalogContent() {
             key={po.id} 
             className={cn(
               "glass-card hover:shadow-lg transition-all cursor-pointer border-l-4 group", 
-              allReceived ? 'border-l-emerald-500 shadow-none' : 'border-l-emerald-600'
+              allReceived 
+                ? 'border-l-emerald-500 bg-emerald-50/10 shadow-none' 
+                : 'border-l-blue-600 bg-white'
             )} 
             onClick={() => setPurchaseOrderToView(po)}
           >
@@ -1599,9 +1601,12 @@ function CatalogContent() {
               <CardDescription className="text-[10px] font-bold uppercase">Creada el {new Date(po.createdAt).toLocaleDateString('es-AR')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="bg-emerald-50/50 border border-emerald-100 rounded-lg p-3 flex items-center justify-between">
-                <span className="text-[10px) font-black text-muted-foreground uppercase">Ítems Totales</span>
-                <span className="text-2xl font-black text-emerald-700">{po.items.length}</span>
+              <div className={cn(
+                "border rounded-lg p-3 flex items-center justify-between",
+                allReceived ? "bg-emerald-100/50 border-emerald-200" : "bg-blue-50/50 border-blue-100"
+              )}>
+                <span className="text-[10px] font-black text-muted-foreground uppercase">Ítems Totales</span>
+                <span className={cn("text-2xl font-black", allReceived ? "text-emerald-700" : "text-blue-700")}>{po.items.length}</span>
               </div>
               {po.productionOrderId && (
                 <div className="flex items-center gap-2 text-[9px] font-bold text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-100">
