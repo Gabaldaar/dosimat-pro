@@ -1139,7 +1139,7 @@ function TransactionsContent() {
                       <TableRow>
                         <TableHead className="text-[10px] font-black uppercase">Fecha</TableHead>
                         <TableHead className="text-[10px] font-black uppercase">Cliente</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase">Tipo</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase">Tipo / Nota</TableHead>
                         <TableHead className="text-[10px] font-black uppercase">Caja</TableHead>
                         <TableHead className="text-right text-[10px] font-black uppercase">Monto Real</TableHead>
                         <TableHead className="text-right text-[10px] font-black uppercase">Abonado</TableHead>
@@ -1164,7 +1164,12 @@ function TransactionsContent() {
                                 {cust?.cuit_dni && <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-tighter">ID: {cust.cuit_dni}</span>}
                               </div>
                             </TableCell>
-                            <TableCell><Badge variant="outline" className={cn("text-[9px] gap-1 px-2 font-black uppercase", info.color)}><Icon className="h-3 w-3" />{info.label}</Badge></TableCell>
+                            <TableCell>
+                              <div className="flex flex-col gap-1">
+                                <Badge variant="outline" className={cn("text-[9px] gap-1 px-2 font-black uppercase w-fit", info.color)}><Icon className="h-3 w-3" />{info.label}</Badge>
+                                {tx.description && <span className="text-[10px] text-muted-foreground italic truncate max-w-[150px]" title={tx.description}>{tx.description}</span>}
+                              </div>
+                            </TableCell>
                             <TableCell><span className="text-[10px] font-black text-muted-foreground uppercase">{acc?.name || "---"}</span></TableCell>
                             <TableCell className="text-right font-black text-slate-800">{tx.currency==='USD'?'u$s':'$'} {Math.abs(tx.amount || 0).toLocaleString()}</TableCell>
                             <TableCell className="text-right text-xs font-bold text-emerald-700">{tx.currency==='USD'?'u$s':'$'} {Number(tx.paidAmount || 0).toLocaleString()}</TableCell>
@@ -1261,6 +1266,12 @@ function TransactionsContent() {
                             {acc?.name || "A cuenta"}
                           </span>
                         </div>
+
+                        {tx.description && (
+                          <p className="text-[11px] text-muted-foreground italic bg-muted/5 p-2 rounded-lg border border-dashed mt-1 line-clamp-2">
+                            {tx.description}
+                          </p>
+                        )}
 
                         <div className="grid grid-cols-2 gap-3 pt-2 border-t border-dashed">
                           <div>
@@ -1500,8 +1511,14 @@ function TransactionsContent() {
 
           <AlertDialog open={!!txToDelete} onOpenChange={(o) => { if(!o) setTxToDelete(null); }}>
             <AlertDialogContent>
-              <AlertDialogHeader><AlertDialogTitle className="text-rose-600 font-black flex items-center gap-2"><Trash2 className="h-5 w-5" /> ¿Confirmar eliminación?</AlertDialogTitle><AlertDialogDescription className="font-bold text-slate-700">Se revertirán todos los saldos asociados e imputaciones. Esta acción es irreversible.</AlertDialogDescription></AlertDialogHeader>
-              <AlertDialogFooter><AlertDialogCancel className="font-bold">Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDeleteTx} className="bg-destructive font-black uppercase">Eliminar y Revertir</AlertDialogAction></AlertDialogFooter>
+              <AlertDialogHeader>
+                <AlertDialogTitle className="text-rose-600 font-black flex items-center gap-2"><Trash2 className="h-5 w-5" /> ¿Confirmar eliminación?</AlertDialogTitle>
+                <AlertDialogDescription className="font-bold text-slate-700">Se revertirán todos los saldos asociados e imputaciones. Esta acción es irreversible.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="font-bold">Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteTx} className="bg-destructive font-black uppercase">Eliminar y Revertir</AlertDialogAction>
+              </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
 
