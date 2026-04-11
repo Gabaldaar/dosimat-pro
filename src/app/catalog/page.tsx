@@ -511,6 +511,7 @@ function CatalogContent() {
     return JSON.stringify(manualPurchaseQtys) !== JSON.stringify(initialPlanData.qtys) ||
            JSON.stringify(manualPurchasePrices) !== JSON.stringify(initialPlanData.prices) ||
            JSON.stringify(manualPurchaseCurrencies) !== JSON.stringify(initialPlanData.currencies) ||
+           JSON.stringify(manualPurchaseCurrencies) !== JSON.stringify(initialPlanData.currencies) ||
            JSON.stringify(manualSuppliers) !== JSON.stringify(initialPlanData.sups) ||
            JSON.stringify(supplierStatuses) !== JSON.stringify(initialPlanData.statuses) ||
            !itemsCountMatch;
@@ -1905,7 +1906,7 @@ function CatalogContent() {
               <div className="flex items-center gap-3">
                 <Box className="h-6 w-6 text-primary" />
                 <div>
-                  <DialogTitle className="text-xl font-black uppercase text-primary tracking-tighter">{editingItemId ? 'Configurar Ítem' : 'Nuevo Ítem'}</DialogTitle>
+                  <DialogTitle className="text-xl font-black uppercase text-primary tracking-tighter">{(editingItemId ? 'Configurar Ítem' : 'Nuevo Ítem')}</DialogTitle>
                   <DialogDescription className="text-[10px] font-bold uppercase text-slate-500">Parámetros técnicos, costos y estructura</DialogDescription>
                 </div>
               </div>
@@ -1946,7 +1947,7 @@ function CatalogContent() {
                 </div>
                 <div className="grid grid-cols-2 gap-4 p-4 bg-muted/20 rounded-2xl border border-dashed">
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2"><Switch checked={formData.isService} onCheckedChange={(v) => setFormData({...formData, iService: v, trackStock: !v})} /><Label className="text-[10px] font-black uppercase">Es un Servicio</Label></div>
+                    <div className="flex items-center gap-2"><Switch checked={formData.isService} onCheckedChange={(v) => setFormData({...formData, isService: v, trackStock: !v})} /><Label className="text-[10px] font-black uppercase">Es un Servicio</Label></div>
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center gap-2"><Switch disabled={formData.isService} checked={formData.trackStock} onCheckedChange={(v) => setFormData({...formData, trackStock: v})} /><Label className="text-[10px] font-black uppercase">Controlar Stock</Label></div>
@@ -2266,7 +2267,7 @@ function CatalogContent() {
           <DialogFooter className="p-4 border-t bg-slate-50">
             <div className="flex justify-between items-center w-full">
               <Button variant="outline" onClick={handleCloseOrderView} className="font-bold">Cerrar</Button>
-              {liveOrderToView?.status === 'ready' && !isProductionOutOfSync && (
+              {(liveOrderToView?.status === 'ready' && !isProductionOutOfSync) && (
                 <Button onClick={handleAssembleFinal} className="bg-blue-600 hover:bg-blue-700 font-black px-8">FINALIZAR ARMADO E INGRESAR STOCK</Button>
               )}
             </div>
@@ -2455,7 +2456,7 @@ function CatalogContent() {
                 <Badge className={cn("font-black uppercase text-[10px]", purchaseOrderToView?.status === 'completed' ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700")}>
                   {purchaseOrderToView?.status === 'completed' ? 'RECIBIDA COMPLETA' : 'PENDIENTE DE RECEPCIÓN'}
                 </Badge>
-                {purchaseOrderToView?.status !== 'completed' && (
+                {(purchaseOrderToView?.status !== 'completed') && (
                   <Button 
                     variant={hasUnsavedChanges ? "default" : "outline"} 
                     size="sm" 
@@ -2469,7 +2470,7 @@ function CatalogContent() {
             </div>
           </DialogHeader>
           
-          {purchaseOrderToView?.status !== 'completed' && (
+          {(purchaseOrderToView?.status !== 'completed') && (
             <div className="px-6 py-3 bg-muted/10 border-b flex flex-col md:flex-row gap-4 items-end">
               <div className="space-y-1 flex-1">
                 <div className="grid grid-cols-2 md:grid-cols-2 gap-3">
@@ -2563,7 +2564,7 @@ function CatalogContent() {
                                 size="sm" 
                                 className="h-8 gap-2 bg-emerald-600 hover:bg-emerald-700 font-bold text-xs flex-1 md:flex-none" 
                                 onClick={() => handleReceiveMaterials(sup)} 
-                                disabled={itemsInGroup.every(i => (manualPurchaseQtys[i.id] ?? i.quantity ?? 0) <= 0)}
+                                disabled={(itemsInGroup.every(i => (manualPurchaseQtys[i.id] ?? i.quantity ?? 0) <= 0))}
                               >
                                 <Save className="h-3.5 w-3.5" /> INGRESAR COMPRA
                               </Button>
@@ -2624,7 +2625,7 @@ function CatalogContent() {
                                     <Input 
                                       type="number" 
                                       disabled={isLineLocked} 
-                                      value={currentQty ?? 0} 
+                                      value={currentQty} 
                                       onChange={(e) => {
                                         const val = Number(e.target.value);
                                         setManualPurchaseQtys(prev => ({ ...prev, [lineId]: val }));
@@ -2637,7 +2638,7 @@ function CatalogContent() {
                                       <Input 
                                         type="number" 
                                         disabled={isLineLocked} 
-                                        value={currentPrice ?? 0} 
+                                        value={currentPrice} 
                                         onChange={(e) => {
                                           const val = Number(e.target.value);
                                           setManualPurchasePrices(prev => ({ ...prev, [lineId]: val }));
@@ -2648,7 +2649,7 @@ function CatalogContent() {
                                         )} 
                                       />
                                       <Tabs 
-                                        value={currentCurrency ?? ""} 
+                                        value={currentCurrency} 
                                         onValueChange={(v: any) => setManualPurchaseCurrencies(prev => ({ ...prev, [lineId]: v }))}
                                         className={cn("shrink-0 h-8", isLineLocked && "pointer-events-none opacity-50")}
                                       >
@@ -2700,7 +2701,7 @@ function CatalogContent() {
                           const lineId = f.id;
                           const currentQty = (manualPurchaseQtys[lineId] ?? f.quantity ?? 0);
                           const currentPrice = (manualPurchasePrices[lineId] ?? f.price ?? 0);
-                          const currentCurrency = manualPurchaseCurrencies[lineId] || (f.currency || 'ARS');
+                          const currentCurrency = (manualPurchaseCurrencies[lineId] || (f.currency || 'ARS'));
                           const isLineLocked = isOrdered || isCompleted || f.received;
                           const isZero = currentPrice <= 0 && !f.received;
                           const refCost = f.refCostCurrency === 'USD' ? f.refCostUSD : f.refCostARS;
@@ -2736,7 +2737,7 @@ function CatalogContent() {
                                       type="number" 
                                       className="h-11 flex-1 text-center font-black text-xl bg-slate-50 border-slate-200" 
                                       disabled={isLineLocked}
-                                      value={currentQty ?? 0}
+                                      value={currentQty}
                                       onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: Number(e.target.value) }))}
                                     />
                                     <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" disabled={isLineLocked} onClick={() => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: ((prev[lineId] ?? f.quantity ?? 0) + 1) }))}>
@@ -2752,7 +2753,7 @@ function CatalogContent() {
                                       type="number" 
                                       className={cn("h-11 pl-10 text-center font-black text-xl bg-white", isZero ? "bg-rose-50 border-rose-300" : "border-emerald-200")} 
                                       disabled={isLineLocked}
-                                      value={currentPrice ?? 0}
+                                      value={currentPrice}
                                       onChange={(e) => setManualPurchasePrices(prev => ({ ...prev, [lineId]: Number(e.target.value) }))}
                                     />
                                   </div>
@@ -2780,7 +2781,7 @@ function CatalogContent() {
                                 <div className="space-y-1.5">
                                   <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1">Moneda</Label>
                                   <Tabs 
-                                    value={currentCurrency ?? ""} 
+                                    value={currentCurrency} 
                                     onValueChange={(v: any) => setManualPurchaseCurrencies(prev => ({ ...prev, [lineId]: v }))}
                                     className={cn("w-full", isLineLocked && "pointer-events-none opacity-50")}
                                   >
@@ -2793,7 +2794,7 @@ function CatalogContent() {
                                 <div className="space-y-1.5">
                                   <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1">Subtotal</Label>
                                   <div className="h-10 flex items-center justify-end px-3 bg-slate-50 border rounded-lg">
-                                    <span className="font-black text-base">{currentCurrency === 'USD' ? 'u$s' : '$'} {((currentQty ?? 0) * (currentPrice ?? 0)).toLocaleString('es-AR')}</span>
+                                    <span className="font-black text-base">{currentCurrency === 'USD' ? 'u$s' : '$'} {((currentQty) * (currentPrice)).toLocaleString('es-AR')}</span>
                                   </div>
                                 </div>
                               </div>
