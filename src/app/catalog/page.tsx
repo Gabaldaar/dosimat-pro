@@ -1367,7 +1367,7 @@ function CatalogContent() {
     const usd = pendingItems.reduce((sum, i) => sum + ((manualPurchaseQtys[i.id] ?? i.quantity) * (manualPurchaseCurrencies[i.id] === 'USD' ? (manualPurchasePrices[i.id] ?? i.price) : 0)), 0);
     text += `\n*INVERSIÓN ESTIMADA:*\n`;
     if (ars > 0) text += `ARS: $${ars.toLocaleString('es-AR')}\n`;
-    if (usd > 0) text += `USD: u$s {usd.toLocaleString('es-AR')}`;
+    if (usd > 0) text += `USD: u$s ${usd.toLocaleString('es-AR')}`;
     navigator.clipboard.writeText(text);
     toast({ title: "Lista de compras copiada", description: `Lista filtrada para ${supplierFilter}.` });
   }
@@ -1600,7 +1600,7 @@ function CatalogContent() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="bg-emerald-50/50 border border-emerald-100 rounded-lg p-3 flex items-center justify-between">
-                <span className="text-[10px] font-black text-muted-foreground uppercase">Ítems Totales</span>
+                <span className="text-[10px) font-black text-muted-foreground uppercase">Ítems Totales</span>
                 <span className="text-2xl font-black text-emerald-700">{po.items.length}</span>
               </div>
               {po.productionOrderId && (
@@ -2503,15 +2503,15 @@ function CatalogContent() {
                   const hasSomeReceived = receivedItemsCount > 0;
                   
                   const groupARS = itemsInGroup.reduce((sum, i) => {
-                    const q = manualPurchaseQtys[i.id] ?? i.quantity ?? 0;
-                    const p = manualPurchasePrices[i.id] ?? i.price ?? 0;
+                    const q = (manualPurchaseQtys[i.id] ?? i.quantity ?? 0);
+                    const p = (manualPurchasePrices[i.id] ?? i.price ?? 0);
                     const c = manualPurchaseCurrencies[i.id] ?? (i.currency || 'ARS');
                     return sum + (q * (c === 'ARS' ? p : 0));
                   }, 0);
                   
                   const groupUSD = itemsInGroup.reduce((sum, i) => {
-                    const q = manualPurchaseQtys[i.id] ?? i.quantity ?? 0;
-                    const p = manualPurchasePrices[i.id] ?? i.price ?? 0;
+                    const q = (manualPurchaseQtys[i.id] ?? i.quantity ?? 0);
+                    const p = (manualPurchasePrices[i.id] ?? i.price ?? 0);
                     const c = manualPurchaseCurrencies[i.id] ?? (i.currency || 'ARS');
                     return sum + (q * (c === 'USD' ? p : 0));
                   }, 0);
@@ -2587,8 +2587,8 @@ function CatalogContent() {
                           <TableBody>
                             {itemsInGroup.map((f: any) => {
                               const lineId = f.id;
-                              const currentQty = manualPurchaseQtys[lineId] ?? f.quantity ?? 0;
-                              const currentPrice = manualPurchasePrices[lineId] ?? f.price ?? 0;
+                              const currentQty = (manualPurchaseQtys[lineId] ?? f.quantity ?? 0);
+                              const currentPrice = (manualPurchasePrices[lineId] ?? f.price ?? 0);
                               const currentCurrency = manualPurchaseCurrencies[lineId] || (f.currency || 'ARS');
                               const isZero = currentPrice <= 0 && !f.received;
                               const isLineLocked = isOrdered || isCompleted || f.received;
@@ -2687,8 +2687,8 @@ function CatalogContent() {
                       <div className="md:hidden space-y-4">
                         {itemsInGroup.map((f: any) => {
                           const lineId = f.id;
-                          const currentQty = manualPurchaseQtys[lineId] ?? f.quantity ?? 0;
-                          const currentPrice = manualPurchasePrices[lineId] ?? f.price ?? 0;
+                          const currentQty = (manualPurchaseQtys[lineId] ?? f.quantity ?? 0);
+                          const currentPrice = (manualPurchasePrices[lineId] ?? f.price ?? 0);
                           const currentCurrency = manualPurchaseCurrencies[lineId] || (f.currency || 'ARS');
                           const isLineLocked = isOrdered || isCompleted || f.received;
                           const isZero = currentPrice <= 0 && !f.received;
@@ -3042,7 +3042,10 @@ function CatalogContent() {
       <AlertDialog open={isExitAlertOpen} onOpenChange={setIsExitAlertOpen}>
         <AlertDialogContent>
           <AlertDialogHeader><AlertDialogTitle>Cambios sin guardar o sincronizar</AlertDialogTitle><AlertDialogDescription>Has realizado modificaciones en el plan o en la orden de compra que no han sido guardadas. ¿Deseas salir de todas formas?</AlertDialogDescription></AlertDialogHeader>
-          <AlertDialogFooter><AlertDialogCancel>Seguir editando</AlertDialogCancel><AlertDialogAction onClick={() => { setIsExitAlertOpen(false); setPurchaseOrderToView(null); setOrderToView(null); setInitialProductionQty(null); }} className="bg-destructive">Salir sin guardar</AlertDialogAction></AlertDialogFooter>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setIsExitAlertOpen(false); setTimeout(() => { if(typeof document !== 'undefined') document.body.style.pointerEvents = 'auto'; }, 100); }}>Seguir editando</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setIsExitAlertOpen(false); setPurchaseOrderToView(null); setOrderToView(null); setInitialProductionQty(null); setTimeout(() => { if(typeof document !== 'undefined') document.body.style.pointerEvents = 'auto'; }, 100); }} className="bg-destructive">Salir sin guardar</AlertDialogAction>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
