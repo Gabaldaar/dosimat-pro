@@ -294,8 +294,8 @@ function CatalogContent() {
   })
 
   // Grouping Counts
-  const activeProdCount = useMemo(() => orders?.filter(o => o.status !== 'completed').length || 0, [orders]);
-  const activePurchCount = useMemo(() => purchaseOrders?.filter(po => !po.items.every((i: any) => i.received)).length || 0, [purchaseOrders]);
+  const activeProdCount = useMemo(() => (orders?.filter(o => o.status !== 'completed').length ?? 0), [orders]);
+  const activePurchCount = useMemo(() => (purchaseOrders?.filter(po => !po.items.every((i: any) => i.received)).length ?? 0), [purchaseOrders]);
 
   // Grouping Orders and Purchases
   const groupedOrders = useMemo(() => ({
@@ -903,7 +903,7 @@ function CatalogContent() {
       });
 
       // Limpiar ítems con cantidad 0 que no fueron recibidos
-      const finalItems = updatedItems.filter(i => i.quantity > 0 || i.received);
+      const finalItems = updatedItems.filter(i => (i.quantity > 0 || i.received));
 
       updateDocumentNonBlocking(doc(db, 'purchase_orders', existingPO.id), { 
         items: finalItems,
@@ -1039,9 +1039,9 @@ function CatalogContent() {
     
     itemsToProcess.forEach(item => {
       const lineId = item.id;
-      const qty = manualPurchaseQtys[lineId] ?? item.quantity;
-      const price = manualPurchasePrices[lineId] ?? item.price;
-      const currency = manualPurchaseCurrencies[lineId] ?? (item.currency || 'ARS');
+      const qty = (manualPurchaseQtys[lineId] ?? item.quantity);
+      const price = (manualPurchasePrices[lineId] ?? item.price);
+      const currency = (manualPurchaseCurrencies[lineId] ?? (item.currency || 'ARS'));
 
       if (qty > 0) {
         const purchaseId = Math.random().toString(36).substring(2, 11);
@@ -1123,7 +1123,7 @@ function CatalogContent() {
     if (!item) return;
     const finalUpdates = { ...updates };
     if ('costAmount' in updates || 'costCurrency' in updates) {
-      const amount = updates.costAmount ?? (item.costCurrency === 'USD' ? (item.costUSD ?? 0) : (item.costARS ?? 0));
+      const amount = (updates.costAmount ?? (item.costCurrency === 'USD' ? (item.costUSD ?? 0) : (item.costARS ?? 0)));
       const currency = updates.costCurrency ?? item.costCurrency;
       finalUpdates.costARS = currency === 'ARS' ? amount : 0;
       finalUpdates.costUSD = currency === 'USD' ? amount : 0;
@@ -1358,9 +1358,9 @@ function CatalogContent() {
     }
     pendingItems.forEach(f => {
       const lineId = f.id;
-      const qty = manualPurchaseQtys[lineId] ?? f.quantity;
-      const price = manualPurchasePrices[lineId] ?? f.price;
-      const currency = manualPurchaseCurrencies[lineId] || (f.currency || 'ARS');
+      const qty = (manualPurchaseQtys[lineId] ?? f.quantity);
+      const price = (manualPurchasePrices[lineId] ?? f.price);
+      const currency = (manualPurchaseCurrencies[lineId] || (f.currency || 'ARS'));
       text += `- *${f.productName}*: ${qty} unidades. (Precio Ref: ${currency === 'USD' ? 'u$s' : '$'}${price.toLocaleString('es-AR')})\n`;
     });
     const ars = pendingItems.reduce((sum, i) => sum + ((manualPurchaseQtys[i.id] ?? i.quantity) * (manualPurchaseCurrencies[i.id] === 'ARS' ? (manualPurchasePrices[i.id] ?? i.price) : 0)), 0);
@@ -1498,9 +1498,9 @@ function CatalogContent() {
       groups[sup].push({
         ...item,
         id: lineId,
-        available: prod?.stock ?? 0,
-        refCostARS: prod?.costARS ?? 0,
-        refCostUSD: prod?.costUSD ?? 0,
+        available: (prod?.stock ?? 0),
+        refCostARS: (prod?.costARS ?? 0),
+        refCostUSD: (prod?.costUSD ?? 0),
         refCostCurrency: prod?.costCurrency || (prod?.costUSD > 0 && !prod?.costARS ? 'USD' : 'ARS')
       });
     });
@@ -1511,6 +1511,7 @@ function CatalogContent() {
   const renderProductionOrders = (ordersList: any[], isHistory: boolean = false) => (
     <div className={cn("grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6", isHistory && "opacity-75 grayscale-[0.2]")}>
       {ordersList.map((order: any) => {
+        const isCompleted = order.status === 'completed';
         const statusInfo = {
           draft: { label: "Borrador", icon: ClipboardList, color: "text-slate-600 bg-slate-100 border-slate-200" },
           pending_purchase: { label: "Faltan Materiales", icon: ShoppingCart, color: "text-amber-700 bg-amber-50 border-amber-200" },
@@ -1524,8 +1525,10 @@ function CatalogContent() {
           <Card 
             key={order.id} 
             className={cn(
-              "glass-card hover:shadow-lg transition-all cursor-pointer border-l-4 group", 
-              isHistory ? 'border-l-emerald-500 shadow-none' : 'border-l-amber-500'
+              "glass-card hover:shadow-lg transition-all cursor-pointer border-l-[6px] group", 
+              isCompleted 
+                ? 'border-l-emerald-500 bg-emerald-50/40 shadow-none opacity-90' 
+                : 'border-l-amber-500 bg-white'
             )} 
             onClick={() => handleOpenOrderView(order)}
           >
@@ -1548,9 +1551,12 @@ function CatalogContent() {
               <CardDescription className="text-[10px] font-bold uppercase tracking-tighter">Creada el {new Date(order.createdAt).toLocaleDateString('es-AR')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="bg-white/50 border rounded-lg p-3 flex items-center justify-between shadow-inner">
+              <div className={cn(
+                "border rounded-lg p-3 flex items-center justify-between shadow-inner",
+                isCompleted ? "bg-emerald-100/50 border-emerald-200" : "bg-white border-slate-200"
+              )}>
                 <span className="text-[10px] font-black text-muted-foreground uppercase">Unidades a Fabricar</span>
-                <span className={cn("text-2xl font-black", isHistory ? "text-emerald-600" : "text-amber-600")}>{order.quantity}</span>
+                <span className={cn("text-2xl font-black", isCompleted ? "text-emerald-600" : "text-amber-600")}>{order.quantity}</span>
               </div>
               {order.purchaseOrderId && (
                 <div className="flex items-center gap-2 text-[9px] font-bold text-emerald-700 bg-emerald-50 p-1.5 rounded border border-emerald-100">
@@ -1577,19 +1583,19 @@ function CatalogContent() {
           <Card 
             key={po.id} 
             className={cn(
-              "glass-card hover:shadow-lg transition-all cursor-pointer border-l-4 group", 
+              "glass-card hover:shadow-lg transition-all cursor-pointer border-l-[6px] group", 
               allReceived 
-                ? 'border-l-emerald-500 bg-emerald-50/10 shadow-none' 
-                : 'border-l-blue-600 bg-white'
+                ? 'border-l-emerald-500 bg-emerald-50/40 shadow-none opacity-90' 
+                : 'border-l-blue-600 bg-white shadow-sm'
             )} 
             onClick={() => setPurchaseOrderToView(po)}
           >
             <CardHeader className="pb-3">
               <div className="flex justify-between items-start">
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5", allReceived ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-blue-50 text-blue-700 border-blue-200")}>
+                  <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5 shadow-sm", allReceived ? "bg-emerald-100 text-emerald-700 border-emerald-300" : "bg-blue-50 text-blue-700 border-blue-200")}>
                     {allReceived ? <CheckCircle className="h-2.5 w-2.5 mr-1" /> : <Clock className="h-2.5 w-2.5 mr-1" />}
-                    {allReceived ? 'COMPLETADA' : 'PENDIENTE'}
+                    {allReceived ? 'RECIBIDA COMPLETA' : 'PENDIENTE'}
                   </Badge>
                   <span className="text-[10px] font-black text-primary bg-primary/5 px-2 py-0.5 rounded border border-primary/10">{friendlyId}</span>
                 </div>
@@ -1603,7 +1609,7 @@ function CatalogContent() {
             <CardContent className="space-y-3">
               <div className={cn(
                 "border rounded-lg p-3 flex items-center justify-between",
-                allReceived ? "bg-emerald-100/50 border-emerald-200" : "bg-blue-50/50 border-blue-100"
+                allReceived ? "bg-emerald-100/50 border-emerald-300" : "bg-blue-50/50 border-blue-100"
               )}>
                 <span className="text-[10px] font-black text-muted-foreground uppercase">Ítems Totales</span>
                 <span className={cn("text-2xl font-black", allReceived ? "text-emerald-700" : "text-blue-700")}>{po.items.length}</span>
@@ -1736,7 +1742,7 @@ function CatalogContent() {
                     <section className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6">
                       {filteredItems.map((item: any) => { 
                         const tracksStock = item.trackStock !== false; 
-                        const isLowStock = tracksStock && !item.isService && (item.stock ?? 0) <= (item.minStock ?? 0); 
+                        const isLowStock = tracksStock && !item.isService && ((item.stock ?? 0) <= (item.minStock ?? 0)); 
                         const catName = categoryMap[item.categoryId] || "Sin Categoría"; 
                         const marginARS = getMarginInfo(item.priceARS ?? 0, item.calculatedCostARS ?? 0); 
                         const marginUSD = getMarginInfo(item.priceUSD ?? 0, item.calculatedCostUSD ?? 0); 
@@ -1940,7 +1946,7 @@ function CatalogContent() {
                 </div>
                 <div className="grid grid-cols-2 gap-4 p-4 bg-muted/20 rounded-2xl border border-dashed">
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2"><Switch checked={formData.isService} onCheckedChange={(v) => setFormData({...formData, isService: v, trackStock: !v})} /><Label className="text-[10px] font-black uppercase">Es un Servicio</Label></div>
+                    <div className="flex items-center gap-2"><Switch checked={formData.isService} onCheckedChange={(v) => setFormData({...formData, iService: v, trackStock: !v})} /><Label className="text-[10px] font-black uppercase">Es un Servicio</Label></div>
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center gap-2"><Switch disabled={formData.isService} checked={formData.trackStock} onCheckedChange={(v) => setFormData({...formData, trackStock: v})} /><Label className="text-[10px] font-black uppercase">Controlar Stock</Label></div>
@@ -2199,7 +2205,7 @@ function CatalogContent() {
                     size="icon" 
                     className="h-16 w-16 shrink-0 border-primary/20 bg-slate-50 text-primary"
                     disabled={liveOrderToView?.status === 'completed'}
-                    onClick={() => setLocalProductionQty(prev => (prev || 0) + 1)}
+                    onClick={() => setLocalProductionQty(prev => ((prev ?? 0) + 1))}
                   >
                     <Plus className="h-8 w-8" />
                   </Button>
@@ -2733,7 +2739,7 @@ function CatalogContent() {
                                       value={currentQty ?? 0}
                                       onChange={(e) => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: Number(e.target.value) }))}
                                     />
-                                    <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" disabled={isLineLocked} onClick={() => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: (prev[lineId] ?? f.quantity ?? 0) + 1 }))}>
+                                    <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" disabled={isLineLocked} onClick={() => setManualPurchaseQtys(prev => ({ ...prev, [lineId]: ((prev[lineId] ?? f.quantity ?? 0) + 1) }))}>
                                       <Plus className="h-4 w-4" />
                                     </Button>
                                   </div>
@@ -2846,7 +2852,7 @@ function CatalogContent() {
                     <TableCell className="py-1"><Input type="number" value={item.minStock ?? 0} onChange={(e) => handleUpdateItemAudit(item.id, { minStock: Number(e.target.value) })} className="h-8 text-center font-black text-xs text-rose-600" /></TableCell>
                     <TableCell className="py-1">
                       <div className="flex items-center gap-1.5">
-                        <Input type="number" value={(item.costCurrency === 'USD' ? item.costUSD : item.costARS) ?? 0} onChange={(e) => handleUpdateItemAudit(item.id, { costAmount: Number(e.target.value) })} className="h-8 text-center font-black text-xs text-emerald-700" />
+                        <Input type="number" value={((item.costCurrency === 'USD' ? item.costUSD : item.costARS) ?? 0)} onChange={(e) => handleUpdateItemAudit(item.id, { costAmount: Number(e.target.value) })} className="h-8 text-center font-black text-xs text-emerald-700" />
                         <Tabs value={item.costCurrency || 'ARS'} onValueChange={(v) => handleUpdateItemAudit(item.id, { costCurrency: v })} className="shrink-0">
                           <TabsList className="h-8 p-0 gap-0 border">
                             <TabsTrigger value="ARS" className="h-7 text-[8px] font-black px-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white">ARS</TabsTrigger>
