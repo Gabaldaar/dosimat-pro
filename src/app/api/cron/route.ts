@@ -7,6 +7,7 @@ import { sendPushNotification } from '@/app/actions/notifications';
  * Se encarga de:
  * 1. Avisar a las 9 AM sobre rutas programadas o activas para hoy.
  * 2. Avisar sobre rutas de días anteriores que siguen "En Camino" (no cerradas).
+ * 3. Avisar a la noche (>= 20hs) si la ruta de hoy sigue abierta.
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -46,8 +47,8 @@ export async function GET(request: NextRequest) {
       const sheetDate = sheet.date;
 
       // 1. Alerta Mañanera (9 AM)
-      // Se activa si la ruta es para hoy, está en camino o planificada, y son las 9 AM.
-      if (sheetDate === todayStr && (sheet.status === 'active' || sheet.status === 'planned') && currentHour === 9 && !sheet.morningAlertSent) {
+      // Se activa si la ruta es para hoy y son las 9 AM.
+      if (sheetDate === todayStr && currentHour === 9 && !sheet.morningAlertSent) {
         if (allTokens.length > 0) {
           await sendPushNotification(allTokens, "Ruta para Hoy", "Hay una Hoja de Ruta programada para cumplir hoy.");
           await doc.ref.update({ morningAlertSent: true });
@@ -55,8 +56,22 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // 2. Alerta de Ruta sin finalizar
-      // Se activa si la fecha de la ruta es anterior a hoy pero el estado sigue siendo "active" (En Camino).
+      // 2. Alerta de Cierre Tardío (Hoy - post 20:00hs)
+      // Si es tarde y la ruta de hoy sigue "En Camino".
+      if (sheetDate === todayStr && sheet.status === 'active' && currentHour >= 20 && (!sheet.lastOverdueAlertDate || !sheet.lastOverdueAlertDate.includes(todayStr))) {
+        if (allTokens.length > 0) {
+          await sendPushNotification(
+            allTokens, 
+            "Ruta sin Cerrar", 
+            `La jornada de hoy todavía figura "En Camino". No olvides finalizarla al terminar.`
+          );
+          await doc.ref.update({ lastOverdueAlertDate: todayStr });
+          notificationsSent++;
+        }
+      }
+
+      // 3. Alerta de Ruta de días anteriores sin finalizar
+      // Se activa si la fecha de la ruta es anterior a hoy pero el estado sigue siendo "active".
       if (sheetDate < todayStr && sheet.status === 'active' && (!sheet.lastOverdueAlertDate || !sheet.lastOverdueAlertDate.includes(todayStr))) {
         if (allTokens.length > 0) {
           await sendPushNotification(
