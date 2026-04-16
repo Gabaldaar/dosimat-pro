@@ -2,7 +2,7 @@
 'use client';
 
 import { Messaging, getToken, onMessage } from 'firebase/messaging';
-import { Firestore, doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { Firestore, doc, setDoc, arrayUnion } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 
 /**
@@ -15,8 +15,8 @@ export async function requestNotificationPermission(
   messaging: Messaging | null,
   firestore: Firestore,
   user: User | null
-) {
-  if (!messaging || !user || typeof window === 'undefined') return;
+): Promise<boolean> {
+  if (!messaging || !user || typeof window === 'undefined') return false;
 
   try {
     const permission = await Notification.requestPermission();
@@ -26,18 +26,25 @@ export async function requestNotificationPermission(
       });
 
       if (currentToken) {
-        // Guardar el token en el perfil del usuario en Firestore para poder enviarle mensajes luego
+        // Guardar el token de forma persistente en el perfil del usuario
         const userRef = doc(firestore, 'users', user.uid);
-        await updateDoc(userRef, {
+        await setDoc(userRef, {
           fcmTokens: arrayUnion(currentToken)
-        });
-        console.log("Dispositivo registrado para notificaciones.");
+        }, { merge: true });
+        
+        console.log("Dosimat Pro: Dispositivo registrado para notificaciones push.");
+        return true;
       } else {
-        console.log('No se pudo obtener el token de registro. Revisa los permisos.');
+        console.warn('Dosimat Pro: No se pudo obtener el token de registro. Revisa los permisos en el navegador.');
+        return false;
       }
+    } else {
+      console.warn("Dosimat Pro: Permiso de notificaciones denegado por el usuario.");
+      return false;
     }
   } catch (error) {
-    console.error('Error al configurar notificaciones push:', error);
+    console.error('Dosimat Pro: Error al configurar notificaciones push:', error);
+    return false;
   }
 }
 
@@ -46,7 +53,7 @@ export function onMessageListener(messaging: Messaging | null) {
   
   return new Promise((resolve) => {
     onMessage(messaging, (payload) => {
-      console.log("Mensaje recibido en primer plano:", payload);
+      console.log("Dosimat Pro: Mensaje recibido en primer plano:", payload);
       resolve(payload);
     });
   });
