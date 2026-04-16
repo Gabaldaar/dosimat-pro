@@ -13,8 +13,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const secret = searchParams.get('secret');
 
-  // Validar clave secreta
-  if (secret !== process.env.CRON_SECRET) {
+  // Validar clave secreta contra variable de entorno
+  if (!secret || secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -25,15 +25,19 @@ export async function GET(request: NextRequest) {
     const currentHour = argentinaTime.getHours();
     const todayStr = argentinaTime.toISOString().split('T')[0];
 
-    const sheetsSnap = await adminDb.collection('route_sheets').get();
+    // Optimización: Solo traer rutas que no están completadas
+    const sheetsSnap = await adminDb.collection('route_sheets')
+      .where('status', 'in', ['planned', 'active'])
+      .get();
+      
     const usersSnap = await adminDb.collection('users').get();
     
     const allUsers = usersSnap.docs.map(doc => doc.data());
     const authorizedRoles = ['Admin', 'Employee', 'Collaborator', 'Communicator', 'Replenisher'];
     
-    // Obtener tokens de todos
+    // Obtener tokens de todos los miembros del equipo
     const allTokens = allUsers
-      .filter(u => authorizedRoles.includes(u.role) && u.fcmTokens)
+      .filter(u => authorizedRoles.includes(u.role) && u.fcmTokens && u.fcmTokens.length > 0)
       .flatMap(u => u.fcmTokens);
 
     let notificationsSent = 0;
@@ -43,6 +47,7 @@ export async function GET(request: NextRequest) {
       const sheetDate = sheet.date;
 
       // 1. Alerta Mañanera (9 AM)
+      // Se activa si la ruta es para hoy, está planificada y son las 9 AM.
       if (sheetDate === todayStr && sheet.status === 'planned' && currentHour === 9 && !sheet.morningAlertSent) {
         if (allTokens.length > 0) {
           await sendPushNotification(allTokens, "Ruta para Hoy", "Hay una Hoja de Ruta programada para cumplir hoy.");
@@ -51,8 +56,9 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // 2. Alerta de Ruta sin finalizar (Si es de ayer o antes y sigue activa)
-      if (sheetDate < todayStr && sheet.status === 'active' && !sheet.lastOverdueAlertDate?.includes(todayStr)) {
+      // 2. Alerta de Ruta sin finalizar
+      // Se activa si la fecha de la ruta es anterior a hoy pero el estado sigue siendo "active" (En Camino).
+      if (sheetDate < todayStr && sheet.status === 'active' && (!sheet.lastOverdueAlertDate || !sheet.lastOverdueAlertDate.includes(todayStr))) {
         if (allTokens.length > 0) {
           await sendPushNotification(
             allTokens, 
@@ -65,7 +71,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, processed: sheetsSnap.size, notificationsSent });
+    return NextResponse.json({ 
+      success: true, 
+      processed: sheetsSnap.size, 
+      notificationsSent,
+      timestamp: argentinaTime.toISOString()
+    });
   } catch (error) {
     console.error('Cron Error:', error);
     return NextResponse.json({ error: String(error) }, { status: 500 });

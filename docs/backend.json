@@ -27,6 +27,19 @@
       },
       "required": ["id", "email", "name", "role"]
     },
+    "RouteSheet": {
+      "title": "RouteSheet",
+      "type": "object",
+      "description": "Planilla de entrega diaria con seguimiento de alertas.",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["planned", "active", "completed"] },
+        "items": { "type": "array" },
+        "morningAlertSent": { "type": "boolean", "description": "Indica si ya se envió el aviso de las 9 AM." },
+        "lastOverdueAlertDate": { "type": "string", "description": "Fecha del último aviso de ruta no cerrada." }
+      }
+    },
     "Payout": {
       "title": "Payout",
       "type": "object",
