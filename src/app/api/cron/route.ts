@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
 import { sendPushNotification } from '@/app/actions/notifications';
@@ -6,8 +5,8 @@ import { sendPushNotification } from '@/app/actions/notifications';
 /**
  * Endpoint de CRON llamado por Fastcron periódicamente.
  * Se encarga de:
- * 1. Avisar a las 9 AM sobre rutas programadas para hoy.
- * 2. Avisar sobre rutas de días anteriores que siguen "En Camino".
+ * 1. Avisar a las 9 AM sobre rutas programadas o activas para hoy.
+ * 2. Avisar sobre rutas de días anteriores que siguen "En Camino" (no cerradas).
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -47,8 +46,8 @@ export async function GET(request: NextRequest) {
       const sheetDate = sheet.date;
 
       // 1. Alerta Mañanera (9 AM)
-      // Se activa si la ruta es para hoy, está planificada y son las 9 AM.
-      if (sheetDate === todayStr && sheet.status === 'planned' && currentHour === 9 && !sheet.morningAlertSent) {
+      // Se activa si la ruta es para hoy, está en camino o planificada, y son las 9 AM.
+      if (sheetDate === todayStr && (sheet.status === 'active' || sheet.status === 'planned') && currentHour === 9 && !sheet.morningAlertSent) {
         if (allTokens.length > 0) {
           await sendPushNotification(allTokens, "Ruta para Hoy", "Hay una Hoja de Ruta programada para cumplir hoy.");
           await doc.ref.update({ morningAlertSent: true });
