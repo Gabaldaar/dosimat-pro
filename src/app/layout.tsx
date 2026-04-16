@@ -5,6 +5,7 @@ import {Toaster} from '@/components/ui/toaster';
 import { FirebaseClientProvider } from '../firebase/client-provider';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { AuthGuard } from '@/components/auth/auth-guard';
+import { NotificationManager } from '@/components/layout/notification-manager';
 import Script from 'next/script';
 
 export const metadata: Metadata = {
@@ -50,6 +51,7 @@ export default function RootLayout({
         <FirebaseClientProvider>
           <AuthGuard>
             <SidebarProvider defaultOpen={true}>
+              <NotificationManager />
               {children}
               <Toaster />
             </SidebarProvider>
@@ -60,11 +62,13 @@ export default function RootLayout({
           {`
             if ('serviceWorker' in navigator) {
               window.addEventListener('load', function() {
+                // Registrar el SW estándar de PWA
                 navigator.serviceWorker.register('/sw.js').then(function(registration) {
-                  console.log('Dosimat Pro PWA: Registro de ServiceWorker exitoso');
-                }, function(err) {
-                  console.log('Dosimat Pro PWA: Error al registrar ServiceWorker: ', err);
+                  console.log('Dosimat Pro PWA: SW registrado');
                 });
+                
+                // El Service Worker de Firebase se registra automáticamente por la SDK 
+                // o lo manejamos explícitamente si es necesario.
               });
             }
           `}

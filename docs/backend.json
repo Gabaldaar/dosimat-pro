@@ -9,6 +9,11 @@
         "email": { "type": "string", "format": "email" },
         "name": { "type": "string" },
         "role": { "type": "string" },
+        "fcmTokens": { 
+          "type": "array", 
+          "items": { "type": "string" },
+          "description": "Tokens de dispositivos registrados para notificaciones push."
+        },
         "feesConfig": {
           "type": "object",
           "properties": {
@@ -92,7 +97,7 @@
   },
   "firestore": {
     "structure": [
-      { "path": "/users/{userId}", "definition": { "entityName": "User", "description": "Perfiles de usuario interno con configuración de honorarios." } },
+      { "path": "/users/{userId}", "definition": { "entityName": "User", "description": "Perfiles de usuario interno con configuración de honorarios y tokens de notificación." } },
       { "path": "/clients/{clientId}", "definition": { "entityName": "Customer", "description": "Cartera de clientes." } },
       { "path": "/route_sheets/{sheetId}", "definition": { "entityName": "RouteSheet", "description": "Planillas de entrega diaria." } },
       { "path": "/transactions/{txId}", "definition": { "entityName": "Transaction", "description": "Movimientos de caja y cuenta corriente." } },
