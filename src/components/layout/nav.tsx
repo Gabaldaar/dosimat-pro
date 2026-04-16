@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -16,7 +17,8 @@ import {
   BarChart3,
   Truck,
   Banknote,
-  BellRing
+  BellRing,
+  Loader2
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -58,6 +60,7 @@ export function Sidebar({ className }: { className?: string }) {
   const router = useRouter()
   const { toast } = useToast()
   const { state, isMobile, setOpenMobile } = useSidebar()
+  const [isLinking, setIsLinking] = React.useState(false)
 
   const userDocRef = useMemoFirebase(() => user ? doc(db, 'users', user.uid) : null, [user, db])
   const { data: userData } = useDoc(userDocRef)
@@ -90,17 +93,30 @@ export function Sidebar({ className }: { className?: string }) {
   }
 
   const handleEnableNotifications = async () => {
-    if (!messaging || !user || !db) return;
-    const success = await requestNotificationPermission(messaging, db, user);
-    if (success) {
+    if (!user || !db) return;
+    
+    if (!messaging) {
       toast({
-        title: "Dispositivo Vinculado",
-        description: "Ahora recibirás alertas de rutas y entregas en este equipo.",
+        title: "Servicio no disponible",
+        description: "No se pudo iniciar el sistema de mensajes. Prueba refrescando o usando otro navegador.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsLinking(true);
+    const result = await requestNotificationPermission(messaging, db, user);
+    setIsLinking(false);
+
+    if (result.success) {
+      toast({
+        title: "Vínculo Exitoso",
+        description: "Este dispositivo ya está registrado para recibir alertas.",
       });
     } else {
       toast({
-        title: "Vínculo Fallido",
-        description: "Asegúrate de permitir las notificaciones en la configuración del navegador.",
+        title: "Error de Vinculación",
+        description: result.error || "Asegúrate de permitir las notificaciones.",
         variant: "destructive"
       });
     }
@@ -175,10 +191,12 @@ export function Sidebar({ className }: { className?: string }) {
           <Button 
             variant="outline" 
             size="sm" 
+            disabled={isLinking}
             className="w-full justify-start text-[10px] font-black uppercase tracking-widest gap-2 bg-primary/5 text-primary border-primary/20"
             onClick={handleEnableNotifications}
           >
-            <BellRing className="h-3.5 w-3.5" /> Vincular Dispositivo
+            {isLinking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BellRing className="h-3.5 w-3.5" />}
+            {isLinking ? 'Vinculando...' : 'Vincular Dispositivo'}
           </Button>
         )}
         {user && (
