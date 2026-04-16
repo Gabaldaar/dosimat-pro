@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Messaging, getToken, onMessage } from 'firebase/messaging';
@@ -6,8 +5,8 @@ import { Firestore, doc, setDoc, arrayUnion } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 
 /**
- * REEMPLAZA ESTA CONSTANTE con la "VAPID Key" generada en la Consola de Firebase
- * Configuración de proyecto > Cloud Messaging > Certificados de inserción web
+ * REEMPLAZA ESTA CONSTANTE con tu "VAPID Key" generada en la Consola de Firebase.
+ * Si ya la habías pegado, asegúrate de mantenerla aquí.
  */
 const VAPID_KEY = "TBLGb4ASwD1k90C3EJGiOHfS3FQD8gRdVBeN6SXz_sMInmOWuNTqgf9zc92VLXZWta001BmQh1wbpxi8prjlKwp";
 
@@ -35,15 +34,15 @@ export async function requestNotificationPermission(
         console.log("Dosimat Pro: Dispositivo registrado para notificaciones push.");
         return true;
       } else {
-        console.warn('Dosimat Pro: No se pudo obtener el token de registro. Revisa los permisos en el navegador.');
+        console.warn('Dosimat Pro: No se pudo obtener el token de registro.');
         return false;
       }
     } else {
-      console.warn("Dosimat Pro: Permiso de notificaciones denegado por el usuario.");
+      console.warn("Dosimat Pro: Permiso de notificaciones denegado.");
       return false;
     }
   } catch (error) {
-    console.error('Dosimat Pro: Error al configurar notificaciones push:', error);
+    console.error('Dosimat Pro: Error al configurar notificaciones:', error);
     return false;
   }
 }

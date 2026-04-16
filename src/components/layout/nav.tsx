@@ -15,7 +15,8 @@ import {
   FileText,
   BarChart3,
   Truck,
-  Banknote
+  Banknote,
+  BellRing
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -23,6 +24,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useFirebase, useDoc, useMemoFirebase, useUser, useCollection } from "../../firebase"
 import { signOut } from "firebase/auth"
 import { doc, collection, query, where } from "firebase/firestore"
+import { requestNotificationPermission } from "@/firebase/messaging"
+import { useToast } from "@/hooks/use-toast"
 import {
   Sidebar as SidebarUI,
   SidebarContent,
@@ -50,9 +53,10 @@ const navItems = [
 
 export function Sidebar({ className }: { className?: string }) {
   const pathname = usePathname()
-  const { auth, firestore, user } = useFirebase()
+  const { auth, firestore, user, messaging } = useFirebase()
   const db = firestore!
   const router = useRouter()
+  const { toast } = useToast()
   const { state, isMobile, setOpenMobile } = useSidebar()
 
   const userDocRef = useMemoFirebase(() => user ? doc(db, 'users', user.uid) : null, [user, db])
@@ -85,6 +89,23 @@ export function Sidebar({ className }: { className?: string }) {
     }
   }
 
+  const handleEnableNotifications = async () => {
+    if (!messaging || !user || !db) return;
+    const success = await requestNotificationPermission(messaging, db, user);
+    if (success) {
+      toast({
+        title: "Dispositivo Vinculado",
+        description: "Ahora recibirás alertas de rutas y entregas en este equipo.",
+      });
+    } else {
+      toast({
+        title: "Vínculo Fallido",
+        description: "Asegúrate de permitir las notificaciones en la configuración del navegador.",
+        variant: "destructive"
+      });
+    }
+  }
+
   const filteredNavItems = React.useMemo(() => {
     if (!userData) return [];
     
@@ -107,7 +128,6 @@ export function Sidebar({ className }: { className?: string }) {
       let badgeCount = 0;
       if (item.href === '/routes') badgeCount = activeRoutesCount;
       if (item.href === '/catalog') badgeCount = catalogCount;
-      // Eliminado el badge de liquidaciones
       return { ...item, badgeCount };
     });
   }, [userData, activeRoutesCount, catalogCount]);
@@ -151,6 +171,16 @@ export function Sidebar({ className }: { className?: string }) {
       </SidebarContent>
 
       <SidebarFooter className={cn("p-4 border-t space-y-4", isMobile && "pb-12")}>
+        {state === "expanded" && (
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="w-full justify-start text-[10px] font-black uppercase tracking-widest gap-2 bg-primary/5 text-primary border-primary/20"
+            onClick={handleEnableNotifications}
+          >
+            <BellRing className="h-3.5 w-3.5" /> Vincular Dispositivo
+          </Button>
+        )}
         {user && (
           <div className="flex items-center gap-3 py-1">
             <Avatar className="h-8 w-8 border border-primary/20 shrink-0">
@@ -186,12 +216,8 @@ export function MobileNav() {
 
   // Consultas para Badges
   const routesQ = useMemoFirebase(() => query(collection(db, 'route_sheets'), where('status', '==', 'active')), [db])
-  const prodQ = useMemoFirebase(() => query(collection(db, 'production_orders'), where('status', '!=', 'completed')), [db])
-  const purchQ = useMemoFirebase(() => query(collection(db, 'purchase_orders'), where('status', '!=', 'completed')), [db])
 
   const { data: activeRoutes } = useCollection(routesQ)
-  const { data: openProd } = useCollection(prodQ)
-  const { data: openPurch } = useCollection(purchQ)
 
   const activeRoutesCount = activeRoutes?.length || 0;
   
@@ -220,7 +246,6 @@ export function MobileNav() {
     return base.map(item => {
       let count = 0;
       if (item.href === '/routes') count = activeRoutesCount;
-      // Eliminado el badge de liquidaciones
       return { ...item, count };
     });
   }, [userData, activeRoutesCount]);
