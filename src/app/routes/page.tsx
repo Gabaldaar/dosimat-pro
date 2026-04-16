@@ -174,13 +174,22 @@ function RoutesContent() {
     });
   }, [toast]);
 
-  // Función para notificar al equipo (Admins y Socios)
-  const notifyTeam = useCallback(async (title: string, body: string) => {
+  /**
+   * Función para notificar al equipo.
+   * target: 'all' notifica a todos los miembros autorizados.
+   * target: 'management' notifica solo a Administradores y Socios (Employee).
+   */
+  const notifyTeam = useCallback(async (title: string, body: string, target: 'all' | 'management' = 'management') => {
     if (!allUsers) return;
     
-    // Obtener tokens de Administradores y Socios (Employee)
+    const authorizedRoles = ['Admin', 'Employee', 'Collaborator', 'Communicator', 'Replenisher'];
+    const managementRoles = ['Admin', 'Employee'];
+    
     const tokens = allUsers
-      .filter(u => (u.role === 'Admin' || u.role === 'Employee') && u.fcmTokens)
+      .filter(u => {
+        const hasRole = target === 'all' ? authorizedRoles.includes(u.role) : managementRoles.includes(u.role);
+        return hasRole && u.fcmTokens;
+      })
       .flatMap(u => u.fcmTokens);
 
     if (tokens.length > 0) {
@@ -298,10 +307,10 @@ function RoutesContent() {
     )
     updateSheet(newItems)
 
-    // Si se marca como entregado, notificar
+    // Si se marca como entregado, notificar a MANAGEMENT
     if (field === 'isDelivered' && value === true) {
       const client = clients?.find(c => c.id === clientId);
-      notifyTeam("Entrega Realizada", `${userData?.name || 'El repositor'} entregó en lo de ${client?.apellido || 'un cliente'}.`);
+      notifyTeam("Entrega Realizada", `${userData?.name || 'El repositor'} entregó en lo de ${client?.apellido || 'un cliente'}.`, 'management');
     }
   }
 
@@ -309,7 +318,8 @@ function RoutesContent() {
     if (!selectedSheetId) return
     updateDocumentNonBlocking(doc(db, 'route_sheets', selectedSheetId), { status: "active" })
     toast({ title: "Ruta habilitada para entrega", description: "Ahora es visible para el repositor." })
-    notifyTeam("Ruta Iniciada", `El repositor ha iniciado la hoja de ruta del ${new Date(selectedSheet?.date + 'T12:00:00').toLocaleDateString('es-AR')}.`);
+    // Notificar a TODOS que la ruta inició
+    notifyTeam("Ruta Iniciada", `El repositor ha iniciado la hoja de ruta del ${new Date(selectedSheet?.date + 'T12:00:00').toLocaleDateString('es-AR')}.`, 'all');
   }
 
   const handleResetToPlanning = () => {
@@ -322,7 +332,8 @@ function RoutesContent() {
     if (!selectedSheetId) return
     updateDocumentNonBlocking(doc(db, 'route_sheets', selectedSheetId), { status: "completed" })
     toast({ title: "Ruta finalizada" })
-    notifyTeam("Jornada Finalizada", `Se ha cerrado la hoja de ruta. Total entregado: ${loadTotals.realChlorine} CL, ${loadTotals.realAcid} AC.`);
+    // Notificar a TODOS el resumen de cierre
+    notifyTeam("Jornada Finalizada", `Se ha cerrado la hoja de ruta. Total entregado: ${loadTotals.realChlorine} CL, ${loadTotals.realAcid} AC.`, 'all');
     setMainView("list")
     setListTab("history")
   }
@@ -363,7 +374,7 @@ function RoutesContent() {
     updateSheet(newItems)
     
     const client = clients?.find(c => c.id === clientId);
-    notifyTeam("Entrega Realizada", `${userData?.name || 'El repositor'} entregó en lo de ${client?.apellido || 'un cliente'}.`);
+    notifyTeam("Entrega Realizada", `${userData?.name || 'El repositor'} entregó en lo de ${client?.apellido || 'un cliente'}.`, 'management');
   }
 
   const handleOpenMaps = (address: string, city: string) => {
