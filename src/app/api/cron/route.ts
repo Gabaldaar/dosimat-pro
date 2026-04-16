@@ -5,8 +5,8 @@ import { sendPushNotification } from '@/app/actions/notifications';
 /**
  * Endpoint de CRON llamado por Fastcron periódicamente.
  * Se encarga de:
- * 1. Avisar a las 9 AM sobre rutas programadas o activas para hoy.
- * 2. Avisar sobre rutas de días anteriores que siguen "En Camino" (no cerradas).
+ * 1. Avisar entre las 9 AM y 11 AM sobre rutas para hoy.
+ * 2. Avisar sobre rutas de días anteriores que siguen "En Camino".
  * 3. Avisar a la noche (>= 20hs) si la ruta de hoy sigue abierta.
  */
 export async function GET(request: NextRequest) {
@@ -20,10 +20,21 @@ export async function GET(request: NextRequest) {
 
   try {
     const now = new Date();
-    // Convertir a hora de Argentina (GMT-3)
-    const argentinaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }));
-    const currentHour = argentinaTime.getHours();
-    const todayStr = argentinaTime.toISOString().split('T')[0];
+    
+    // Obtener fecha y hora de Argentina de forma robusta
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false
+    });
+    
+    const parts = formatter.formatToParts(now);
+    const dateParts: Record<string, string> = {};
+    parts.forEach(({ type, value }) => { dateParts[type] = value; });
+
+    const currentHour = parseInt(dateParts.hour);
+    const todayStr = `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
 
     // Optimización: Solo traer rutas que no están completadas
     const sheetsSnap = await adminDb.collection('route_sheets')
@@ -46,9 +57,9 @@ export async function GET(request: NextRequest) {
       const sheet = doc.data();
       const sheetDate = sheet.date;
 
-      // 1. Alerta Mañanera (9 AM)
-      // Se activa si la ruta es para hoy y son las 9 AM.
-      if (sheetDate === todayStr && currentHour === 9 && !sheet.morningAlertSent) {
+      // 1. Alerta Mañanera (9 AM a 11 AM)
+      // Se activa si la ruta es para hoy y estamos en el rango horario, y aún no se envió.
+      if (sheetDate === todayStr && currentHour >= 9 && currentHour < 11 && !sheet.morningAlertSent) {
         if (allTokens.length > 0) {
           await sendPushNotification(allTokens, "Ruta para Hoy", "Hay una Hoja de Ruta programada para cumplir hoy.");
           await doc.ref.update({ morningAlertSent: true });
@@ -57,13 +68,12 @@ export async function GET(request: NextRequest) {
       }
 
       // 2. Alerta de Cierre Tardío (Hoy - post 20:00hs)
-      // Si es tarde y la ruta de hoy sigue "En Camino".
       if (sheetDate === todayStr && sheet.status === 'active' && currentHour >= 20 && (!sheet.lastOverdueAlertDate || !sheet.lastOverdueAlertDate.includes(todayStr))) {
         if (allTokens.length > 0) {
           await sendPushNotification(
             allTokens, 
             "Ruta sin Cerrar", 
-            `La jornada de hoy todavía figura "En Camino". No olvides finalizarla al terminar.`
+            "La jornada de hoy todavía figura 'En Camino'. No olvides finalizarla al terminar."
           );
           await doc.ref.update({ lastOverdueAlertDate: todayStr });
           notificationsSent++;
@@ -71,7 +81,6 @@ export async function GET(request: NextRequest) {
       }
 
       // 3. Alerta de Ruta de días anteriores sin finalizar
-      // Se activa si la fecha de la ruta es anterior a hoy pero el estado sigue siendo "active".
       if (sheetDate < todayStr && sheet.status === 'active' && (!sheet.lastOverdueAlertDate || !sheet.lastOverdueAlertDate.includes(todayStr))) {
         if (allTokens.length > 0) {
           await sendPushNotification(
@@ -89,7 +98,8 @@ export async function GET(request: NextRequest) {
       success: true, 
       processed: sheetsSnap.size, 
       notificationsSent,
-      timestamp: argentinaTime.toISOString()
+      argentinaTime: `${todayStr} ${currentHour}hs`,
+      debug: { hour: currentHour, today: todayStr }
     });
   } catch (error) {
     console.error('Cron Error:', error);
