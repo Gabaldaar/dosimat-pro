@@ -52,44 +52,57 @@ export async function GET(request: NextRequest) {
       .flatMap(u => u.fcmTokens);
 
     let notificationsSent = 0;
+    const logs: any[] = [];
 
     for (const doc of sheetsSnap.docs) {
       const sheet = doc.data();
-      const sheetDate = sheet.date;
+      const sheetDate = sheet.date; // Esperado YYYY-MM-DD
 
       // 1. Alerta Mañanera (9 AM a 11 AM)
-      // Se activa si la ruta es para hoy y estamos en el rango horario, y aún no se envió.
-      if (sheetDate === todayStr && currentHour >= 9 && currentHour < 11 && !sheet.morningAlertSent) {
-        if (allTokens.length > 0) {
-          await sendPushNotification(allTokens, "Ruta para Hoy", "Hay una Hoja de Ruta programada para cumplir hoy.");
-          await doc.ref.update({ morningAlertSent: true });
-          notificationsSent++;
+      if (sheetDate === todayStr && currentHour >= 9 && currentHour < 11) {
+        if (!sheet.morningAlertSent) {
+          if (allTokens.length > 0) {
+            await sendPushNotification(allTokens, "Ruta para Hoy", "Hay una Hoja de Ruta programada para cumplir hoy.");
+            await doc.ref.update({ morningAlertSent: true });
+            notificationsSent++;
+            logs.push(`Enviada alerta matutina para ruta ${sheet.id}`);
+          } else {
+            logs.push(`No se pudo enviar alerta matutina: No hay tokens registrados en el equipo.`);
+          }
+        } else {
+          logs.push(`Alerta matutina ya había sido enviada hoy para la ruta ${sheet.id}`);
         }
       }
 
       // 2. Alerta de Cierre Tardío (Hoy - post 20:00hs)
-      if (sheetDate === todayStr && sheet.status === 'active' && currentHour >= 20 && (!sheet.lastOverdueAlertDate || !sheet.lastOverdueAlertDate.includes(todayStr))) {
-        if (allTokens.length > 0) {
-          await sendPushNotification(
-            allTokens, 
-            "Ruta sin Cerrar", 
-            "La jornada de hoy todavía figura 'En Camino'. No olvides finalizarla al terminar."
-          );
-          await doc.ref.update({ lastOverdueAlertDate: todayStr });
-          notificationsSent++;
+      if (sheetDate === todayStr && sheet.status === 'active' && currentHour >= 20) {
+        if (!sheet.lastOverdueAlertDate || !sheet.lastOverdueAlertDate.includes(todayStr)) {
+          if (allTokens.length > 0) {
+            await sendPushNotification(
+              allTokens, 
+              "Ruta sin Cerrar", 
+              "La jornada de hoy todavía figura 'En Camino'. No olvides finalizarla al terminar."
+            );
+            await doc.ref.update({ lastOverdueAlertDate: todayStr });
+            notificationsSent++;
+            logs.push(`Enviada alerta de cierre tardío para hoy.`);
+          }
         }
       }
 
       // 3. Alerta de Ruta de días anteriores sin finalizar
-      if (sheetDate < todayStr && sheet.status === 'active' && (!sheet.lastOverdueAlertDate || !sheet.lastOverdueAlertDate.includes(todayStr))) {
-        if (allTokens.length > 0) {
-          await sendPushNotification(
-            allTokens, 
-            "Ruta Pendiente de Cierre", 
-            `La hoja de ruta del ${sheetDate} aún figura "En Camino". Por favor, finalizar la jornada.`
-          );
-          await doc.ref.update({ lastOverdueAlertDate: todayStr });
-          notificationsSent++;
+      if (sheetDate < todayStr && sheet.status === 'active') {
+        if (!sheet.lastOverdueAlertDate || !sheet.lastOverdueAlertDate.includes(todayStr)) {
+          if (allTokens.length > 0) {
+            await sendPushNotification(
+              allTokens, 
+              "Ruta Pendiente de Cierre", 
+              `La hoja de ruta del ${sheetDate} aún figura "En Camino". Por favor, finalizar la jornada.`
+            );
+            await doc.ref.update({ lastOverdueAlertDate: todayStr });
+            notificationsSent++;
+            logs.push(`Enviada alerta de ruta antigua pendiente: ${sheetDate}`);
+          }
         }
       }
     }
@@ -98,8 +111,9 @@ export async function GET(request: NextRequest) {
       success: true, 
       processed: sheetsSnap.size, 
       notificationsSent,
+      tokensFound: allTokens.length,
       argentinaTime: `${todayStr} ${currentHour}hs`,
-      debug: { hour: currentHour, today: todayStr }
+      debug: { hour: currentHour, today: todayStr, logs }
     });
   } catch (error) {
     console.error('Cron Error:', error);
