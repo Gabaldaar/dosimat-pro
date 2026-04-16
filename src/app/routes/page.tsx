@@ -89,11 +89,12 @@ import {
   useUser
 } from "../../firebase"
 import { collection, doc, query, orderBy } from "firebase/firestore"
-import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
+import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { sendPushNotification } from "@/app/actions/notifications"
 
 function RoutesContent() {
   const { toast } = useToast()
@@ -134,12 +135,14 @@ function RoutesContent() {
   const routesQuery = useMemoFirebase(() => query(collection(db, 'route_sheets'), orderBy('date', 'desc')), [db])
   const catalogQuery = useMemoFirebase(() => collection(db, 'products_services'), [db])
   const emailTemplatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
+  const usersQuery = useMemoFirebase(() => collection(db, 'users'), [db])
 
   const { data: clients } = useCollection(clientsQuery)
   const { data: zones } = useCollection(zonesQuery)
   const { data: rawRouteSheets, isLoading: loadingSheets } = useCollection(routesQuery)
   const { data: catalog } = useCollection(catalogQuery)
   const { data: emailTemplates } = useCollection(emailTemplatesQuery)
+  const { data: allUsers } = useCollection(usersQuery)
 
   const refillClients = useMemo(() => {
     if (!clients) return [];
@@ -170,6 +173,20 @@ function RoutesContent() {
       variant: "destructive"
     });
   }, [toast]);
+
+  // Función para notificar al equipo (Admins y Socios)
+  const notifyTeam = useCallback(async (title: string, body: string) => {
+    if (!allUsers) return;
+    
+    // Obtener tokens de Administradores y Socios (Employee)
+    const tokens = allUsers
+      .filter(u => (u.role === 'Admin' || u.role === 'Employee') && u.fcmTokens)
+      .flatMap(u => u.fcmTokens);
+
+    if (tokens.length > 0) {
+      await sendPushNotification(tokens, title, body, `/routes?sheetId=${selectedSheetId}`);
+    }
+  }, [allUsers, selectedSheetId]);
 
   useEffect(() => {
     const sheetId = searchParams.get('sheetId')
@@ -280,12 +297,19 @@ function RoutesContent() {
       i.clientId === clientId ? { ...i, [field]: value } : i
     )
     updateSheet(newItems)
+
+    // Si se marca como entregado, notificar
+    if (field === 'isDelivered' && value === true) {
+      const client = clients?.find(c => c.id === clientId);
+      notifyTeam("Entrega Realizada", `${userData?.name || 'El repositor'} entregó en lo de ${client?.apellido || 'un cliente'}.`);
+    }
   }
 
   const handleStartRoute = () => {
     if (!selectedSheetId) return
     updateDocumentNonBlocking(doc(db, 'route_sheets', selectedSheetId), { status: "active" })
     toast({ title: "Ruta habilitada para entrega", description: "Ahora es visible para el repositor." })
+    notifyTeam("Ruta Iniciada", `El repositor ha iniciado la hoja de ruta del ${new Date(selectedSheet?.date + 'T12:00:00').toLocaleDateString('es-AR')}.`);
   }
 
   const handleResetToPlanning = () => {
@@ -298,6 +322,7 @@ function RoutesContent() {
     if (!selectedSheetId) return
     updateDocumentNonBlocking(doc(db, 'route_sheets', selectedSheetId), { status: "completed" })
     toast({ title: "Ruta finalizada" })
+    notifyTeam("Jornada Finalizada", `Se ha cerrado la hoja de ruta. Total entregado: ${loadTotals.realChlorine} CL, ${loadTotals.realAcid} AC.`);
     setMainView("list")
     setListTab("history")
   }
@@ -307,9 +332,9 @@ function RoutesContent() {
       mode: 'new',
       clientId: item.clientId,
       type: 'refill',
-      cloro: item.realChlorine.toString(),
-      acido: item.realAcid.toString(),
-      cash: item.cashCollected.toString(),
+      cloro: (item.realChlorine ?? 0).toString(),
+      acido: (item.realAcid ?? 0).toString(),
+      cash: (item.cashCollected ?? 0).toString(),
       notes: item.notes || '',
       routeId: selectedSheetId!,
       fromRoute: 'true'
@@ -331,9 +356,14 @@ function RoutesContent() {
     if (!selectedSheet) return
     const item = selectedSheet.items.find((i: any) => i.clientId === clientId)
     if (!item) return
-    updateItemField(clientId, 'realChlorine', item.plannedChlorine)
-    updateItemField(clientId, 'realAcid', item.plannedAcid)
-    updateItemField(clientId, 'isDelivered', true)
+    
+    const newItems = selectedSheet.items.map((i: any) => 
+      i.clientId === clientId ? { ...i, realChlorine: item.plannedChlorine, realAcid: item.plannedAcid, isDelivered: true } : i
+    )
+    updateSheet(newItems)
+    
+    const client = clients?.find(c => c.id === clientId);
+    notifyTeam("Entrega Realizada", `${userData?.name || 'El repositor'} entregó en lo de ${client?.apellido || 'un cliente'}.`);
   }
 
   const handleOpenMaps = (address: string, city: string) => {
@@ -345,7 +375,7 @@ function RoutesContent() {
     if (!phone) return "";
     let cleaned = phone.replace(/\D/g, "");
     if (cleaned.startsWith("00")) cleaned = cleaned.substring(2);
-    if (cleaned.startsWith("0")) cleaned = cleaned.substring(1);
+    if (cleaned.startsWith("0") cleaned = cleaned.substring(1));
     if (!cleaned.startsWith("54") && cleaned.length >= 10) {
       cleaned = "54" + cleaned;
     }
@@ -721,7 +751,7 @@ function RoutesContent() {
                           <Select onValueChange={addItemToSheet}>
                             <SelectTrigger className="h-11"><SelectValue placeholder="Seleccionar cliente..." /></SelectTrigger>
                             <SelectContent className="max-h-96">
-                              {refillClients.map((c: any) => (
+                              {(refillClients ?? []).map((c: any) => (
                                 <SelectItem key={c.id} value={c.id}>{c.apellido}, {c.nombre} ({c.direccion})</SelectItem>
                               ))}
                             </SelectContent>
@@ -732,16 +762,16 @@ function RoutesContent() {
                   )}
 
                   <div className="space-y-4">
-                    {selectedSheet.items.length === 0 ? (
+                    {(selectedSheet.items ?? []).length === 0 ? (
                       <div className="text-center py-20 bg-muted/5 border-2 border-dashed rounded-3xl">
                         <p className="text-muted-foreground italic">Agregue clientes para comenzar.</p>
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 gap-4">
-                        {selectedSheet.items.map((item: any, idx: number) => {
-                          const client = clients?.find(c => c.id === item.clientId)
+                        {(selectedSheet.items ?? []).map((item: any, idx: number) => {
+                          const client = (clients ?? []).find(c => c.id === item.clientId)
                           if (!client) return null
-                          const zone = zones?.find(z => z.id === client.zonaId);
+                          const zone = (zones ?? []).find(z => z.id === client.zonaId);
 
                           const cloroSub = Number(item.realChlorine || 0) * referencePrices.cloro;
                           const acidoSub = Number(item.realAcid || 0) * referencePrices.acido;
@@ -1024,7 +1054,7 @@ function RoutesContent() {
                 <Card className="bg-amber-50 border-amber-100 p-4"><p className="text-xs font-bold text-amber-800 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Verificar Remitente (DOSIMAT)</p></Card>
                 <div className="space-y-2"><Label>Plantilla</Label><Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
                   <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
-                  <SelectContent>{emailTemplates?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+                  <SelectContent>{(emailTemplates ?? []).map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
                 </Select></div>
                 {dynamicKeys.length > 0 && (<div className="p-4 border border-dashed rounded-xl space-y-4 bg-muted/5"><p className="text-[10px] font-black uppercase text-primary">Datos Manuales</p><div className="grid grid-cols-1 gap-4">{dynamicKeys.map(key => (<div key={key} className="space-y-1"><Label className="text-xs font-bold">{key}</Label><Input value={dynamicValues[key] || ""} onChange={(e) => setDynamicValues({...dynamicValues, [key]: e.target.value})} className="bg-white h-9" /></div>))}</div></div>)}
                 {activeTemplate && (<div className="space-y-2"><Label className="text-[10px] font-black uppercase text-muted-foreground">Vista Previa</Label><ScrollArea className="h-48 border rounded-xl bg-white p-4 italic text-sm text-slate-700 shadow-inner"><p className="font-bold mb-2">Asunto: {replaceMarkers(activeTemplate.subject || "", selectedCommCustomer, dynamicValues)}</p><div className="whitespace-pre-wrap">{replaceMarkers(activeTemplate.body, selectedCommCustomer, dynamicValues)}</div></ScrollArea></div>)}
@@ -1092,10 +1122,10 @@ function RoutesContent() {
               </tr>
             </thead>
             <tbody>
-              {selectedSheet.items.map((item: any, idx: number) => {
-                const client = clients?.find(c => c.id === item.clientId)
+              {(selectedSheet.items ?? []).map((item: any, idx: number) => {
+                const client = (clients ?? []).find(c => c.id === item.clientId)
                 if (!client) return null
-                const zone = zones?.find(z => z.id === client.zonaId);
+                const zone = (zones ?? []).find(z => z.id === client.zonaId);
                 return (
                   <tr key={idx} className="border-b border-slate-300">
                     <td className="border border-slate-900 p-2">

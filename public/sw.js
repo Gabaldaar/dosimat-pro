@@ -1,16 +1,25 @@
-
-// Service Worker básico para cumplir con los requisitos de instalación PWA
-const CACHE_NAME = 'dosimat-pro-v1';
-
-self.addEventListener('install', (event) => {
-  self.skipWaiting();
+// Service Worker para Notificaciones Push (Web Push)
+self.addEventListener('push', function(event) {
+  if (event.data) {
+    const data = event.data.json();
+    const options = {
+      body: data.notification.body,
+      icon: 'https://i.ibb.co/tM1VCHQ5/logo.png',
+      badge: 'https://i.ibb.co/tM1VCHQ5/logo.png',
+      vibrate: [100, 50, 100],
+      data: {
+        url: data.notification.click_action || '/'
+      }
+    };
+    event.waitUntil(
+      self.registration.showNotification(data.notification.title, options)
+    );
+  }
 });
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil(clients.claim());
-});
-
-self.addEventListener('fetch', (event) => {
-  // Requerido para la activación del banner de instalación
-  // Aquí se podría implementar lógica de caché offline en el futuro
+self.addEventListener('notificationclick', function(event) {
+  event.notification.close();
+  event.waitUntil(
+    clients.openWindow(event.notification.data.url)
+  );
 });

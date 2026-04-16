@@ -9,7 +9,7 @@ import { User } from 'firebase/auth';
  * REEMPLAZA ESTA CONSTANTE con la "VAPID Key" generada en la Consola de Firebase
  * Configuración de proyecto > Cloud Messaging > Certificados de inserción web
  */
-const VAPID_KEY = "TU_VAPID_KEY_AQUI";
+const VAPID_KEY = "TBLGb4ASwD1k90C3EJGiOHfS3FQD8gRdVBeN6SXz_sMInmOWuNTqgf9zc92VLXZWta001BmQh1wbpxi8prjlKwp";
 
 export async function requestNotificationPermission(
   messaging: Messaging | null,
