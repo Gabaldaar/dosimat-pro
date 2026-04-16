@@ -375,7 +375,7 @@ function RoutesContent() {
     if (!phone) return "";
     let cleaned = phone.replace(/\D/g, "");
     if (cleaned.startsWith("00")) cleaned = cleaned.substring(2);
-    if (cleaned.startsWith("0") cleaned = cleaned.substring(1));
+    if (cleaned.startsWith("0")) cleaned = cleaned.substring(1);
     if (!cleaned.startsWith("54") && cleaned.length >= 10) {
       cleaned = "54" + cleaned;
     }
