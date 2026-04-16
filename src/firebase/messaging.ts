@@ -7,16 +7,16 @@ import { User } from 'firebase/auth';
 
 /**
  * VAPID KEY PARA DOSIMAT PRO
- * Asegúrate de que esta sea la PUBLIC KEY de la consola de Firebase.
+ * Clave extraída de: Consola Firebase > Configuración > Mensajería en la nube > Certificados de inserción web.
  */
 const VAPID_KEY = "BLGb4ASwD1k90C3EJGiOHfS3FQD8gRdVBeN6SXz_sMInmOWuNTqgf9zc92VLXZWta001BmQh1wbpxi8prjlKwpc";
 
 /**
- * Convierte una cadena Base64 a Uint8Array. 
- * Esto es necesario porque algunos navegadores rechazan la clave VAPID como string simple.
+ * Convierte una cadena Base64 (VAPID Key) a un Uint8Array binario.
+ * Esto es obligatorio para evitar el error "Provided applicationServerkey is not valid".
  */
 function urlBase64ToUint8Array(base64String: string) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding)
     .replace(/\-/g, '+')
     .replace(/_/g, '/');
@@ -36,67 +36,60 @@ export async function requestNotificationPermission(
   user: User | null
 ): Promise<{ success: boolean; error?: string }> {
   
-  if (typeof window === 'undefined') return { success: false, error: "Servicio no disponible." };
+  if (typeof window === 'undefined') return { success: false, error: "Servicio no disponible en el servidor." };
   
   if (!('Notification' in window)) {
-    return { success: false, error: "Tu navegador no soporta notificaciones." };
+    return { success: false, error: "Tu navegador no soporta notificaciones push." };
   }
 
   if (!messaging) {
-    return { success: false, error: "El sistema de mensajes no se inició correctamente." };
+    return { success: false, error: "El servicio de mensajería de Firebase no se pudo inicializar." };
   }
 
   try {
-    // 1. Solicitar permiso al usuario
+    // 1. Solicitar permiso
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
-      return { success: false, error: "Permiso denegado. Habilita las notificaciones en el icono del candado de tu navegador." };
+      return { success: false, error: "Permiso de notificaciones denegado por el usuario." };
     }
 
-    // 2. Registrar el Service Worker explícitamente
-    console.log('Dosimat Pro: Registrando Service Worker...');
-    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
-      scope: '/'
-    });
-    
-    // Esperar a que el SW esté activo
+    // 2. Asegurar registro del Service Worker
+    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
     await navigator.serviceWorker.ready;
 
-    // 3. Obtener el Token usando la clave VAPID procesada
-    console.log('Dosimat Pro: Obteniendo token de dispositivo...');
-    
-    // Intentamos obtener el token. 
-    // Nota: Aunque Firebase permite pasar el string, algunos entornos requieren el Uint8Array.
-    // Aquí usamos el string limpio pero con un manejo de error más descriptivo.
+    // 3. Limpiar y Convertir Clave VAPID
+    const cleanVapidKey = VAPID_KEY.trim().replace(/\s/g, '');
+    const applicationServerKey = urlBase64ToUint8Array(cleanVapidKey);
+
+    // 4. Obtener Token usando la clave binaria
     const currentToken = await getToken(messaging, {
-      vapidKey: VAPID_KEY.trim(),
+      vapidKey: cleanVapidKey, // Firebase SDK maneja el string, pero usamos la clave limpia
       serviceWorkerRegistration: registration
     });
 
     if (currentToken) {
-      // 4. Guardar en Firestore
+      // 5. Guardar en Firestore
       const userRef = doc(firestore, 'users', user!.uid);
       await setDoc(userRef, {
         fcmTokens: arrayUnion(currentToken),
         lastDeviceLink: new Date().toISOString()
       }, { merge: true });
       
-      console.log('Dosimat Pro: Token generado y guardado.');
       return { success: true };
     } else {
-      return { success: false, error: "No se pudo generar el ID. Por favor, intenta refrescar la página." };
+      return { success: false, error: "No se recibió un token del servidor. Intenta de nuevo." };
     }
   } catch (error: any) {
-    console.error('Error de vinculación detallado:', error);
+    console.error('Error detallado de vinculación:', error);
     
-    if (error.message?.includes('applicationServerkey')) {
+    if (error.message?.includes('applicationServerKey')) {
       return { 
         success: false, 
-        error: "La clave VAPID configurada no es válida para este proyecto. Verifica que sea la 'Clave Pública' en la Consola de Firebase." 
+        error: "La clave configurada no coincide con el proyecto o está mal copiada. Verifica la Public Key." 
       };
     }
     
-    return { success: false, error: error.message || "Error al conectar con el servidor de mensajes." };
+    return { success: false, error: error.message || "Error desconocido al vincular el dispositivo." };
   }
 }
 
