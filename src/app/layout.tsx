@@ -62,13 +62,10 @@ export default function RootLayout({
           {`
             if ('serviceWorker' in navigator) {
               window.addEventListener('load', function() {
-                // Registrar el SW estándar de PWA
-                navigator.serviceWorker.register('/sw.js').then(function(registration) {
-                  console.log('Dosimat Pro PWA: SW registrado');
-                });
-                
-                // El Service Worker de Firebase se registra automáticamente por la SDK 
-                // o lo manejamos explícitamente si es necesario.
+                // Registrar el Service Worker de Firebase explícitamente
+                navigator.serviceWorker.register('/firebase-messaging-sw.js')
+                  .then(reg => console.log('Dosimat Pro: SW de Mensajería registrado'))
+                  .catch(err => console.error('Dosimat Pro: Error registrando SW', err));
               });
             }
           `}
