@@ -533,25 +533,64 @@ function TransactionsContent() {
     toast({ title: "Operación eliminada" });
   };
 
-  const filteredTransactions = useMemo(() => {
-    if (!transactions) return []
-    return transactions.filter((tx: any) => {
-      const matchCustomer = filterCustomer === "all" || tx.clientId === filterCustomer
-      const matchAccount = filterAccount === "all" || (filterAccount === "null" ? !tx.financialAccountId : tx.financialAccountId === filterAccount)
-      const txDateStr = tx.date.split('T')[0];
-      const matchStart = !filterStartDate || txDateStr >= filterStartDate;
-      const matchEnd = !filterEndDate || txDateStr <= filterEndDate;
-      
-      const matchType = filterOpType === "all" || 
-                        (filterOpType === 'Reposición' ? (tx.type === 'Reposición' || tx.type === 'refill') : tx.type === filterOpType);
-      
-      let matchFlow = true;
-      if (filterFlow === 'income') matchFlow = tx.amount > 0 || tx.type === 'cobro';
-      if (filterFlow === 'expense') matchFlow = tx.amount < 0 && tx.type !== 'cobro';
+  const transactionsWithDynamicBalances = useMemo(() => {
+    if (!transactions) return [];
+    
+    // Si no hay filtro de caja único, devolvemos la lista tal cual
+    if (filterAccount === "all" || filterAccount === "null") return transactions;
 
-      return matchCustomer && matchAccount && matchStart && matchEnd && matchType && matchFlow;
-    })
-  }, [transactions, filterCustomer, filterAccount, filterStartDate, filterEndDate, filterOpType, filterFlow])
+    const targetAccount = accounts?.find(a => a.id === filterAccount);
+    if (!targetAccount) return transactions;
+
+    // 1. Filtrar solo los movimientos de esta caja
+    const accountTxs = transactions.filter(tx => tx.financialAccountId === filterAccount);
+
+    // 2. Ordenar por fecha DESC (más reciente primero)
+    // Usamos el Saldo Actual de la caja como punto de partida para el movimiento más reciente
+    let runningBalance = Number(targetAccount.initialBalance || 0);
+    
+    return accountTxs.map((tx: any) => {
+      const movement = Number(tx.accountMovementAmount || tx.paidAmount || 0);
+      const balanceAtThisPoint = runningBalance;
+      // Para el siguiente (más antiguo), "revertimos" el movimiento
+      runningBalance -= movement;
+      
+      return { ...tx, dynamicBalance: balanceAtThisPoint };
+    });
+  }, [transactions, filterAccount, accounts]);
+
+  const filteredTransactions = useMemo(() => {
+    const list = filterAccount !== "all" && filterAccount !== "null" 
+      ? transactionsWithDynamicBalances 
+      : transactionsWithDynamicBalances.filter((tx: any) => {
+          const matchCustomer = filterCustomer === "all" || tx.clientId === filterCustomer
+          const matchAccount = filterAccount === "all" || (filterAccount === "null" ? !tx.financialAccountId : tx.financialAccountId === filterAccount)
+          const txDateStr = tx.date.split('T')[0];
+          const matchStart = !filterStartDate || txDateStr >= filterStartDate;
+          const matchEnd = !filterEndDate || txDateStr <= filterEndDate;
+          const matchType = filterOpType === "all" || (filterOpType === 'Reposición' ? (tx.type === 'Reposición' || tx.type === 'refill') : tx.type === filterOpType);
+          let matchFlow = true;
+          if (filterFlow === 'income') matchFlow = tx.amount > 0 || tx.type === 'cobro';
+          if (filterFlow === 'expense') matchFlow = tx.amount < 0 && tx.type !== 'cobro';
+          return matchCustomer && matchAccount && matchStart && matchEnd && matchType && matchFlow;
+        });
+
+    // Si hay otros filtros además de la caja, volvemos a filtrar la lista ya procesada
+    if (filterAccount !== "all" && filterAccount !== "null") {
+      return list.filter((tx: any) => {
+        const matchCustomer = filterCustomer === "all" || tx.clientId === filterCustomer
+        const txDateStr = tx.date.split('T')[0];
+        const matchStart = !filterStartDate || txDateStr >= filterStartDate;
+        const matchEnd = !filterEndDate || txDateStr <= filterEndDate;
+        const matchType = filterOpType === "all" || (filterOpType === 'Reposición' ? (tx.type === 'Reposición' || tx.type === 'refill') : tx.type === filterOpType);
+        let matchFlow = true;
+        if (filterFlow === 'income') matchFlow = tx.amount > 0 || tx.type === 'cobro';
+        if (filterFlow === 'expense') matchFlow = tx.amount < 0 && tx.type !== 'cobro';
+        return matchCustomer && matchStart && matchEnd && matchType && matchFlow;
+      });
+    }
+    return list;
+  }, [transactionsWithDynamicBalances, filterCustomer, filterAccount, filterStartDate, filterEndDate, filterOpType, filterFlow]);
 
   const filteredTotals = useMemo(() => {
     return filteredTransactions.reduce((acc, tx) => {
@@ -1158,6 +1197,9 @@ function TransactionsContent() {
                         const info = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" };
                         const Icon = info.icon;
                         const pendingAmt = Number(tx.pendingAmount || 0);
+                        const balanceToShow = tx.dynamicBalance ?? tx.accountBalanceAfter;
+                        const isDynamic = tx.dynamicBalance !== undefined;
+                        
                         return (
                           <TableRow key={tx.id} className="cursor-pointer hover:bg-primary/5 transition-colors group" onClick={() => setSelectedTxDetails(tx)}>
                             <TableCell className="text-xs font-bold text-slate-600">{formatLocalDate(tx.date)}</TableCell>
@@ -1188,7 +1230,10 @@ function TransactionsContent() {
                                 {tx.currency==='USD'?'u$s':'$'} {Math.abs(pendingAmt).toLocaleString()}
                               </span>
                             </TableCell>
-                            <TableCell className="text-right text-[10px] font-mono font-bold text-primary">{tx.currency==='USD'?'u$s':'$'} {Number(tx.accountBalanceAfter || 0).toLocaleString()}</TableCell>
+                            <TableCell className="text-right text-[10px] font-mono font-bold text-primary">
+                              {tx.currency==='USD'?'u$s':'$'} {Number(balanceToShow || 0).toLocaleString()}
+                              {isDynamic && <span className="block text-[7px] opacity-40 uppercase">Dinam.</span>}
+                            </TableCell>
                             <TableCell onClick={(e) => e.stopPropagation()}>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
@@ -1226,6 +1271,7 @@ function TransactionsContent() {
                   const Icon = info.icon;
                   const pendingAmt = Number(tx.pendingAmount || 0);
                   const symbol = tx.currency === 'USD' ? 'u$s' : '$';
+                  const balanceToShow = tx.dynamicBalance ?? tx.accountBalanceAfter;
 
                   return (
                     <Card key={tx.id} className="glass-card shadow-md active:scale-[0.98] transition-transform border-primary/5" onClick={() => setSelectedTxDetails(tx)}>
@@ -1303,7 +1349,7 @@ function TransactionsContent() {
                           </div>
                           <div className="flex gap-2">
                             <span className="text-slate-400 uppercase font-black text-[8px]">Saldo Final:</span>
-                            <span className="text-primary font-mono font-black">{symbol} {Number(tx.accountBalanceAfter || 0).toLocaleString()}</span>
+                            <span className="text-primary font-mono font-black">{symbol} {Number(balanceToShow || 0).toLocaleString()}</span>
                           </div>
                         </div>
                       </CardContent>
