@@ -67,7 +67,7 @@ const txTypeMap: Record<string, { label: string, icon: any, color: string }> = {
   sale: { label: "Venta", icon: ArrowUpRight, color: "text-emerald-600 bg-emerald-50" },
   refill: { label: "Reposición", icon: ArrowUpRight, color: "text-emerald-600 bg-emerald-50" },
   service: { label: "Servicio Técnico", icon: ArrowUpRight, color: "text-emerald-600 bg-emerald-50" },
-  cobro: { label: "Cobro de Saldo", icon: Wallet, color: "text-emerald-600 bg-emerald-50" },
+  cobro: { label: "Cobro", icon: ArrowUpRight, color: "text-emerald-600 bg-emerald-50" },
   adjustment: { label: "Ajuste", icon: RefreshCw, color: "text-slate-600 bg-slate-50" },
   FinancialTransferOut: { label: "Transferencia (Salida)", icon: ArrowRightLeft, color: "text-amber-600 bg-amber-50" },
   FinancialTransferIn: { label: "Transferencia (Entrada)", icon: ArrowRightLeft, color: "text-emerald-600 bg-emerald-50" },

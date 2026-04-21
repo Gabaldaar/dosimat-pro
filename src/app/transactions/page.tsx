@@ -40,7 +40,8 @@ import {
   ChevronRight,
   Wallet,
   Printer,
-  ArrowRightLeft
+  ArrowRightLeft,
+  ArrowUpRight
 } from "lucide-react"
 import { useToast } from "../../hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -78,11 +79,13 @@ const txTypeMap: Record<string, { label: string, icon: any, color: string, descr
   sale: { label: "Venta", icon: ShoppingBag, color: "text-blue-600 bg-blue-50", description: "Venta general de productos o accesorios." },
   refill: { label: "Reposición", icon: Droplet, color: "text-cyan-600 bg-cyan-50", description: "Servicio de reposición de químicos." },
   service: { label: "Técnico", icon: Wrench, color: "text-indigo-600 bg-indigo-50", description: "Reparaciones o visitas de mantenimiento." },
-  cobro: { label: "Cobro", icon: Receipt, color: "text-emerald-600 bg-emerald-50", description: "Pago recibido del cliente." },
+  cobro: { label: "Cobro", icon: ArrowUpRight, color: "text-emerald-600 bg-emerald-50", description: "Pago recibido del cliente." },
   adjustment: { label: "Ajuste", icon: Settings2, color: "text-slate-600 bg-slate-50", description: "Corrección manual de saldo." },
   Adjustment: { label: "Ajuste", icon: RefreshCw, color: "text-slate-600 bg-slate-50", description: "Ajuste manual." },
   Expense: { label: "Gasto", icon: ArrowDownLeft, color: "text-rose-600 bg-rose-50", description: "Gasto manual registrado." },
   Reposición: { label: "Reposición", icon: Droplet, color: "text-cyan-600 bg-cyan-50", description: "Servicio de reposición de químicos." },
+  FinancialTransferOut: { label: "Transferencia (Salida)", icon: ArrowRightLeft, color: "text-amber-600 bg-amber-50", description: "Movimiento entre cajas." },
+  FinancialTransferIn: { label: "Transferencia (Entrada)", icon: ArrowRightLeft, color: "text-emerald-600 bg-emerald-50", description: "Movimiento entre cajas." },
 }
 
 function getLocalDateString() {
@@ -582,7 +585,7 @@ function TransactionsContent() {
 
     text += `*Total Operación:* ${symbol} ${Math.abs(tx.amount).toLocaleString('es-AR')}\n`;
     text += `*Movimiento de Caja:* ${symbol} ${Number(tx.paidAmount || 0).toLocaleString('es-AR')}\n`;
-    text += `*A Cuenta Corriente:* ${symbol} ${Math.abs(tx.pendingAmount || 0).toLocaleString('es-AR')}`;
+    text += `*Pendiente:* ${symbol} ${Math.abs(tx.pendingAmount || 0).toLocaleString('es-AR')}`;
 
     navigator.clipboard.writeText(text);
     toast({ title: "Detalle copiado" });
@@ -847,7 +850,7 @@ function TransactionsContent() {
                                   </div>
                                   <div className="flex justify-between items-end gap-4">
                                     <div className="space-y-1">
-                                      <p className="text-[10px] font-black uppercase text-rose-600">A Cuenta Corriente</p>
+                                      <p className="text-[10px] font-black uppercase text-rose-600">Pendiente</p>
                                       <p className="text-xl font-black text-rose-700">{manualCurrency==='USD'?'u$s':'$'} {Math.abs(tx.pendingAmount || 0).toLocaleString()}</p>
                                     </div>
                                     <div className="flex-1 space-y-1">
@@ -880,7 +883,7 @@ function TransactionsContent() {
                                   <TableRow>
                                     <TableHead className="text-[9px] font-black uppercase">Fecha</TableHead>
                                     <TableHead className="text-[9px] font-black uppercase">Tipo</TableHead>
-                                    <TableHead className="text-right text-[9px] font-black uppercase">A Cuenta</TableHead>
+                                    <TableHead className="text-right text-[9px] font-black uppercase">Pendiente</TableHead>
                                     <TableHead className="w-40 text-right text-[9px] font-black uppercase">Asignar</TableHead>
                                   </TableRow>
                                 </TableHeader>
@@ -1072,7 +1075,7 @@ function TransactionsContent() {
                             <div className="space-y-1"><Label className="text-[10px] uppercase font-black">Caja de Cobro:</Label><Select value={destinationAccounts[curr] || "pending"} onValueChange={(v) => setDestinationAccounts({...destinationAccounts, [curr]: v})}><SelectTrigger className="h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">A CUENTA / SIN CAJA</SelectItem>{accounts?.filter(a => a.currency === curr).map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent></Select></div>
                             {debt > 0 && (
                               <div className="pt-2 border-t border-dashed mt-2 text-rose-600 font-black text-[10px] flex justify-between uppercase italic">
-                                <span>A Cuenta Corriente:</span>
+                                <span>Pendiente:</span>
                                 <span>{curr==='USD'?'u$s':'$'} {debt.toLocaleString()}</span>
                               </div>
                             )}
@@ -1120,7 +1123,7 @@ function TransactionsContent() {
                    <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Flujo</Label><Select value={filterFlow || "all"} onValueChange={setFilterFlow}><SelectTrigger className="w-[120px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos los flujos</SelectItem><SelectItem value="income" className="text-emerald-600 font-bold">Ingresos</SelectItem><SelectItem value="expense" className="text-rose-600 font-bold">Egresos</SelectItem></SelectContent></Select></div>
                    <div className="space-y-1"><Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Operación</Label><Select value={filterOpType || "all"} onValueChange={setFilterOpType}><SelectTrigger className="w-[140px] h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>
                      {Object.keys(txTypeMap)
-                      .filter(k => !['Adjustment','Expense', 'refill', 'adjustment'].includes(k))
+                      .filter(k => !['Adjustment','Expense', 'refill', 'adjustment', 'FinancialTransferOut', 'FinancialTransferIn'].includes(k))
                       .concat(['adjustment'])
                       .map(k => <SelectItem key={k} value={k}>{txTypeMap[k].label}</SelectItem>)}
                    </SelectContent></Select></div>
@@ -1143,7 +1146,7 @@ function TransactionsContent() {
                         <TableHead className="text-[10px] font-black uppercase">Caja</TableHead>
                         <TableHead className="text-right text-[10px] font-black uppercase">Total Operación</TableHead>
                         <TableHead className="text-right text-[10px] font-black uppercase">Movimiento de Caja</TableHead>
-                        <TableHead className="text-right text-[10px] font-black uppercase">A Cuenta Corriente</TableHead>
+                        <TableHead className="text-right text-[10px] font-black uppercase">Pendiente</TableHead>
                         <TableHead className="text-right text-[10px] font-black uppercase">Saldo Final Caja</TableHead>
                         <TableHead className="w-12"></TableHead>
                       </TableRow>
@@ -1279,7 +1282,7 @@ function TransactionsContent() {
                             <p className="text-lg font-black text-slate-800">{symbol} {Math.abs(tx.amount || 0).toLocaleString()}</p>
                           </div>
                           <div className="text-right">
-                            <p className="text-[8px] font-black uppercase text-slate-400">A Cuenta Cte.</p>
+                            <p className="text-[8px] font-black uppercase text-slate-400">Pendiente</p>
                             <div className={cn(
                               "inline-block px-2 py-0.5 rounded border text-[10px] font-black",
                               Math.abs(pendingAmt) < 0.01 
@@ -1351,7 +1354,7 @@ function TransactionsContent() {
                           ? "bg-rose-50 border-rose-100" 
                           : "bg-emerald-50 border-emerald-100"
                     )}>
-                      <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">A Cuenta Corriente</p>
+                      <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Pendiente</p>
                       <p className={cn(
                         "text-3xl font-black",
                         Math.abs(selectedTxDetails.pendingAmount || 0) < 0.01 
@@ -1577,7 +1580,7 @@ function TransactionsContent() {
               <th className="border border-slate-900 p-2 text-left uppercase font-black">Caja</th>
               <th className="border border-slate-900 p-2 text-right uppercase font-black">Total Operación</th>
               <th className="border border-slate-900 p-2 text-right uppercase font-black">Monto en Efectivo</th>
-              <th className="border border-slate-900 p-2 text-right uppercase font-black">A Cuenta Cte.</th>
+              <th className="border border-slate-900 p-2 text-right uppercase font-black">Pendiente</th>
             </tr>
           </thead>
           <tbody>
