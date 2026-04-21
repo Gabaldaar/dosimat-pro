@@ -289,7 +289,8 @@ export default function AccountsPage() {
       description: txFormData.description || (txType === 'income' ? 'Ingreso manual' : 'Gasto manual'),
       financialAccountId: selectedAccount.id,
       expenseCategoryId: txFormData.categoryId || null,
-      accountBalanceAfter: Number(selectedAccount.initialBalance || 0) + amount
+      accountBalanceAfter: Number(selectedAccount.initialBalance || 0) + amount,
+      accountMovementAmount: amount
     })
 
     toast({ title: "Operación procesada" })
@@ -322,7 +323,8 @@ export default function AccountsPage() {
       currency: fromAcc.currency,
       financialAccountId: fromId,
       description: description || `Transferencia a ${toAcc.name} (${toAcc.currency})`,
-      accountBalanceAfter: Number(fromAcc.initialBalance || 0) - Number(amount)
+      accountBalanceAfter: Number(fromAcc.initialBalance || 0) - Number(amount),
+      accountMovementAmount: -Number(amount)
     })
 
     addDocumentNonBlocking(collection(db, 'transactions'), {
@@ -332,7 +334,8 @@ export default function AccountsPage() {
       currency: toAcc.currency,
       financialAccountId: toId,
       description: description || `Transferencia desde ${fromAcc.name} (${fromAcc.currency})`,
-      accountBalanceAfter: Number(toAcc.initialBalance || 0) + finalAmountTo
+      accountBalanceAfter: Number(toAcc.initialBalance || 0) + finalAmountTo,
+      accountMovementAmount: finalAmountTo
     })
 
     toast({ title: "Transferencia completada" })
@@ -566,6 +569,7 @@ export default function AccountsPage() {
                   recentTxs.map((move: any) => {
                     const typeInfo = txTypeMap[move.type] || { label: move.type, icon: RefreshCw, color: "text-slate-600 bg-slate-50" };
                     const Icon = typeInfo.icon;
+                    const movementValue = Math.abs(move.accountMovementAmount || move.paidAmount || move.amount || 0);
                     return (
                       <div key={move.id} className="flex items-center justify-between p-4 hover:bg-muted/5 transition-colors">
                         <div className="flex items-center gap-4">
@@ -579,8 +583,8 @@ export default function AccountsPage() {
                             </p>
                           </div>
                         </div>
-                        <span className={`font-black text-sm ${move.amount > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                          {move.currency === 'USD' ? 'u$s' : '$'}{Math.abs(move.amount).toLocaleString('es-AR')}
+                        <span className={`font-black text-sm ${(move.accountMovementAmount || move.amount) > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {move.currency === 'USD' ? 'u$s' : '$'}{movementValue.toLocaleString('es-AR')}
                         </span>
                       </div>
                     )

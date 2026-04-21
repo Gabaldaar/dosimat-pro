@@ -133,7 +133,6 @@ function TransactionsContent() {
   const [exchangeRate, setExchangeRate] = useState(1)
   const [convertedAmountOverride, setConvertedAmountOverride] = useState<number | null>(null)
 
-  // Desbloqueador global de puntero (Evita congelamientos de Radix UI)
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (document.body.style.pointerEvents === 'none') {
@@ -165,7 +164,6 @@ function TransactionsContent() {
 
   const [hasAutoPopulated, setHasAutoPopulated] = useState(false)
 
-  // Sincronizar parámetros de URL
   useEffect(() => {
     const mode = searchParams.get('mode')
     const clientId = searchParams.get('clientId')
@@ -188,7 +186,6 @@ function TransactionsContent() {
     if (desc) setTxDescription(decodeURIComponent(desc))
   }, [searchParams])
 
-  // Lógica de auto-población desde Hojas de Ruta
   useEffect(() => {
     if (!catalog || hasAutoPopulated || searchParams.get('fromRoute') !== 'true') return;
 
@@ -432,7 +429,7 @@ function TransactionsContent() {
         originalCurrency: isCrossCurrency ? manualCurrency : null,
         description: desc, 
         financialAccountId: manualAccountId === "pending" ? null : manualAccountId, 
-        paidAmount: activeTab === 'cobro' ? Math.abs(finalAmountValue) : 0, 
+        paidAmount: Math.abs(accountMovementAmount), 
         pendingAmount: (activeTab === 'adjustment' && baseManualAmount < 0) ? baseManualAmount : 0,
         imputations: activeTab === 'cobro' ? imputations : null,
         accountBalanceAfter,
@@ -478,7 +475,8 @@ function TransactionsContent() {
           financialAccountId: (destinationAccounts[curr]==="pending" || paid === 0) ? null : destinationAccounts[curr], 
           items: selectedItems.filter(i => i.currency === curr), 
           pendingAmount: finalPending,
-          accountBalanceAfter
+          accountBalanceAfter,
+          accountMovementAmount: paid
         }
         setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
         if (destinationAccounts[curr] !== "pending" && paid !== 0) updateDocumentNonBlocking(doc(db, 'financial_accounts', destinationAccounts[curr]), { initialBalance: increment(paid) });
@@ -536,25 +534,18 @@ function TransactionsContent() {
   const transactionsWithDynamicBalances = useMemo(() => {
     if (!transactions) return [];
     
-    // Si no hay filtro de caja único, devolvemos la lista tal cual
     if (filterAccount === "all" || filterAccount === "null") return transactions;
 
     const targetAccount = accounts?.find(a => a.id === filterAccount);
     if (!targetAccount) return transactions;
 
-    // 1. Filtrar solo los movimientos de esta caja
     const accountTxs = transactions.filter(tx => tx.financialAccountId === filterAccount);
-
-    // 2. Ordenar por fecha DESC (más reciente primero)
-    // Usamos el Saldo Actual de la caja como punto de partida para el movimiento más reciente
     let runningBalance = Number(targetAccount.initialBalance || 0);
     
     return accountTxs.map((tx: any) => {
       const movement = Number(tx.accountMovementAmount || tx.paidAmount || 0);
       const balanceAtThisPoint = runningBalance;
-      // Para el siguiente (más antiguo), "revertimos" el movimiento
       runningBalance -= movement;
-      
       return { ...tx, dynamicBalance: balanceAtThisPoint };
     });
   }, [transactions, filterAccount, accounts]);
@@ -570,12 +561,11 @@ function TransactionsContent() {
           const matchEnd = !filterEndDate || txDateStr <= filterEndDate;
           const matchType = filterOpType === "all" || (filterOpType === 'Reposición' ? (tx.type === 'Reposición' || tx.type === 'refill') : tx.type === filterOpType);
           let matchFlow = true;
-          if (filterFlow === 'income') matchFlow = tx.amount > 0 || tx.type === 'cobro';
-          if (filterFlow === 'expense') matchFlow = tx.amount < 0 && tx.type !== 'cobro';
+          if (filterFlow === 'income') matchFlow = tx.amount > 0 || tx.type === 'cobro' || tx.accountMovementAmount > 0;
+          if (filterFlow === 'expense') matchFlow = (tx.amount < 0 && tx.type !== 'cobro') || tx.accountMovementAmount < 0;
           return matchCustomer && matchAccount && matchStart && matchEnd && matchType && matchFlow;
         });
 
-    // Si hay otros filtros además de la caja, volvemos a filtrar la lista ya procesada
     if (filterAccount !== "all" && filterAccount !== "null") {
       return list.filter((tx: any) => {
         const matchCustomer = filterCustomer === "all" || tx.clientId === filterCustomer
@@ -584,8 +574,8 @@ function TransactionsContent() {
         const matchEnd = !filterEndDate || txDateStr <= filterEndDate;
         const matchType = filterOpType === "all" || (filterOpType === 'Reposición' ? (tx.type === 'Reposición' || tx.type === 'refill') : tx.type === filterOpType);
         let matchFlow = true;
-        if (filterFlow === 'income') matchFlow = tx.amount > 0 || tx.type === 'cobro';
-        if (filterFlow === 'expense') matchFlow = tx.amount < 0 && tx.type !== 'cobro';
+        if (filterFlow === 'income') matchFlow = tx.amount > 0 || tx.type === 'cobro' || tx.accountMovementAmount > 0;
+        if (filterFlow === 'expense') matchFlow = (tx.amount < 0 && tx.type !== 'cobro') || tx.accountMovementAmount < 0;
         return matchCustomer && matchStart && matchEnd && matchType && matchFlow;
       });
     }
@@ -623,7 +613,7 @@ function TransactionsContent() {
     }
 
     text += `*Total Operación:* ${symbol} ${Math.abs(tx.amount).toLocaleString('es-AR')}\n`;
-    text += `*Movimiento de Caja:* ${symbol} ${Number(tx.paidAmount || 0).toLocaleString('es-AR')}\n`;
+    text += `*Movimiento de Caja:* ${symbol} ${Math.abs(tx.accountMovementAmount || tx.paidAmount || 0).toLocaleString('es-AR')}\n`;
     text += `*Pendiente:* ${symbol} ${Math.abs(tx.pendingAmount || 0).toLocaleString('es-AR')}`;
 
     navigator.clipboard.writeText(text);
@@ -695,7 +685,7 @@ function TransactionsContent() {
     result = result.replace(/\{\{Total\}\}/g, `${symbol} ${Math.abs(tx.amount || 0).toLocaleString('es-AR')}`);
     result = result.replace(/\{\{Pendiente_Operacion\}\}/g, `${symbol} ${Math.abs(tx.pendingAmount || 0).toLocaleString('es-AR')}`);
     result = result.replace(/\{\{Moneda\}\}/g, tx.currency);
-    result = result.replace(/\{\{Monto_Abonado\}\}/g, `${symbol} ${Number(tx.paidAmount || 0).toLocaleString('es-AR')}`);
+    result = result.replace(/\{\{Monto_Abonado\}\}/g, `${symbol} ${Math.abs(tx.accountMovementAmount || tx.paidAmount || 0).toLocaleString('es-AR')}`);
     result = result.replace(/\{\{Descripción\}\}/g, tx.description || "");
     result = result.replace(/\{\{Saldo_Caja_Final\}\}/g, `${symbol} ${Number(tx.accountBalanceAfter || 0).toLocaleString('es-AR')}`);
 
@@ -884,7 +874,7 @@ function TransactionsContent() {
                               {customerPendingTxs.filter(tx => tx.currency === manualCurrency).map(tx => (
                                 <Card key={tx.id} className="p-4 border-emerald-100 shadow-sm">
                                   <div className="flex justify-between items-center mb-3">
-                                    <Badge variant="outline" className={cn("text-[9px] uppercase font-black", txTypeMap[tx.type]?.color)}>{txTypeMap[tx.type]?.label || tx.type}</Badge>
+                                    <Badge variant="outline" className={cn("text-[9px] uppercase font-black", txTypeMap[tx.type]?.color || "bg-slate-50")}>{txTypeMap[tx.type]?.label || tx.type}</Badge>
                                     <span className="text-[10px] font-bold text-slate-400">{formatLocalDate(tx.date)}</span>
                                   </div>
                                   <div className="flex justify-between items-end gap-4">
@@ -930,7 +920,7 @@ function TransactionsContent() {
                                   {customerPendingTxs.filter(tx => tx.currency === manualCurrency).map(tx => (
                                     <TableRow key={tx.id}>
                                       <TableCell className="text-xs font-bold">{formatLocalDate(tx.date)}</TableCell>
-                                      <TableCell><Badge variant="outline" className={cn("text-[9px] uppercase font-black", txTypeMap[tx.type]?.color)}>{txTypeMap[tx.type]?.label || tx.type}</Badge></TableCell>
+                                      <TableCell><Badge variant="outline" className={cn("text-[9px] uppercase font-black", txTypeMap[tx.type]?.color || "bg-slate-50")}>{txTypeMap[tx.type]?.label || tx.type}</Badge></TableCell>
                                       <TableCell className="text-right font-black text-rose-600">{manualCurrency==='USD'?'u$s':'$'} {Math.abs(tx.pendingAmount || 0).toLocaleString()}</TableCell>
                                       <TableCell>
                                         <div className="flex items-center gap-2">
@@ -1199,6 +1189,7 @@ function TransactionsContent() {
                         const pendingAmt = Number(tx.pendingAmount || 0);
                         const balanceToShow = tx.dynamicBalance ?? tx.accountBalanceAfter;
                         const isDynamic = tx.dynamicBalance !== undefined;
+                        const movementValue = Math.abs(tx.accountMovementAmount || tx.paidAmount || 0);
                         
                         return (
                           <TableRow key={tx.id} className="cursor-pointer hover:bg-primary/5 transition-colors group" onClick={() => setSelectedTxDetails(tx)}>
@@ -1217,7 +1208,7 @@ function TransactionsContent() {
                             </TableCell>
                             <TableCell><span className="text-[10px] font-black text-muted-foreground uppercase">{acc?.name || "---"}</span></TableCell>
                             <TableCell className="text-right font-black text-slate-800">{tx.currency==='USD'?'u$s':'$'} {Math.abs(tx.amount || 0).toLocaleString()}</TableCell>
-                            <TableCell className="text-right text-xs font-bold text-emerald-700">{tx.currency==='USD'?'u$s':'$'} {Number(tx.paidAmount || 0).toLocaleString()}</TableCell>
+                            <TableCell className="text-right text-xs font-bold text-emerald-700">{tx.currency==='USD'?'u$s':'$'} {movementValue.toLocaleString()}</TableCell>
                             <TableCell className="text-right text-xs">
                               <span className={cn(
                                 "px-2 py-0.5 rounded border text-[10px] font-black",
@@ -1272,6 +1263,7 @@ function TransactionsContent() {
                   const pendingAmt = Number(tx.pendingAmount || 0);
                   const symbol = tx.currency === 'USD' ? 'u$s' : '$';
                   const balanceToShow = tx.dynamicBalance ?? tx.accountBalanceAfter;
+                  const movementValue = Math.abs(tx.accountMovementAmount || tx.paidAmount || 0);
 
                   return (
                     <Card key={tx.id} className="glass-card shadow-md active:scale-[0.98] transition-transform border-primary/5" onClick={() => setSelectedTxDetails(tx)}>
@@ -1345,7 +1337,7 @@ function TransactionsContent() {
                         <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl text-[10px] font-bold border shadow-inner">
                           <div className="flex gap-2">
                             <span className="text-slate-400 uppercase font-black text-[8px]">A Caja:</span>
-                            <span className="text-emerald-700">{symbol} {Number(tx.paidAmount || 0).toLocaleString()}</span>
+                            <span className="text-emerald-700">{symbol} {movementValue.toLocaleString()}</span>
                           </div>
                           <div className="flex gap-2">
                             <span className="text-slate-400 uppercase font-black text-[8px]">Saldo Final:</span>
@@ -1390,7 +1382,7 @@ function TransactionsContent() {
                     </div>
                     <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl space-y-1 shadow-inner">
                       <p className="text-[10px] font-black uppercase text-emerald-700 tracking-widest">Movimiento de Caja</p>
-                      <p className="text-3xl font-black text-emerald-800">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Number(selectedTxDetails.paidAmount || 0).toLocaleString()}</p>
+                      <p className="text-3xl font-black text-emerald-800">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Math.abs(selectedTxDetails.accountMovementAmount || selectedTxDetails.paidAmount || 0).toLocaleString()}</p>
                     </div>
                     <div className={cn(
                       "p-4 border rounded-2xl space-y-1 shadow-inner",
@@ -1575,7 +1567,6 @@ function TransactionsContent() {
         <MobileNav />
       </div>
 
-      {/* VISTA DE IMPRESIÓN (PDF) */}
       <div className="print-only w-full p-8 bg-white text-slate-900 font-sans">
         <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
           <div>
@@ -1625,7 +1616,7 @@ function TransactionsContent() {
               <th className="border border-slate-900 p-2 text-left uppercase font-black">Operación</th>
               <th className="border border-slate-900 p-2 text-left uppercase font-black">Caja</th>
               <th className="border border-slate-900 p-2 text-right uppercase font-black">Total Operación</th>
-              <th className="border border-slate-900 p-2 text-right uppercase font-black">Monto en Efectivo</th>
+              <th className="border border-slate-900 p-2 text-right uppercase font-black">Movimiento de Caja</th>
               <th className="border border-slate-900 p-2 text-right uppercase font-black">Pendiente</th>
             </tr>
           </thead>
@@ -1641,7 +1632,7 @@ function TransactionsContent() {
                   <td className="border border-slate-900 p-2 uppercase font-bold">{txTypeMap[tx.type]?.label || tx.type}</td>
                   <td className="border border-slate-900 p-2 uppercase font-medium">{acc?.name || 'A Cuenta'}</td>
                   <td className="border border-slate-900 p-2 text-right font-black">{symbol} {Math.abs(tx.amount).toLocaleString('es-AR')}</td>
-                  <td className="border border-slate-900 p-2 text-right font-bold text-emerald-700">{symbol} {Number(tx.paidAmount || 0).toLocaleString('es-AR')}</td>
+                  <td className="border border-slate-900 p-2 text-right font-bold text-emerald-700">{symbol} {Math.abs(tx.accountMovementAmount || tx.paidAmount || 0).toLocaleString('es-AR')}</td>
                   <td className="border border-slate-900 p-2 text-right font-black">
                     {Math.abs(tx.pendingAmount || 0) < 0.01 ? '-' : `${symbol} ${Math.abs(tx.pendingAmount).toLocaleString('es-AR')}`}
                   </td>

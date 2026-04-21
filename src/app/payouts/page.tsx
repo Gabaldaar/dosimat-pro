@@ -380,7 +380,8 @@ export default function PayoutsPage() {
       description: `Liquidación de haberes: ${selectedCollab.name} (#${payoutId.toUpperCase().slice(0,6)})`,
       financialAccountId: accountId,
       recordedByUserId: userData?.id || 'system',
-      accountBalanceAfter: (Number(selectedAccount?.initialBalance || 0)) - finalTotalInAccountCurrency
+      accountBalanceAfter: (Number(selectedAccount?.initialBalance || 0)) - finalTotalInAccountCurrency,
+      accountMovementAmount: -finalTotalInAccountCurrency
     }
     setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
     
@@ -413,7 +414,7 @@ export default function PayoutsPage() {
 
     if (p.financialAccountId) {
       const tx = transactions?.find(t => t.id === p.transactionId);
-      const amountToRevert = Math.abs(tx?.amount || 0);
+      const amountToRevert = Math.abs(tx?.accountMovementAmount || tx?.amount || 0);
       updateDocumentNonBlocking(doc(db, 'financial_accounts', p.financialAccountId), { initialBalance: increment(amountToRevert) });
     }
 
@@ -552,8 +553,8 @@ export default function PayoutsPage() {
                                     <TableCell className="text-xs font-medium truncate max-w-[150px]">{d.clientName}</TableCell>
                                     <TableCell>
                                       <div className="flex gap-2">
-                                        <Badge variant="outline" className="text-[9px] font-bold bg-blue-50 text-blue-700">{d.cloro} CL</Badge>
-                                        <Badge variant="outline" className="text-[9px] font-bold bg-rose-50 text-rose-700">{d.acido} AC</Badge>
+                                        <Badge variant="outline" className="text-[8px] font-bold bg-blue-50 text-blue-700">{d.cloro} CL</Badge>
+                                        <Badge variant="outline" className="text-[8px] font-bold bg-rose-50 text-rose-700">{d.acido} AC</Badge>
                                       </div>
                                     </TableCell>
                                     <TableCell className="text-right font-black text-xs text-emerald-700">${sub.toLocaleString()}</TableCell>
@@ -735,6 +736,7 @@ export default function PayoutsPage() {
                       const acc = accounts?.find(a => a.id === p.financialAccountId);
                       const tx = transactions?.find(t => t.id === p.transactionId);
                       const symbol = p.currency === 'USD' ? 'u$s' : '$';
+                      const movementValue = Math.abs(tx?.accountMovementAmount || tx?.paidAmount || tx?.amount || 0);
                       return (
                         <TableRow key={p.id}>
                           <TableCell className="text-xs font-bold text-slate-600">{new Date(p.date).toLocaleDateString('es-AR')}</TableCell>
@@ -754,7 +756,7 @@ export default function PayoutsPage() {
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
-                            <p className={cn("font-black text-sm", p.currency === 'USD' ? 'text-emerald-700' : 'text-blue-700')}>{symbol} {Math.abs(tx?.amount || 0).toLocaleString()}</p>
+                            <p className={cn("font-black text-sm", p.currency === 'USD' ? 'text-emerald-700' : 'text-blue-700')}>{symbol} {movementValue.toLocaleString()}</p>
                             <p className="text-[8px] font-black text-muted-foreground uppercase">{acc?.name}</p>
                           </TableCell>
                           <TableCell>
@@ -779,6 +781,7 @@ export default function PayoutsPage() {
                   const acc = accounts?.find(a => a.id === p.financialAccountId);
                   const tx = transactions?.find(t => t.id === p.transactionId);
                   const symbol = p.currency === 'USD' ? 'u$s' : '$';
+                  const movementValue = Math.abs(tx?.accountMovementAmount || tx?.paidAmount || tx?.amount || 0);
                   return (
                     <Card key={p.id} className="glass-card shadow-md">
                       <CardContent className="p-4 space-y-4">
@@ -815,7 +818,7 @@ export default function PayoutsPage() {
                           <div className="text-right">
                             <p className="text-[8px] font-black text-muted-foreground uppercase">Total Liquidado</p>
                             <p className={cn("text-xl font-black", p.currency === 'USD' ? 'text-emerald-700' : 'text-blue-700')}>
-                              {symbol} {Math.abs(tx?.amount || 0).toLocaleString()}
+                              {symbol} {movementValue.toLocaleString()}
                             </p>
                           </div>
                         </div>
@@ -926,7 +929,7 @@ export default function PayoutsPage() {
                     <div className="p-3 bg-muted/20 rounded-xl border text-center">
                       <p className="text-[8px] font-black uppercase text-muted-foreground mb-1">Total Pagado</p>
                       <p className={cn("text-lg font-black", payoutForDetails?.currency === 'USD' ? 'text-emerald-700' : 'text-blue-700')}>
-                        {payoutForDetails?.currency === 'USD' ? 'u$s' : '$'} {Math.abs(transactions?.find(t => t.id === payoutForDetails?.transactionId)?.amount || 0).toLocaleString()}
+                        {payoutForDetails?.currency === 'USD' ? 'u$s' : '$'} {Math.abs(transactions?.find(t => t.id === payoutForDetails?.transactionId)?.accountMovementAmount || transactions?.find(t => t.id === payoutForDetails?.transactionId)?.amount || 0).toLocaleString()}
                       </p>
                     </div>
                     <div className="p-3 bg-muted/20 rounded-xl border text-center">
@@ -1028,7 +1031,7 @@ export default function PayoutsPage() {
               <div className="text-right space-y-1">
                 <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Monto Abonado</p>
                 <p className={cn("text-3xl font-black", payoutToPrint.currency === 'USD' ? 'text-emerald-700' : 'text-blue-700')}>
-                  {payoutToPrint.currency === 'USD' ? 'u$s' : '$'} {Math.abs(transactions?.find(t => t.id === payoutToPrint.transactionId)?.amount || 0).toLocaleString()}
+                  {payoutToPrint.currency === 'USD' ? 'u$s' : '$'} {Math.abs(transactions?.find(t => t.id === payoutToPrint.transactionId)?.accountMovementAmount || transactions?.find(t => t.id === payoutToPrint.transactionId)?.amount || 0).toLocaleString()}
                 </p>
                 <p className="text-[10px] font-bold text-slate-400 uppercase">Caja: {accounts?.find(a => a.id === payoutToPrint.financialAccountId)?.name || '---'}</p>
               </div>
