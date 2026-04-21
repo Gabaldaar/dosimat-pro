@@ -102,6 +102,22 @@ function formatLocalDate(dateString: string) {
   return date.toLocaleDateString('es-AR');
 }
 
+/**
+ * Función centralizada para extraer el movimiento neto de caja de una transacción.
+ */
+function getMovementAmount(tx: any): number {
+  // 1. Usar el campo unificado si existe
+  if (typeof tx.accountMovementAmount === 'number') return tx.accountMovementAmount;
+  
+  // 2. Fallbacks para registros antiguos
+  if (['cobro', 'adjustment', 'Adjustment', 'Expense', 'FinancialTransferIn', 'FinancialTransferOut'].includes(tx.type)) {
+    return Number(tx.amount || 0);
+  }
+  
+  // 3. Fallback para Ventas/Reposiciones (donde entra el paidAmount)
+  return Number(tx.paidAmount || 0);
+}
+
 function TransactionsContent() {
   const { toast } = useToast()
   const db = useFirestore()
@@ -381,7 +397,7 @@ function TransactionsContent() {
         updateDocumentNonBlocking(doc(db, 'clients', tx.clientId), { [field]: increment(amountToRevert) });
       }
       if (tx.financialAccountId) {
-        const amountToRevert = -Number(tx.accountMovementAmount || tx.amount || 0);
+        const amountToRevert = -Number(getMovementAmount(tx));
         updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), { initialBalance: increment(amountToRevert) });
       }
       if (tx.type === 'cobro' && tx.imputations) {
@@ -516,7 +532,7 @@ function TransactionsContent() {
     }
 
     if (tx.financialAccountId) {
-      const amountToRevert = -Number(tx.accountMovementAmount || tx.amount || 0);
+      const amountToRevert = -Number(getMovementAmount(tx));
       updateDocumentNonBlocking(doc(db, 'financial_accounts', tx.financialAccountId), { initialBalance: increment(amountToRevert) });
     }
 
@@ -543,7 +559,7 @@ function TransactionsContent() {
     let runningBalance = Number(targetAccount.initialBalance || 0);
     
     return accountTxs.map((tx: any) => {
-      const movement = Number(tx.accountMovementAmount || tx.paidAmount || 0);
+      const movement = getMovementAmount(tx);
       const balanceAtThisPoint = runningBalance;
       runningBalance -= movement;
       return { ...tx, dynamicBalance: balanceAtThisPoint };
@@ -561,8 +577,9 @@ function TransactionsContent() {
           const matchEnd = !filterEndDate || txDateStr <= filterEndDate;
           const matchType = filterOpType === "all" || (filterOpType === 'Reposición' ? (tx.type === 'Reposición' || tx.type === 'refill') : tx.type === filterOpType);
           let matchFlow = true;
-          if (filterFlow === 'income') matchFlow = tx.amount > 0 || tx.type === 'cobro' || tx.accountMovementAmount > 0;
-          if (filterFlow === 'expense') matchFlow = (tx.amount < 0 && tx.type !== 'cobro') || tx.accountMovementAmount < 0;
+          const m = getMovementAmount(tx);
+          if (filterFlow === 'income') matchFlow = m > 0;
+          if (filterFlow === 'expense') matchFlow = m < 0;
           return matchCustomer && matchAccount && matchStart && matchEnd && matchType && matchFlow;
         });
 
@@ -574,8 +591,9 @@ function TransactionsContent() {
         const matchEnd = !filterEndDate || txDateStr <= filterEndDate;
         const matchType = filterOpType === "all" || (filterOpType === 'Reposición' ? (tx.type === 'Reposición' || tx.type === 'refill') : tx.type === filterOpType);
         let matchFlow = true;
-        if (filterFlow === 'income') matchFlow = tx.amount > 0 || tx.type === 'cobro' || tx.accountMovementAmount > 0;
-        if (filterFlow === 'expense') matchFlow = (tx.amount < 0 && tx.type !== 'cobro') || tx.accountMovementAmount < 0;
+        const m = getMovementAmount(tx);
+        if (filterFlow === 'income') matchFlow = m > 0;
+        if (filterFlow === 'expense') matchFlow = m < 0;
         return matchCustomer && matchStart && matchEnd && matchType && matchFlow;
       });
     }
@@ -612,8 +630,9 @@ function TransactionsContent() {
       text += `\n`;
     }
 
+    const m = getMovementAmount(tx);
     text += `*Total Operación:* ${symbol} ${Math.abs(tx.amount).toLocaleString('es-AR')}\n`;
-    text += `*Movimiento de Caja:* ${symbol} ${Math.abs(tx.accountMovementAmount || tx.paidAmount || 0).toLocaleString('es-AR')}\n`;
+    text += `*Movimiento de Caja:* ${symbol} ${Math.abs(m).toLocaleString('es-AR')}\n`;
     text += `*Pendiente:* ${symbol} ${Math.abs(tx.pendingAmount || 0).toLocaleString('es-AR')}`;
 
     navigator.clipboard.writeText(text);
@@ -685,7 +704,7 @@ function TransactionsContent() {
     result = result.replace(/\{\{Total\}\}/g, `${symbol} ${Math.abs(tx.amount || 0).toLocaleString('es-AR')}`);
     result = result.replace(/\{\{Pendiente_Operacion\}\}/g, `${symbol} ${Math.abs(tx.pendingAmount || 0).toLocaleString('es-AR')}`);
     result = result.replace(/\{\{Moneda\}\}/g, tx.currency);
-    result = result.replace(/\{\{Monto_Abonado\}\}/g, `${symbol} ${Math.abs(tx.accountMovementAmount || tx.paidAmount || 0).toLocaleString('es-AR')}`);
+    result = result.replace(/\{\{Monto_Abonado\}\}/g, `${symbol} ${Math.abs(getMovementAmount(tx)).toLocaleString('es-AR')}`);
     result = result.replace(/\{\{Descripción\}\}/g, tx.description || "");
     result = result.replace(/\{\{Saldo_Caja_Final\}\}/g, `${symbol} ${Number(tx.accountBalanceAfter || 0).toLocaleString('es-AR')}`);
 
@@ -738,6 +757,8 @@ function TransactionsContent() {
     if (filterEndDate) list.push({ label: 'Hasta', value: formatLocalDate(filterEndDate) });
     return list;
   }, [filterCustomer, filterAccount, filterOpType, filterFlow, filterStartDate, filterEndDate, customers, accounts]);
+
+  if (isUserLoading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
 
   return (
     <div className="flex min-h-screen bg-background w-full">
@@ -1189,7 +1210,7 @@ function TransactionsContent() {
                         const pendingAmt = Number(tx.pendingAmount || 0);
                         const balanceToShow = tx.dynamicBalance ?? tx.accountBalanceAfter;
                         const isDynamic = tx.dynamicBalance !== undefined;
-                        const movementValue = Math.abs(tx.accountMovementAmount || tx.paidAmount || 0);
+                        const movement = getMovementAmount(tx);
                         
                         return (
                           <TableRow key={tx.id} className="cursor-pointer hover:bg-primary/5 transition-colors group" onClick={() => setSelectedTxDetails(tx)}>
@@ -1208,7 +1229,9 @@ function TransactionsContent() {
                             </TableCell>
                             <TableCell><span className="text-[10px] font-black text-muted-foreground uppercase">{acc?.name || "---"}</span></TableCell>
                             <TableCell className="text-right font-black text-slate-800">{tx.currency==='USD'?'u$s':'$'} {Math.abs(tx.amount || 0).toLocaleString()}</TableCell>
-                            <TableCell className="text-right text-xs font-bold text-emerald-700">{tx.currency==='USD'?'u$s':'$'} {movementValue.toLocaleString()}</TableCell>
+                            <TableCell className={cn("text-right text-xs font-bold", movement > 0 ? "text-emerald-700" : movement < 0 ? "text-rose-700" : "text-slate-400")}>
+                              {tx.currency==='USD'?'u$s':'$'} {movement > 0 ? '+' : ''}{movement.toLocaleString()}
+                            </TableCell>
                             <TableCell className="text-right text-xs">
                               <span className={cn(
                                 "px-2 py-0.5 rounded border text-[10px] font-black",
@@ -1263,7 +1286,7 @@ function TransactionsContent() {
                   const pendingAmt = Number(tx.pendingAmount || 0);
                   const symbol = tx.currency === 'USD' ? 'u$s' : '$';
                   const balanceToShow = tx.dynamicBalance ?? tx.accountBalanceAfter;
-                  const movementValue = Math.abs(tx.accountMovementAmount || tx.paidAmount || 0);
+                  const movement = getMovementAmount(tx);
 
                   return (
                     <Card key={tx.id} className="glass-card shadow-md active:scale-[0.98] transition-transform border-primary/5" onClick={() => setSelectedTxDetails(tx)}>
@@ -1337,7 +1360,7 @@ function TransactionsContent() {
                         <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl text-[10px] font-bold border shadow-inner">
                           <div className="flex gap-2">
                             <span className="text-slate-400 uppercase font-black text-[8px]">A Caja:</span>
-                            <span className="text-emerald-700">{symbol} {movementValue.toLocaleString()}</span>
+                            <span className={cn(movement > 0 ? "text-emerald-700" : "text-rose-700")}>{symbol} {movement > 0 ? '+' : ''}{movement.toLocaleString()}</span>
                           </div>
                           <div className="flex gap-2">
                             <span className="text-slate-400 uppercase font-black text-[8px]">Saldo Final:</span>
@@ -1382,7 +1405,7 @@ function TransactionsContent() {
                     </div>
                     <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl space-y-1 shadow-inner">
                       <p className="text-[10px] font-black uppercase text-emerald-700 tracking-widest">Movimiento de Caja</p>
-                      <p className="text-3xl font-black text-emerald-800">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {Math.abs(selectedTxDetails.accountMovementAmount || selectedTxDetails.paidAmount || 0).toLocaleString()}</p>
+                      <p className="text-3xl font-black text-emerald-800">{selectedTxDetails.currency === 'USD' ? 'u$s' : '$'} {getMovementAmount(selectedTxDetails).toLocaleString()}</p>
                     </div>
                     <div className={cn(
                       "p-4 border rounded-2xl space-y-1 shadow-inner",
@@ -1625,6 +1648,7 @@ function TransactionsContent() {
               const cust = customers?.find(c => c.id === tx.clientId);
               const acc = accounts?.find(a => a.id === tx.financialAccountId);
               const symbol = tx.currency === 'USD' ? 'u$s' : '$';
+              const movement = getMovementAmount(tx);
               return (
                 <tr key={tx.id} className="border-b border-slate-300">
                   <td className="border border-slate-900 p-2 font-bold">{formatLocalDate(tx.date)}</td>
@@ -1632,7 +1656,7 @@ function TransactionsContent() {
                   <td className="border border-slate-900 p-2 uppercase font-bold">{txTypeMap[tx.type]?.label || tx.type}</td>
                   <td className="border border-slate-900 p-2 uppercase font-medium">{acc?.name || 'A Cuenta'}</td>
                   <td className="border border-slate-900 p-2 text-right font-black">{symbol} {Math.abs(tx.amount).toLocaleString('es-AR')}</td>
-                  <td className="border border-slate-900 p-2 text-right font-bold text-emerald-700">{symbol} {Math.abs(tx.accountMovementAmount || tx.paidAmount || 0).toLocaleString('es-AR')}</td>
+                  <td className={cn("border border-slate-900 p-2 text-right font-bold", movement > 0 ? "text-emerald-700" : movement < 0 ? "text-rose-700" : "")}>{symbol} {movement > 0 ? '+' : ''}{movement.toLocaleString('es-AR')}</td>
                   <td className="border border-slate-900 p-2 text-right font-black">
                     {Math.abs(tx.pendingAmount || 0) < 0.01 ? '-' : `${symbol} ${Math.abs(tx.pendingAmount).toLocaleString('es-AR')}`}
                   </td>
