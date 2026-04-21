@@ -713,9 +713,9 @@ function CustomersContent() {
                   </div>
                 </div>
                 <div className="space-y-3">
-                  <h4 className="text-xs font-black uppercase text-slate-500 tracking-widest px-1">Operaciones Pendientes de Pago</h4>
+                  <h4 className="text-xs font-black uppercase text-slate-500 tracking-widest px-1">Operaciones a Cuenta Corriente</h4>
                   <div className="border rounded-2xl overflow-hidden bg-white shadow-sm">
-                    <Table><TableHeader className="bg-slate-50"><TableRow><TableHead className="text-[10px] font-black uppercase">Fecha</TableHead><TableHead className="text-[10px] font-black uppercase">Operación</TableHead><TableHead className="text-right text-[10px] font-black uppercase">Monto Original</TableHead><TableHead className="text-right text-[10px] font-black uppercase">Deuda Pendiente</TableHead></TableRow></TableHeader>
+                    <Table><TableHeader className="bg-slate-50"><TableRow><TableHead className="text-[10px] font-black uppercase">Fecha</TableHead><TableHead className="text-[10px] font-black uppercase">Operación</TableHead><TableHead className="text-right text-[10px] font-black uppercase">Total Operación</TableHead><TableHead className="text-right text-[10px] font-black uppercase">A Cuenta Cte.</TableHead></TableRow></TableHeader>
                       <TableBody>
                         {pendingOperations.length === 0 ? (<TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground italic">Sin deudas pendientes.</TableCell></TableRow>) : pendingOperations.map(tx => (
                           <TableRow key={tx.id} className="hover:bg-muted/5 transition-colors">
