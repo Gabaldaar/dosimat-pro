@@ -106,15 +106,12 @@ function formatLocalDate(dateString: string) {
  * Función centralizada para extraer el movimiento neto de caja de una transacción.
  */
 function getMovementAmount(tx: any): number {
-  // 1. Usar el campo unificado si existe
   if (typeof tx.accountMovementAmount === 'number') return tx.accountMovementAmount;
   
-  // 2. Fallbacks para registros antiguos
   if (['cobro', 'adjustment', 'Adjustment', 'Expense', 'FinancialTransferIn', 'FinancialTransferOut'].includes(tx.type)) {
     return Number(tx.amount || 0);
   }
   
-  // 3. Fallback para Ventas/Reposiciones (donde entra el paidAmount)
   return Number(tx.paidAmount || 0);
 }
 
@@ -602,8 +599,9 @@ function TransactionsContent() {
 
   const filteredTotals = useMemo(() => {
     return filteredTransactions.reduce((acc, tx) => {
-      if (tx.currency === 'ARS') acc.ars += Number(tx.amount || 0);
-      if (tx.currency === 'USD') acc.usd += Number(tx.amount || 0);
+      const movement = getMovementAmount(tx);
+      if (tx.currency === 'ARS') acc.ars += movement;
+      if (tx.currency === 'USD') acc.usd += movement;
       return acc;
     }, { ars: 0, usd: 0 })
   }, [filteredTransactions]);
