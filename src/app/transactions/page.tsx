@@ -41,7 +41,8 @@ import {
   Wallet,
   Printer,
   ArrowRightLeft,
-  ArrowUpRight
+  ArrowUpRight,
+  Tag
 } from "lucide-react"
 import { useToast } from "../../hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -166,6 +167,7 @@ function TransactionsContent() {
   const wsTemplatesQuery = useMemoFirebase(() => collection(db, 'whatsapp_templates'), [db])
   const emailTemplatesQuery = useMemoFirebase(() => collection(db, 'email_templates'), [db])
   const productCatsQuery = useMemoFirebase(() => collection(db, 'product_categories'), [db])
+  const expenseCatsQuery = useMemoFirebase(() => collection(db, 'expense_categories'), [db])
 
   const { data: customers } = useCollection(clientsQuery)
   const { data: catalog } = useCollection(catalogQuery)
@@ -174,6 +176,7 @@ function TransactionsContent() {
   const { data: wsTemplates } = useCollection(wsTemplatesQuery)
   const { data: emailTemplates } = useCollection(emailTemplatesQuery)
   const { data: productCategories } = useCollection(productCatsQuery)
+  const { data: expenseCategories } = useCollection(expenseCatsQuery)
 
   const [hasAutoPopulated, setHasAutoPopulated] = useState(false)
 
@@ -296,6 +299,7 @@ function TransactionsContent() {
   const [manualAmount, setManualAmount] = useState(0)
   const [manualCurrency, setManualCurrency] = useState("ARS")
   const [manualAccountId, setManualAccountId] = useState("pending")
+  const [manualCategoryId, setManualCategoryId] = useState("")
   const [adjustmentSign, setAdjustmentSign] = useState<"1" | "-1">("1")
   const [txDescription, setTxDescription] = useState("")
   const [imputations, setImputations] = useState<Record<string, number>>({})
@@ -368,6 +372,7 @@ function TransactionsContent() {
         setManualCurrency(tx.currency);
       }
       setManualAccountId(tx.financialAccountId || "pending");
+      setManualCategoryId(tx.expenseCategoryId || "");
       setAdjustmentSign(tx.amount >= 0 ? "1" : "-1");
       setImputations(tx.imputations || {});
     } else {
@@ -442,6 +447,7 @@ function TransactionsContent() {
         originalCurrency: isCrossCurrency ? manualCurrency : null,
         description: desc, 
         financialAccountId: manualAccountId === "pending" ? null : manualAccountId, 
+        expenseCategoryId: (activeTab === 'Expense' || activeTab === 'adjustment') ? (manualCategoryId || null) : null,
         paidAmount: Math.abs(accountMovementAmount), 
         pendingAmount: (activeTab === 'adjustment' && baseManualAmount < 0) ? baseManualAmount : 0,
         imputations: activeTab === 'cobro' ? imputations : null,
@@ -513,6 +519,7 @@ function TransactionsContent() {
     setOperationDate(getLocalDateString());
     setHasAutoPopulated(false);
     setConvertedAmountOverride(null);
+    setManualCategoryId("");
   }
 
   const handleDeleteTx = () => {
@@ -706,6 +713,9 @@ function TransactionsContent() {
     result = result.replace(/\{\{Descripción\}\}/g, tx.description || "");
     result = result.replace(/\{\{Saldo_Caja_Final\}\}/g, `${symbol} ${Number(tx.accountBalanceAfter || 0).toLocaleString('es-AR')}`);
 
+    const expCat = expenseCategories?.find(c => c.id === tx.expenseCategoryId);
+    result = result.replace(/\{\{Categoria_Gasto\}\}/g, expCat?.name || "Sin Rubro");
+
     if (tx.items && tx.items.length > 0) {
       const itemsText = tx.items.map((i: any) => {
         const iSymbol = i.currency === 'USD' ? 'u$s' : '$';
@@ -819,7 +829,7 @@ function TransactionsContent() {
                   {['cobro', 'adjustment', 'Expense'].includes(activeTab) ? (
                     <div className="space-y-6">
                       <div className="p-6 border rounded-xl space-y-4 bg-muted/5">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase">{activeTab === 'cobro' ? 'Monto a Cobrar' : 'Monto'}</Label>
                             <div className="relative">
@@ -844,6 +854,19 @@ function TransactionsContent() {
                               </SelectContent>
                             </Select>
                           </div>
+                          {(activeTab === 'Expense' || activeTab === 'adjustment') && (
+                            <div className="space-y-2">
+                              <Label className="text-xs font-bold uppercase">Rubro / Categoría de Gasto</Label>
+                              <Select value={manualCategoryId || ""} onValueChange={setManualCategoryId}>
+                                <SelectTrigger className="bg-white h-12"><SelectValue placeholder="Seleccionar rubro..." /></SelectTrigger>
+                                <SelectContent>
+                                  {expenseCategories?.map((c: any) => (
+                                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
                         </div>
 
                         {activeTab === 'adjustment' && (
@@ -1432,7 +1455,12 @@ function TransactionsContent() {
                         <span className="font-black text-slate-800 text-lg">{customers?.find(c => c.id === selectedTxDetails.clientId)?.apellido || 'Global'}, {customers?.find(c => c.id === selectedTxDetails.clientId)?.nombre || ''}</span>
                         {customers?.find(c => c.id === selectedTxDetails.clientId)?.cuit_dni && <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">CUIT/DNI: {customers?.find(c => c.id === selectedTxDetails.clientId)?.cuit_dni}</span>}
                       </div>
-                      <Badge variant="secondary" className="w-fit font-black uppercase text-[10px] py-1 px-3 border-primary/10">{selectedTxDetails.financialAccountId ? (accounts?.find(a => a.id === selectedTxDetails.financialAccountId)?.name || 'Caja') : 'A CUENTA'}</Badge>
+                      <div className="flex gap-2 flex-wrap items-center">
+                        <Badge variant="secondary" className="w-fit font-black uppercase text-[10px] py-1 px-3 border-primary/10">{selectedTxDetails.financialAccountId ? (accounts?.find(a => a.id === selectedTxDetails.financialAccountId)?.name || 'Caja') : 'A CUENTA'}</Badge>
+                        {selectedTxDetails.expenseCategoryId && (
+                          <Badge variant="outline" className="text-[10px] font-black uppercase bg-slate-50 text-slate-700 gap-1"><Tag className="h-3 w-3" /> {expenseCategories?.find(c => c.id === selectedTxDetails.expenseCategoryId)?.name || "Rubro"}</Badge>
+                        )}
+                      </div>
                     </div>
                   </div>
 
