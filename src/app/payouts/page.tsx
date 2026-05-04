@@ -355,24 +355,29 @@ export default function PayoutsPage() {
     }
     setDocumentNonBlocking(doc(db, 'payouts', payoutId), payoutData, { merge: true })
 
-    // Marcar ítems de ruta como liquidados - AGRUPADO PARA EVITAR RACE CONDITIONS
+    // Marcar ítems de ruta como liquidados - LOGICA REFORZADA: Agrupar por Hoja y actualizar lista completa
     const fieldToUpdate = selectedCollab.role === 'Replenisher' ? 'liquidadoRepositor' : 'liquidadoComunicador';
-    const updatesBySheet: Record<string, number[]> = {};
+    const updatesBySheet: Record<string, Set<number>> = {};
     
     selectedItems.forEach(itemId => {
       const itemData = pendingDeliveries.find(d => d.id === itemId)
       if (itemData) {
-        if (!updatesBySheet[itemData.sheetId]) updatesBySheet[itemData.sheetId] = [];
-        updatesBySheet[itemData.sheetId].push(itemData.itemIdx);
+        if (!updatesBySheet[itemData.sheetId]) updatesBySheet[itemData.sheetId] = new Set();
+        updatesBySheet[itemData.sheetId].add(itemData.itemIdx);
       }
     });
 
-    Object.entries(updatesBySheet).forEach(([sheetId, indices]) => {
+    Object.entries(updatesBySheet).forEach(([sheetId, indicesSet]) => {
       const sheet = routeSheets?.find(s => s.id === sheetId);
       if (sheet && sheet.items) {
-        const updatedItems = sheet.items.map((it: any, idx: number) => 
-          indices.includes(idx) ? { ...it, [fieldToUpdate]: true } : it
-        );
+        // Clonar la lista de ítems para modificarla de forma segura
+        const updatedItems = [...sheet.items];
+        indicesSet.forEach(idx => {
+          if (updatedItems[idx]) {
+            updatedItems[idx] = { ...updatedItems[idx], [fieldToUpdate]: true };
+          }
+        });
+        // Realizar una única escritura atómica para toda la hoja
         updateDocumentNonBlocking(doc(db, 'route_sheets', sheetId), { items: updatedItems });
       }
     });
@@ -404,24 +409,27 @@ export default function PayoutsPage() {
     if (!payoutToDelete || !isAdmin) return;
     const p = payoutToDelete;
 
-    // Revertir marcas de liquidación - AGRUPADO PARA EVITAR RACE CONDITIONS
+    // Revertir marcas de liquidación - LOGICA REFORZADA: Agrupar por Hoja
     if (p.itemIds && p.itemIds.length > 0) {
       const fieldToRevert = p.userRole === 'Replenisher' ? 'liquidadoRepositor' : 'liquidadoComunicador';
-      const revertsBySheet: Record<string, number[]> = {};
+      const revertsBySheet: Record<string, Set<number>> = {};
 
       p.itemIds.forEach((itemId: string) => {
         const [sheetId, idxStr] = itemId.split('_');
         const idx = parseInt(idxStr);
-        if (!revertsBySheet[sheetId]) revertsBySheet[sheetId] = [];
-        revertsBySheet[sheetId].push(idx);
+        if (!revertsBySheet[sheetId]) revertsBySheet[sheetId] = new Set();
+        revertsBySheet[sheetId].add(idx);
       });
 
-      Object.entries(revertsBySheet).forEach(([sheetId, indices]) => {
+      Object.entries(revertsBySheet).forEach(([sheetId, indicesSet]) => {
         const sheet = routeSheets?.find(s => s.id === sheetId);
         if (sheet && sheet.items) {
-          const updatedItems = sheet.items.map((it: any, idx: number) => 
-            indices.includes(idx) ? { ...it, [fieldToRevert]: false } : it
-          );
+          const updatedItems = [...sheet.items];
+          indicesSet.forEach(idx => {
+            if (updatedItems[idx]) {
+              updatedItems[idx] = { ...updatedItems[idx], [fieldToRevert]: false };
+            }
+          });
           updateDocumentNonBlocking(doc(db, 'route_sheets', sheetId), { items: updatedItems });
         }
       });
