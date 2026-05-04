@@ -103,9 +103,6 @@ function formatLocalDate(dateString: string) {
   return date.toLocaleDateString('es-AR');
 }
 
-/**
- * Función centralizada para extraer el movimiento neto de caja de una transacción.
- */
 function getMovementAmount(tx: any): number {
   if (typeof tx.accountMovementAmount === 'number') return tx.accountMovementAmount;
   
