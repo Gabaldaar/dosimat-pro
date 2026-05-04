@@ -151,7 +151,8 @@ export default function PayoutsPage() {
       if (sheetDate < startDate || sheetDate > endDate) return;
 
       sheet.items?.forEach((item: any, idx: number) => {
-        const isLiquidado = selectedCollab.role === 'Replenisher' ? item.liquidadoRepositor : item.liquidadoComunicador;
+        // Verificación robusta del estado de liquidación según el rol del colaborador
+        const isLiquidado = !!(selectedCollab.role === 'Replenisher' ? item.liquidadoRepositor : item.liquidadoComunicador);
         
         if (!isLiquidado && (item.realChlorine > 0 || item.realAcid > 0)) {
           const client = clients.find(c => c.id === item.clientId);
@@ -354,27 +355,34 @@ export default function PayoutsPage() {
     }
     setDocumentNonBlocking(doc(db, 'payouts', payoutId), payoutData, { merge: true })
 
-    // Marcar ítems de ruta como liquidados
+    // Marcar ítems de ruta como liquidados - AGRUPADO PARA EVITAR RACE CONDITIONS
     const fieldToUpdate = selectedCollab.role === 'Replenisher' ? 'liquidadoRepositor' : 'liquidadoComunicador';
+    const updatesBySheet: Record<string, number[]> = {};
+    
     selectedItems.forEach(itemId => {
       const itemData = pendingDeliveries.find(d => d.id === itemId)
-      if (itemData && routeSheets) {
-        const sheet = routeSheets.find(s => s.id === itemData.sheetId);
-        if (sheet) {
-          const updatedItems = sheet.items.map((it: any, idx: number) => 
-            idx === itemData.itemIdx ? { ...it, [fieldToUpdate]: true } : it
-          )
-          updateDocumentNonBlocking(doc(db, 'route_sheets', sheet.id), { items: updatedItems })
-        }
+      if (itemData) {
+        if (!updatesBySheet[itemData.sheetId]) updatesBySheet[itemData.sheetId] = [];
+        updatesBySheet[itemData.sheetId].push(itemData.itemIdx);
       }
-    })
+    });
+
+    Object.entries(updatesBySheet).forEach(([sheetId, indices]) => {
+      const sheet = routeSheets?.find(s => s.id === sheetId);
+      if (sheet && sheet.items) {
+        const updatedItems = sheet.items.map((it: any, idx: number) => 
+          indices.includes(idx) ? { ...it, [fieldToUpdate]: true } : it
+        );
+        updateDocumentNonBlocking(doc(db, 'route_sheets', sheetId), { items: updatedItems });
+      }
+    });
 
     // Crear la Transacción financiera con flag isPayout ROBUSTO
     const txData = {
       id: txId,
       date: now,
       type: 'Expense',
-      isPayout: true, // FLAG CLAVE: Identificador exacto para el Análisis estructural
+      isPayout: true,
       amount: -finalTotalInAccountCurrency,
       currency: selectedAccount?.currency || 'ARS',
       description: `Liquidación de haberes: ${selectedCollab.name} (#${payoutId.toUpperCase().slice(0,6)})`,
@@ -396,18 +404,25 @@ export default function PayoutsPage() {
     if (!payoutToDelete || !isAdmin) return;
     const p = payoutToDelete;
 
+    // Revertir marcas de liquidación - AGRUPADO PARA EVITAR RACE CONDITIONS
     if (p.itemIds && p.itemIds.length > 0) {
       const fieldToRevert = p.userRole === 'Replenisher' ? 'liquidadoRepositor' : 'liquidadoComunicador';
+      const revertsBySheet: Record<string, number[]> = {};
+
       p.itemIds.forEach((itemId: string) => {
         const [sheetId, idxStr] = itemId.split('_');
         const idx = parseInt(idxStr);
+        if (!revertsBySheet[sheetId]) revertsBySheet[sheetId] = [];
+        revertsBySheet[sheetId].push(idx);
+      });
+
+      Object.entries(revertsBySheet).forEach(([sheetId, indices]) => {
         const sheet = routeSheets?.find(s => s.id === sheetId);
         if (sheet && sheet.items) {
-          const updatedItems = [...sheet.items];
-          if (updatedItems[idx]) {
-            updatedItems[idx][fieldToRevert] = false;
-            updateDocumentNonBlocking(doc(db, 'route_sheets', sheetId), { items: updatedItems });
-          }
+          const updatedItems = sheet.items.map((it: any, idx: number) => 
+            indices.includes(idx) ? { ...it, [fieldToRevert]: false } : it
+          );
+          updateDocumentNonBlocking(doc(db, 'route_sheets', sheetId), { items: updatedItems });
         }
       });
     }
@@ -907,7 +922,7 @@ export default function PayoutsPage() {
           {/* Detalle de Liquidación */}
           <Dialog open={!!payoutForDetails} onOpenChange={(o) => !o && setPayoutForDetails(null)}>
             <DialogContent className="max-w-3xl max-h-[95vh] overflow-y-auto p-0 md:p-6">
-              <DialogHeader className="p-4 md:p-0">
+              <DialogHeader className="p-4 pb-2 border-b md:border-none">
                 <div className="flex justify-between items-start w-full">
                   <div className="space-y-1 pr-8 text-left">
                     <div className="flex items-center gap-2 text-primary mb-1">
