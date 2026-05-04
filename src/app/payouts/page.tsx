@@ -664,6 +664,23 @@ export default function PayoutsPage() {
                 <Card className="glass-card h-fit sticky top-8 border-t-4 border-t-primary shadow-2xl overflow-hidden">
                   <CardHeader className="bg-primary/5 border-b"><CardTitle className="text-xs uppercase font-black tracking-widest text-primary">Resumen de Liquidación</CardTitle></CardHeader>
                   <CardContent className="space-y-6 pt-6">
+                    {selectedItems.length > 0 && (
+                      <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 space-y-3 animate-in fade-in duration-300">
+                        <p className="text-[10px] font-black uppercase text-primary/60 tracking-widest text-center">Bidones Seleccionados</p>
+                        <div className="flex justify-around items-center">
+                          <div className="text-center">
+                            <p className="text-[10px] font-black text-blue-600 uppercase">Cloro</p>
+                            <p className="text-3xl font-black text-blue-800">{totals.cloro}</p>
+                          </div>
+                          <div className="h-10 w-px bg-primary/20" />
+                          <div className="text-center">
+                            <p className="text-[10px] font-black text-rose-600 uppercase">Ácido</p>
+                            <p className="text-3xl font-black text-rose-800">{totals.acido}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="space-y-3">
                       <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground font-medium">Honorarios y Base (ARS):</span><span className="font-black text-blue-700">${(totals.subtotalItemsARS + totals.baseFijaARS).toLocaleString()}</span></div>
                       <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground font-medium">Extras en Pesos:</span><span className="font-black text-blue-700">${totals.subtotalExtrasARS.toLocaleString()}</span></div>
