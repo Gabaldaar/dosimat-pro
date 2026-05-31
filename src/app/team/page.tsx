@@ -1,0 +1,352 @@
+
+"use client"
+
+import { useEffect, useState, useMemo } from "react"
+import { useRouter } from "next/navigation"
+import { Sidebar, MobileNav } from "@/components/layout/nav"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { 
+  Users, 
+  ShieldCheck, 
+  UserCircle, 
+  MoreVertical,
+  Trash2,
+  ShieldAlert,
+  UserPlus,
+  Clock,
+  Ban,
+  Droplets,
+  Loader2,
+  MessageSquare,
+  Truck,
+  Info,
+  Coins,
+  Save,
+  ChevronRight,
+  Settings2,
+  Calculator,
+  Eye
+} from "lucide-react"
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger,
+  DropdownMenuSeparator
+} from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter
+} from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking, useUser } from "../../firebase"
+import { collection, doc, query, where, getDocs, limit } from "firebase/firestore"
+import { normalizeEmail } from "@/lib/auth-routing"
+import { useToast } from "../../hooks/use-toast"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
+
+const roleDisplay: Record<string, { label: string, icon: any, color: string }> = {
+  'Admin': { label: 'Administrador', icon: ShieldCheck, color: 'default' },
+  'Employee': { label: 'Socio', icon: UserCircle, color: 'secondary' },
+  'Collaborator': { label: 'Colaborador', icon: Eye, color: 'outline' },
+  'Communicator': { label: 'Comunicador', icon: MessageSquare, color: 'outline' },
+  'Replenisher': { label: 'Repositor', icon: Truck, color: 'secondary' },
+  'Pending': { label: 'Pendiente', icon: Clock, color: 'outline' },
+  'Blocked': { label: 'Bloqueado', icon: Ban, color: 'destructive' },
+  'Client': { label: 'Cliente', icon: UserCircle, color: 'outline' }
+}
+
+export default function TeamPage() {
+  const { toast } = useToast()
+  const db = useFirestore()
+  const router = useRouter()
+  const { user: currentUser, userData, isUserLoading } = useUser()
+  const isAdmin = userData?.role === 'Admin'
+  const isStaff = useMemo(() => userData && ['Admin', 'Employee', 'Collaborator', 'Communicator', 'Replenisher'].includes(userData.role), [userData]);
+
+  const [isInviteOpen, setIsInviteOpen] = useState(false)
+  const [memberToDelete, setMemberToDelete] = useState<any | null>(null)
+  const [editingFees, setEditingFees] = useState<any | null>(null)
+  
+  const usersQuery = useMemoFirebase(() => isStaff ? collection(db, 'users') : null, [db, isStaff])
+  const { data: team, isLoading } = useCollection(usersQuery)
+
+  const [feesFormData, setFeesFormData] = useState({
+    valorCloro: 0,
+    valorAcido: 0,
+    valorHora: 0,
+    valorKm: 0,
+    baseFija: 0
+  })
+
+  // Solución para el bug de Radix UI / Shadcn que deja trabado el body con pointer-events: none
+  // cuando un elemento se desmonta de forma inmediata al confirmarse su eliminación.
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      if (document.body.style.pointerEvents === 'none') {
+        const anyOpen = isInviteOpen || !!editingFees || !!memberToDelete;
+        if (!anyOpen) {
+          document.body.style.pointerEvents = 'auto';
+        }
+      }
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+    return () => observer.disconnect();
+  }, [isInviteOpen, editingFees, memberToDelete]);
+
+  const handleUpdateRole = async (userId: string, newRole: string, memberEmail?: string) => {
+    if (!isAdmin) return
+
+    const updates: Record<string, string | null> = {
+      role: newRole,
+      updatedAt: new Date().toISOString(),
+    }
+
+    if (newRole === 'Client' && memberEmail) {
+      const clientsQuery = query(
+        collection(db, 'clients'),
+        where('mail', '==', normalizeEmail(memberEmail)),
+        limit(1)
+      )
+      const snapshot = await getDocs(clientsQuery)
+      if (!snapshot.empty) {
+        updates.clientId = snapshot.docs[0].id
+      }
+    } else if (newRole !== 'Client') {
+      updates.clientId = null
+    }
+
+    updateDocumentNonBlocking(doc(db, 'users', userId), updates)
+
+    if (newRole === 'Client' && memberEmail && !updates.clientId) {
+      toast({
+        title: "Rol actualizado",
+        description: "Se asignó el rol Cliente, pero no se encontró una ficha con ese email.",
+        variant: "destructive",
+      })
+    } else {
+      toast({ title: "Rol actualizado" })
+    }
+  }
+
+  const handleDeleteMember = async (memberId: string) => {
+    try {
+      if (!currentUser) return;
+      const idToken = await currentUser.getIdToken();
+      
+      const response = await fetch('/api/users/delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ userId: memberId })
+      });
+
+      const res = await response.json();
+      if (response.ok) {
+        toast({ title: "Miembro eliminado", description: "El usuario fue borrado de Firestore y Auth." });
+      } else {
+        toast({ title: "Error al eliminar", description: res.error || "No se pudo completar la operación.", variant: "destructive" });
+      }
+    } catch (e: any) {
+      console.error("Error deleting member:", e);
+      toast({ title: "Error de red", description: "No se pudo conectar con el servidor.", variant: "destructive" });
+    }
+  }
+
+  const handleOpenFees = (member: any) => {
+    setEditingFees(member)
+    setFeesFormData({
+      valorCloro: member.feesConfig?.valorCloro ?? 0,
+      valorAcido: member.feesConfig?.valorAcido ?? 0,
+      valorHora: member.feesConfig?.valorHora ?? 0,
+      valorKm: member.feesConfig?.valorKm ?? 0,
+      baseFija: member.feesConfig?.baseFija ?? 0
+    })
+  }
+
+  const handleSaveFees = () => {
+    if (!editingFees) return
+    updateDocumentNonBlocking(doc(db, 'users', editingFees.id), {
+      feesConfig: feesFormData,
+      updatedAt: new Date().toISOString()
+    })
+    setEditingFees(null)
+    toast({ title: "Honorarios configurados" })
+  }
+
+  const sortedTeam = useMemo(() => {
+    if (!team) return [];
+    return [...team].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  }, [team]);
+
+  const pendingCount = useMemo(() => team?.filter(m => m.role === 'Pending').length || 0, [team]);
+
+  if (isUserLoading || !isStaff) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin" /></div>
+
+  return (
+    <div className="flex min-h-screen w-full">
+      <Sidebar />
+      <SidebarInset className="flex-1 w-full pb-32 md:pb-8 p-4 md:p-8 space-y-6 overflow-x-hidden">
+        <header className="flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <SidebarTrigger className="flex" />
+            <h1 className="text-xl md:text-3xl font-headline font-bold text-primary">Equipo</h1>
+          </div>
+          {isAdmin && (
+            <Button onClick={() => setIsInviteOpen(true)} className="font-bold gap-2">
+              <UserPlus className="h-4 w-4" /> Invitar
+            </Button>
+          )}
+        </header>
+
+        <div className="p-4 bg-primary/5 border border-primary/10 rounded-2xl flex gap-4 items-center">
+          <Info className="h-5 w-5 text-primary shrink-0" />
+          <p className="text-xs font-medium text-slate-700">
+            <b>Configuración de Pagos:</b> Pulsa el botón <b>"Honorarios"</b> en cada colaborador para definir cuánto se le abona por bidón entregado, por hora de servicio técnico o su sueldo base.
+          </p>
+        </div>
+
+        <Tabs defaultValue="active" className="w-full">
+          <TabsList className="bg-muted/50 p-1 mb-6">
+            <TabsTrigger value="active" className="font-bold">Activos</TabsTrigger>
+            <TabsTrigger value="pending" className="font-bold relative">
+              Pendientes 
+              {pendingCount > 0 && <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center animate-pulse">{pendingCount}</span>}
+            </TabsTrigger>
+            <TabsTrigger value="blocked" className="font-bold">Bloqueados</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="active" className="space-y-4">
+            {sortedTeam.filter(m => ['Admin', 'Employee', 'Collaborator', 'Communicator', 'Replenisher'].includes(m.role)).map((member: any) => (
+              <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onDelete={setMemberToDelete} onEditFees={handleOpenFees} />
+            ))}
+          </TabsContent>
+
+          <TabsContent value="pending" className="space-y-4">
+            {sortedTeam.filter(m => m.role === 'Pending').map((member: any) => (
+              <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onDelete={setMemberToDelete} onEditFees={handleOpenFees} />
+            ))}
+          </TabsContent>
+
+          <TabsContent value="blocked" className="space-y-4">
+            {sortedTeam.filter(m => m.role === 'Blocked').map((member: any) => (
+              <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onDelete={setMemberToDelete} onEditFees={handleOpenFees} />
+            ))}
+          </TabsContent>
+        </Tabs>
+
+        <Dialog open={!!editingFees} onOpenChange={(o) => !o && setEditingFees(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <div className="flex items-center gap-2 text-primary mb-2">
+                <Coins className="h-5 w-5" />
+                <DialogTitle>Configurar Honorarios</DialogTitle>
+              </div>
+              <DialogDescription>Define los valores de retribución para <b>{editingFees?.name}</b>. Estos valores se usarán para calcular sus liquidaciones mensuales automáticamente.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground">Bidón Cloro ($)</Label>
+                  <Input type="number" value={feesFormData.valorCloro} onChange={(e) => setFeesFormData({...feesFormData, valorCloro: Number(e.target.value)})} className="font-bold" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground">Bidón Ácido ($)</Label>
+                  <Input type="number" value={feesFormData.valorAcido} onChange={(e) => setFeesFormData({...feesFormData, valorAcido: Number(e.target.value)})} className="font-bold" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground">Valor Hora ($)</Label>
+                  <Input type="number" value={feesFormData.valorHora} onChange={(e) => setFeesFormData({...feesFormData, valorHora: Number(e.target.value)})} className="font-bold" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground">Valor KM ($)</Label>
+                  <Input type="number" value={feesFormData.valorKm} onChange={(e) => setFeesFormData({...feesFormData, valorKm: Number(e.target.value)})} className="font-bold" />
+                </div>
+              </div>
+              <div className="space-y-1.5 pt-2 border-t">
+                <Label className="text-[10px] font-black uppercase text-primary">Sueldo Base / Fijo Mensual ($)</Label>
+                <Input type="number" className="h-12 text-xl font-black border-primary/30" value={feesFormData.baseFija} onChange={(e) => setFeesFormData({...feesFormData, baseFija: Number(e.target.value)})} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingFees(null)}>Cancelar</Button>
+              <Button onClick={handleSaveFees} className="gap-2 bg-primary font-bold"><Save className="h-4 w-4" /> Guardar Configuración</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <AlertDialog open={!!memberToDelete} onOpenChange={(o) => !o && setMemberToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle>
+              <AlertDialogDescription>Se borrará el acceso de {memberToDelete?.name} tanto de la base de datos como de la autenticación.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={async () => { 
+                const idToDelete = memberToDelete.id;
+                setMemberToDelete(null);
+                await handleDeleteMember(idToDelete); 
+              }} className="bg-destructive">Eliminar</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </SidebarInset>
+      <MobileNav />
+    </div>
+  )
+}
+
+function MemberCard({ member, isAdmin, currentUid, onUpdateRole, onDelete, onEditFees }: {
+  member: any
+  isAdmin: boolean
+  currentUid?: string
+  onUpdateRole: (userId: string, newRole: string, memberEmail?: string) => void
+  onDelete: (member: any) => void
+  onEditFees: (member: any) => void
+}) {
+  const roleInfo = roleDisplay[member.role] || { label: member.role, icon: UserCircle, color: 'secondary' };
+  const Icon = roleInfo.icon;
+  const isMe = member.id === currentUid;
+  const hasFees = member.feesConfig && ((member.feesConfig.valorCloro || 0) > 0 || (member.feesConfig.valorAcido || 0) > 0 || (member.feesConfig.baseFija || 0) > 0);
+  return (
+    <Card className={cn("glass-card border-l-4 transition-all hover:shadow-md", isMe ? "border-l-primary" : "border-l-muted")}>
+      <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-start gap-4 flex-1">
+          <Avatar className="h-12 w-12 border border-muted shadow-sm shrink-0">
+            <AvatarImage src={`https://picsum.photos/seed/${member.id}/100/100`} />
+            <AvatarFallback className="bg-primary/5 text-primary font-bold text-lg">{member.name?.[0] || 'U'}</AvatarFallback>
+          </Avatar>
+          <div className="space-y-1.5 min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap"><h3 className="font-bold text-base leading-none truncate">{member.name || member.email} {isMe && "(Tú)"}</h3><Badge variant={roleInfo.color as any} className="text-[9px] uppercase font-black tracking-widest h-5 px-2 shrink-0"><Icon className="h-2.5 w-2.5 mr-1" />{roleInfo.label}</Badge></div>
+            <p className="text-[11px] text-muted-foreground font-medium truncate">{member.email}</p>
+            {hasFees && (<div className="flex flex-wrap gap-1.5 mt-1">{(member.feesConfig.valorCloro > 0 || member.feesConfig.valorAcido > 0) && (<Badge variant="outline" className="text-[8px] font-black bg-blue-50/50 text-blue-700 border-blue-100 px-1.5 h-4">CL: ${member.feesConfig.valorCloro} | AC: ${member.feesConfig.valorAcido}</Badge>)}{member.feesConfig.baseFija > 0 && (<Badge variant="outline" className="text-[8px] font-black bg-emerald-50/50 text-emerald-700 border-emerald-100 px-1.5 h-4">FIJO: ${member.feesConfig.baseFija.toLocaleString()}</Badge>)}</div>)}
+          </div>
+        </div>
+        <div className="flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-none">{isAdmin && (<Button variant="outline" size="sm" className={cn("h-9 sm:h-8 gap-2 font-bold text-[10px] uppercase transition-all flex-1 sm:flex-none", hasFees ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50" : "border-primary/30 text-primary hover:bg-primary/5")} onClick={() => onEditFees(member)}><Settings2 className="h-3.5 w-3.5" /> Honorarios</Button>)}{isAdmin && !isMe && (<DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8 shrink-0"><MoreVertical className="h-4 w-4 text-muted-foreground" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-56 font-bold"><DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Replenisher', member.email)}><Truck className="mr-2 h-4 w-4" /> Hacer Repositor</DropdownMenuItem><DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Communicator', member.email)}><MessageSquare className="mr-2 h-4 w-4" /> Hacer Comunicador</DropdownMenuItem><DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Collaborator', member.email)}><Eye className="mr-2 h-4 w-4" /> Hacer Colaborador</DropdownMenuItem><DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Employee', member.email)}><UserCircle className="mr-2 h-4 w-4" /> Hacer Socio</DropdownMenuItem><DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Admin', member.email)}><ShieldCheck className="mr-2 h-4 w-4" /> Hacer Admin</DropdownMenuItem><DropdownMenuItem onClick={() => onUpdateRole(member.id, 'Client', member.email)}><UserCircle className="mr-2 h-4 w-4" /> Hacer Cliente</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem className="text-destructive font-black" onClick={() => onDelete(member)}><Trash2 className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem></DropdownMenuContent></DropdownMenu>)}</div>
+      </CardContent>
+    </Card>
+  );
+}

@@ -1,0 +1,34 @@
+{
+  "placeholderImages": [
+    {
+      "id": "pool-hero",
+      "description": "Luxurious swimming pool",
+      "imageUrl": "https://picsum.photos/seed/pool1/1200/600",
+      "imageHint": "swimming pool"
+    },
+    {
+      "id": "chlorine-refill",
+      "description": "Pool maintenance chemicals",
+      "imageUrl": "https://picsum.photos/seed/chem/400/300",
+      "imageHint": "pool chemicals"
+    },
+    {
+      "id": "pool-service",
+      "description": "Professional pool cleaning",
+      "imageUrl": "https://picsum.photos/seed/clean/400/300",
+      "imageHint": "pool cleaning"
+    },
+    {
+      "id": "avatar-user",
+      "description": "User profile avatar",
+      "imageUrl": "https://picsum.photos/seed/user1/200/200",
+      "imageHint": "person portrait"
+    },
+    {
+      "id": "app-logo",
+      "description": "Dosimat Pro App Logo",
+      "imageUrl": "https://picsum.photos/seed/pool-water/192/192",
+      "imageHint": "water drop"
+    }
+  ]
+}

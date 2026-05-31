@@ -1,0 +1,93 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasRole(role) {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == role;
+    }
+
+    function isManagement() {
+      return hasRole('Admin') || hasRole('Employee');
+    }
+
+    function isStaff() {
+      return isManagement() || hasRole('Collaborator') || hasRole('Communicator') || hasRole('Replenisher');
+    }
+
+    function isClient() {
+      return hasRole('Client');
+    }
+
+    function canReadClientTransaction(clientId) {
+      return isClient() &&
+        clientId != null &&
+        clientId == getUserData().clientId;
+    }
+
+    function clientIsOnRouteSheet() {
+      return isClient() &&
+        getUserData().clientId != null &&
+        resource.data.participantClientIds.hasAny([getUserData().clientId]);
+    }
+
+    // Reglas para perfiles de usuario
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isStaff());
+      allow write: if isSignedIn() && (request.auth.uid == userId || hasRole('Admin'));
+    }
+
+    // Reglas para Clientes
+    match /clients/{docId} { 
+      // PERMITIR LISTAR/BUSCAR POR EMAIL DURANTE EL LOGIN (Crítico para el acceso simplificado)
+      allow list: if true; 
+      allow read: if isStaff() || (isSignedIn() && (resource.data.mail == request.auth.token.email || resource.data.userId == request.auth.uid));
+      allow update: if isStaff() || (isSignedIn() && resource.data.mail == request.auth.token.email);
+      allow create: if isStaff();
+      allow delete: if isManagement();
+    }
+    
+    // Reglas para Transacciones
+    match /transactions/{docId} {
+      allow read: if isStaff() || canReadClientTransaction(resource.data.clientId);
+      allow write: if isManagement();
+    }
+
+    match /client_requests/{docId} {
+      allow read: if isStaff() || canReadClientTransaction(resource.data.clientId);
+      allow create: if isSignedIn();
+      allow update, delete: if isStaff();
+    }
+
+    match /route_sheets/{docId} { 
+      allow read: if isStaff() || (
+        clientIsOnRouteSheet() &&
+        resource.data.status in ['planned', 'active']
+      );
+      allow write: if isManagement() || hasRole('Communicator') || hasRole('Replenisher'); 
+    }
+
+    match /financial_accounts/{docId} { allow read: if isStaff(); allow write: if isManagement(); }
+    match /payouts/{docId} { allow read: if isStaff(); allow write: if isManagement(); }
+    match /payout_concepts/{docId} { allow read: if isStaff(); allow write: if isManagement(); }
+    match /products_services/{docId} { allow read: if isStaff(); allow write: if isManagement(); }
+    match /zones/{docId} { allow read: if isStaff(); allow write: if isManagement() || hasRole('Communicator'); }
+    match /product_categories/{docId} { allow read: if isStaff(); allow write: if isManagement(); }
+    match /expense_categories/{docId} { allow read: if isStaff(); allow write: if isManagement(); }
+    match /email_templates/{docId} { allow read: if isStaff(); allow write: if isManagement() || hasRole('Communicator'); }
+    match /whatsapp_templates/{docId} { allow read: if isStaff(); allow write: if isManagement() || hasRole('Communicator'); }
+    match /purchases/{docId} { allow read: if isStaff(); allow write: if isManagement(); }
+    match /production_orders/{docId} { allow read: if isStaff(); allow write: if isManagement(); }
+    match /purchase_orders/{docId} { allow read: if isStaff(); allow write: if isManagement(); }
+    match /suppliers/{docId} { allow read: if isStaff(); allow write: if isManagement(); }
+    match /settings/company { allow read: if true; allow write: if isManagement(); }
+  }
+}

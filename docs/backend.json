@@ -1,0 +1,59 @@
+
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "fcmTokens": { 
+          "type": "array", 
+          "items": { "type": "string" },
+          "description": "Tokens de dispositivos registrados para notificaciones push."
+        },
+        "feesConfig": {
+          "type": "object",
+          "properties": {
+            "valorCloro": { "type": "number" },
+            "valorAcido": { "type": "number" },
+            "valorHora": { "type": "number" },
+            "valorKm": { "type": "number" },
+            "baseFija": { "type": "number" }
+          }
+        }
+      },
+      "required": ["id", "email", "name", "role"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "type": "object",
+      "description": "Ficha de cliente con datos de contacto, saldo y vinculación a portal.",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string", "description": "ID de autenticación vinculado para acceso al portal." },
+        "nombre": { "type": "string" },
+        "apellido": { "type": "string" },
+        "mail": { "type": "string", "format": "email" },
+        "telefono": { "type": "string" },
+        "direccion": { "type": "string" },
+        "localidad": { "type": "string" },
+        "saldoActual": { "type": "number" },
+        "saldoUSD": { "type": "number" },
+        "esClienteReposicion": { "type": "boolean" },
+        "zonaId": { "type": "string" }
+      }
+    }
+  },
+  "auth": {
+    "providers": ["password", "google.com"]
+  },
+  "firestore": {
+    "structure": [
+      { "path": "/users/{userId}", "definition": { "entityName": "User", "description": "Perfiles de usuario interno y clientes vinculados." } },
+      { "path": "/clients/{clientId}", "definition": { "entityName": "Customer", "description": "Cartera de clientes con email para vinculación automática." } }
+    ]
+  }
+}
