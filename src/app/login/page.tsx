@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useFirebase, useUser } from "../../firebase"
-import { signInWithEmailAndPassword } from "firebase/auth"
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -18,6 +18,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false)
   
   const { auth } = useFirebase()
   const { user, userData } = useUser()
@@ -54,6 +55,36 @@ export default function LoginPage() {
     }
   }
 
+  const handlePasswordRecovery = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (isLoading) return
+    if (!email) {
+      toast({ title: "Email Requerido", description: "Por favor ingresa tu correo electrónico.", variant: "destructive" })
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      await sendPasswordResetEmail(auth, normalizeEmail(email))
+      toast({ 
+        title: "Correo Enviado", 
+        description: "Se ha enviado un enlace para restablecer tu contraseña a tu correo." 
+      })
+      setIsRecoveryMode(false)
+    } catch (error: any) {
+      console.error("Password Recovery Error:", error);
+      let message = "No se pudo enviar el correo de recuperación."
+      if (error.code === 'auth/user-not-found') {
+        message = "No existe ningún usuario registrado con ese correo."
+      } else if (error.code === 'auth/invalid-email') {
+        message = "El formato del correo electrónico no es válido."
+      }
+      toast({ title: "Error", description: message, variant: "destructive" })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#F8F9FC] p-4">
       <Card className="w-full max-w-[400px] border-none shadow-xl rounded-3xl overflow-hidden p-6">
@@ -65,54 +96,108 @@ export default function LoginPage() {
           </div>
           <div className="space-y-1">
             <CardTitle className="text-4xl font-bold tracking-tight text-[#1A1F36]">Dosimat Pro</CardTitle>
-            <CardDescription className="text-[#697386] font-medium">Ingresa tus credenciales para continuar</CardDescription>
+            <CardDescription className="text-[#697386] font-medium">
+              {isRecoveryMode 
+                ? "Recupera tu contraseña de acceso" 
+                : "Ingresa tus credenciales para continuar"}
+            </CardDescription>
           </div>
         </CardHeader>
         
         <CardContent className="space-y-6">
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold text-[#1A1F36] ml-1">Email</Label>
-              <Input 
-                type="email" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)} 
-                placeholder="gab.aldazabal@gmail.com"
-                required 
-                className="h-14 bg-[#EDF2F7] border-none rounded-2xl px-4 text-base focus-visible:ring-2 focus-visible:ring-blue-500 transition-all"
+          {isRecoveryMode ? (
+            <form onSubmit={handlePasswordRecovery} className="space-y-6">
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-[#1A1F36] ml-1">Email</Label>
+                <Input 
+                  type="email" 
+                  value={email} 
+                  onChange={(e) => setEmail(e.target.value)} 
+                  placeholder="gab.aldazabal@gmail.com"
+                  required 
+                  className="h-14 bg-[#EDF2F7] border-none rounded-2xl px-4 text-base focus-visible:ring-2 focus-visible:ring-blue-500 transition-all"
+                  disabled={isLoading}
+                />
+              </div>
+              
+              <Button 
+                type="submit" 
+                className="w-full h-16 bg-[#1D77FF] hover:bg-[#1565D8] text-white font-bold text-lg rounded-2xl shadow-lg shadow-blue-100 transition-all mt-4" 
                 disabled={isLoading}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold text-[#1A1F36] ml-1">Contraseña</Label>
-              <Input 
-                type="password" 
-                value={password} 
-                onChange={(e) => setPassword(e.target.value)} 
-                placeholder="••••••••••"
-                required 
-                className="h-14 bg-[#EDF2F7] border-none rounded-2xl px-4 text-base focus-visible:ring-2 focus-visible:ring-blue-500 transition-all"
+              >
+                {isLoading ? (
+                  <RefreshCw className="h-6 w-6 animate-spin" />
+                ) : (
+                  "Enviar Enlace"
+                )}
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={handleLogin} className="space-y-6">
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-[#1A1F36] ml-1">Email</Label>
+                <Input 
+                  type="email" 
+                  value={email} 
+                  onChange={(e) => setEmail(e.target.value)} 
+                  placeholder="gab.aldazabal@gmail.com"
+                  required 
+                  className="h-14 bg-[#EDF2F7] border-none rounded-2xl px-4 text-base focus-visible:ring-2 focus-visible:ring-blue-500 transition-all"
+                  disabled={isLoading}
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center ml-1">
+                  <Label className="text-sm font-semibold text-[#1A1F36]">Contraseña</Label>
+                  <button 
+                    type="button"
+                    onClick={() => setIsRecoveryMode(true)}
+                    className="text-xs font-semibold text-[#1D77FF] hover:underline"
+                    disabled={isLoading}
+                  >
+                    ¿La olvidaste?
+                  </button>
+                </div>
+                <Input 
+                  type="password" 
+                  value={password} 
+                  onChange={(e) => setPassword(e.target.value)} 
+                  placeholder="••••••••••"
+                  required 
+                  className="h-14 bg-[#EDF2F7] border-none rounded-2xl px-4 text-base focus-visible:ring-2 focus-visible:ring-blue-500 transition-all"
+                  disabled={isLoading}
+                />
+              </div>
+              
+              <Button 
+                type="submit" 
+                className="w-full h-16 bg-[#1D77FF] hover:bg-[#1565D8] text-white font-bold text-lg rounded-2xl shadow-lg shadow-blue-100 transition-all mt-4" 
                 disabled={isLoading}
-              />
-            </div>
-            
-            <Button 
-              type="submit" 
-              className="w-full h-16 bg-[#1D77FF] hover:bg-[#1565D8] text-white font-bold text-lg rounded-2xl shadow-lg shadow-blue-100 transition-all mt-4" 
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <RefreshCw className="h-6 w-6 animate-spin" />
-              ) : (
-                "Iniciar Sesión"
-              )}
-            </Button>
-          </form>
+              >
+                {isLoading ? (
+                  <RefreshCw className="h-6 w-6 animate-spin" />
+                ) : (
+                  "Iniciar Sesión"
+                )}
+              </Button>
+            </form>
+          )}
 
           <div className="text-center pt-4">
-            <Link href="/register" className="text-[#1D77FF] font-semibold text-sm hover:underline">
-              ¿No tienes cuenta? Regístrate aquí
-            </Link>
+            {isRecoveryMode ? (
+              <button 
+                type="button" 
+                onClick={() => setIsRecoveryMode(false)} 
+                className="text-[#1D77FF] font-semibold text-sm hover:underline"
+                disabled={isLoading}
+              >
+                Volver al inicio de sesión
+              </button>
+            ) : (
+              <Link href="/register" className="text-[#1D77FF] font-semibold text-sm hover:underline">
+                ¿No tienes cuenta? Regístrate aquí
+              </Link>
+            )}
           </div>
         </CardContent>
       </Card>

@@ -20,14 +20,15 @@ import {
   BellRing,
   Loader2,
   HelpCircle,
-  Settings
+  Settings,
+  UserCircle
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useFirebase, useDoc, useMemoFirebase, useUser, useCollection } from "../../firebase"
 import { signOut } from "firebase/auth"
-import { doc, collection, query, where } from "firebase/firestore"
+import { doc, collection, query, where, limit } from "firebase/firestore"
 import { requestNotificationPermission } from "@/firebase/messaging"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -88,13 +89,28 @@ export function Sidebar({ className }: { className?: string }) {
     return query(collection(db, 'client_requests'), where('status', '==', 'pending'));
   }, [db, isStaff])
 
+  const reviewOrdersQSidebar = useMemoFirebase(() => {
+    if (!isStaff) return null;
+    return query(collection(db, 'client_requests'), where('needsStaffReview', '==', true));
+  }, [db, isStaff])
+
   const { data: openProd } = useCollection(prodQ)
   const { data: openPurch } = useCollection(purchQ)
   const { data: pendingOrders } = useCollection(pendingOrdersQ)
+  const { data: reviewOrdersSidebar } = useCollection(reviewOrdersQSidebar)
 
   const catalogCount = (openProd?.length || 0) + (openPurch?.length || 0);
-  const pendingOrdersCount = pendingOrders?.length || 0;
+  const pendingOrdersCount = (pendingOrders?.length || 0) + (reviewOrdersSidebar?.length || 0);
   
+  // Check if the current user is also a client
+  const clientsRef = useMemoFirebase(() => {
+    if (!user?.email) return null;
+    return query(collection(db, 'clients'), where('mail', '==', user.email.trim().toLowerCase()), limit(1));
+  }, [db, user?.email]);
+  
+  const { data: clientDocs } = useCollection(clientsRef);
+  const isAlsoClient = !!clientDocs?.length;
+
   // Si es un cliente o no es staff, no mostramos la barra lateral administrativa
   if (!userData || userData.role === 'Client') return null;
 
@@ -148,7 +164,7 @@ export function Sidebar({ className }: { className?: string }) {
     
     const role = userData.role;
 
-    let items = [];
+    let items: typeof navItems = [];
     if (role === 'Communicator') {
       items = navItems.filter(item => ['/customers', '/routes', '/help'].includes(item.href));
     } else if (role === 'Replenisher') {
@@ -161,13 +177,19 @@ export function Sidebar({ className }: { className?: string }) {
       }
     }
 
-    return items.map(item => {
+    const mapped = items.map(item => {
       let badgeCount = 0;
       if (item.href === '/routes') badgeCount = pendingOrdersCount;
       if (item.href === '/catalog') badgeCount = catalogCount;
       return { ...item, badgeCount };
     });
-  }, [userData, pendingOrdersCount, catalogCount]);
+
+    if (isAlsoClient) {
+      mapped.push({ href: "/portal", label: "Panel Cliente", icon: UserCircle, badgeCount: 0 });
+    }
+
+    return mapped;
+  }, [userData, pendingOrdersCount, catalogCount, isAlsoClient]);
 
   return (
     <SidebarUI collapsible="icon" className={cn("border-r no-print", className)}>
@@ -249,7 +271,7 @@ export function Sidebar({ className }: { className?: string }) {
 
 export function MobileNav() {
   const pathname = usePathname()
-  const { userData } = useUser()
+  const { user, userData } = useUser()
   const { firestore } = useFirebase()
   const db = firestore!
 
@@ -264,9 +286,23 @@ export function MobileNav() {
     return query(collection(db, 'client_requests'), where('status', '==', 'pending'));
   }, [db, isStaff])
 
-  const { data: pendingOrders } = useCollection(pendingOrdersQ)
+  const reviewOrdersQ = useMemoFirebase(() => {
+    if (!isStaff) return null;
+    return query(collection(db, 'client_requests'), where('needsStaffReview', '==', true));
+  }, [db, isStaff])
 
-  const pendingOrdersCount = pendingOrders?.length || 0;
+  const { data: pendingOrders } = useCollection(pendingOrdersQ)
+  const { data: reviewOrders } = useCollection(reviewOrdersQ)
+
+  const pendingOrdersCount = (pendingOrders?.length || 0) + (reviewOrders?.length || 0);
+
+  const clientsRef = useMemoFirebase(() => {
+    if (!user?.email) return null;
+    return query(collection(db, 'clients'), where('mail', '==', user.email.trim().toLowerCase()), limit(1));
+  }, [db, user?.email]);
+
+  const { data: clientDocs } = useCollection(clientsRef);
+  const isAlsoClient = !!clientDocs?.length;
   
   const mobileItems = React.useMemo(() => {
     const role = userData.role;
@@ -295,12 +331,18 @@ export function MobileNav() {
       ];
     }
 
-    return base.map(item => {
+    const mapped = base.map(item => {
       let count = 0;
       if (item.href === '/routes') count = pendingOrdersCount;
       return { ...item, count };
     });
-  }, [userData, pendingOrdersCount]);
+
+    if (isAlsoClient) {
+      mapped.push({ href: "/portal", label: "Portal", icon: UserCircle, count: 0 });
+    }
+
+    return mapped;
+  }, [userData, pendingOrdersCount, isAlsoClient]);
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-background/60 backdrop-blur-xl border-t flex items-center justify-around px-4 py-3 pb-[calc(1rem+env(safe-area-inset-bottom))] md:hidden no-print">

@@ -122,7 +122,7 @@ export default function TeamPage() {
       updatedAt: new Date().toISOString(),
     }
 
-    if (newRole === 'Client' && memberEmail) {
+    if (memberEmail) {
       const clientsQuery = query(
         collection(db, 'clients'),
         where('mail', '==', normalizeEmail(memberEmail)),
@@ -131,9 +131,9 @@ export default function TeamPage() {
       const snapshot = await getDocs(clientsQuery)
       if (!snapshot.empty) {
         updates.clientId = snapshot.docs[0].id
+      } else {
+        updates.clientId = null
       }
-    } else if (newRole !== 'Client') {
-      updates.clientId = null
     }
 
     updateDocumentNonBlocking(doc(db, 'users', userId), updates)
@@ -236,6 +236,7 @@ export default function TeamPage() {
               {pendingCount > 0 && <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center animate-pulse">{pendingCount}</span>}
             </TabsTrigger>
             <TabsTrigger value="blocked" className="font-bold">Bloqueados</TabsTrigger>
+            <TabsTrigger value="clients" className="font-bold">Clientes</TabsTrigger>
           </TabsList>
 
           <TabsContent value="active" className="space-y-4">
@@ -252,6 +253,12 @@ export default function TeamPage() {
 
           <TabsContent value="blocked" className="space-y-4">
             {sortedTeam.filter(m => m.role === 'Blocked').map((member: any) => (
+              <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onDelete={setMemberToDelete} onEditFees={handleOpenFees} />
+            ))}
+          </TabsContent>
+
+          <TabsContent value="clients" className="space-y-4">
+            {sortedTeam.filter(m => m.role === 'Client').map((member: any) => (
               <MemberCard key={member.id} member={member} isAdmin={isAdmin} currentUid={currentUser?.uid} onUpdateRole={handleUpdateRole} onDelete={setMemberToDelete} onEditFees={handleOpenFees} />
             ))}
           </TabsContent>

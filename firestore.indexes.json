@@ -23,6 +23,22 @@
         { "fieldPath": "routeSheetId", "order": "ASCENDING" },
         { "fieldPath": "clientId", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "client_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "transactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

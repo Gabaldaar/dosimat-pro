@@ -27,14 +27,27 @@ service cloud.firestore {
       return hasRole('Client');
     }
 
-    function canReadClientTransaction(clientId) {
-      return isClient() &&
+    function clientOwnsClientId(clientId) {
+      return isStaff() || (
+        isClient() &&
         clientId != null &&
-        clientId == getUserData().clientId;
+        exists(/databases/$(database)/documents/clients/$(clientId)) &&
+        (
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          getUserData().clientId == clientId) ||
+          get(/databases/$(database)/documents/clients/$(clientId)).data.mail.lower() == request.auth.token.email.lower() ||
+          get(/databases/$(database)/documents/clients/$(clientId)).data.userId == request.auth.uid
+        )
+      );
+    }
+
+    function canReadClientTransaction(clientId) {
+      return clientOwnsClientId(clientId);
     }
 
     function clientIsOnRouteSheet() {
       return isClient() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         getUserData().clientId != null &&
         resource.data.participantClientIds.hasAny([getUserData().clientId]);
     }
