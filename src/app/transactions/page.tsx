@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { 
@@ -277,7 +278,15 @@ function TransactionsContent() {
   const [imputations, setImputations] = useState<Record<string, number>>({})
 
   const selectedAccountForManual = useMemo(() => accounts?.find(a => a.id === manualAccountId), [accounts, manualAccountId]);
+  const [showCurrencyMismatch, setShowCurrencyMismatch] = useState(false);
   const isCrossCurrency = useMemo(() => selectedAccountForManual && selectedAccountForManual.currency !== manualCurrency, [selectedAccountForManual, manualCurrency]);
+  
+  useEffect(() => {
+    if (selectedItems.length === 0) return;
+    const baseCurr = selectedItems[0].currency;
+    const mixed = selectedItems.some(it => it.currency !== baseCurr);
+    if (mixed) setShowCurrencyMismatch(true);
+  }, [selectedItems]);
 
   useEffect(() => {
     if (isCrossCurrency) {
@@ -347,6 +356,15 @@ function TransactionsContent() {
   };
 
   const handleSaveTransaction = () => {
+    // Prevent saving if items have mixed currencies
+    if (selectedItems.length > 0) {
+      const baseCurr = selectedItems[0].currency;
+      const mixed = selectedItems.some(it => it.currency !== baseCurr);
+      if (mixed) {
+        toast({ title: "Error", description: "Los ítems contienen diferentes monedas. Por favor, usa operaciones separadas." });
+        return;
+      }
+    }
     if (editingTx) {
       const tx = editingTx;
       if (tx.clientId) {
@@ -654,6 +672,17 @@ function TransactionsContent() {
 
   return (
     <TooltipProvider>
+      <AlertDialog open={showCurrencyMismatch} onOpenChange={setShowCurrencyMismatch}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Advertencia de moneda</AlertDialogTitle>
+            <AlertDialogDescription>Has seleccionado ítems con diferentes monedas. Por favor, asegúrate de que el total y la moneda sean correctos antes de proceder.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction>Entendido</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <div className="flex min-h-screen bg-background w-full">
         <div className="no-print w-full flex">
           <Sidebar />
@@ -736,7 +765,7 @@ function TransactionsContent() {
                                 <SelectTrigger className="bg-white h-12"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="pending">A CUENTA (No mueve caja)</SelectItem>
-                                  {accounts?.map(a => (<SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>))}
+                                  {accounts?.filter(a => a.currency === manualCurrency).map(a => (<SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>))}
                                 </SelectContent>
                               </Select>
                             </div>
@@ -786,15 +815,48 @@ function TransactionsContent() {
                         </div>
                         <div className="border rounded-xl bg-white shadow-sm overflow-hidden">
                           <Table>
-                            <TableHeader className="bg-muted/30"><TableRow><TableHead className="text-[9px] font-black uppercase">Ítem</TableHead><TableHead className="w-24 text-center text-[9px]">Cant.</TableHead><TableHead className="w-28 text-center text-[9px]">Precio</TableHead><TableHead className="text-right text-[9px]">Subtotal</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
+                            <TableHeader className="bg-muted/30">
+                              <TableRow>
+                                <TableHead className="text-[9px] font-black uppercase">Ítem</TableHead>
+                                <TableHead className="w-24 text-center text-[9px]">Cant.</TableHead>
+                                <TableHead className="w-28 text-center text-[9px]">Precio</TableHead>
+                                <TableHead className="w-12 text-center text-[9px]">Moneda</TableHead>
+                                <TableHead className="w-28 text-center text-[9px]">Descuento%</TableHead>
+                                <TableHead className="text-right text-[9px]">Subtotal</TableHead>
+                                <TableHead className="w-10"></TableHead>
+                              </TableRow>
+                            </TableHeader>
                             <TableBody>
                               {selectedItems.map((item, i) => (
                                 <TableRow key={i}>
                                   <TableCell className="font-bold text-xs">{item.name}</TableCell>
-                                  <TableCell><Input type="number" value={item.qty} className="h-8 text-center" onChange={(e) => { const n = [...selectedItems]; n[i].qty = Number(e.target.value); setSelectedItems(n); }} /></TableCell>
-                                  <TableCell><Input type="number" value={item.price} className="h-8 text-center" onChange={(e) => { const n = [...selectedItems]; n[i].price = Number(e.target.value); setSelectedItems(n); }} /></TableCell>
-                                  <TableCell className="text-right font-black text-xs">{(item.price * item.qty).toLocaleString()}</TableCell>
-                                  <TableCell><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setSelectedItems(selectedItems.filter((_, idx) => idx !== i))}><Trash2 className="h-3 w-3" /></Button></TableCell>
+                                  <TableCell>
+                                    <Input type="number" min={1} value={item.qty} className="h-8 text-center" onChange={(e) => { const n = [...selectedItems]; n[i].qty = Number(e.target.value); setSelectedItems(n); }} />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Input type="number" min={0} value={item.price} className="h-8 text-center" onChange={(e) => { const n = [...selectedItems]; n[i].price = Number(e.target.value); setSelectedItems(n); }} />
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <RadioGroup value={item.currency} onValueChange={(v) => { const n = [...selectedItems]; n[i].currency = v; setSelectedItems(n); }}>
+                                      <div className="flex items-center space-x-2 justify-center">
+                                        <RadioGroupItem value="ARS" id={`currency-ars-${i}`} />
+                                        <Label htmlFor={`currency-ars-${i}`} className="text-xs">ARS</Label>
+                                        <RadioGroupItem value="USD" id={`currency-usd-${i}`} />
+                                        <Label htmlFor={`currency-usd-${i}`} className="text-xs">USD</Label>
+                                      </div>
+                                    </RadioGroup>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Input type="number" min={0} max={100} value={item.discount || 0} className="h-8 text-center" onChange={(e) => { const n = [...selectedItems]; n[i].discount = Number(e.target.value); setSelectedItems(n); }} />
+                                  </TableCell>
+                                  <TableCell className="text-right font-black text-xs">
+                                    {(item.price * item.qty * (1 - (item.discount || 0) / 100)).toLocaleString()}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setSelectedItems(selectedItems.filter((_, idx) => idx !== i))}>
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </TableCell>
                                 </TableRow>
                               ))}
                             </TableBody>

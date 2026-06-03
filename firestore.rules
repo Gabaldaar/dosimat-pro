@@ -88,9 +88,7 @@ match /route_sheets/{docId} {
   //   • staff siempre
   //   • cualquier cliente autenticado cuando la hoja está "planned"
   //   • cliente que está en la hoja cuando está "active"
-  allow read: if isStaff() ||
-    (isSignedIn() && resource.data.status == 'planned') ||
-    (clientIsOnRouteSheet() && resource.data.status == 'active');
+  allow read: if isSignedIn();
   // Escritura restringida a gestión y roles específicos
   allow write: if isManagement() || hasRole('Communicator') || hasRole('Replenisher');
 }
