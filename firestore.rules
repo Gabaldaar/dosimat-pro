@@ -80,13 +80,17 @@ service cloud.firestore {
       allow update, delete: if isStaff();
     }
 
-    match /route_sheets/{docId} { 
-      allow read: if isStaff() || (
-        clientIsOnRouteSheet() &&
-        resource.data.status in ['planned', 'active']
-      );
-      allow write: if isManagement() || hasRole('Communicator') || hasRole('Replenisher'); 
-    }
+match /route_sheets/{docId} {
+  // Permitir listar solo hojas con estado 'planned' para usuarios autenticados
+  allow list: if isSignedIn() && request.query.where('status', '==', 'planned');
+  // Lectura: staff siempre, cualquier cliente autenticado si es 'planned', o cliente participante si es 'active'
+  allow read: if isStaff() ||
+    (isSignedIn() && resource.data.status == 'planned') ||
+    (clientIsOnRouteSheet() && resource.data.status == 'active');
+  // Escritura restringida a staff de gestión y roles de comunicación/replenishment
+  allow write: if isManagement() || hasRole('Communicator') || hasRole('Replenisher');
+}
+
 
     match /financial_accounts/{docId} { allow read: if isStaff(); allow write: if isManagement(); }
     match /payouts/{docId} { allow read: if isStaff(); allow write: if isManagement(); }

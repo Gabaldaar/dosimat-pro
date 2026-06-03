@@ -192,6 +192,27 @@ export default function ClientPortal() {
     }
   }, [clientId, auth, user?.uid])
 
+  
+  // Global query for any planned route sheet (ignores client)
+  const globalPlannedQuery = useMemoFirebase(() => {
+    return query(collection(db, 'route_sheets'), where('status', '==', 'planned'));
+  }, [db]);
+
+  // Fetch global planned sheets
+  const { data: globalPlannedSheets, isLoading: loadingGlobalPlanned } = useCollection(globalPlannedQuery);
+
+  // Compute earliest upcoming planned delivery date (global)
+  const upcomingPlanned = useMemo(() => {
+    if (!globalPlannedSheets?.length) return null;
+    // Filter future dates
+    const future = globalPlannedSheets.filter((s: any) => new Date(s.date) >= new Date());
+    if (!future.length) return null;
+    const sorted = [...future].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const sheet = sorted[0];
+    return { date: sheet.date };
+  }, [globalPlannedSheets]);
+
+  // Existing client‑specific query (kept for other logic that may need it)
   const routeQuery = useMemoFirebase(() => {
     if (!clientId) return null;
     return query(
@@ -200,7 +221,8 @@ export default function ClientPortal() {
       where('status', 'in', ['planned', 'active'])
     );
   }, [db, clientId]);
-
+  const { data: routeSheets, isLoading: loadingRouteSheets } = useCollection(routeQuery);
+  // Query for client‑specific pending/scheduled orders
   const openOrdersQuery = useMemoFirebase(() => {
     if (!clientId) return null;
     return query(
@@ -209,16 +231,14 @@ export default function ClientPortal() {
       where('status', 'in', ['pending', 'scheduled'])
     );
   }, [db, clientId]);
+  const { data: openOrdersRaw, isLoading: loadingOpenOrders } = useCollection(openOrdersQuery);
 
   const clientRequestsQuery = useMemoFirebase(() => {
     if (!clientId) return null;
     return query(collection(db, 'client_requests'), where('clientId', '==', clientId), limit(40));
   }, [db, clientId]);
-
-  const { data: routeSheets, isLoading: loadingRoute } = useCollection(routeQuery);
-  const { data: openOrdersRaw, isLoading: loadingOpenOrders } = useCollection(openOrdersQuery);
-  const { data: clientRequests } = useCollection(clientRequestsQuery);
-
+  const { data: clientRequests, isLoading: loadingClientRequests } = useCollection(clientRequestsQuery);
+  
   const openOrders = useMemo(() => {
     const list = openOrdersRaw ?? [];
     return [...list].sort(
@@ -380,6 +400,7 @@ export default function ClientPortal() {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
+
       <header className="bg-white border-b sticky top-0 z-30 px-6 py-4 flex justify-between items-center shadow-sm">
         <div className="flex items-center gap-2">
           <div className="bg-primary p-1.5 rounded-lg shadow-sm"><Droplets className="h-5 w-5 text-white" /></div>
@@ -398,6 +419,19 @@ export default function ClientPortal() {
           </Button>
         </div>
       </header>
+            {(upcomingPlanned || upcomingDelivery) && (
+        <div className="mx-auto max-w-4xl p-4">
+          <Card className="border-l-4 border-l-amber-500 bg-amber-50/20 shadow-lg">
+            <CardContent className="flex items-center gap-2">
+              <Info className="h-5 w-5 text-amber-600" />
+              <p className="font-medium text-amber-900">
+                La Próxima reposición será el día {new Date((upcomingPlanned ? upcomingPlanned.date : upcomingDelivery.date) + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
 
       <main className="max-w-4xl mx-auto p-4 md:p-8 space-y-8">
         <section className="space-y-1">
@@ -480,7 +514,7 @@ export default function ClientPortal() {
             </div>
           )}
 
-          {loadingRoute ? (
+          {loadingRouteSheets ? (
             <Card className="p-6 shadow-lg">
               <div className="flex items-center justify-center gap-3 text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin text-primary" />
@@ -583,7 +617,7 @@ export default function ClientPortal() {
                 </Card>
               ))}
             </div>
-          ) : !loadingRoute && !upcomingDelivery && staffReviewNotices.length === 0 ? (
+          ) : !loadingRouteSheets && !upcomingDelivery && staffReviewNotices.length === 0 ? (
             <p className="text-sm text-muted-foreground font-medium px-1">No tenés pedidos abiertos en este momento.</p>
           ) : null}
         </section>

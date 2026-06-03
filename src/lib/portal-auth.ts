@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase-admin'
-import { normalizeEmail } from '@/lib/auth-routing'
+import { normalizeEmail, isStaffOrClientRole } from '@/lib/auth-routing'
 
 export type PortalClientAuth = { clientId: string; uid: string }
 
@@ -9,7 +9,7 @@ export type PortalClientAuth = { clientId: string; uid: string }
  * o por users.clientId, sincronizando el vínculo si hace falta.
  */
 export async function verifyPortalClient(
-  request: NextRequest
+  request: NextRequest,
 ): Promise<{ auth: PortalClientAuth } | { error: NextResponse }> {
   const authHeader = request.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
@@ -29,7 +29,7 @@ export async function verifyPortalClient(
     const userDoc = await userRef.get()
     const userData = userDoc.data()
 
-    if (!userData || userData.role !== 'Client') {
+    if (!userData || !isStaffOrClientRole(userData.role)) {
       return { error: NextResponse.json({ error: 'Acceso denegado.' }, { status: 403 }) }
     }
 
@@ -54,16 +54,13 @@ export async function verifyPortalClient(
       return {
         error: NextResponse.json(
           { error: 'Tu cuenta no está vinculada a una ficha de cliente.' },
-          { status: 403 }
+          { status: 403 },
         ),
       }
     }
 
     if (userData.clientId !== clientId) {
-      await userRef.set(
-        { clientId, updatedAt: new Date().toISOString() },
-        { merge: true }
-      )
+      await userRef.set({ clientId, updatedAt: new Date().toISOString() }, { merge: true })
     }
 
     return { auth: { clientId, uid: decoded.uid } }
