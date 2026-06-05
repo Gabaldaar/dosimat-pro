@@ -132,6 +132,14 @@ function getPendingAmount(tx: any): number {
   return Math.abs(pending) > 0.01 ? Math.abs(pending) : 0;
 }
 
+function getEffectivePendingAmount(tx: any, editingTx: any): number {
+  let pending = getPendingAmount(tx);
+  if (editingTx && editingTx.type === 'cobro' && editingTx.imputations && editingTx.imputations[tx.id]) {
+    pending += Number(editingTx.imputations[tx.id]);
+  }
+  return pending;
+}
+
 function TransactionsContent() {
   const { toast } = useToast()
   const db = useFirestore()
@@ -307,8 +315,26 @@ function TransactionsContent() {
 
   const customerPendingTxs = useMemo(() => {
     if (!selectedCustomerId || !transactions || selectedCustomerId === "none") return []
-    return transactions.filter(tx => tx.clientId === selectedCustomerId && tx.pendingAmount !== 0 && tx.type !== 'cobro')
-  }, [selectedCustomerId, transactions])
+    return transactions.filter(tx => {
+      if (tx.clientId !== selectedCustomerId || tx.type === 'cobro') return false;
+      return getEffectivePendingAmount(tx, editingTx) > 0;
+    }).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+  }, [selectedCustomerId, transactions, editingTx])
+
+  const handleAutoAssign = () => {
+    let remaining = manualAmount;
+    const newImputations: Record<string, number> = {};
+    for (const tx of customerPendingTxs) {
+      if (remaining <= 0) break;
+      const effectiveDebt = getEffectivePendingAmount(tx, editingTx);
+      const assign = Math.min(effectiveDebt, remaining);
+      if (assign > 0) {
+        newImputations[tx.id] = assign;
+        remaining -= assign;
+      }
+    }
+    setImputations(newImputations);
+  };
 
   const cartTotals = useMemo(() => {
     return selectedItems.reduce((acc, item) => {
@@ -482,11 +508,19 @@ function TransactionsContent() {
       if (tpl) combinedText = tpl.body || ""
     }
     const keys = extractDynamicKeys(combinedText)
-    setDynamicKeys(keys)
+    setDynamicKeys(prev => {
+      if (prev.length === keys.length && prev.every((k, i) => k === keys[i])) return prev;
+      return keys;
+    })
     setDynamicValues(prev => {
+      let hasChanges = false;
       const next: Record<string, string> = {}
-      keys.forEach(k => { next[k] = prev[k] || "" })
-      return next
+      keys.forEach(k => { 
+        next[k] = prev[k] || "" 
+        if (next[k] !== prev[k]) hasChanges = true;
+      })
+      if (Object.keys(prev).length !== keys.length) hasChanges = true;
+      return hasChanges ? next : prev;
     })
   }, [selectedTemplateId, selectedWsTemplateId, isMailDialogOpen, isWsDialogOpen, emailTemplates, wsTemplates])
 
@@ -528,9 +562,11 @@ function TransactionsContent() {
     if (!selectedTxForEmail || !selectedTemplateId || !emailTemplates) return
     const tpl = emailTemplates.find(t => t.id === selectedTemplateId)
     if (tpl) {
-      setProcessedEmail({
-        subject: processMarkers(tpl.subject, selectedTxForEmail),
-        body: processMarkers(tpl.body, selectedTxForEmail),
+      setProcessedEmail(prev => {
+        const newSubject = processMarkers(tpl.subject, selectedTxForEmail);
+        const newBody = processMarkers(tpl.body, selectedTxForEmail);
+        if (prev.subject === newSubject && prev.body === newBody) return prev;
+        return { subject: newSubject, body: newBody };
       })
     }
   }, [selectedTxForEmail, selectedTemplateId, emailTemplates, processMarkers])
@@ -538,7 +574,13 @@ function TransactionsContent() {
   useEffect(() => {
     if (!selectedTxForWs || !selectedWsTemplateId || !wsTemplates) return
     const tpl = wsTemplates.find(t => t.id === selectedWsTemplateId)
-    if (tpl) setProcessedWs(processMarkers(tpl.body, selectedTxForWs))
+    if (tpl) {
+      setProcessedWs(prev => {
+        const newBody = processMarkers(tpl.body, selectedTxForWs);
+        if (prev === newBody) return prev;
+        return newBody;
+      })
+    }
   }, [selectedTxForWs, selectedWsTemplateId, wsTemplates, processMarkers])
 
   const handleOpenEmailDialog = (tx: any) => {
@@ -597,30 +639,60 @@ function TransactionsContent() {
   }
 
   const renderTxActions = (tx: any, isLatest: boolean) => (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
-          <MoreVertical className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => setSelectedTxDetails(tx)}><Info className="h-4 w-4 mr-2" /> Ficha Completa</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleOpenWsDialog(tx)}><MessageSquare className="h-4 w-4 mr-2 text-emerald-600" /> WhatsApp</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleCopyWhatsApp(tx)}><Copy className="h-4 w-4 mr-2" /> Copiar Detalle</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleOpenEmailDialog(tx)}><Mail className="h-4 w-4 mr-2" /> Enviar Email</DropdownMenuItem>
-        {isAdmin && (
-          <>
-            <DropdownMenuItem onClick={() => handleStartEdit(tx)} disabled={!isLatest} className={!isLatest ? "opacity-50" : ""}>
-              {isLatest ? <Edit className="h-4 w-4 mr-2" /> : <Lock className="h-4 w-4 mr-2" />}
-              Editar {!isLatest && "(Bloqueado)"}
-            </DropdownMenuItem>
-            <DropdownMenuItem className={cn("text-destructive", !isLatest && "opacity-50")} onClick={() => setTxToDelete(tx)} disabled={!isLatest}>
-              <Trash2 className="h-4 w-4 mr-2" /> Eliminar {!isLatest && "(Bloqueado)"}
-            </DropdownMenuItem>
-          </>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div className="flex items-center gap-1 justify-end">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-primary/10" onClick={(e) => { e.stopPropagation(); setSelectedTxDetails(tx); }}>
+            <Info className="h-4 w-4 text-primary" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent className="text-[10px] font-black uppercase">Ficha Completa</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-emerald-50" onClick={(e) => { e.stopPropagation(); handleOpenWsDialog(tx); }}>
+            <MessageSquare className="h-4 w-4 text-emerald-600" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent className="text-[10px] font-black uppercase">WhatsApp</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-slate-100" onClick={(e) => { e.stopPropagation(); handleCopyWhatsApp(tx); }}>
+            <Copy className="h-4 w-4 text-slate-600" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent className="text-[10px] font-black uppercase">Copiar Detalle</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-blue-50" onClick={(e) => { e.stopPropagation(); handleOpenEmailDialog(tx); }}>
+            <Mail className="h-4 w-4 text-blue-600" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent className="text-[10px] font-black uppercase">Enviar Email</TooltipContent>
+      </Tooltip>
+      {isAdmin && (
+        <>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className={cn("h-7 w-7 hover:bg-amber-50", !isLatest && "opacity-50")} onClick={(e) => { e.stopPropagation(); handleStartEdit(tx); }} disabled={!isLatest}>
+                {isLatest ? <Edit className="h-4 w-4 text-amber-600" /> : <Lock className="h-4 w-4 text-slate-400" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="text-[10px] font-black uppercase">{isLatest ? "Editar" : "Editar (Bloqueado)"}</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className={cn("h-7 w-7 hover:bg-rose-50", !isLatest && "opacity-50")} onClick={(e) => { e.stopPropagation(); setTxToDelete(tx); }} disabled={!isLatest}>
+                <Trash2 className="h-4 w-4 text-rose-600" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="text-[10px] font-black uppercase text-rose-600">{isLatest ? "Eliminar" : "Eliminar (Bloqueado)"}</TooltipContent>
+          </Tooltip>
+        </>
+      )}
+    </div>
   )
 
   const transactionsWithDynamicBalances = useMemo(() => {
@@ -786,6 +858,63 @@ function TransactionsContent() {
                                 <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                                 <SelectContent><SelectItem value="1">Ingreso (+)</SelectItem><SelectItem value="-1">Egreso (-)</SelectItem></SelectContent>
                               </Select>
+                            </div>
+                          )}
+                          {activeTab === 'cobro' && selectedCustomerId && selectedCustomerId !== "none" && customerPendingTxs.length > 0 && (
+                            <div className="pt-4 border-t border-dashed space-y-4">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-xs font-bold uppercase">Imputar a Deudas Pendientes</Label>
+                                <Button type="button" variant="outline" size="sm" onClick={handleAutoAssign} className="h-7 text-[10px] uppercase font-bold" disabled={manualAmount <= 0}>
+                                  <Sparkles className="h-3 w-3 mr-1" /> Auto-asignar
+                                </Button>
+                              </div>
+                              <div className="border rounded-xl bg-white overflow-hidden shadow-sm">
+                                <Table>
+                                  <TableHeader className="bg-muted/30">
+                                    <TableRow>
+                                      <TableHead className="text-[9px] font-black uppercase">Fecha / Detalle</TableHead>
+                                      <TableHead className="text-right text-[9px] font-black uppercase">Deuda Pendi.</TableHead>
+                                      <TableHead className="w-32 text-center text-[9px] font-black uppercase">A Imputar</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {customerPendingTxs.map(tx => {
+                                      const effectiveDebt = getEffectivePendingAmount(tx, editingTx);
+                                      return (
+                                        <TableRow key={tx.id}>
+                                          <TableCell>
+                                            <div className="font-bold text-xs">{formatLocalDate(tx.date)}</div>
+                                            <div className="text-[10px] text-muted-foreground line-clamp-1">{txTypeMap[tx.type]?.label} {tx.description ? `- ${tx.description}` : ''}</div>
+                                          </TableCell>
+                                          <TableCell className="text-right font-bold text-xs text-rose-600">
+                                            {tx.currency === 'USD' ? 'u$s' : '$'} {effectiveDebt.toLocaleString("es-AR")}
+                                          </TableCell>
+                                          <TableCell>
+                                            <Input 
+                                              type="number" 
+                                              min={0}
+                                              max={effectiveDebt}
+                                              value={imputations[tx.id] || ''}
+                                              onChange={(e) => {
+                                                const val = Number(e.target.value);
+                                                if (val <= 0) {
+                                                  const newImp = { ...imputations };
+                                                  delete newImp[tx.id];
+                                                  setImputations(newImp);
+                                                } else {
+                                                  setImputations(prev => ({ ...prev, [tx.id]: val > effectiveDebt ? effectiveDebt : val }));
+                                                }
+                                              }}
+                                              placeholder="0"
+                                              className="h-8 text-right font-black"
+                                            />
+                                          </TableCell>
+                                        </TableRow>
+                                      );
+                                    })}
+                                  </TableBody>
+                                </Table>
+                              </div>
                             </div>
                           )}
                         </div>
