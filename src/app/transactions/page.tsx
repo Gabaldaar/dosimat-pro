@@ -552,6 +552,18 @@ function TransactionsContent() {
         ? `${currencySymbol} ${Number(tx.accountBalanceAfter).toLocaleString("es-AR")}`
         : "N/A",
       "{{Moneda}}": tx.currency || "",
+      "{{Metodo_Pago}}": acc?.name || "A Cuenta",
+      "{{Saldo_Cuenta}}": `${currencySymbol} ${Number(tx.currency === 'ARS' ? (client?.saldoActual || 0) : (client?.saldoUSD || 0)).toLocaleString("es-AR")}`,
+      "{{Saldo_ARS}}": `$ ${Number(client?.saldoActual || 0).toLocaleString("es-AR")}`,
+      "{{Saldo_USD}}": `u$s ${Number(client?.saldoUSD || 0).toLocaleString("es-AR")}`,
+      "{{Direccion}}": client?.direccion || "",
+      "{{Localidad}}": client?.localidad || "",
+      "{{Detalle_Items}}": tx.items && tx.items.length > 0 ? tx.items.map((i: any) => `${i.qty}x ${i.name} (${tx.currency === "ARS" ? "$" : "u$s"} ${Number(i.price).toLocaleString("es-AR")})`).join(", ") : "N/A",
+      "{{Item}}": tx.items?.[0]?.name || "N/A",
+      "{{Cantidad}}": tx.items?.[0]?.qty?.toString() || "N/A",
+      "{{Precio}}": `${tx.currency === "ARS" ? "$" : "u$s"} ${Number(tx.items?.[0]?.price || 0).toLocaleString("es-AR")}`,
+      "{{Subtotal}}": `${tx.currency === "ARS" ? "$" : "u$s"} ${Number((tx.items?.[0]?.price || 0) * (tx.items?.[0]?.qty || 0)).toLocaleString("es-AR")}`,
+      "{{Total_Descuento}}": `${tx.currency === "ARS" ? "$" : "u$s"} ${Number(getTotalOperationAmount(tx) * (tx.items?.[0]?.discount || 0) / 100).toLocaleString("es-AR")}`,
     }
     Object.entries(replacements).forEach(([marker, value]) => { result = result.replaceAll(marker, value) })
     result = result.replace(/\{\{\?([^}]+)\}\}/g, (match, key) => dynamicValues[key] || match)
@@ -1093,66 +1105,7 @@ function TransactionsContent() {
                   </div>
                 </Card>
 
-                <Card className="glass-card overflow-hidden shadow-md hidden md:block">
-                  <Table className="min-w-[1100px]">
-                    <TableHeader className="bg-muted/30">
-                      <TableRow>
-                        <TableHead className="text-[10px] font-black uppercase">Fecha</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase">Cliente</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase">Tipo / Nota</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase">Caja</TableHead>
-                        <TableHead className="text-right text-[10px] font-black uppercase">Total Operación</TableHead>
-                        <TableHead className="text-right text-[10px] font-black uppercase">Movimiento de Caja</TableHead>
-                        <TableHead className="text-right text-[10px] font-black uppercase">Pendiente</TableHead>
-                        <TableHead className="text-right text-[10px] font-black uppercase">Saldo Final Caja</TableHead>
-                        <TableHead className="w-12"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredTransactions.map((tx: any) => {
-                        const cust = customers?.find(c => c.id === tx.clientId)
-                        const acc = accounts?.find(a => a.id === tx.financialAccountId)
-                        const info = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" }
-                        const Icon = info.icon
-                        const symbol = tx.currency === "USD" ? "u$s" : "$"
-                        const movement = getMovementAmount(tx)
-                        const pending = getPendingAmount(tx)
-                        const isLatest = isLatestForAccount(tx)
-                        const boxBalance = tx.dynamicBalance ?? tx.accountBalanceAfter
-                        return (
-                          <TableRow key={tx.id} className="cursor-pointer hover:bg-primary/5 transition-colors group" onClick={() => setSelectedTxDetails(tx)}>
-                            <TableCell className="text-xs font-bold whitespace-nowrap">{formatLocalDate(tx.date)}</TableCell>
-                            <TableCell className="text-xs font-black">{cust ? `${cust.apellido}, ${cust.nombre}` : "Global"}</TableCell>
-                            <TableCell className="max-w-[220px]">
-                              <div className="flex flex-col gap-1">
-                                <Badge variant="outline" className={cn("text-[9px] font-black uppercase w-fit gap-1", info.color)}><Icon className="h-3 w-3" />{info.label}</Badge>
-                                {tx.description && <span className="text-[10px] text-muted-foreground line-clamp-2">{tx.description}</span>}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              {acc ? <Badge variant="secondary" className="text-[9px] font-bold"><Wallet className="h-3 w-3 mr-1" />{acc.name}</Badge> : <span className="text-[10px] text-muted-foreground italic">A Cuenta</span>}
-                            </TableCell>
-                            <TableCell className="text-right font-black text-xs">{symbol} {getTotalOperationAmount(tx).toLocaleString("es-AR")}</TableCell>
-                            <TableCell className={cn("text-right font-black text-xs", movement >= 0 ? "text-emerald-600" : "text-rose-600")}>
-                              {movement >= 0 ? "+" : "-"}{symbol} {Math.abs(movement).toLocaleString("es-AR")}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {pending > 0 ? (
-                                <span className="inline-block text-xs font-black text-rose-700 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded">{symbol} {pending.toLocaleString("es-AR")}</span>
-                              ) : <span className="text-[10px] text-muted-foreground">—</span>}
-                            </TableCell>
-                            <TableCell className="text-right text-[10px] font-mono font-bold">
-                              {boxBalance != null ? `${symbol} ${Number(boxBalance).toLocaleString("es-AR")}` : "—"}
-                            </TableCell>
-                            <TableCell onClick={(e) => e.stopPropagation()}>{renderTxActions(tx, isLatest)}</TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
-                </Card>
-
-                <div className="grid grid-cols-1 gap-4 md:hidden">
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
                   {filteredTransactions.map((tx: any) => {
                     const cust = customers?.find(c => c.id === tx.clientId)
                     const acc = accounts?.find(a => a.id === tx.financialAccountId)

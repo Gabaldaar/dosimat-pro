@@ -42,6 +42,16 @@ import {
   useSidebar,
   SidebarMenuBadge,
 } from "@/components/ui/sidebar"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -66,6 +76,7 @@ export function Sidebar({ className }: { className?: string }) {
   const { toast } = useToast()
   const { state, isMobile, setOpenMobile } = useSidebar()
   const [isLinking, setIsLinking] = React.useState(false)
+  const [showLogoutDialog, setShowLogoutDialog] = React.useState(false)
 
   const { userData } = useUser()
 
@@ -260,11 +271,24 @@ export function Sidebar({ className }: { className?: string }) {
             )}
           </div>
         )}
-        <Button variant="ghost" className="w-full text-destructive justify-start px-2" onClick={handleLogout}>
+        <Button variant="ghost" className="w-full text-destructive justify-start px-2" onClick={() => setShowLogoutDialog(true)}>
           <LogOut className={cn("h-4 w-4", state === "expanded" && "mr-2")} />
           {state === "expanded" && <span>Cerrar sesión</span>}
         </Button>
       </SidebarFooter>
+
+      <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cerrar sesión</AlertDialogTitle>
+            <AlertDialogDescription>¿Estás seguro que deseas cerrar tu sesión actual?</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setShowLogoutDialog(false); handleLogout(); }} className="bg-destructive hover:bg-destructive/90 text-white">Cerrar sesión</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SidebarUI>
   )
 }

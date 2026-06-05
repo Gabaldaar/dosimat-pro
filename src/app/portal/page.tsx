@@ -124,6 +124,7 @@ export default function ClientPortal() {
   const [editForm, setEditForm] = useState({ cloro: 0, acido: 0, notes: "" })
   const [cancelRequestId, setCancelRequestId] = useState<string | null>(null)
   const [isSavingOrder, setIsSavingOrder] = useState(false)
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false)
 
   const clientsRef = useMemoFirebase(() => {
     if (!user?.email) return null;
@@ -388,7 +389,7 @@ export default function ClientPortal() {
                 <Shield className="h-4 w-4" /> Volver a Panel de Trabajo
               </Button>
             )}
-            <Button variant="outline" className="w-full" onClick={handleLogout}>Cerrar Sesión</Button>
+            <Button variant="outline" className="w-full" onClick={() => setShowLogoutDialog(true)}>Cerrar Sesión</Button>
           </div>
         </Card>
       </div>
@@ -414,7 +415,7 @@ export default function ClientPortal() {
               <span className="sm:hidden">Volver</span>
             </Button>
           )}
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground font-bold gap-2 h-9">
+          <Button variant="ghost" size="sm" onClick={() => setShowLogoutDialog(true)} className="text-muted-foreground font-bold gap-2 h-9">
             <LogOut className="h-4 w-4" /> <span className="hidden sm:inline">Cerrar Sesión</span>
           </Button>
         </div>
@@ -758,6 +759,19 @@ export default function ClientPortal() {
             <AlertDialogAction onClick={handleConfirmCancel} className="bg-destructive font-bold" disabled={isSavingOrder}>
               {isSavingOrder ? 'Anulando...' : 'Anular pedido'}
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cerrar sesión</AlertDialogTitle>
+            <AlertDialogDescription>¿Estás seguro que deseas cerrar tu sesión actual?</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setShowLogoutDialog(false); handleLogout(); }} className="bg-destructive hover:bg-destructive/90 text-white">Cerrar sesión</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

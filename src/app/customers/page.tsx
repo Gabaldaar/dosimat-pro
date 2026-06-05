@@ -371,6 +371,12 @@ function CustomersContent() {
       result = result.replace(/\{\{Localidad\}\}/g, client.localidad || "");
       result = result.replace(/\{\{Saldo_ARS\}\}/g, `$ ${Number(client.saldoActual || 0).toLocaleString('es-AR')}`);
       result = result.replace(/\{\{Saldo_USD\}\}/g, `u$s ${Number(client.saldoUSD || 0).toLocaleString('es-AR')}`);
+      result = result.replace(/\{\{Saldo_Cuenta\}\}/g, `$ ${Number(client.saldoActual || 0).toLocaleString('es-AR')} / u$s ${Number(client.saldoUSD || 0).toLocaleString('es-AR')}`);
+      
+      const txMarkers = ["Fecha", "Tipo_Operacion", "Categoria_Gasto", "Descripción", "Total", "Pendiente_Operacion", "Detalle_Items", "Item", "Cantidad", "Precio", "Moneda", "Subtotal", "Total_Descuento", "Monto_Abonado", "Caja_Destino", "Saldo_Caja_Final", "Metodo_Pago"];
+      txMarkers.forEach(m => {
+        result = result.replace(new RegExp(`\\{\\{${m}\\}\\}`, 'g'), "N/A (Sólo aplica desde Operaciones)");
+      });
     }
     
     if (catalog) {
