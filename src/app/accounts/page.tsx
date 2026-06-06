@@ -422,7 +422,7 @@ export default function AccountsPage() {
               <Calculator className="absolute right-4 top-1/2 -translate-y-1/2 h-12 w-12 text-primary/10 -rotate-12" />
               <CardContent className="p-4">
                 <p className="text-[10px] font-black text-primary uppercase tracking-widest">Saldo Total ARS</p>
-                <h3 className="text-2xl font-black mt-1 text-primary">
+                <h3 className={cn("text-2xl font-black mt-1", globalTotals.ARS < 0 ? "text-rose-600" : "text-primary")}>
                   ${globalTotals.ARS.toLocaleString('es-AR')}
                 </h3>
               </CardContent>
@@ -431,7 +431,7 @@ export default function AccountsPage() {
               <TrendingUp className="absolute right-4 top-1/2 -translate-y-1/2 h-12 w-12 text-emerald-500/10 -rotate-12" />
               <CardContent className="p-4">
                 <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Saldo Total USD</p>
-                <h3 className="text-2xl font-black mt-1 text-emerald-700">
+                <h3 className={cn("text-2xl font-black mt-1", globalTotals.USD < 0 ? "text-rose-600" : "text-emerald-700")}>
                   u$s {globalTotals.USD.toLocaleString('es-AR')}
                 </h3>
               </CardContent>
@@ -509,7 +509,7 @@ export default function AccountsPage() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className={cn("text-4xl font-black tracking-tighter mb-6", themeColor)}>
+                    <div className={cn("text-4xl font-black tracking-tighter mb-6", Number(account.initialBalance || 0) < 0 ? "text-rose-600" : themeColor)}>
                       {isUSD ? 'u$s' : '$'}{Number(account.initialBalance || 0).toLocaleString('es-AR')}
                     </div>
                     <div className="flex gap-2">

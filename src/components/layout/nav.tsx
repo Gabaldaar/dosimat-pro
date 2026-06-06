@@ -21,7 +21,10 @@ import {
   Loader2,
   HelpCircle,
   Settings,
-  UserCircle
+  UserCircle,
+  Plus,
+  ShoppingBag,
+  ArrowUpRight
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -52,6 +55,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -349,9 +358,7 @@ export function MobileNav() {
         { href: "/customers", label: "Clientes", icon: Users },
         { href: "/routes", label: "Rutas", icon: Truck },
         { href: "/transactions", label: "Operaciones", icon: ArrowLeftRight },
-        { href: "/payouts", label: "Pagos", icon: Banknote },
-        { href: "/settings", label: "Ajustes", icon: Settings },
-        { href: "/help", label: "Ayuda", icon: HelpCircle }
+        { href: "/accounts", label: "Cajas", icon: Wallet }
       ];
     }
 
@@ -369,18 +376,51 @@ export function MobileNav() {
   }, [userData, pendingOrdersCount, isAlsoClient]);
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-background/60 backdrop-blur-xl border-t flex items-center justify-around px-4 py-3 pb-[calc(1rem+env(safe-area-inset-bottom))] md:hidden no-print">
-      {mobileItems.map((item) => (
-        <Link key={item.href} href={item.href} className={cn("flex flex-col items-center gap-1.5 relative", pathname === item.href ? "text-primary font-bold" : "text-muted-foreground")}>
-          <item.icon className="h-6 w-6" />
-          <span className="text-[9px] uppercase tracking-wider font-bold">{item.label}</span>
-          {item.count > 0 && (
-            <span className="absolute top-0 right-0 -mr-1 -mt-1 bg-amber-500 text-white text-[8px] font-black min-w-3.5 h-3.5 px-0.5 rounded-full flex items-center justify-center">
-              {item.count}
-            </span>
-          )}
-        </Link>
-      ))}
-    </nav>
+    <>
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-background/60 backdrop-blur-xl border-t flex items-center justify-around px-4 py-3 pb-[calc(1rem+env(safe-area-inset-bottom))] md:hidden no-print">
+        {mobileItems.map((item) => (
+          <Link key={item.href} href={item.href} className={cn("flex flex-col items-center gap-1.5 relative", pathname === item.href ? "text-primary font-bold" : "text-muted-foreground")}>
+            <item.icon className="h-6 w-6" />
+            <span className="text-[9px] uppercase tracking-wider font-bold">{item.label}</span>
+            {item.count > 0 && (
+              <span className="absolute top-0 right-0 -mr-1 -mt-1 bg-amber-500 text-white text-[8px] font-black min-w-3.5 h-3.5 px-0.5 rounded-full flex items-center justify-center">
+                {item.count}
+              </span>
+            )}
+          </Link>
+        ))}
+      </nav>
+
+      {/* Floating Action Button para móviles */}
+      <div className="md:hidden no-print">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button className="fixed bottom-24 right-4 z-50 h-14 w-14 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.12)] bg-primary text-primary-foreground hover:bg-primary/90 flex items-center justify-center transition-transform hover:scale-105">
+              <Plus className="h-6 w-6" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" sideOffset={16} className="w-56 p-2 rounded-2xl shadow-xl">
+            <DropdownMenuItem asChild className="p-3 cursor-pointer rounded-xl hover:bg-muted focus:bg-muted">
+              <Link href="/transactions?mode=new&type=refill" className="flex items-center w-full font-bold">
+                <div className="bg-cyan-50 p-2 rounded-lg mr-3"><Droplets className="h-4 w-4 text-cyan-600" /></div>
+                Reposición
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild className="p-3 cursor-pointer rounded-xl hover:bg-muted focus:bg-muted mt-1">
+              <Link href="/transactions?mode=new&type=cobro" className="flex items-center w-full font-bold">
+                <div className="bg-emerald-50 p-2 rounded-lg mr-3"><ArrowUpRight className="h-4 w-4 text-emerald-600" /></div>
+                Cobro
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild className="p-3 cursor-pointer rounded-xl hover:bg-muted focus:bg-muted mt-1">
+              <Link href="/transactions?mode=new&type=sale" className="flex items-center w-full font-bold">
+                <div className="bg-blue-50 p-2 rounded-lg mr-3"><ShoppingBag className="h-4 w-4 text-blue-600" /></div>
+                Venta
+              </Link>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </>
   )
 }

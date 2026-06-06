@@ -48,7 +48,8 @@ import {
   Tag,
   HelpCircle,
   Lock,
-  Sparkles
+  Sparkles,
+  Plus
 } from "lucide-react"
 import { useToast } from "../../hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -776,12 +777,20 @@ function TransactionsContent() {
                 <SidebarTrigger className="flex" />
                 <h1 className="text-xl md:text-3xl font-bold text-primary font-headline uppercase tracking-tighter italic">Operaciones</h1>
               </div>
-              <Tabs value={mainView} onValueChange={setMainView}>
-                <TabsList className="bg-muted/40 h-10 p-1 rounded-xl shadow-inner border">
-                  <TabsTrigger value="register" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary uppercase">{editingTx ? 'EDITAR' : 'NUEVA'}</TabsTrigger>
-                  <TabsTrigger value="history" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary uppercase">HISTORIAL</TabsTrigger>
-                </TabsList>
-              </Tabs>
+              <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+                <Tabs value={mainView} onValueChange={setMainView} className="shrink-0">
+                  <TabsList className="bg-muted/40 h-10 p-1 rounded-xl shadow-inner border">
+                    <TabsTrigger value="register" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary uppercase">{editingTx ? 'EDITAR' : 'NUEVA'}</TabsTrigger>
+                    <TabsTrigger value="history" className="text-[10px] font-black h-8 px-5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary uppercase">HISTORIAL</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                <Button 
+                  onClick={() => { resetRegisterForm(); setMainView("register"); }}
+                  className="shadow-lg rounded-full px-6 bg-primary font-bold shrink-0 hidden md:flex"
+                >
+                  <Plus className="mr-2 h-4 w-4" /> Nueva Operación
+                </Button>
+              </div>
             </header>
 
             {mainView === "register" ? (
