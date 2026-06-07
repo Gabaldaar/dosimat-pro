@@ -52,14 +52,24 @@ export default function RegisterPage() {
       const newUser = userCredential.user
       const db = firestore!
 
-      const clientsQuery = query(
-        collection(db, 'clients'),
-        where('mail', '==', normalizedEmail),
-        limit(1)
-      )
-      const clientSnapshot = await getDocs(clientsQuery)
-      const matchedClient = clientSnapshot.docs[0]
-      const isClient = !!matchedClient
+      let matchedClientId = null;
+      let isClient = false;
+      try {
+        const res = await fetch('/api/portal/lookup-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: normalizedEmail })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.isClient && data.clientId) {
+            matchedClientId = data.clientId;
+            isClient = true;
+          }
+        }
+      } catch (err) {
+        console.error("Lookup error during registration", err);
+      }
 
       const userProfile: Record<string, string> = {
         id: newUser.uid,
@@ -70,8 +80,8 @@ export default function RegisterPage() {
         updatedAt: new Date().toISOString(),
       }
 
-      if (isClient) {
-        userProfile.clientId = matchedClient.id
+      if (isClient && matchedClientId) {
+        userProfile.clientId = matchedClientId
       }
 
       await setDoc(doc(db, 'users', newUser.uid), userProfile)

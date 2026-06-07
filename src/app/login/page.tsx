@@ -5,6 +5,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useFirebase, useUser } from "../../firebase"
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth"
+import { doc, setDoc } from "firebase/firestore"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,7 +21,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isRecoveryMode, setIsRecoveryMode] = useState(false)
   
-  const { auth } = useFirebase()
+  const { auth, firestore } = useFirebase()
   const { user, userData } = useUser()
   const { toast } = useToast()
   const router = useRouter()
@@ -36,8 +37,38 @@ export default function LoginPage() {
     if (isLoading) return
 
     setIsLoading(true)
+    let loginEmail = normalizeEmail(email)
+    let foundClientId = null
+
     try {
-      await signInWithEmailAndPassword(auth, normalizeEmail(email), password)
+      try {
+        const res = await fetch('/api/portal/lookup-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: loginEmail })
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.isClient) {
+            foundClientId = data.clientId
+            if (data.primaryEmail) {
+              loginEmail = data.primaryEmail
+            }
+          }
+        }
+      } catch (lookupError) {
+        console.error("Lookup Email Error:", lookupError)
+      }
+
+      const userCredential = await signInWithEmailAndPassword(auth, loginEmail, password)
+      
+      if (foundClientId && firestore) {
+        await setDoc(doc(firestore, 'users', userCredential.user.uid), {
+          clientId: foundClientId,
+          updatedAt: new Date().toISOString()
+        }, { merge: true }).catch(err => console.error("Error setting clientId:", err))
+      }
+
       toast({ 
         title: "Acceso Exitoso", 
         description: "Entrando al sistema..." 
@@ -51,6 +82,7 @@ export default function LoginPage() {
         message = "El inicio de sesión por email no está habilitado en Firebase Console."
       }
       toast({ title: "Error de Acceso", description: message, variant: "destructive" })
+    } finally {
       setIsLoading(false)
     }
   }
@@ -64,8 +96,26 @@ export default function LoginPage() {
     }
 
     setIsLoading(true)
+    let targetEmail = normalizeEmail(email)
+
     try {
-      await sendPasswordResetEmail(auth, normalizeEmail(email))
+      try {
+        const res = await fetch('/api/portal/lookup-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: targetEmail })
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.isClient && data.primaryEmail) {
+            targetEmail = data.primaryEmail
+          }
+        }
+      } catch (lookupError) {
+        console.error("Lookup Error in Recovery:", lookupError)
+      }
+
+      await sendPasswordResetEmail(auth, targetEmail)
       toast({ 
         title: "Correo Enviado", 
         description: "Se ha enviado un enlace para restablecer tu contraseña a tu correo." 

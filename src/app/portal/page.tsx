@@ -127,9 +127,12 @@ export default function ClientPortal() {
   const [showLogoutDialog, setShowLogoutDialog] = useState(false)
 
   const clientsRef = useMemoFirebase(() => {
+    if (userData?.clientId) {
+      return query(collection(db, 'clients'), where('__name__', '==', userData.clientId), limit(1));
+    }
     if (!user?.email) return null;
     return query(collection(db, 'clients'), where('mail', '==', normalizeEmail(user.email)), limit(1));
-  }, [db, user?.email]);
+  }, [db, user?.email, userData?.clientId]);
   
   const { data: clientDocs, isLoading: loadingClient } = useCollection(clientsRef);
   const client = clientDocs?.[0];

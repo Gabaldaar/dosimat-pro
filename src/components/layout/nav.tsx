@@ -123,13 +123,7 @@ export function Sidebar({ className }: { className?: string }) {
   const pendingOrdersCount = (pendingOrders?.length || 0) + (reviewOrdersSidebar?.length || 0);
   
   // Check if the current user is also a client
-  const clientsRef = useMemoFirebase(() => {
-    if (!user?.email) return null;
-    return query(collection(db, 'clients'), where('mail', '==', user.email.trim().toLowerCase()), limit(1));
-  }, [db, user?.email]);
-  
-  const { data: clientDocs } = useCollection(clientsRef);
-  const isAlsoClient = !!clientDocs?.length;
+  const isAlsoClient = !!userData?.clientId;
 
   // Si es un cliente o no es staff, no mostramos la barra lateral administrativa
   if (!userData || userData.role === 'Client') return null;
@@ -329,13 +323,7 @@ export function MobileNav() {
 
   const pendingOrdersCount = (pendingOrders?.length || 0) + (reviewOrders?.length || 0);
 
-  const clientsRef = useMemoFirebase(() => {
-    if (!user?.email) return null;
-    return query(collection(db, 'clients'), where('mail', '==', user.email.trim().toLowerCase()), limit(1));
-  }, [db, user?.email]);
-
-  const { data: clientDocs } = useCollection(clientsRef);
-  const isAlsoClient = !!clientDocs?.length;
+  const isAlsoClient = !!userData?.clientId;
   
   const mobileItems = React.useMemo(() => {
     const role = userData.role;
