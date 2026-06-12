@@ -963,32 +963,32 @@ function TransactionsContent() {
                             </Select>
                           </div>
                         </div>
-                        <div className="border rounded-xl bg-white shadow-sm overflow-hidden">
-                          <Table>
+                        <div className="border rounded-xl bg-white shadow-sm overflow-x-auto">
+                          <Table className="min-w-[650px]">
                             <TableHeader className="bg-muted/30">
                               <TableRow>
-                                <TableHead className="text-[9px] font-black uppercase">Ítem</TableHead>
-                                <TableHead className="w-24 text-center text-[9px]">Cant.</TableHead>
-                                <TableHead className="w-28 text-center text-[9px]">Precio</TableHead>
-                                <TableHead className="w-12 text-center text-[9px]">Moneda</TableHead>
-                                <TableHead className="w-28 text-center text-[9px]">Descuento%</TableHead>
-                                <TableHead className="text-right text-[9px]">Subtotal</TableHead>
-                                <TableHead className="w-10"></TableHead>
+                                <TableHead className="min-w-[150px] text-[9px] font-black uppercase">Ítem</TableHead>
+                                <TableHead className="w-[80px] md:w-[100px] text-center text-[9px] uppercase px-1">Cant.</TableHead>
+                                <TableHead className="w-[100px] md:w-[120px] text-center text-[9px] uppercase px-1">Precio</TableHead>
+                                <TableHead className="w-[140px] md:w-[160px] text-center text-[9px] uppercase px-1">Moneda</TableHead>
+                                <TableHead className="w-[80px] md:w-[100px] text-center text-[9px] uppercase px-1">Desc.%</TableHead>
+                                <TableHead className="w-[100px] text-right text-[9px] uppercase px-1">Subtotal</TableHead>
+                                <TableHead className="w-10 px-1"></TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
                               {selectedItems.map((item, i) => (
                                 <TableRow key={i}>
                                   <TableCell className="font-bold text-xs">{item.name}</TableCell>
-                                  <TableCell>
-                                    <Input type="number" min={1} value={item.qty} className="h-8 text-center" onChange={(e) => { const n = [...selectedItems]; n[i].qty = Number(e.target.value); setSelectedItems(n); }} />
+                                  <TableCell className="p-1">
+                                    <Input type="number" min={1} value={item.qty} className="h-8 text-center px-1" onChange={(e) => { const n = [...selectedItems]; n[i].qty = Number(e.target.value); setSelectedItems(n); }} />
                                   </TableCell>
-                                  <TableCell>
-                                    <Input type="number" min={0} value={item.price} className="h-8 text-center" onChange={(e) => { const n = [...selectedItems]; n[i].price = Number(e.target.value); setSelectedItems(n); }} />
+                                  <TableCell className="p-1">
+                                    <Input type="number" min={0} value={item.price} className="h-8 text-center px-1" onChange={(e) => { const n = [...selectedItems]; n[i].price = Number(e.target.value); setSelectedItems(n); }} />
                                   </TableCell>
-                                  <TableCell className="text-center">
+                                  <TableCell className="text-center p-1">
                                     <RadioGroup value={item.currency} onValueChange={(v) => { const n = [...selectedItems]; n[i].currency = v; setSelectedItems(n); }}>
-                                      <div className="flex items-center space-x-2 justify-center">
+                                      <div className="flex items-center space-x-1 md:space-x-2 justify-center">
                                         <RadioGroupItem value="ARS" id={`currency-ars-${i}`} />
                                         <Label htmlFor={`currency-ars-${i}`} className="text-xs">ARS</Label>
                                         <RadioGroupItem value="USD" id={`currency-usd-${i}`} />
@@ -996,13 +996,13 @@ function TransactionsContent() {
                                       </div>
                                     </RadioGroup>
                                   </TableCell>
-                                  <TableCell>
-                                    <Input type="number" min={0} max={100} value={item.discount || 0} className="h-8 text-center" onChange={(e) => { const n = [...selectedItems]; n[i].discount = Number(e.target.value); setSelectedItems(n); }} />
+                                  <TableCell className="p-1">
+                                    <Input type="number" min={0} max={100} value={item.discount || 0} className="h-8 text-center px-1" onChange={(e) => { const n = [...selectedItems]; n[i].discount = Number(e.target.value); setSelectedItems(n); }} />
                                   </TableCell>
-                                  <TableCell className="text-right font-black text-xs">
+                                  <TableCell className="text-right font-black text-xs p-1">
                                     {(item.price * item.qty * (1 - (item.discount || 0) / 100)).toLocaleString()}
                                   </TableCell>
-                                  <TableCell>
+                                  <TableCell className="p-1">
                                     <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setSelectedItems(selectedItems.filter((_, idx) => idx !== i))}>
                                       <Trash2 className="h-3 w-3" />
                                     </Button>
