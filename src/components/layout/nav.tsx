@@ -24,7 +24,8 @@ import {
   UserCircle,
   Plus,
   ShoppingBag,
-  ArrowUpRight
+  ArrowUpRight,
+  Activity
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -68,6 +69,7 @@ const navItems = [
   { href: "/routes", label: "Rutas", icon: Truck },
   { href: "/transactions", label: "Operaciones", icon: ArrowLeftRight },
   { href: "/analysis", label: "Análisis", icon: BarChart3 },
+  { href: "/monitoring", label: "Monitoreo", icon: Activity },
   { href: "/accounts", label: "Cajas", icon: Wallet },
   { href: "/payouts", label: "Liquidaciones", icon: Banknote },
   { href: "/catalog", label: "Catálogo", icon: Package },

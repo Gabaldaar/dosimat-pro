@@ -80,6 +80,12 @@ service cloud.firestore {
       allow update, delete: if isStaff();
     }
 
+    match /portal_activity_logs/{docId} {
+      allow create: if isSignedIn();
+      allow read: if isStaff();
+      allow update, delete: if false;
+    }
+
 match /route_sheets/{docId} {
   // ✅ LIST: cualquier usuario firmado puede obtener la lista completa.
   //     (El cliente seguirá recibiendo sólo los documentos que pueda leer.)

@@ -118,6 +118,24 @@ export default function ClientPortal() {
   const router = useRouter()
   const { toast } = useToast()
 
+  const logActivity = async (action: string, details?: string) => {
+    if (!user) return
+    try {
+      await addDocumentNonBlocking(collection(db, 'portal_activity_logs'), {
+        userId: user.uid,
+        email: user.email || "",
+        clientId: client?.id || "N/A",
+        clientName: client ? `${client.apellido || ""}, ${client.nombre || ""}` : "Usuario Staff / Sin Vínculo",
+        action,
+        details: details || "",
+        timestamp: new Date().toISOString(),
+        device: typeof window !== 'undefined' ? navigator.userAgent : 'Server'
+      })
+    } catch (e) {
+      console.error("Error writing activity log:", e)
+    }
+  }
+
   const [orderData, setOrderData] = useState({ cloro: 0, acido: 0, notes: "" })
   const [isOrdering, setIsOrdering] = useState(false)
   const [editingRequest, setEditingRequest] = useState<any | null>(null)
@@ -148,6 +166,16 @@ export default function ClientPortal() {
       updatedAt: new Date().toISOString(),
     }, { merge: true }).catch((err) => console.error("Error syncing clientId:", err))
   }, [user, clientId, userData?.clientId, db])
+
+  // Log de acceso único por día/sesión - Esperamos a que termine de cargar el cliente
+  useEffect(() => {
+    if (!user || loadingClient) return
+    const sessionKey = `portal_logged_${user.uid}_${new Date().toISOString().split('T')[0]}`
+    if (!sessionStorage.getItem(sessionKey)) {
+      logActivity("Ingreso al Portal")
+      sessionStorage.setItem(sessionKey, "true")
+    }
+  }, [user, loadingClient, client])
 
   const settingsRef = useMemoFirebase(() => doc(db, 'settings', 'company'), [db]);
   const { data: settings } = useDoc(settingsRef);
@@ -280,6 +308,7 @@ export default function ClientPortal() {
   }, [routeSheets, clientId]);
 
   const handleLogout = async () => {
+    await logActivity("Cierre de Sesión")
     await signOut(auth);
     router.push('/login');
   }
@@ -297,6 +326,7 @@ export default function ClientPortal() {
         notes: orderData.notes,
         status: 'pending'
       })
+      logActivity("Envío de Pedido", `Cloro: ${orderData.cloro}, Ácido: ${orderData.acido}. Notas: ${orderData.notes || 'Ninguna'}`)
       toast({ title: "Pedido enviado", description: "Recibimos tu solicitud. Te avisaremos cuando lo programemos." })
       setOrderData({ cloro: 0, acido: 0, notes: "" })
     } catch (e) {
@@ -329,6 +359,7 @@ export default function ClientPortal() {
         acido: editForm.acido,
         notes: editForm.notes,
       })
+      logActivity("Edición de Pedido", `Nuevos valores -> Cloro: ${editForm.cloro}, Ácido: ${editForm.acido}. Notas: ${editForm.notes || 'Ninguna'}`)
       toast({ title: "Pedido actualizado", description: data.message })
       setEditingRequest(null)
     } catch (e: any) {
@@ -343,6 +374,7 @@ export default function ClientPortal() {
     setIsSavingOrder(true)
     try {
       const data = await portalOrdersFetch(auth, 'DELETE', { requestId: cancelRequestId })
+      logActivity("Anulación de Pedido", `ID Pedido: ${cancelRequestId}`)
       toast({ title: "Pedido anulado", description: data.message })
       setCancelRequestId(null)
     } catch (e: any) {
