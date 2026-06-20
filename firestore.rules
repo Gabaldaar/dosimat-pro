@@ -83,7 +83,8 @@ service cloud.firestore {
     match /portal_activity_logs/{docId} {
       allow create: if isSignedIn();
       allow read: if isStaff();
-      allow update, delete: if false;
+      allow delete: if isStaff();
+      allow update: if false;
     }
 
 match /route_sheets/{docId} {

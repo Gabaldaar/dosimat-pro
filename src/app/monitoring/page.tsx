@@ -11,7 +11,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebase"
-import { collection, query, orderBy, limit } from "firebase/firestore"
+import { collection, query, orderBy, limit, deleteDoc, doc } from "firebase/firestore"
+import { Checkbox } from "@/components/ui/checkbox"
+import { useToast } from "@/hooks/use-toast"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { 
   Activity, 
   Search, 
@@ -76,8 +88,13 @@ const actionStyles: Record<string, string> = {
 export default function MonitoringPage() {
   const db = useFirestore()
   const router = useRouter()
+  const { toast } = useToast()
   const { userData, isUserLoading } = useUser()
   const isStaff = useMemo(() => userData && ['Admin', 'Employee', 'Collaborator', 'Communicator', 'Replenisher'].includes(userData.role), [userData])
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false)
 
   // Redirección por Rol si no es staff
   useEffect(() => {
@@ -119,6 +136,44 @@ export default function MonitoringPage() {
       return matchSearch && matchAction && matchDate
     })
   }, [logs, searchTerm, actionFilter, dateFilter])
+
+  const isAllSelected = useMemo(() => {
+    return filteredLogs.length > 0 && filteredLogs.every(log => selectedIds.includes(log.id))
+  }, [filteredLogs, selectedIds])
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    )
+  }
+
+  const handleToggleSelectAll = () => {
+    if (isAllSelected) {
+      const filteredIds = filteredLogs.map(l => l.id)
+      setSelectedIds(prev => prev.filter(id => !filteredIds.includes(id)))
+    } else {
+      const newIds = filteredLogs.map(l => l.id)
+      setSelectedIds(prev => Array.from(new Set([...prev, ...newIds])))
+    }
+  }
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return
+    setIsDeleting(true)
+    try {
+      for (const id of selectedIds) {
+        await deleteDoc(doc(db, 'portal_activity_logs', id))
+      }
+      setSelectedIds([])
+      toast({ title: "Registros eliminados", description: "Se han borrado los registros seleccionados con éxito." })
+    } catch (error) {
+      console.error("Error deleting logs:", error)
+      toast({ title: "Error", description: "No se pudieron eliminar los registros.", variant: "destructive" })
+    } finally {
+      setIsDeleting(false)
+      setShowConfirmDelete(false)
+    }
+  }
 
   const actionTypes = useMemo(() => {
     if (!logs) return []
@@ -229,9 +284,22 @@ export default function MonitoringPage() {
                     Registros en tiempo real del portal de autogestión de clientes.
                   </CardDescription>
                 </div>
-                <Badge variant="secondary" className="font-bold">
-                  {filteredLogs.length} registros
-                </Badge>
+                <div className="flex items-center gap-2">
+                  {selectedIds.length > 0 && (
+                    <Button 
+                      variant="destructive" 
+                      size="sm" 
+                      className="font-bold flex items-center gap-2 rounded-xl h-8 px-3 transition-all"
+                      onClick={() => setShowConfirmDelete(true)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Eliminar ({selectedIds.length})
+                    </Button>
+                  )}
+                  <Badge variant="secondary" className="font-bold">
+                    {filteredLogs.length} registros
+                  </Badge>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -239,7 +307,14 @@ export default function MonitoringPage() {
                 <Table>
                   <TableHeader className="bg-slate-50/50">
                     <TableRow>
-                      <TableHead className="font-bold text-xs text-muted-foreground uppercase pl-6 py-4">Cliente / Usuario</TableHead>
+                      <TableHead className="w-12 pl-6 py-4">
+                        <Checkbox 
+                          checked={isAllSelected}
+                          onCheckedChange={handleToggleSelectAll}
+                          aria-label="Seleccionar todo"
+                        />
+                      </TableHead>
+                      <TableHead className="font-bold text-xs text-muted-foreground uppercase py-4">Cliente / Usuario</TableHead>
                       <TableHead className="font-bold text-xs text-muted-foreground uppercase py-4">Acción Realizada</TableHead>
                       <TableHead className="font-bold text-xs text-muted-foreground uppercase py-4">Fecha y Hora</TableHead>
                       <TableHead className="font-bold text-xs text-muted-foreground uppercase py-4">Dispositivo / Sistema</TableHead>
@@ -249,7 +324,7 @@ export default function MonitoringPage() {
                   <TableBody>
                     {filteredLogs.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
+                        <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
                           No se encontraron registros que coincidan con la búsqueda.
                         </TableCell>
                       </TableRow>
@@ -271,7 +346,14 @@ export default function MonitoringPage() {
 
                         return (
                           <TableRow key={log.id} className="hover:bg-slate-50/50 transition-colors">
-                            <TableCell className="pl-6 py-4">
+                            <TableCell className="w-12 pl-6 py-4">
+                              <Checkbox 
+                                checked={selectedIds.includes(log.id)}
+                                onCheckedChange={() => handleToggleSelect(log.id)}
+                                aria-label={`Seleccionar log de ${log.clientName}`}
+                              />
+                            </TableCell>
+                            <TableCell className="py-4">
                               <div className="flex flex-col">
                                 <span className="font-bold text-sm text-slate-800">{log.clientName || "Cliente Desconocido"}</span>
                                 <span className="text-xs text-muted-foreground">{log.email}</span>
@@ -312,6 +394,27 @@ export default function MonitoringPage() {
           </Card>
         </div>
       </SidebarInset>
+
+      <AlertDialog open={showConfirmDelete} onOpenChange={setShowConfirmDelete}>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-xl font-bold">¿Confirmas la eliminación?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se eliminarán de forma permanente {selectedIds.length} {selectedIds.length === 1 ? 'registro' : 'registros'} de actividad del historial. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteSelected} 
+              disabled={isDeleting}
+              className="bg-destructive hover:bg-destructive/90 text-white font-bold rounded-xl"
+            >
+              {isDeleting ? "Eliminando..." : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
