@@ -24,6 +24,8 @@ import {
   MoreVertical, 
   Edit, 
   RefreshCw, 
+  ExternalLink,
+  Coins, 
   Loader2, 
   ArrowDownLeft, 
   Info, 
@@ -186,6 +188,7 @@ function TransactionsContent() {
   const emailTemplatesQuery = useMemoFirebase(() => isStaff ? collection(db, 'email_templates') : null, [db, isStaff])
   const productCatsQuery = useMemoFirebase(() => isStaff ? collection(db, 'product_categories') : null, [db, isStaff])
   const expenseCatsQuery = useMemoFirebase(() => isStaff ? collection(db, 'expense_categories') : null, [db, isStaff])
+  const payoutsQuery = useMemoFirebase(() => isStaff ? collection(db, 'payouts') : null, [db, isStaff])
 
   const { data: customers } = useCollection(clientsQuery)
   const { data: catalog } = useCollection(catalogQuery)
@@ -195,6 +198,7 @@ function TransactionsContent() {
   const { data: emailTemplates } = useCollection(emailTemplatesQuery)
   const { data: productCategories } = useCollection(productCatsQuery)
   const { data: expenseCategories } = useCollection(expenseCatsQuery)
+  const { data: payouts } = useCollection(payoutsQuery)
 
   const [hasAutoPopulated, setHasAutoPopulated] = useState(false)
 
@@ -267,6 +271,17 @@ function TransactionsContent() {
   }, [searchParams])
 
   useEffect(() => {
+    const txIdParam = searchParams.get('id');
+    if (txIdParam && transactions) {
+      const found = transactions.find(t => t.id === txIdParam);
+      if (found) {
+        setSelectedTxDetails(found);
+        setMainView("history");
+      }
+    }
+  }, [searchParams, transactions]);
+
+  useEffect(() => {
     if (!catalog || hasAutoPopulated || searchParams.get('fromRoute') !== 'true') return;
 
     const cloroQty = Number(searchParams.get('cloro') || 0);
@@ -319,6 +334,15 @@ function TransactionsContent() {
         .catch(err => console.error("Error fetching rate:", err));
     }
   }, [isEditTransferDialogOpen, editFromAcc, editToAcc]);
+
+  const correspondingPayout = useMemo(() => {
+    if (!selectedTxDetails || !payouts) return null;
+    return payouts.find((p: any) => 
+      p.transactionId === selectedTxDetails.id || 
+      p.id === selectedTxDetails.payoutId ||
+      (selectedTxDetails.description && selectedTxDetails.description.includes(`#${p.id.toUpperCase().slice(0, 6)}`))
+    ) || null;
+  }, [selectedTxDetails, payouts]);
 
   const sortedCustomers = useMemo(() => {
     if (!customers) return [];
@@ -1463,6 +1487,41 @@ function TransactionsContent() {
                             ))}
                           </TableBody>
                         </Table>
+                      </div>
+                    )}
+                    {selectedTxDetails.isPayout && correspondingPayout && (
+                      <div className="space-y-4">
+                        <div className="p-4 bg-primary/5 rounded-xl border border-primary/10 flex items-center justify-between hover:shadow-sm transition-all duration-200">
+                          <div className="space-y-0.5">
+                            <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Liquidación Vinculada</Label>
+                            <p className="text-xs font-bold text-slate-700">Liquidación de {correspondingPayout.userName}</p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 font-black uppercase text-xs border-primary text-primary hover:bg-primary/5 gap-1.5"
+                            onClick={() => {
+                              setSelectedTxDetails(null);
+                              router.push(`/payouts?payoutId=${correspondingPayout.id}`);
+                            }}
+                          >
+                            Ver Liquidación <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-2"><Coins className="h-3.5 w-3.5" /> Desglose de Conceptos de la Liquidación</Label>
+                          <div className="border rounded-xl overflow-hidden bg-white shadow-sm divide-y">
+                            {correspondingPayout.items?.filter((it: any) => it.amount !== 0).map((item: any, idx: number) => (
+                              <div key={idx} className="flex justify-between items-center p-3 text-xs">
+                                <span className="font-medium text-slate-700">{item.description}</span>
+                                <span className="font-extrabold text-rose-600">
+                                  - {item.currency === 'USD' ? 'u$s' : '$'} {Number(item.amount || 0).toLocaleString('es-AR')}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     )}
                     <div className="p-4 bg-muted/30 rounded-xl border text-sm italic text-slate-700 min-h-[60px]">

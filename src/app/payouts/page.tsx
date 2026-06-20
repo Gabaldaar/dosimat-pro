@@ -1,8 +1,8 @@
 
 "use client"
 
-import { useState, useMemo, useEffect, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useMemo, useEffect, useCallback, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Sidebar, MobileNav } from "@/components/layout/nav"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -70,10 +70,11 @@ import { cn } from "@/lib/utils"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
-export default function PayoutsPage() {
+function PayoutsContent() {
   const { toast } = useToast()
   const db = useFirestore()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { userData, isUserLoading } = useUser()
   const isAdmin = userData?.role === 'Admin'
   const isStaff = useMemo(() => userData && ['Admin', 'Employee', 'Collaborator', 'Communicator', 'Replenisher'].includes(userData.role), [userData]);
@@ -129,6 +130,17 @@ export default function PayoutsPage() {
 
   const selectedCollab = useMemo(() => collaborators?.find(c => c.id === selectedCollabId), [collaborators, selectedCollabId])
   const selectedAccount = useMemo(() => accounts?.find(a => a.id === accountId), [accounts, accountId])
+
+  useEffect(() => {
+    const pId = searchParams.get('payoutId');
+    if (pId && payouts) {
+      const p = payouts.find((item: any) => item.id === pId);
+      if (p) {
+        setPayoutForDetails(p);
+        setActiveTab("history");
+      }
+    }
+  }, [searchParams, payouts]);
 
   // Obtener tipo de cambio si hay multimoneda
   useEffect(() => {
@@ -389,6 +401,7 @@ export default function PayoutsPage() {
       date: now,
       type: 'Expense',
       isPayout: true,
+      payoutId: payoutId,
       amount: -finalTotalInAccountCurrency,
       currency: selectedAccount?.currency || 'ARS',
       description: `Liquidación de haberes: ${selectedCollab.name} (#${payoutId.toUpperCase().slice(0,6)})`,
@@ -780,7 +793,12 @@ export default function PayoutsPage() {
                       const movementValue = Math.abs(tx?.accountMovementAmount || tx?.paidAmount || tx?.amount || 0);
                       return (
                         <TableRow key={p.id}>
-                          <TableCell className="text-xs font-bold text-slate-600">{new Date(p.date).toLocaleDateString('es-AR')}</TableCell>
+                          <TableCell className="text-xs font-bold text-slate-600">
+                            <div className="flex flex-col">
+                              <span>{new Date(p.date).toLocaleDateString('es-AR')}</span>
+                              <span className="font-mono text-[9px] text-primary/70 font-black uppercase">#{p.id.toUpperCase().slice(0, 6)}</span>
+                            </div>
+                          </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary border border-primary/20">{p.userName?.[0]}</div>
@@ -827,8 +845,11 @@ export default function PayoutsPage() {
                     <Card key={p.id} className="glass-card shadow-md">
                       <CardContent className="p-4 space-y-4">
                         <div className="flex justify-between items-start">
-                          <div className="space-y-1">
-                            <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">{new Date(p.date).toLocaleDateString('es-AR')}</p>
+                          <div className="space-y-1 w-full">
+                            <div className="flex justify-between items-center w-full">
+                              <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">{new Date(p.date).toLocaleDateString('es-AR')}</p>
+                              <span className="font-mono text-[9px] text-primary/70 font-black uppercase">#{p.id.toUpperCase().slice(0, 6)}</span>
+                            </div>
                             <div className="flex items-center gap-2">
                               <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[9px] font-bold text-primary">{p.userName?.[0]}</div>
                               <h4 className="font-black text-slate-800 text-sm uppercase">{p.userName}</h4>
@@ -966,6 +987,25 @@ export default function PayoutsPage() {
               </DialogHeader>
               {payoutForDetails && (
                 <div className="space-y-6 py-4 px-4 md:px-0">
+                  {payoutForDetails.transactionId && (
+                    <div className="p-4 bg-primary/5 rounded-xl border border-primary/10 flex items-center justify-between hover:shadow-sm transition-all duration-200">
+                      <div className="space-y-0.5">
+                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Transacción Vinculada</Label>
+                        <p className="text-xs font-bold text-slate-700">Ver movimiento en el historial de Caja</p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 font-black uppercase text-xs border-primary text-primary hover:bg-primary/5 gap-1.5"
+                        onClick={() => {
+                          setPayoutForDetails(null);
+                          router.push(`/transactions?id=${payoutForDetails.transactionId}`);
+                        }}
+                      >
+                        Ver Transacción <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div className="p-3 bg-muted/20 rounded-xl border text-center">
                       <p className="text-[8px] font-black uppercase text-muted-foreground mb-1">Total Pagado</p>
@@ -1160,5 +1200,18 @@ export default function PayoutsPage() {
 
       <MobileNav />
     </div>
+  )
+}
+
+export default function PayoutsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center min-h-screen bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="mt-4 text-xs font-bold text-muted-foreground uppercase">Cargando liquidaciones...</p>
+      </div>
+    }>
+      <PayoutsContent />
+    </Suspense>
   )
 }
