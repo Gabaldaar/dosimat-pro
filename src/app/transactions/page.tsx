@@ -198,6 +198,53 @@ function TransactionsContent() {
 
   const [hasAutoPopulated, setHasAutoPopulated] = useState(false)
 
+  const getTransferAccountName = useCallback((tx: any, role: 'from' | 'to') => {
+    if (!tx) return "Desconocido";
+    if (role === 'from') {
+      if (tx.transferFromAccountId) {
+        const acc = accounts?.find(a => a.id === tx.transferFromAccountId);
+        if (acc) return `${acc.name} (${acc.currency})`;
+      }
+      if (tx.type === 'FinancialTransferOut') {
+        const acc = accounts?.find(a => a.id === tx.financialAccountId);
+        if (acc) return `${acc.name} (${acc.currency})`;
+      } else if (tx.type === 'FinancialTransferIn') {
+        const pair = transactions?.find(t => 
+          t.type === 'FinancialTransferOut' && 
+          t.date === tx.date
+        );
+        if (pair) {
+          const acc = accounts?.find(a => a.id === pair.financialAccountId);
+          if (acc) return `${acc.name} (${acc.currency})`;
+        }
+        const match = tx.description?.match(/Transferencia desde (.+?)(?:\s*\((?:ARS|USD)\))?$/);
+        if (match) return match[1];
+      }
+      return "Desconocido";
+    } else {
+      if (tx.transferToAccountId) {
+        const acc = accounts?.find(a => a.id === tx.transferToAccountId);
+        if (acc) return `${acc.name} (${acc.currency})`;
+      }
+      if (tx.type === 'FinancialTransferIn') {
+        const acc = accounts?.find(a => a.id === tx.financialAccountId);
+        if (acc) return `${acc.name} (${acc.currency})`;
+      } else if (tx.type === 'FinancialTransferOut') {
+        const pair = transactions?.find(t => 
+          t.type === 'FinancialTransferIn' && 
+          t.date === tx.date
+        );
+        if (pair) {
+          const acc = accounts?.find(a => a.id === pair.financialAccountId);
+          if (acc) return `${acc.name} (${acc.currency})`;
+        }
+        const match = tx.description?.match(/Transferencia a (.+?)(?:\s*\((?:ARS|USD)\))?$/);
+        if (match) return match[1];
+      }
+      return "Desconocido";
+    }
+  }, [accounts, transactions]);
+
   useEffect(() => {
     const mode = searchParams.get('mode')
     const clientId = searchParams.get('clientId')
@@ -247,6 +294,31 @@ function TransactionsContent() {
     if (notes) setTxDescription(notes);
     setHasAutoPopulated(true);
   }, [catalog, searchParams, hasAutoPopulated]);
+
+  const [isEditTransferDialogOpen, setIsEditTransferDialogOpen] = useState(false)
+  const [editingTransferData, setEditingTransferData] = useState<any | null>(null)
+  const [editExchangeRate, setEditExchangeRate] = useState(1)
+
+  const editFromAcc = useMemo(() => accounts?.find((a: any) => a.id === editingTransferData?.fromId), [accounts, editingTransferData?.fromId]);
+  const editToAcc = useMemo(() => accounts?.find((a: any) => a.id === editingTransferData?.toId), [accounts, editingTransferData?.toId]);
+
+  const sortedAccounts = useMemo(() => {
+    if (!accounts) return [];
+    return [...accounts].sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""));
+  }, [accounts]);
+
+  useEffect(() => {
+    if (isEditTransferDialogOpen && editFromAcc && editToAcc && editFromAcc.currency !== editToAcc.currency) {
+      fetch('https://dolarapi.com/v1/dolares/oficial')
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.venta) {
+            setEditExchangeRate(data.venta);
+          }
+        })
+        .catch(err => console.error("Error fetching rate:", err));
+    }
+  }, [isEditTransferDialogOpen, editFromAcc, editToAcc]);
 
   const sortedCustomers = useMemo(() => {
     if (!customers) return [];
@@ -357,6 +429,38 @@ function TransactionsContent() {
 
   const handleStartEdit = (tx: any) => {
     setSelectedTxDetails(null); 
+
+    if (tx.type === 'FinancialTransferOut' || tx.type === 'FinancialTransferIn') {
+      const isOut = tx.type === 'FinancialTransferOut';
+      const txOut = isOut ? tx : transactions?.find((t: any) => t.type === 'FinancialTransferOut' && t.date === tx.date);
+      const txIn = !isOut ? tx : transactions?.find((t: any) => t.type === 'FinancialTransferIn' && t.date === tx.date);
+
+      if (!txOut || !txIn) {
+        toast({ title: "Error", description: "No se encontró la contrapartida de la transferencia para poder editarla.", variant: "destructive" });
+        return;
+      }
+
+      const fromId = txOut.transferFromAccountId || txOut.financialAccountId;
+      const toId = txIn.transferToAccountId || txIn.financialAccountId;
+      const amount = Math.abs(txOut.amount);
+
+      setEditingTransferData({
+        txOutId: txOut.id,
+        txInId: txIn.id,
+        fromId: fromId,
+        toId: toId,
+        amount: amount,
+        description: txOut.description || txIn.description || "",
+        date: txOut.date.split('T')[0],
+        originalFromId: fromId,
+        originalToId: toId,
+        originalAmount: amount,
+        originalFinalAmountTo: Math.abs(txIn.amount)
+      });
+      setIsEditTransferDialogOpen(true);
+      return;
+    }
+
     setEditingTx(tx);
     setSelectedCustomerId(tx.clientId || "none");
     setOperationDate(tx.date.split('T')[0]);
@@ -451,6 +555,27 @@ function TransactionsContent() {
   const handleDeleteTx = () => {
     if (!txToDelete) return;
     const tx = txToDelete;
+
+    if (tx.type === 'FinancialTransferOut' || tx.type === 'FinancialTransferIn') {
+      const isOut = tx.type === 'FinancialTransferOut';
+      const txOut = isOut ? tx : transactions?.find((t: any) => t.type === 'FinancialTransferOut' && t.date === tx.date);
+      const txIn = !isOut ? tx : transactions?.find((t: any) => t.type === 'FinancialTransferIn' && t.date === tx.date);
+
+      if (txOut) {
+        const fromId = txOut.transferFromAccountId || txOut.financialAccountId;
+        updateDocumentNonBlocking(doc(db, 'financial_accounts', fromId), { initialBalance: increment(Math.abs(txOut.amount)) });
+        deleteDocumentNonBlocking(doc(db, 'transactions', txOut.id));
+      }
+      if (txIn) {
+        const toId = txIn.transferToAccountId || txIn.financialAccountId;
+        updateDocumentNonBlocking(doc(db, 'financial_accounts', toId), { initialBalance: increment(-Math.abs(txIn.amount)) });
+        deleteDocumentNonBlocking(doc(db, 'transactions', txIn.id));
+      }
+      toast({ title: "Transferencia eliminada", description: "Se borraron ambos movimientos y se revirtieron los saldos." });
+      setTxToDelete(null);
+      return;
+    }
+
     if (tx.clientId) {
       const field = (tx.originalCurrency || tx.currency) === 'USD' ? 'saldoUSD' : 'saldoActual';
       const amountToRevert = ['cobro', 'adjustment', 'Expense'].includes(tx.type) ? -Number(tx.originalAmount || tx.amount || 0) : Number(tx.debtAmount || 0);
@@ -469,6 +594,82 @@ function TransactionsContent() {
     toast({ title: "Operación eliminada", description: "Los saldos fueron revertidos." });
     setTxToDelete(null);
   }
+
+  const handleSaveEditedTransfer = () => {
+    if (!editingTransferData) return;
+    const { 
+      txOutId, txInId, fromId, toId, amount, description, date,
+      originalFromId, originalToId, originalAmount, originalFinalAmountTo 
+    } = editingTransferData;
+
+    const fromAcc = accounts?.find((a: any) => a.id === fromId);
+    const toAcc = accounts?.find((a: any) => a.id === toId);
+
+    if (!fromId) {
+      toast({ title: "Error", description: "Debe seleccionar la caja de origen", variant: "destructive" });
+      return;
+    }
+    if (!toId) {
+      toast({ title: "Error", description: "Debe seleccionar la caja de destino", variant: "destructive" });
+      return;
+    }
+    if (fromId === toId) {
+      toast({ title: "Error", description: "La caja de origen y de destino no pueden ser iguales", variant: "destructive" });
+      return;
+    }
+    if (Number(amount) <= 0) {
+      toast({ title: "Error", description: "El monto a transferir debe ser mayor a cero", variant: "destructive" });
+      return;
+    }
+    if (!fromAcc || !toAcc) return;
+
+    let finalAmountTo = Number(amount);
+    if (fromAcc.currency !== toAcc.currency) {
+      if (fromAcc.currency === 'ARS' && toAcc.currency === 'USD') {
+        finalAmountTo = Number(amount) / editExchangeRate;
+      } else if (fromAcc.currency === 'USD' && toAcc.currency === 'ARS') {
+        finalAmountTo = Number(amount) * editExchangeRate;
+      }
+    }
+
+    setIsEditTransferDialogOpen(false);
+
+    // Revert original balances
+    updateDocumentNonBlocking(doc(db, 'financial_accounts', originalFromId), { initialBalance: increment(Number(originalAmount)) });
+    updateDocumentNonBlocking(doc(db, 'financial_accounts', originalToId), { initialBalance: increment(-Number(originalFinalAmountTo)) });
+
+    // Apply new balances
+    updateDocumentNonBlocking(doc(db, 'financial_accounts', fromId), { initialBalance: increment(-Number(amount)) });
+    updateDocumentNonBlocking(doc(db, 'financial_accounts', toId), { initialBalance: increment(finalAmountTo) });
+
+    const finalDate = new Date(date + 'T12:00:00').toISOString();
+
+    // Update transactions
+    updateDocumentNonBlocking(doc(db, 'transactions', txOutId), {
+      date: finalDate,
+      amount: -Number(amount),
+      currency: fromAcc.currency,
+      financialAccountId: fromId,
+      transferFromAccountId: fromId,
+      transferToAccountId: toId,
+      description: description || `Transferencia a ${toAcc.name} (${toAcc.currency})`,
+      accountBalanceAfter: Number(fromAcc.initialBalance || 0) + Number(originalAmount) - Number(amount)
+    });
+
+    updateDocumentNonBlocking(doc(db, 'transactions', txInId), {
+      date: finalDate,
+      amount: finalAmountTo,
+      currency: toAcc.currency,
+      financialAccountId: toId,
+      transferFromAccountId: fromId,
+      transferToAccountId: toId,
+      description: description || `Transferencia desde ${fromAcc.name} (${fromAcc.currency})`,
+      accountBalanceAfter: Number(toAcc.initialBalance || 0) - Number(originalFinalAmountTo) + finalAmountTo
+    });
+
+    toast({ title: "Transferencia actualizada con éxito" });
+    setEditingTransferData(null);
+  };
 
   const resetFilters = () => {
     setFilterCustomer("all")
@@ -730,7 +931,13 @@ function TransactionsContent() {
       const txDateStr = tx.date.split('T')[0];
       const matchStart = !filterStartDate || txDateStr >= filterStartDate;
       const matchEnd = !filterEndDate || txDateStr <= filterEndDate;
-      const matchType = filterOpType === "all" || (filterOpType === 'Reposición' ? (tx.type === 'Reposición' || tx.type === 'refill') : tx.type === filterOpType);
+      const matchType = filterOpType === "all" || (
+        filterOpType === 'Reposición' 
+          ? (tx.type === 'Reposición' || tx.type === 'refill') 
+          : filterOpType === 'transfer'
+            ? (tx.type === 'FinancialTransferIn' || tx.type === 'FinancialTransferOut')
+            : tx.type === filterOpType
+      );
       const m = getMovementAmount(tx);
       const matchFlow = filterFlow === 'all' || (filterFlow === 'income' ? m > 0 : m < 0);
       return matchCustomer && matchAccount && matchStart && matchEnd && matchType && matchFlow;
@@ -1096,6 +1303,7 @@ function TransactionsContent() {
                           <SelectItem value="cobro">Cobro</SelectItem>
                           <SelectItem value="Expense">Gasto</SelectItem>
                           <SelectItem value="adjustment">Ajuste</SelectItem>
+                          <SelectItem value="transfer">Transferencia</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1178,17 +1386,44 @@ function TransactionsContent() {
                 {selectedTxDetails && (
                   <div className="space-y-6 py-4">
                     <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-3 bg-muted/20 rounded-xl border">
-                        <Label className="text-[10px] font-bold uppercase text-muted-foreground">Cliente</Label>
-                        <p className="font-bold text-sm mt-1">
-                          {customers?.find(c => c.id === selectedTxDetails.clientId)?.apellido || "Global"},{" "}
-                          {customers?.find(c => c.id === selectedTxDetails.clientId)?.nombre || ""}
-                        </p>
-                      </div>
-                      <div className="p-3 bg-muted/20 rounded-xl border">
-                        <Label className="text-[10px] font-bold uppercase text-muted-foreground">Caja</Label>
-                        <p className="font-bold text-sm mt-1">{accounts?.find(a => a.id === selectedTxDetails.financialAccountId)?.name || "A Cuenta"}</p>
-                      </div>
+                      {['FinancialTransferIn', 'FinancialTransferOut'].includes(selectedTxDetails.type) ? (
+                        <>
+                          <div className="p-4 bg-rose-50/40 rounded-xl border border-rose-100/50 flex flex-col justify-between relative overflow-hidden group hover:shadow-sm transition-all duration-200">
+                            <div className="absolute right-2 top-2 opacity-5">
+                              <ArrowUpCircle className="h-16 w-16 text-rose-500 rotate-45" />
+                            </div>
+                            <Label className="text-[10px] font-bold uppercase text-rose-600 tracking-wider">Caja de Origen</Label>
+                            <p className="font-extrabold text-base mt-2 text-rose-700 tracking-tight flex items-center gap-1.5">
+                              <ArrowDownCircle className="h-4 w-4 text-rose-500 shrink-0" />
+                              {getTransferAccountName(selectedTxDetails, 'from')}
+                            </p>
+                          </div>
+                          <div className="p-4 bg-emerald-50/40 rounded-xl border border-emerald-100/50 flex flex-col justify-between relative overflow-hidden group hover:shadow-sm transition-all duration-200">
+                            <div className="absolute right-2 top-2 opacity-5">
+                              <ArrowDownCircle className="h-16 w-16 text-emerald-500 -rotate-45" />
+                            </div>
+                            <Label className="text-[10px] font-bold uppercase text-emerald-600 tracking-wider">Caja de Destino</Label>
+                            <p className="font-extrabold text-base mt-2 text-emerald-700 tracking-tight flex items-center gap-1.5">
+                              <ArrowUpCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+                              {getTransferAccountName(selectedTxDetails, 'to')}
+                            </p>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="p-3 bg-muted/20 rounded-xl border">
+                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">Cliente</Label>
+                            <p className="font-bold text-sm mt-1">
+                              {customers?.find(c => c.id === selectedTxDetails.clientId)?.apellido || "Global"},{" "}
+                              {customers?.find(c => c.id === selectedTxDetails.clientId)?.nombre || ""}
+                            </p>
+                          </div>
+                          <div className="p-3 bg-muted/20 rounded-xl border">
+                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">Caja</Label>
+                            <p className="font-bold text-sm mt-1">{accounts?.find(a => a.id === selectedTxDetails.financialAccountId)?.name || "A Cuenta"}</p>
+                          </div>
+                        </>
+                      )}
                     </section>
                     <Card className="border-none bg-primary/5 shadow-none">
                       <CardContent className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
@@ -1240,6 +1475,90 @@ function TransactionsContent() {
                   </div>
                 )}
                 <DialogFooter><Button onClick={() => setSelectedTxDetails(null)} className="w-full font-black uppercase">Cerrar</Button></DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={isEditTransferDialogOpen} onOpenChange={setIsEditTransferDialogOpen}>
+              <DialogContent>
+                <DialogHeader><DialogTitle className="text-2xl font-black font-headline text-primary">Editar Transferencia entre Cajas</DialogTitle></DialogHeader>
+                {editingTransferData && (
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label>Fecha</Label>
+                      <Input 
+                        type="date" 
+                        value={editingTransferData.date} 
+                        onChange={(e) => setEditingTransferData({...editingTransferData, date: e.target.value})} 
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Origen</Label>
+                        <Select 
+                          value={editingTransferData.fromId} 
+                          onValueChange={(v) => setEditingTransferData({...editingTransferData, fromId: v})}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Caja..." /></SelectTrigger>
+                          <SelectContent>
+                            {sortedAccounts?.map((a: any) => (
+                              <SelectItem key={a.id} value={a.id}>
+                                {a.name} ({a.currency}) - Saldo: {a.currency === 'USD' ? 'u$s' : '$'}{a.initialBalance.toLocaleString('es-AR')}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Destino</Label>
+                        <Select 
+                          value={editingTransferData.toId} 
+                          onValueChange={(v) => setEditingTransferData({...editingTransferData, toId: v})}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Caja..." /></SelectTrigger>
+                          <SelectContent>
+                            {sortedAccounts?.map((a: any) => (
+                              <SelectItem key={a.id} value={a.id}>
+                                {a.name} ({a.currency}) - Saldo: {a.currency === 'USD' ? 'u$s' : '$'}{a.initialBalance.toLocaleString('es-AR')}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Monto a transferir ({editFromAcc?.currency || '...' })</Label>
+                      <Input 
+                        type="number" 
+                        value={editingTransferData.amount} 
+                        onChange={(e) => setEditingTransferData({...editingTransferData, amount: Number(e.target.value)})} 
+                      />
+                    </div>
+                    {editFromAcc && editToAcc && editFromAcc.currency !== editToAcc.currency && (
+                      <div className="p-3 bg-accent/5 rounded border text-xs font-bold flex justify-between">
+                        <span>Recibirá estimado en destino ({editToAcc.currency}):</span>
+                        <span>
+                          {editToAcc.currency === 'USD' ? 'u$s' : '$'}
+                          {(editFromAcc.currency === 'ARS' 
+                            ? Number(editingTransferData.amount) / editExchangeRate 
+                            : Number(editingTransferData.amount) * editExchangeRate
+                          ).toLocaleString('es-AR')}
+                        </span>
+                      </div>
+                    )}
+                    <div className="space-y-2">
+                      <Label>Descripción / Notas</Label>
+                      <Input 
+                        placeholder="Ej: Retiro para sueldos, Pago proveedor..." 
+                        value={editingTransferData.description} 
+                        onChange={(e) => setEditingTransferData({...editingTransferData, description: e.target.value})} 
+                      />
+                    </div>
+                  </div>
+                )}
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsEditTransferDialogOpen(false)}>Cancelar</Button>
+                  <Button onClick={handleSaveEditedTransfer}>Guardar Cambios</Button>
+                </DialogFooter>
               </DialogContent>
             </Dialog>
 

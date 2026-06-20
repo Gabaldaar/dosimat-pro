@@ -148,7 +148,7 @@ export default function AccountsPage() {
   // Form States
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
-  const [txType, setTxType] = useState<'income' | 'expense'>('income')
+  const [txType, setTxType] = useState<'income' | 'expense' | 'adjustment'>('income')
   const [newCategoryName, setNewCategoryName] = useState("")
   const [exchangeRate, setExchangeRate] = useState(1)
   
@@ -164,8 +164,13 @@ export default function AccountsPage() {
     currency: "ARS"
   })
 
-  const [txFormData, setTxFormData] = useState({
-    amount: 0,
+  const [txFormData, setTxFormData] = useState<{
+    amount: string | number;
+    description: string;
+    categoryId: string;
+    date: string;
+  }>({
+    amount: "",
     description: "",
     categoryId: "",
     date: new Date().toISOString().split('T')[0]
@@ -175,7 +180,8 @@ export default function AccountsPage() {
     fromId: "",
     toId: "",
     amount: 0,
-    description: ""
+    description: "",
+    date: new Date().toISOString().split('T')[0]
   })
 
   const fromAcc = useMemo(() => accounts?.find(a => a.id === transferFormData.fromId), [accounts, transferFormData.fromId]);
@@ -250,11 +256,11 @@ export default function AccountsPage() {
     toast({ title: "Caja eliminada" })
   }
 
-  const handleOpenTxDialog = (account: any, type: 'income' | 'expense') => {
+  const handleOpenTxDialog = (account: any, type: 'income' | 'expense' | 'adjustment') => {
     setSelectedAccountId(account.id)
     setTxType(type)
     setTxFormData({ 
-      amount: 0, 
+      amount: "", 
       description: "", 
       categoryId: "", 
       date: new Date().toISOString().split('T')[0] 
@@ -263,35 +269,61 @@ export default function AccountsPage() {
   }
 
   const handleProcessTx = () => {
-    if (!selectedAccount || txFormData.amount <= 0) return
-    
-    const multiplier = txType === 'income' ? 1 : -1
-    const amount = Number(txFormData.amount) * multiplier
+    if (!selectedAccount) return
+    const amountVal = Number(txFormData.amount)
+    if (amountVal === 0) {
+      toast({ title: "Error", description: "El monto debe ser diferente de cero", variant: "destructive" })
+      return
+    }
+
+    let finalAmount = amountVal
+    if (txType === 'income') {
+      finalAmount = Math.abs(amountVal)
+    } else if (txType === 'expense') {
+      finalAmount = -Math.abs(amountVal)
+    }
+
     const finalDate = new Date(txFormData.date + 'T12:00:00').toISOString();
 
     setIsTxDialogOpen(false)
 
     updateDocumentNonBlocking(doc(db, 'financial_accounts', selectedAccount.id), {
-      initialBalance: increment(amount)
+      initialBalance: increment(finalAmount)
     })
 
     addDocumentNonBlocking(collection(db, 'transactions'), {
       date: finalDate,
-      type: txType === 'income' ? 'Adjustment' : 'Expense',
-      amount: amount,
+      type: txType === 'expense' ? 'Expense' : 'Adjustment',
+      amount: finalAmount,
       currency: selectedAccount.currency,
-      description: txFormData.description || (txType === 'income' ? 'Ingreso manual' : 'Gasto manual'),
+      description: txFormData.description || (txType === 'income' ? 'Ingreso manual' : txType === 'expense' ? 'Gasto manual' : 'Ajuste manual'),
       financialAccountId: selectedAccount.id,
       expenseCategoryId: txFormData.categoryId || null,
-      accountBalanceAfter: Number(selectedAccount.initialBalance || 0) + amount
+      accountBalanceAfter: Number(selectedAccount.initialBalance || 0) + finalAmount
     })
 
     toast({ title: "Operación procesada" })
   }
 
   const handleTransfer = () => {
-    const { fromId, toId, amount, description } = transferFormData
-    if (!fromAcc || !toAcc || amount <= 0) return
+    const { fromId, toId, amount, description, date } = transferFormData
+    if (!fromId) {
+      toast({ title: "Error", description: "Debe seleccionar la caja de origen", variant: "destructive" })
+      return
+    }
+    if (!toId) {
+      toast({ title: "Error", description: "Debe seleccionar la caja de destino", variant: "destructive" })
+      return
+    }
+    if (fromId === toId) {
+      toast({ title: "Error", description: "La caja de origen y de destino no pueden ser iguales", variant: "destructive" })
+      return
+    }
+    if (Number(amount) <= 0) {
+      toast({ title: "Error", description: "El monto a transferir debe ser mayor a cero", variant: "destructive" })
+      return
+    }
+    if (!fromAcc || !toAcc) return
 
     setIsTransferDialogOpen(false)
 
@@ -304,27 +336,41 @@ export default function AccountsPage() {
       }
     }
 
+    const finalDate = new Date(date + 'T12:00:00').toISOString();
+
     updateDocumentNonBlocking(doc(db, 'financial_accounts', fromId), { initialBalance: increment(-Number(amount)) })
     updateDocumentNonBlocking(doc(db, 'financial_accounts', toId), { initialBalance: increment(finalAmountTo) })
 
     addDocumentNonBlocking(collection(db, 'transactions'), {
-      date: new Date().toISOString(),
+      date: finalDate,
       type: 'FinancialTransferOut',
       amount: -Number(amount),
       currency: fromAcc.currency,
       financialAccountId: fromId,
+      transferFromAccountId: fromId,
+      transferToAccountId: toId,
       description: description || `Transferencia a ${toAcc.name} (${toAcc.currency})`,
       accountBalanceAfter: Number(fromAcc.initialBalance || 0) - Number(amount)
     })
 
     addDocumentNonBlocking(collection(db, 'transactions'), {
-      date: new Date().toISOString(),
+      date: finalDate,
       type: 'FinancialTransferIn',
       amount: finalAmountTo,
       currency: toAcc.currency,
       financialAccountId: toId,
+      transferFromAccountId: fromId,
+      transferToAccountId: toId,
       description: description || `Transferencia desde ${fromAcc.name} (${fromAcc.currency})`,
       accountBalanceAfter: Number(toAcc.initialBalance || 0) + finalAmountTo
+    })
+
+    setTransferFormData({
+      fromId: "",
+      toId: "",
+      amount: 0,
+      description: "",
+      date: new Date().toISOString().split('T')[0]
     })
 
     toast({ title: "Transferencia completada" })
@@ -405,7 +451,16 @@ export default function AccountsPage() {
             <Button variant="outline" size="icon" onClick={handleCopyAllAccounts} title="Copiar resumen de saldos">
               <Copy className="h-4 w-4" />
             </Button>
-            <Button variant="outline" onClick={() => setIsTransferDialogOpen(true)}>
+            <Button variant="outline" onClick={() => {
+              setTransferFormData({
+                fromId: "",
+                toId: "",
+                amount: 0,
+                description: "",
+                date: new Date().toISOString().split('T')[0]
+              });
+              setIsTransferDialogOpen(true);
+            }}>
               <ArrowRightLeft className="mr-2 h-4 w-4" /> Transferencia
             </Button>
             {isAdmin && (
@@ -528,6 +583,14 @@ export default function AccountsPage() {
                         onClick={(e) => { e.stopPropagation(); handleOpenTxDialog(account, 'expense'); }}
                       >
                         GASTO
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="flex-1 text-[10px] h-8 font-bold hover:bg-slate-100" 
+                        onClick={(e) => { e.stopPropagation(); handleOpenTxDialog(account, 'adjustment'); }}
+                      >
+                        AJUSTE
                       </Button>
                     </div>
                   </CardContent>
@@ -668,7 +731,7 @@ export default function AccountsPage() {
         <Dialog open={isTxDialogOpen} onOpenChange={setIsTxDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{txType === 'income' ? 'Ingreso Manual' : 'Gasto Manual'}</DialogTitle>
+              <DialogTitle>{txType === 'income' ? 'Ingreso Manual' : txType === 'expense' ? 'Gasto Manual' : 'Ajuste Manual'}</DialogTitle>
               {selectedAccount && (
                 <DialogDescription className="font-bold text-primary flex items-center gap-2">
                   <Wallet className="h-3 w-3" />
@@ -683,7 +746,20 @@ export default function AccountsPage() {
               </div>
               <div className="space-y-2">
                 <Label>Monto</Label>
-                <Input type="number" value={txFormData.amount} onChange={(e) => setTxFormData({...txFormData, amount: Number(e.target.value)})} />
+                <Input 
+                  type="text" 
+                  inputMode="decimal"
+                  value={txFormData.amount} 
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === "" || val === "-" || !isNaN(Number(val)) || val.endsWith(".")) {
+                      setTxFormData({...txFormData, amount: val});
+                    }
+                  }} 
+                />
+                {txType === 'adjustment' && (
+                  <p className="text-[10px] text-muted-foreground">Permite valores positivos para sumar saldo, o negativos (ej. -500) para restar.</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Descripción</Label>
@@ -713,6 +789,10 @@ export default function AccountsPage() {
           <DialogContent>
             <DialogHeader><DialogTitle>Transferencia entre Cajas</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Fecha</Label>
+                <Input type="date" value={transferFormData.date} onChange={(e) => setTransferFormData({...transferFormData, date: e.target.value})} />
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Origen</Label>
