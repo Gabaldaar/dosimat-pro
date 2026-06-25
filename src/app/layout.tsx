@@ -6,6 +6,7 @@ import { FirebaseClientProvider } from '../firebase/client-provider';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { NotificationManager } from '@/components/layout/notification-manager';
+import { PwaInstallPrompt } from '@/components/layout/pwa-install-prompt';
 import Script from 'next/script';
 
 export const metadata: Metadata = {
@@ -52,6 +53,7 @@ export default function RootLayout({
           <AuthGuard>
             <SidebarProvider defaultOpen={true}>
               <NotificationManager />
+              <PwaInstallPrompt />
               {children}
               <Toaster />
             </SidebarProvider>
