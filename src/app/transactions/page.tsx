@@ -1690,6 +1690,61 @@ function TransactionsContent() {
             </AlertDialog>
           </SidebarInset>
         </div>
+        <div className="print-only w-full p-4 font-sans text-slate-900 bg-white">
+          <div className="flex justify-between items-start border-b border-slate-900 pb-2 mb-4">
+            <div>
+              <h1 className="text-xl font-black uppercase">Movimientos de Caja</h1>
+              <p className="text-sm font-bold">
+                Caja: {filterAccount === "all" ? "Todas las cajas" : filterAccount === "null" ? "A CUENTA (Deuda)" : (accounts?.find(a => a.id === filterAccount)?.name || "Desconocida")}
+              </p>
+              <p className="text-xs">
+                Período: {filterStartDate ? formatLocalDate(filterStartDate) : "Inicio"} al {filterEndDate ? formatLocalDate(filterEndDate) : "Hoy"}
+              </p>
+            </div>
+            {filterAccount !== "all" && filterAccount !== "null" && (
+              <div className="text-right">
+                <p className="text-sm font-bold uppercase">Estado Actual</p>
+                <p className="text-2xl font-black">
+                  {accounts?.find(a => a.id === filterAccount)?.currency === 'USD' ? 'u$s' : '$'} {Number(accounts?.find(a => a.id === filterAccount)?.initialBalance || 0).toLocaleString('es-AR')}
+                </p>
+              </div>
+            )}
+          </div>
+          <table className="w-full border-collapse border border-slate-900 text-xs">
+            <thead>
+              <tr className="bg-slate-900 text-white">
+                <th className="border border-slate-900 p-1 text-left uppercase">Fecha</th>
+                <th className="border border-slate-900 p-1 text-left uppercase">Detalle / Cliente</th>
+                <th className="border border-slate-900 p-1 text-right uppercase">Movimiento</th>
+                <th className="border border-slate-900 p-1 text-right uppercase">Saldo Parcial</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTransactions.map((tx: any) => {
+                const cust = customers?.find(c => c.id === tx.clientId);
+                const info = txTypeMap[tx.type] || { label: tx.type };
+                const symbol = tx.currency === 'USD' ? 'u$s' : '$';
+                const movement = getMovementAmount(tx);
+                const boxBalance = tx.dynamicBalance ?? tx.accountBalanceAfter;
+                return (
+                  <tr key={tx.id} className="border-b border-slate-300">
+                    <td className="border border-slate-900 p-1 whitespace-nowrap">{formatLocalDate(tx.date)}</td>
+                    <td className="border border-slate-900 p-1">
+                      <p className="font-black">{cust ? `${cust.apellido}, ${cust.nombre}` : "Global"}</p>
+                      <p className="text-[10px]">{info.label} {tx.description ? `- ${tx.description}` : ''}</p>
+                    </td>
+                    <td className="border border-slate-900 p-1 text-right font-black">
+                      {movement >= 0 ? "+" : "-"}{symbol} {Math.abs(movement).toLocaleString("es-AR")}
+                    </td>
+                    <td className="border border-slate-900 p-1 text-right font-black">
+                      {boxBalance != null ? `${symbol} ${Number(boxBalance).toLocaleString("es-AR")}` : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
         <MobileNav />
       </div>
     </TooltipProvider>
