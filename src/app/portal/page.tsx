@@ -50,7 +50,9 @@ import {
   Phone,
   Lock,
   CheckCircle2,
-  Shield
+  Shield,
+  Plus,
+  Minus
 } from "lucide-react"
 import { useFirebase } from "@/firebase"
 import { signOut } from "firebase/auth"
@@ -143,6 +145,7 @@ export default function ClientPortal() {
   const [cancelRequestId, setCancelRequestId] = useState<string | null>(null)
   const [isSavingOrder, setIsSavingOrder] = useState(false)
   const [showLogoutDialog, setShowLogoutDialog] = useState(false)
+  const [showOrderConfirmDialog, setShowOrderConfirmDialog] = useState(false)
 
   const clientsRef = useMemoFirebase(() => {
     if (userData?.clientId) {
@@ -313,8 +316,20 @@ export default function ClientPortal() {
     router.push('/login');
   }
 
+  const handleOpenConfirmDialog = () => {
+    if (orderData.cloro === 0 && orderData.acido === 0) {
+      toast({ title: "Cantidad requerida", description: "Indicá al menos cloro o ácido.", variant: "destructive" })
+      return
+    }
+    setShowOrderConfirmDialog(true)
+  }
+
   const handleSendOrder = async () => {
     if (!client || deliveryLocked) return
+    if (orderData.cloro === 0 && orderData.acido === 0) {
+      toast({ title: "Cantidad requerida", description: "Indicá al menos cloro o ácido.", variant: "destructive" })
+      return
+    }
     setIsOrdering(true)
     try {
       await addDocumentNonBlocking(collection(db, 'client_requests'), {
@@ -329,6 +344,7 @@ export default function ClientPortal() {
       logActivity("Envío de Pedido", `Cloro: ${orderData.cloro}, Ácido: ${orderData.acido}. Notas: ${orderData.notes || 'Ninguna'}`)
       toast({ title: "Pedido enviado", description: "Recibimos tu solicitud. Te avisaremos cuando lo programemos." })
       setOrderData({ cloro: 0, acido: 0, notes: "" })
+      setShowOrderConfirmDialog(false)
     } catch (e) {
       toast({ title: "Error", description: "No se pudo enviar el pedido.", variant: "destructive" })
     } finally {
@@ -461,7 +477,7 @@ export default function ClientPortal() {
             <CardContent className="flex items-center gap-2">
               <Info className="h-5 w-5 text-amber-600" />
               <p className="font-medium text-amber-900">
-                La Próxima reposición será el día {new Date((upcomingPlanned ? upcomingPlanned.date : upcomingDelivery.date) + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                La Próxima reposición será el día {new Date((upcomingPlanned?.date || upcomingDelivery?.date || '') + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}
               </p>
             </CardContent>
           </Card>
@@ -716,7 +732,7 @@ export default function ClientPortal() {
                     <div className="space-y-2"><Label className="text-[10px] font-black uppercase">Ácido</Label><Input type="number" min={0} value={orderData.acido} onChange={(e) => setOrderData({...orderData, acido: Number(e.target.value)})} className="h-12 text-center font-black text-xl" /></div>
                   </div>
                   <div className="space-y-2"><Label className="text-[10px] font-black uppercase">Notas</Label><Textarea placeholder="Ej: Pasar por la mañana..." value={orderData.notes} onChange={(e) => setOrderData({...orderData, notes: e.target.value})} className="min-h-[80px]" /></div>
-                  <Button className="w-full h-12 font-black uppercase tracking-widest gap-2" onClick={handleSendOrder} disabled={isOrdering || (orderData.cloro === 0 && orderData.acido === 0)}>
+                  <Button className="w-full h-12 font-black uppercase tracking-widest gap-2" onClick={handleOpenConfirmDialog} disabled={isOrdering || (orderData.cloro === 0 && orderData.acido === 0)}>
                     {isOrdering ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />} Enviar Pedido
                   </Button>
                 </>
@@ -810,6 +826,139 @@ export default function ClientPortal() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={showOrderConfirmDialog} onOpenChange={setShowOrderConfirmDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl font-black text-slate-800">
+              <Package className="h-5 w-5 text-primary" />
+              Confirmar Pedido de Reposición
+            </DialogTitle>
+            <DialogDescription className="text-sm font-medium text-slate-600">
+              Por favor verificá las cantidades solicitadas. Podés ajustar los valores si te equivocaste antes de confirmar.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-3">
+            {/* Cloro Input */}
+            <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-200/80 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-blue-900 font-black">
+                  <Droplets className="h-5 w-5 text-blue-600" />
+                  <span>Cloro</span>
+                </div>
+                <span className="text-xs font-bold uppercase tracking-wider text-blue-700 bg-blue-100 px-2.5 py-1 rounded-full">
+                  {orderData.cloro} {orderData.cloro === 1 ? 'bidón' : 'bidones'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-10 w-10 shrink-0 bg-white border-blue-300 hover:bg-blue-100 text-blue-800 font-bold"
+                  onClick={() => setOrderData(prev => ({ ...prev, cloro: Math.max(0, prev.cloro - 1) }))}
+                >
+                  <Minus className="h-4 w-4" />
+                </Button>
+                <Input
+                  type="number"
+                  min={0}
+                  value={orderData.cloro}
+                  onChange={(e) => setOrderData({ ...orderData, cloro: Math.max(0, Number(e.target.value)) })}
+                  className="h-10 text-center font-black text-lg bg-white border-blue-300 focus-visible:ring-blue-500"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-10 w-10 shrink-0 bg-white border-blue-300 hover:bg-blue-100 text-blue-800 font-bold"
+                  onClick={() => setOrderData(prev => ({ ...prev, cloro: prev.cloro + 1 }))}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Ácido Input */}
+            <div className="p-4 rounded-2xl bg-rose-50/70 border border-rose-200/80 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-rose-900 font-black">
+                  <Beaker className="h-5 w-5 text-rose-600" />
+                  <span>Ácido</span>
+                </div>
+                <span className="text-xs font-bold uppercase tracking-wider text-rose-700 bg-rose-100 px-2.5 py-1 rounded-full">
+                  {orderData.acido} {orderData.acido === 1 ? 'bidón' : 'bidones'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-10 w-10 shrink-0 bg-white border-rose-300 hover:bg-rose-100 text-rose-800 font-bold"
+                  onClick={() => setOrderData(prev => ({ ...prev, acido: Math.max(0, prev.acido - 1) }))}
+                >
+                  <Minus className="h-4 w-4" />
+                </Button>
+                <Input
+                  type="number"
+                  min={0}
+                  value={orderData.acido}
+                  onChange={(e) => setOrderData({ ...orderData, acido: Math.max(0, Number(e.target.value)) })}
+                  className="h-10 text-center font-black text-lg bg-white border-rose-300 focus-visible:ring-rose-500"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-10 w-10 shrink-0 bg-white border-rose-300 hover:bg-rose-100 text-rose-800 font-bold"
+                  onClick={() => setOrderData(prev => ({ ...prev, acido: prev.acido + 1 }))}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Notes Input */}
+            <div className="space-y-1.5">
+              <Label className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Notas u observaciones</Label>
+              <Textarea
+                placeholder="Ej: Dejar al lado del portón..."
+                value={orderData.notes}
+                onChange={(e) => setOrderData({ ...orderData, notes: e.target.value })}
+                className="min-h-[70px] text-sm bg-slate-50 border-slate-200"
+              />
+            </div>
+
+            {/* Summary Banner */}
+            <div className="p-3.5 bg-amber-50/80 rounded-xl border border-amber-200 flex items-center gap-3">
+              <Info className="h-5 w-5 text-amber-600 shrink-0" />
+              <p className="text-xs text-amber-900 font-medium">
+                Resumen total: <strong className="font-black text-slate-900">{orderData.cloro} Cloro</strong> y <strong className="font-black text-slate-900">{orderData.acido} Ácido</strong>.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowOrderConfirmDialog(false)}
+              className="font-bold border-slate-300"
+            >
+              Corregir / Volver
+            </Button>
+            <Button
+              onClick={handleSendOrder}
+              disabled={isOrdering || (orderData.cloro === 0 && orderData.acido === 0)}
+              className="font-black gap-2 bg-primary hover:bg-primary/90 text-white"
+            >
+              {isOrdering ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Confirmar y Enviar Pedido
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
