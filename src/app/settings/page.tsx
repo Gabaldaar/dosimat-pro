@@ -35,6 +35,8 @@ export default function SettingsPage() {
 
   const [formData, setFormData] = useState({
     name: "Dosimat Pro",
+    adminPhone: "",
+    adminEmail: "",
     supportEmail: "",
     supportWhatsapp: "",
     address: "",
@@ -45,6 +47,8 @@ export default function SettingsPage() {
     if (settings) {
       setFormData({
         name: settings.name || "Dosimat Pro",
+        adminPhone: settings.adminPhone || settings.supportWhatsapp || "",
+        adminEmail: settings.adminEmail || settings.supportEmail || "",
         supportEmail: settings.supportEmail || "",
         supportWhatsapp: settings.supportWhatsapp || "",
         address: settings.address || "",
@@ -74,7 +78,7 @@ export default function SettingsPage() {
   return (
     <div className="flex min-h-screen bg-background w-full">
       <Sidebar />
-      <SidebarInset className="flex-1 w-full pb-32 md:pb-8 p-4 md:p-8 space-y-6 overflow-x-hidden">
+      <SidebarInset className="flex-1 pb-24 p-4 md:p-8 space-y-6">
         <header className="flex items-center gap-4">
           <SidebarTrigger className="flex" />
           <div className="flex items-center gap-2 md:hidden pr-2 border-r">
@@ -95,7 +99,7 @@ export default function SettingsPage() {
                   <CardTitle>Datos de la Empresa</CardTitle>
                 </div>
                 <CardDescription>
-                  Configura los datos que tus clientes verán en su panel de autogestión y comprobantes.
+                  Configura los datos que tus clientes verán en sus presupuestos, portal de autogestión y comprobantes.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -125,9 +129,43 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
+                  {/* Datos Comerciales / Administrativos */}
+                  <div className="bg-slate-50 p-4 rounded-2xl border space-y-3">
+                    <p className="text-xs font-bold uppercase text-primary tracking-wider">Datos Administrativos / Presupuestos (Cotizaciones)</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-[10px] font-black uppercase text-slate-700 tracking-widest">Tel / WhatsApp Comercial</Label>
+                        <div className="relative">
+                          <MessageSquare className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
+                          <Input 
+                            value={formData.adminPhone} 
+                            onChange={(e) => setFormData({...formData, adminPhone: e.target.value})} 
+                            className="bg-white pl-10 border-primary/20"
+                            placeholder="Ej: 11 2345-6789"
+                            disabled={!isAdmin}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-[10px] font-black uppercase text-slate-700 tracking-widest">Email Comercial / Cotizaciones</Label>
+                        <div className="relative">
+                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
+                          <Input 
+                            value={formData.adminEmail} 
+                            onChange={(e) => setFormData({...formData, adminEmail: e.target.value})} 
+                            className="bg-white pl-10 border-primary/20"
+                            placeholder="ventas@dosimat.pro"
+                            disabled={!isAdmin}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Datos de Soporte Técnico */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase text-primary tracking-widest">WhatsApp de Soporte (Clientes)</Label>
+                      <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">WhatsApp de Soporte Técnico</Label>
                       <div className="relative">
                         <MessageSquare className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-600" />
                         <Input 
@@ -140,14 +178,14 @@ export default function SettingsPage() {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Email de Soporte (Clientes)</Label>
+                      <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Email de Soporte Técnico</Label>
                       <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input 
                           value={formData.supportEmail} 
                           onChange={(e) => setFormData({...formData, supportEmail: e.target.value})} 
-                          className="bg-white pl-10 border-primary/10"
-                          placeholder="administracion@dosimat.pro"
+                          className="bg-white pl-10"
+                          placeholder="soporte@dosimat.pro"
                           disabled={!isAdmin}
                         />
                       </div>
@@ -155,13 +193,14 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Dirección / Depósito</Label>
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Dirección / Depósito (Opcional)</Label>
                     <div className="relative">
                       <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                       <Input 
                         value={formData.address} 
                         onChange={(e) => setFormData({...formData, address: e.target.value})} 
                         className="bg-white pl-10"
+                        placeholder="Dejar vacío si no se desea mostrar en los presupuestos"
                         disabled={!isAdmin}
                       />
                     </div>

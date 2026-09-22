@@ -967,13 +967,165 @@ export default function QuotesPage() {
             </Badge>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="w-full overflow-x-auto">
+            {/* VISTA MÓVIL (Tarjetas responsivas sin scroll lateral) */}
+            <div className="block md:hidden p-3 space-y-3 bg-slate-50/50">
+              {filteredQuotes.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <ReceiptText className="h-10 w-10 text-slate-300 mx-auto mb-2" />
+                  <p className="font-bold text-sm text-slate-600">No se encontraron cotizaciones</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Crea tu primera cotización presionando "Nueva Cotización".</p>
+                </div>
+              ) : (
+                filteredQuotes.map((quote) => {
+                  const status = statusConfig[quote.status] || statusConfig.draft
+                  const StatusIcon = status.icon
+                  const currencySym = quote.currency === 'USD' ? 'USD $' : '$'
+
+                  return (
+                    <div 
+                      key={quote.id} 
+                      className="bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-sm space-y-3"
+                    >
+                      {/* Fila Superior: N°, Estado y Menú de Acciones */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-sm text-primary">
+                            {quote.quoteNumber}
+                          </span>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className={`h-6 px-2 rounded-full text-[10px] font-bold border ${status.color}`}>
+                                <StatusIcon className="h-3 w-3 mr-1 shrink-0" />
+                                <span className="truncate">{status.label}</span>
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="rounded-2xl p-1">
+                              <DropdownMenuItem onClick={() => handleUpdateStatus(quote, 'draft')} className="gap-2 text-xs font-semibold">
+                                <Clock className="h-3.5 w-3.5 text-slate-500" /> Marcar como Borrador
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleUpdateStatus(quote, 'sent')} className="gap-2 text-xs font-semibold">
+                                <Send className="h-3.5 w-3.5 text-blue-500" /> Marcar como Enviada
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleUpdateStatus(quote, 'approved')} className="gap-2 text-xs font-semibold">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> Marcar como Aprobada
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleUpdateStatus(quote, 'rejected')} className="gap-2 text-xs font-semibold">
+                                <XCircle className="h-3.5 w-3.5 text-rose-500" /> Marcar como Rechazada
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 rounded-xl">
+                              <MoreVertical className="h-4 w-4 text-slate-500" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="rounded-2xl p-1">
+                            <DropdownMenuItem onClick={() => handleEditQuote(quote)} className="gap-2 text-xs font-semibold">
+                              <Edit className="h-3.5 w-3.5 text-slate-500" /> Editar Cotización
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDuplicateQuote(quote)} className="gap-2 text-xs font-semibold">
+                              <Copy className="h-3.5 w-3.5 text-slate-500" /> Duplicar Cotización
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => setQuoteToDelete(quote)} className="gap-2 text-xs font-semibold text-destructive focus:text-destructive">
+                              <Trash2 className="h-3.5 w-3.5" /> Eliminar
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+
+                      {/* Fila Intermedia: Cliente y Contacto */}
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-sm text-slate-800">
+                            {quote.clientName}
+                          </span>
+                          {quote.isProspect && (
+                            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-amber-300 text-amber-700 bg-amber-50">
+                              Prospecto
+                            </Badge>
+                          )}
+                        </div>
+                        {(quote.clientPhone || quote.clientEmail || quote.clientAddress) && (
+                          <p className="text-xs text-muted-foreground truncate mt-0.5">
+                            {[quote.clientPhone, quote.clientEmail, quote.clientAddress].filter(Boolean).join(" • ")}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Fechas y Total */}
+                      <div className="flex items-end justify-between pt-2 border-t border-slate-100">
+                        <div className="text-[11px] text-slate-500 space-y-0.5">
+                          <p>Emisión: <span className="font-semibold text-slate-700">{quote.date ? new Date(quote.date).toLocaleDateString('es-AR') : '-'}</span></p>
+                          {quote.validUntil && (
+                            <p>Vence: <span className="font-semibold text-slate-700">{new Date(quote.validUntil).toLocaleDateString('es-AR')}</span></p>
+                          )}
+                        </div>
+
+                        <div className="text-right">
+                          <span className="text-[10px] text-muted-foreground block">
+                            {quote.items?.length || 0} {quote.items?.length === 1 ? 'ítem' : 'ítems'}
+                          </span>
+                          <span className="font-black text-base text-slate-900">
+                            {currencySym}{Number(quote.total || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Fila de Botones de Acción Rápida */}
+                      <div className="flex items-center gap-1.5 pt-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setPreviewQuote(quote)
+                            setIsPreviewOpen(true)
+                          }}
+                          className="flex-1 h-8 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-100 gap-1 font-bold text-xs"
+                        >
+                          <Printer className="h-3.5 w-3.5" />
+                          PDF
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleShareWhatsApp(quote)}
+                          className="flex-1 h-8 rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50 gap-1 font-bold text-xs"
+                        >
+                          <MessageSquare className="h-3.5 w-3.5 text-emerald-600" />
+                          WhatsApp
+                        </Button>
+
+                        {quote.status !== 'converted' && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => setQuoteToConvert(quote)}
+                            className="flex-1 h-8 rounded-xl bg-purple-600 hover:bg-purple-700 text-white gap-1 font-bold text-xs"
+                          >
+                            <ArrowUpRight className="h-3.5 w-3.5" />
+                            A Venta
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            {/* VISTA DESKTOP (Tabla espaciosa para pantallas medianas y grandes) */}
+            <div className="hidden md:block w-full overflow-x-auto">
               <Table className="min-w-full">
                 <TableHeader className="bg-slate-50/60">
                   <TableRow>
                     <TableHead className="pl-4 sm:pl-6 font-bold text-xs uppercase text-muted-foreground py-3">N°</TableHead>
                     <TableHead className="font-bold text-xs uppercase text-muted-foreground py-3">Cliente</TableHead>
-                    <TableHead className="font-bold text-xs uppercase text-muted-foreground py-3 hidden md:table-cell">Fecha</TableHead>
+                    <TableHead className="font-bold text-xs uppercase text-muted-foreground py-3">Fecha</TableHead>
                     <TableHead className="font-bold text-xs uppercase text-muted-foreground py-3">Total</TableHead>
                     <TableHead className="font-bold text-xs uppercase text-muted-foreground py-3">Estado</TableHead>
                     <TableHead className="pr-4 sm:pr-6 text-right font-bold text-xs uppercase text-muted-foreground py-3">Acciones</TableHead>
@@ -1018,7 +1170,7 @@ export default function QuotesPage() {
                             </div>
                           </TableCell>
 
-                          <TableCell className="py-3 hidden md:table-cell">
+                          <TableCell className="py-3">
                             <div className="flex flex-col text-xs">
                               <span className="font-semibold text-slate-700">
                                 {quote.date ? new Date(quote.date).toLocaleDateString('es-AR') : '-'}
@@ -1988,10 +2140,18 @@ export default function QuotesPage() {
 
                 <div className="text-left sm:text-right space-y-0.5 text-xs text-slate-600">
                   <h3 className="font-black text-sm text-slate-900">{settings?.name || "DOSIMAT PRO"}</h3>
-                  {settings?.supportWhatsapp && <p>Tel / WA: <span className="font-bold">{settings.supportWhatsapp}</span></p>}
-                  {settings?.supportEmail && <p>Email: {settings.supportEmail}</p>}
-                  {settings?.address && <p>Ubicación: {settings.address}</p>}
-                  {settings?.website && <p className="text-primary font-semibold">{settings.website}</p>}
+                  {(settings?.adminPhone || settings?.supportWhatsapp) && (
+                    <p>Tel / WA: <span className="font-bold">{settings.adminPhone || settings.supportWhatsapp}</span></p>
+                  )}
+                  {(settings?.adminEmail || settings?.supportEmail) && (
+                    <p>Email: {settings.adminEmail || settings.supportEmail}</p>
+                  )}
+                  {settings?.address && settings.address.trim() !== "" && (
+                    <p>Ubicación: {settings.address}</p>
+                  )}
+                  {settings?.website && settings.website.trim() !== "" && (
+                    <p className="text-primary font-semibold">{settings.website}</p>
+                  )}
                 </div>
               </div>
 
@@ -2004,7 +2164,9 @@ export default function QuotesPage() {
                   <h4 className="text-sm sm:text-base font-black text-slate-900">{previewQuote.clientName}</h4>
                   {previewQuote.clientPhone && <p className="text-xs text-slate-700 mt-0.5">Tel: {previewQuote.clientPhone}</p>}
                   {previewQuote.clientEmail && <p className="text-xs text-slate-700">Email: {previewQuote.clientEmail}</p>}
-                  {previewQuote.clientAddress && <p className="text-xs text-slate-700">Dirección: {previewQuote.clientAddress}</p>}
+                  {previewQuote.clientAddress && previewQuote.clientAddress.trim() !== "" && (
+                    <p className="text-xs text-slate-700">Dirección: {previewQuote.clientAddress}</p>
+                  )}
                 </div>
 
                 <div className="sm:text-right space-y-0.5">
