@@ -2,9 +2,9 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Sidebar, MobileNav } from "@/components/layout/nav"
+import { Sidebar } from "@/components/layout/nav"
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,7 +31,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useFirestore, useCollection, useDoc, useMemoFirebase, useUser, addDocumentNonBlocking, setDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase"
+import { useFirestore, useCollection, useDoc, useMemoFirebase, useUser } from "@/firebase"
 import { collection, query, orderBy, doc, deleteDoc, addDoc, setDoc } from "firebase/firestore"
 import { useToast } from "@/hooks/use-toast"
 import { 
@@ -47,27 +48,18 @@ import {
   XCircle, 
   Clock, 
   Coins, 
-  Calendar, 
-  User, 
-  Building2, 
-  FileText, 
-  ArrowRight, 
-  Layers, 
-  RefreshCw, 
-  MoreVertical, 
-  FilterX, 
-  ShoppingBag, 
-  Percent, 
   DollarSign, 
   Check, 
   Sparkles, 
-  Share2, 
-  Info, 
-  CreditCard,
   Droplets,
-  Package,
   ArrowUpRight,
-  ShieldCheck
+  ArrowRightLeft,
+  Tag,
+  Package,
+  Boxes,
+  HelpCircle,
+  RefreshCw,
+  MoreVertical
 } from "lucide-react"
 
 export interface QuoteItem {
@@ -80,6 +72,8 @@ export interface QuoteItem {
   discount: number // porcentaje 0-100
   subtotal: number
   isCustom?: boolean
+  originalPrice?: number
+  originalCurrency?: 'ARS' | 'USD'
 }
 
 export interface Quote {
@@ -94,6 +88,8 @@ export interface Quote {
   clientAddress: string
   isProspect: boolean
   currency: 'ARS' | 'USD'
+  exchangeRate: number
+  rateType: 'official' | 'blue' | 'custom'
   items: QuoteItem[]
   subtotal: number
   globalDiscountPercent: number
@@ -136,6 +132,28 @@ export default function QuotesPage() {
     }
   }, [userData, isUserLoading, router])
 
+  // Obtener cotizaciones del Dólar en vivo
+  const [exchangeRates, setExchangeRates] = useState<{ official: number; blue: number }>({ official: 1300, blue: 1350 })
+
+  useEffect(() => {
+    const fetchRates = async () => {
+      try {
+        const [offRes, blueRes] = await Promise.all([
+          fetch('https://dolarapi.com/v1/dolares/oficial'),
+          fetch('https://dolarapi.com/v1/dolares/blue')
+        ])
+        const off = await offRes.json()
+        const blue = await blueRes.json()
+        if (off?.venta && blue?.venta) {
+          setExchangeRates({ official: Number(off.venta), blue: Number(blue.venta) })
+        }
+      } catch (e) {
+        console.error("Error fetching exchange rates:", e)
+      }
+    }
+    fetchRates()
+  }, [])
+
   // Consultas Firestore
   const quotesQuery = useMemoFirebase(() => {
     if (!isStaff) return null
@@ -144,14 +162,16 @@ export default function QuotesPage() {
 
   const clientsQuery = useMemoFirebase(() => isStaff ? collection(db, 'clients') : null, [db, isStaff])
   const productsQuery = useMemoFirebase(() => isStaff ? collection(db, 'products_services') : null, [db, isStaff])
+  const categoriesQuery = useMemoFirebase(() => isStaff ? collection(db, 'product_categories') : null, [db, isStaff])
   const settingsRef = useMemoFirebase(() => doc(db, 'settings', 'company'), [db])
 
   const { data: quotes, isLoading: loadingQuotes } = useCollection(quotesQuery)
   const { data: clients } = useCollection(clientsQuery)
   const { data: products } = useCollection(productsQuery)
+  const { data: categories } = useCollection(categoriesQuery)
   const { data: settings } = useDoc(settingsRef)
 
-  // Filtros de búsqueda
+  // Filtros de búsqueda en listado
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [currencyFilter, setCurrencyFilter] = useState("all")
@@ -160,6 +180,11 @@ export default function QuotesPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingQuoteId, setEditingQuoteId] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+
+  // Buscador de Catálogo (Popover)
+  const [catalogSearch, setCatalogSearch] = useState("")
+  const [catalogCategoryFilter, setCatalogCategoryFilter] = useState("all")
+  const [isCatalogPopoverOpen, setIsCatalogPopoverOpen] = useState(false)
 
   // Estado del Modal de Vista Previa / Impresión
   const [previewQuote, setPreviewQuote] = useState<Quote | null>(null)
@@ -184,6 +209,8 @@ export default function QuotesPage() {
     clientAddress: "",
     isProspect: false,
     currency: 'ARS',
+    exchangeRate: 1350,
+    rateType: 'blue',
     items: [],
     subtotal: 0,
     globalDiscountPercent: 0,
@@ -215,10 +242,50 @@ export default function QuotesPage() {
     return d.toISOString().split('T')[0]
   }
 
+  // Helper para resolver el precio de un producto y convertirlo si es necesario
+  const resolveProductPrice = (prod: any, targetCurrency: 'ARS' | 'USD', rate: number) => {
+    const validRate = Number(rate) > 0 ? Number(rate) : 1350
+    const rawPriceARS = Number(prod.priceARS ?? prod.price ?? 0)
+    const rawPriceUSD = Number(prod.priceUSD ?? 0)
+    const rawCostARS = Number(prod.costARS ?? 0)
+    const rawCostUSD = Number(prod.costUSD ?? 0)
+
+    if (targetCurrency === 'ARS') {
+      if (rawPriceARS > 0) return { price: rawPriceARS, originalCurrency: 'ARS' as const, originalPrice: rawPriceARS }
+      if (rawPriceUSD > 0) return { price: Math.round(rawPriceUSD * validRate), originalCurrency: 'USD' as const, originalPrice: rawPriceUSD }
+      if (rawCostARS > 0) return { price: rawCostARS, originalCurrency: 'ARS' as const, originalPrice: rawCostARS }
+      if (rawCostUSD > 0) return { price: Math.round(rawCostUSD * validRate), originalCurrency: 'USD' as const, originalPrice: rawCostUSD }
+      return { price: 0, originalCurrency: 'ARS' as const, originalPrice: 0 }
+    } else {
+      if (rawPriceUSD > 0) return { price: rawPriceUSD, originalCurrency: 'USD' as const, originalPrice: rawPriceUSD }
+      if (rawPriceARS > 0) return { price: Math.round((rawPriceARS / validRate) * 100) / 100, originalCurrency: 'ARS' as const, originalPrice: rawPriceARS }
+      if (rawCostUSD > 0) return { price: rawCostUSD, originalCurrency: 'USD' as const, originalPrice: rawCostUSD }
+      if (rawCostARS > 0) return { price: Math.round((rawCostARS / validRate) * 100) / 100, originalCurrency: 'ARS' as const, originalPrice: rawCostARS }
+      return { price: 0, originalCurrency: 'USD' as const, originalPrice: 0 }
+    }
+  }
+
+  // Lista ordenada y filtrada de productos del catálogo para el buscador rápido
+  const sortedAndFilteredCatalog = useMemo(() => {
+    if (!products) return []
+    return [...products]
+      .filter((p: any) => {
+        const name = (p.name || "").toLowerCase()
+        const cat = p.categoryId || "uncategorized"
+        const matchText = !catalogSearch || name.includes(catalogSearch.toLowerCase())
+        const matchCategory = catalogCategoryFilter === "all" || cat === catalogCategoryFilter
+        return matchText && matchCategory
+      })
+      .sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""))
+  }, [products, catalogSearch, catalogCategoryFilter])
+
   // Abrir modal para nueva cotización
   const handleOpenNewQuote = () => {
     const todayStr = new Date().toISOString().split('T')[0]
+    const initialRate = exchangeRates.blue || 1350
     setEditingQuoteId(null)
+    setCatalogSearch("")
+    setCatalogCategoryFilter("all")
     setFormData({
       quoteNumber: getNextQuoteNumber(),
       date: todayStr,
@@ -230,6 +297,8 @@ export default function QuotesPage() {
       clientAddress: "",
       isProspect: false,
       currency: 'ARS',
+      exchangeRate: initialRate,
+      rateType: 'blue',
       items: [],
       subtotal: 0,
       globalDiscountPercent: 0,
@@ -244,8 +313,12 @@ export default function QuotesPage() {
   // Abrir modal para editar cotización existente
   const handleEditQuote = (quote: Quote) => {
     setEditingQuoteId(quote.id || null)
+    setCatalogSearch("")
+    setCatalogCategoryFilter("all")
     setFormData({
       ...quote,
+      exchangeRate: quote.exchangeRate || exchangeRates.blue || 1350,
+      rateType: quote.rateType || 'blue',
       items: quote.items || []
     })
     setIsDialogOpen(true)
@@ -304,19 +377,68 @@ export default function QuotesPage() {
     return { subtotal, globalDiscountAmount, total }
   }
 
-  // Agregar producto desde catálogo
-  const handleAddCatalogProduct = (productId: string) => {
-    if (!productId) return
-    const prod = products?.find(p => p.id === productId)
-    if (!prod) return
+  // Cambiar Moneda y Opcionalmente Convertir Ítems Existentes
+  const handleChangeCurrency = (newCurrency: 'ARS' | 'USD') => {
+    if (newCurrency === formData.currency) return
+    const rate = Number(formData.exchangeRate) > 0 ? Number(formData.exchangeRate) : 1350
 
-    // Buscar precio correspondiente según moneda
-    let unitPrice = 0
-    if (formData.currency === 'USD') {
-      unitPrice = Number(prod.priceUSD || prod.price || 0)
-    } else {
-      unitPrice = Number(prod.price || 0)
-    }
+    // Convertir los ítems existentes en la cotización
+    const convertedItems = formData.items.map(item => {
+      let newUnitPrice = 0
+      if (newCurrency === 'USD') {
+        // De ARS a USD
+        newUnitPrice = Math.round((item.unitPrice / rate) * 100) / 100
+      } else {
+        // De USD a ARS
+        newUnitPrice = Math.round(item.unitPrice * rate)
+      }
+      const qty = Number(item.qty) || 0
+      const discount = Number(item.discount) || 0
+      const subtotal = qty * newUnitPrice * (1 - discount / 100)
+
+      return {
+        ...item,
+        unitPrice: newUnitPrice,
+        subtotal
+      }
+    })
+
+    const { subtotal, globalDiscountAmount, total } = recalculateTotals(convertedItems, formData.globalDiscountPercent)
+
+    setFormData(prev => ({
+      ...prev,
+      currency: newCurrency,
+      items: convertedItems,
+      subtotal,
+      globalDiscountAmount,
+      total
+    }))
+
+    toast({ 
+      title: `Cambiado a ${newCurrency === 'USD' ? 'Dólares (USD)' : 'Pesos (ARS)'}`,
+      description: `Los precios de los artículos se convirtieron según el tipo de cambio ($${rate.toLocaleString('es-AR')}).`
+    })
+  }
+
+  // Cambiar Tipo de Dólar
+  const handleRateTypeChange = (type: 'official' | 'blue' | 'custom', customValue?: number) => {
+    let rate = formData.exchangeRate
+    if (type === 'official') rate = exchangeRates.official || 1300
+    else if (type === 'blue') rate = exchangeRates.blue || 1350
+    else if (type === 'custom' && customValue !== undefined) rate = customValue
+
+    setFormData(prev => ({
+      ...prev,
+      rateType: type,
+      exchangeRate: rate
+    }))
+  }
+
+  // Agregar producto desde catálogo con precio resuelto
+  const handleAddCatalogProduct = (prod: any) => {
+    if (!prod) return
+    const rate = Number(formData.exchangeRate) > 0 ? Number(formData.exchangeRate) : 1350
+    const { price, originalCurrency, originalPrice } = resolveProductPrice(prod, formData.currency, rate)
 
     const newItem: QuoteItem = {
       id: `${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
@@ -324,10 +446,12 @@ export default function QuotesPage() {
       name: prod.name || "Producto sin nombre",
       description: prod.description || "",
       qty: 1,
-      unitPrice,
+      unitPrice: price,
       discount: 0,
-      subtotal: unitPrice,
-      isCustom: false
+      subtotal: price,
+      isCustom: false,
+      originalCurrency,
+      originalPrice
     }
 
     const updatedItems = [...formData.items, newItem]
@@ -340,6 +464,9 @@ export default function QuotesPage() {
       globalDiscountAmount,
       total
     }))
+
+    setIsCatalogPopoverOpen(false)
+    toast({ title: "Artículo agregado", description: `Se añadió "${prod.name}" a la cotización.` })
   }
 
   // Agregar ítem manual libre
@@ -448,7 +575,7 @@ export default function QuotesPage() {
         await setDoc(doc(db, 'quotes', editingQuoteId), quotePayload, { merge: true })
         toast({ title: "Cotización actualizada", description: `Se guardaron los cambios de ${formData.quoteNumber}.` })
       } else {
-        const docRef = await addDoc(collection(db, 'quotes'), {
+        await addDoc(collection(db, 'quotes'), {
           ...quotePayload,
           createdAt: new Date().toISOString()
         })
@@ -495,7 +622,6 @@ export default function QuotesPage() {
     if (!quoteToConvert || !quoteToConvert.id) return
     setIsConverting(true)
     try {
-      // 1. Crear documento en transactions
       const txData = {
         type: 'sale',
         clientId: quoteToConvert.clientId || null,
@@ -519,7 +645,6 @@ export default function QuotesPage() {
 
       const txRef = await addDoc(collection(db, 'transactions'), txData)
 
-      // 2. Marcar cotización como convertida
       await setDoc(doc(db, 'quotes', quoteToConvert.id), {
         status: 'converted',
         convertedTransactionId: txRef.id,
@@ -1020,27 +1145,39 @@ export default function QuotesPage() {
                     placeholder="Nombre completo o Empresa del prospecto..."
                     value={formData.clientName}
                     onChange={e => setFormData(prev => ({ ...prev, clientName: e.target.value }))}
-                    className="h-11 bg-white border rounded-2xl"
+                    className="h-11 bg-white border rounded-2xl font-bold"
                     required
                   />
                 )}
               </div>
 
-              {/* Moneda */}
+              {/* Moneda y Tipo de Cambio */}
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold uppercase text-slate-700">Moneda de Cotización</Label>
-                <Select 
-                  value={formData.currency} 
-                  onValueChange={(val: 'ARS' | 'USD') => setFormData(prev => ({ ...prev, currency: val }))}
-                >
-                  <SelectTrigger className="h-11 bg-white border rounded-2xl font-bold">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ARS">Pesos Argentinos (ARS)</SelectItem>
-                    <SelectItem value="USD">Dólares Estadounidenses (USD)</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex justify-between items-center">
+                  <Label className="text-xs font-bold uppercase text-slate-700">Moneda</Label>
+                  <span className="text-[11px] font-bold text-emerald-700">
+                    1 USD = ${formData.exchangeRate.toLocaleString('es-AR')}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant={formData.currency === 'ARS' ? 'default' : 'outline'}
+                    onClick={() => handleChangeCurrency('ARS')}
+                    className={`h-11 rounded-2xl font-bold text-xs ${formData.currency === 'ARS' ? 'bg-primary text-white' : 'bg-white text-slate-700'}`}
+                  >
+                    🇦🇷 Pesos (ARS)
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={formData.currency === 'USD' ? 'default' : 'outline'}
+                    onClick={() => handleChangeCurrency('USD')}
+                    className={`h-11 rounded-2xl font-bold text-xs ${formData.currency === 'USD' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-700'}`}
+                  >
+                    🇺🇸 Dólares (USD)
+                  </Button>
+                </div>
               </div>
 
               {/* Datos de Contacto Secundarios */}
@@ -1066,12 +1203,31 @@ export default function QuotesPage() {
               </div>
 
               <div className="space-y-1">
-                <Label className="text-[11px] font-semibold text-slate-500">Dirección / Localidad</Label>
+                <div className="flex justify-between items-center">
+                  <Label className="text-[11px] font-semibold text-slate-500">Cotización Dólar</Label>
+                  <div className="flex gap-1">
+                    <button 
+                      type="button" 
+                      onClick={() => handleRateTypeChange('blue')}
+                      className={`text-[9px] px-1 rounded font-bold ${formData.rateType === 'blue' ? 'bg-emerald-100 text-emerald-800' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      Blue (${exchangeRates.blue})
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => handleRateTypeChange('official')}
+                      className={`text-[9px] px-1 rounded font-bold ${formData.rateType === 'official' ? 'bg-blue-100 text-blue-800' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      Oficial (${exchangeRates.official})
+                    </button>
+                  </div>
+                </div>
                 <Input 
-                  placeholder="Ej: Calle 123, Barrio Los Pinos"
-                  value={formData.clientAddress}
-                  onChange={e => setFormData(prev => ({ ...prev, clientAddress: e.target.value }))}
-                  className="h-9 bg-white border rounded-xl text-xs"
+                  type="number"
+                  placeholder="Tipo de cambio"
+                  value={formData.exchangeRate}
+                  onChange={e => handleRateTypeChange('custom', Number(e.target.value))}
+                  className="h-9 bg-white border rounded-xl text-xs font-bold"
                 />
               </div>
             </div>
@@ -1143,28 +1299,135 @@ export default function QuotesPage() {
               </div>
             </div>
 
-            {/* Fila 3: Tabla de Artículos / Servicios */}
+            {/* Fila 3: Tabla de Artículos / Servicios con Buscador Rápido */}
             <div className="space-y-3">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                 <div>
-                  <h4 className="text-sm font-black text-slate-800 uppercase tracking-wide">Artículos y Servicios</h4>
+                  <h4 className="text-sm font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                    <Boxes className="h-4 w-4 text-primary" />
+                    Artículos y Servicios
+                  </h4>
                   <p className="text-xs text-muted-foreground">Selecciona ítems del catálogo o ingresa conceptos manuales.</p>
                 </div>
 
                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                  {/* Selector de Catálogo */}
-                  <Select onValueChange={handleAddCatalogProduct}>
-                    <SelectTrigger className="h-9 rounded-xl border-primary/30 text-primary font-bold text-xs bg-primary/5 w-full sm:w-60">
-                      <SelectValue placeholder="+ Catálogo de Productos" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-64">
-                      {products?.map(p => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name} - {formData.currency === 'USD' ? `USD $${p.priceUSD || p.price || 0}` : `$${p.price || 0}`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  
+                  {/* BUSCADOR RÁPIDO DE CATÁLOGO (POPOVER) */}
+                  <Popover open={isCatalogPopoverOpen} onOpenChange={setIsCatalogPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="default"
+                        size="sm"
+                        className="h-10 rounded-2xl bg-primary hover:bg-primary/90 text-white font-bold text-xs shadow-md shadow-primary/20 gap-1.5"
+                      >
+                        <Search className="h-4 w-4" />
+                        + Buscar en Catálogo ({products?.length || 0})
+                      </Button>
+                    </PopoverTrigger>
+
+                    <PopoverContent align="end" className="w-[360px] sm:w-[480px] p-4 rounded-3xl shadow-2xl border-slate-200">
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center border-b pb-2">
+                          <h5 className="font-black text-sm text-slate-900 flex items-center gap-1.5">
+                            <Package className="h-4 w-4 text-primary" />
+                            Catálogo de Productos y Servicios
+                          </h5>
+                          <Badge variant="secondary" className="text-[10px] font-bold">
+                            {sortedAndFilteredCatalog.length} artículos
+                          </Badge>
+                        </div>
+
+                        {/* Input de Búsqueda Rápida */}
+                        <div className="relative">
+                          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                          <Input 
+                            autoFocus
+                            placeholder="Escribe el nombre del producto..."
+                            value={catalogSearch}
+                            onChange={e => setCatalogSearch(e.target.value)}
+                            className="pl-9 h-10 rounded-xl bg-slate-50 border-slate-200 text-xs font-medium"
+                          />
+                        </div>
+
+                        {/* Filtro por Categorías */}
+                        {categories && categories.length > 0 && (
+                          <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
+                            <button
+                              type="button"
+                              onClick={() => setCatalogCategoryFilter("all")}
+                              className={`text-[10px] px-2 py-0.5 rounded-lg font-bold transition-all ${catalogCategoryFilter === 'all' ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                            >
+                              Todas
+                            </button>
+                            {categories.map((cat: any) => (
+                              <button
+                                key={cat.id}
+                                type="button"
+                                onClick={() => setCatalogCategoryFilter(cat.id)}
+                                className={`text-[10px] px-2 py-0.5 rounded-lg font-bold transition-all ${catalogCategoryFilter === cat.id ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                              >
+                                {cat.name}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Lista de Productos Encontrados */}
+                        <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 pr-1 space-y-1">
+                          {sortedAndFilteredCatalog.length === 0 ? (
+                            <div className="text-center py-8 text-xs text-muted-foreground">
+                              No se encontraron productos que coincidan con la búsqueda.
+                            </div>
+                          ) : (
+                            sortedAndFilteredCatalog.map((prod: any) => {
+                              const rate = Number(formData.exchangeRate) > 0 ? Number(formData.exchangeRate) : 1350
+                              const { price, originalCurrency, originalPrice } = resolveProductPrice(prod, formData.currency, rate)
+                              const catName = categories?.find((c: any) => c.id === prod.categoryId)?.name
+
+                              return (
+                                <div
+                                  key={prod.id}
+                                  onClick={() => handleAddCatalogProduct(prod)}
+                                  className="p-2.5 rounded-2xl hover:bg-slate-50 cursor-pointer transition-all flex items-center justify-between gap-3 group border border-transparent hover:border-slate-200"
+                                >
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="font-bold text-xs text-slate-900 group-hover:text-primary transition-colors truncate">
+                                      {prod.name}
+                                    </span>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      {catName && (
+                                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-slate-200 text-slate-500">
+                                          {catName}
+                                        </Badge>
+                                      )}
+                                      {prod.stock !== undefined && prod.trackStock !== false && (
+                                        <span className="text-[10px] text-muted-foreground">
+                                          Stock: <b className={prod.stock <= (prod.minStock || 0) ? 'text-amber-600' : 'text-slate-700'}>{prod.stock}</b>
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="text-right shrink-0">
+                                    <span className="font-black text-xs text-slate-900 block">
+                                      {formData.currency === 'USD' ? 'USD $' : '$'}
+                                      {price.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                    {originalCurrency !== formData.currency && originalPrice > 0 && (
+                                      <span className="text-[9px] text-muted-foreground block">
+                                        (Orig: {originalCurrency === 'USD' ? 'USD $' : '$'}{originalPrice.toLocaleString('es-AR')})
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            })
+                          )}
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
 
                   {/* Botón Ítem Manual */}
                   <Button 
@@ -1172,30 +1435,34 @@ export default function QuotesPage() {
                     variant="outline" 
                     size="sm"
                     onClick={handleAddCustomItem}
-                    className="h-9 rounded-xl font-bold text-xs shrink-0"
+                    className="h-10 rounded-2xl font-bold text-xs shrink-0 border-slate-200"
                   >
                     + Ítem Libre
                   </Button>
                 </div>
               </div>
 
+              {/* Tabla de Items */}
               <div className="border rounded-2xl overflow-hidden bg-white shadow-sm">
                 <Table>
                   <TableHeader className="bg-slate-50/80">
                     <TableRow>
                       <TableHead className="text-xs font-bold text-slate-600 pl-4 py-2.5">Descripción / Concepto</TableHead>
                       <TableHead className="text-xs font-bold text-slate-600 w-20 py-2.5 text-center">Cant.</TableHead>
-                      <TableHead className="text-xs font-bold text-slate-600 w-32 py-2.5 text-right">Precio Unit.</TableHead>
+                      <TableHead className="text-xs font-bold text-slate-600 w-36 py-2.5 text-right">
+                        Precio Unit. ({formData.currency})
+                      </TableHead>
                       <TableHead className="text-xs font-bold text-slate-600 w-24 py-2.5 text-center">Desc. %</TableHead>
-                      <TableHead className="text-xs font-bold text-slate-600 w-32 py-2.5 text-right">Subtotal</TableHead>
+                      <TableHead className="text-xs font-bold text-slate-600 w-36 py-2.5 text-right">Subtotal</TableHead>
                       <TableHead className="w-10 py-2.5 pr-4"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {formData.items.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-xs text-muted-foreground">
-                          No has agregado artículos. Selecciona productos del catálogo arriba o añade un ítem libre.
+                        <TableCell colSpan={6} className="text-center py-10 text-xs text-muted-foreground">
+                          <Package className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                          No has agregado artículos. Presiona <b>"+ Buscar en Catálogo"</b> arriba o añade un <b>"Ítem Libre"</b>.
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -1291,7 +1558,7 @@ export default function QuotesPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleAppendNotePreset("• Precios en USD pagaderos en ARS según tipo de cambio oficial del día de pago.")}
+                    onClick={() => handleAppendNotePreset(`• Precios en USD pagaderos en ARS según tipo de cambio Dólar Blue al día de pago (Cotización ref: $${formData.exchangeRate}).`)}
                     className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded-lg font-semibold"
                   >
                     + Cláusula USD
