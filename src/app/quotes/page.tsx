@@ -113,6 +113,12 @@ export default function QuotesPage() {
   const { toast } = useToast()
   const { userData, isUserLoading } = useUser()
 
+  // Evitar Hydration Mismatch
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   const isStaff = useMemo(() => {
     return userData && ['Admin', 'Employee', 'Collaborator', 'Communicator'].includes(userData.role)
   }, [userData])
@@ -177,7 +183,7 @@ export default function QuotesPage() {
   const [editingQuoteId, setEditingQuoteId] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
-  // Buscador de Catálogo (Modal dedicado para evitar conflictos de foco)
+  // Buscador de Catálogo (Modal dedicado)
   const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false)
   const [catalogSearch, setCatalogSearch] = useState("")
   const [catalogCategoryFilter, setCatalogCategoryFilter] = useState("all")
@@ -196,6 +202,29 @@ export default function QuotesPage() {
   // Estado de Conversión a Venta
   const [quoteToConvert, setQuoteToConvert] = useState<Quote | null>(null)
   const [isConverting, setIsConverting] = useState(false)
+
+  // Helper para restaurar puntero si Radix Dialog lo bloquea
+  const ensurePointerEvents = () => {
+    setTimeout(() => {
+      if (typeof document !== 'undefined') {
+        document.body.style.pointerEvents = 'auto'
+      }
+    }, 50)
+  }
+
+  // Observer para evitar que la app se congele al cerrar modales
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      if (document.body.style.pointerEvents === 'none') {
+        const anyOpen = isDialogOpen || isPreviewOpen || isCatalogModalOpen || isClientModalOpen || !!quoteToDelete || !!quoteToConvert
+        if (!anyOpen) {
+          document.body.style.pointerEvents = 'auto'
+        }
+      }
+    })
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] })
+    return () => observer.disconnect()
+  }, [isDialogOpen, isPreviewOpen, isCatalogModalOpen, isClientModalOpen, quoteToDelete, quoteToConvert])
 
   // Formulario de Cotización
   const [formData, setFormData] = useState<Quote>({
@@ -380,6 +409,7 @@ export default function QuotesPage() {
       clientAddress: client.direccion || client.zona || ""
     }))
     setIsClientModalOpen(false)
+    ensurePointerEvents()
     toast({ title: "Cliente seleccionado", description: `${client.apellido || ""} ${client.nombre || ""}`.trim() })
   }
 
@@ -491,6 +521,7 @@ export default function QuotesPage() {
     }))
 
     setIsCatalogModalOpen(false)
+    ensurePointerEvents()
     toast({ title: "Artículo agregado", description: `Se añadió "${prod.name}" a la cotización.` })
   }
 
@@ -608,6 +639,7 @@ export default function QuotesPage() {
       }
 
       setIsDialogOpen(false)
+      ensurePointerEvents()
     } catch (error) {
       console.error("Error saving quote:", error)
       toast({ title: "Error", description: "No se pudo guardar la cotización.", variant: "destructive" })
@@ -637,6 +669,7 @@ export default function QuotesPage() {
       await deleteDoc(doc(db, 'quotes', quoteToDelete.id))
       toast({ title: "Cotización eliminada", description: `Se eliminó el presupuesto ${quoteToDelete.quoteNumber}.` })
       setQuoteToDelete(null)
+      ensurePointerEvents()
     } catch (error) {
       toast({ title: "Error", description: "No se pudo eliminar la cotización.", variant: "destructive" })
     }
@@ -682,6 +715,7 @@ export default function QuotesPage() {
         description: `Se registró la operación en el módulo de Operaciones a partir de la cotización ${quoteToConvert.quoteNumber}.` 
       })
       setQuoteToConvert(null)
+      ensurePointerEvents()
     } catch (error) {
       console.error("Error converting quote:", error)
       toast({ title: "Error", description: "No se pudo convertir la cotización a venta.", variant: "destructive" })
@@ -760,7 +794,7 @@ export default function QuotesPage() {
     return { totalARS, totalUSD, activeCount, approvedCount, conversionRate }
   }, [quotes])
 
-  if (isUserLoading || loadingQuotes) {
+  if (!mounted || isUserLoading || loadingQuotes) {
     return (
       <div className="flex justify-center items-center h-screen bg-background">
         <RefreshCw className="h-8 w-8 animate-spin text-primary" />
@@ -1113,7 +1147,13 @@ export default function QuotesPage() {
       {/* ======================================================== */}
       {/* MODAL CREADOR / EDITOR DE COTIZACIÓN (AMPLIO Y RESPONSIVE)*/}
       {/* ======================================================== */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog 
+        open={isDialogOpen} 
+        onOpenChange={(open) => {
+          setIsDialogOpen(open)
+          if (!open) ensurePointerEvents()
+        }}
+      >
         <DialogContent className="w-[96vw] max-w-5xl max-h-[92vh] overflow-y-auto rounded-3xl p-4 sm:p-7 overflow-x-hidden">
           <DialogHeader>
             <div className="flex items-center justify-between pr-2">
@@ -1665,7 +1705,10 @@ export default function QuotesPage() {
               <Button 
                 type="button" 
                 variant="outline" 
-                onClick={() => setIsDialogOpen(false)}
+                onClick={() => {
+                  setIsDialogOpen(false)
+                  ensurePointerEvents()
+                }}
                 className="rounded-2xl h-10 font-bold text-xs"
               >
                 Cancelar
@@ -1685,7 +1728,13 @@ export default function QuotesPage() {
       {/* ======================================================== */}
       {/* MODAL BUSCADOR DE CATÁLOGO (DEDICADO SIN CONFLICTOS)     */}
       {/* ======================================================== */}
-      <Dialog open={isCatalogModalOpen} onOpenChange={setIsCatalogModalOpen}>
+      <Dialog 
+        open={isCatalogModalOpen} 
+        onOpenChange={(open) => {
+          setIsCatalogModalOpen(open)
+          if (!open) ensurePointerEvents()
+        }}
+      >
         <DialogContent className="w-[95vw] max-w-lg max-h-[85vh] overflow-y-auto rounded-3xl p-4 sm:p-6">
           <DialogHeader>
             <div className="flex items-center justify-between">
@@ -1802,7 +1851,13 @@ export default function QuotesPage() {
       {/* ======================================================== */}
       {/* MODAL BUSCADOR DE CLIENTES (DEDICADO Y ORDENADO)        */}
       {/* ======================================================== */}
-      <Dialog open={isClientModalOpen} onOpenChange={setIsClientModalOpen}>
+      <Dialog 
+        open={isClientModalOpen} 
+        onOpenChange={(open) => {
+          setIsClientModalOpen(open)
+          if (!open) ensurePointerEvents()
+        }}
+      >
         <DialogContent className="w-[95vw] max-w-lg max-h-[85vh] overflow-y-auto rounded-3xl p-4 sm:p-6">
           <DialogHeader>
             <div className="flex items-center justify-between">
@@ -1878,7 +1933,13 @@ export default function QuotesPage() {
       {/* ======================================================== */}
       {/* MODAL VISTA PREVIA E IMPRESIÓN PDF A4                    */}
       {/* ======================================================== */}
-      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+      <Dialog 
+        open={isPreviewOpen} 
+        onOpenChange={(open) => {
+          setIsPreviewOpen(open)
+          if (!open) ensurePointerEvents()
+        }}
+      >
         <DialogContent className="w-[96vw] max-w-4xl max-h-[95vh] overflow-y-auto rounded-3xl p-4 sm:p-8">
           <DialogHeader className="no-print">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4">
@@ -1915,7 +1976,7 @@ export default function QuotesPage() {
           {previewQuote && (
             <div className="bg-white text-slate-900 p-4 sm:p-10 rounded-2xl border shadow-sm my-2 font-sans overflow-x-hidden">
               
-              {/* Encabezado: Logo Limpio (sin texto duplicado) y Datos de Empresa */}
+              {/* Encabezado: Logo Limpio y Datos de Empresa */}
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b-2 border-primary/20 pb-4">
                 <div>
                   <img 
@@ -2065,7 +2126,15 @@ export default function QuotesPage() {
       {/* ======================================================== */}
       {/* DIÁLOGO CONFIRMAR BORRADO                                */}
       {/* ======================================================== */}
-      <AlertDialog open={!!quoteToDelete} onOpenChange={(open) => !open && setQuoteToDelete(null)}>
+      <AlertDialog 
+        open={!!quoteToDelete} 
+        onOpenChange={(open) => {
+          if (!open) {
+            setQuoteToDelete(null)
+            ensurePointerEvents()
+          }
+        }}
+      >
         <AlertDialogContent className="w-[95vw] max-w-md rounded-3xl p-5">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-lg font-bold">¿Eliminar cotización?</AlertDialogTitle>
@@ -2088,7 +2157,15 @@ export default function QuotesPage() {
       {/* ======================================================== */}
       {/* DIÁLOGO CONVERTIR A VENTA                                */}
       {/* ======================================================== */}
-      <AlertDialog open={!!quoteToConvert} onOpenChange={(open) => !open && setQuoteToConvert(null)}>
+      <AlertDialog 
+        open={!!quoteToConvert} 
+        onOpenChange={(open) => {
+          if (!open) {
+            setQuoteToConvert(null)
+            ensurePointerEvents()
+          }
+        }}
+      >
         <AlertDialogContent className="w-[95vw] max-w-md rounded-3xl p-5">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-lg font-bold flex items-center gap-2">
