@@ -25,7 +25,8 @@ import {
   Plus,
   ShoppingBag,
   ArrowUpRight,
-  Activity
+  Activity,
+  ReceiptText
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -68,6 +69,7 @@ const navItems = [
   { href: "/customers", label: "Clientes", icon: Users },
   { href: "/routes", label: "Rutas", icon: Truck },
   { href: "/transactions", label: "Operaciones", icon: ArrowLeftRight },
+  { href: "/quotes", label: "Cotizaciones", icon: ReceiptText },
   { href: "/analysis", label: "Análisis", icon: BarChart3 },
   { href: "/monitoring", label: "Monitoreo", icon: Activity },
   { href: "/accounts", label: "Cajas", icon: Wallet },
@@ -182,7 +184,7 @@ export function Sidebar({ className }: { className?: string }) {
 
     let items: typeof navItems = [];
     if (role === 'Communicator') {
-      items = navItems.filter(item => ['/customers', '/routes', '/help'].includes(item.href));
+      items = navItems.filter(item => ['/customers', '/routes', '/quotes', '/help'].includes(item.href));
     } else if (role === 'Replenisher') {
       items = navItems.filter(item => ['/routes', '/help'].includes(item.href));
     } else if (role === 'Employee' || role === 'Admin' || role === 'Collaborator') {

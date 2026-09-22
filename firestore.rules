@@ -87,6 +87,11 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    match /quotes/{docId} {
+      allow read: if isStaff() || canReadClientTransaction(resource.data.clientId);
+      allow write: if isStaff();
+    }
+
 match /route_sheets/{docId} {
   // ✅ LIST: cualquier usuario firmado puede obtener la lista completa.
   //     (El cliente seguirá recibiendo sólo los documentos que pueda leer.)
