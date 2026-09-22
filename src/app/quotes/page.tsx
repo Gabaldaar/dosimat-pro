@@ -747,7 +747,7 @@ export default function QuotesPage() {
   // "COT_CXXXX_nombre.cliente_aaaammdd.pdf"
   const getPdfFilename = (quote: Quote) => {
     let code = "COT"
-    if (quote.quoteNumber) {
+    if (quote?.quoteNumber) {
       const digits = quote.quoteNumber.replace(/\D/g, '')
       if (digits) {
         code = `COT_C${digits.padStart(4, '0')}`
@@ -756,7 +756,7 @@ export default function QuotesPage() {
       }
     }
 
-    const rawClient = quote.clientName || "cliente"
+    const rawClient = quote?.clientName || "cliente"
     const clientClean = rawClient
       .trim()
       .toLowerCase()
@@ -765,7 +765,7 @@ export default function QuotesPage() {
       .replace(/^\.+|\.+$/g, '') // eliminar puntos iniciales o finales
 
     let dateStr = ""
-    if (quote.date && /^\d{4}-\d{2}-\d{2}$/.test(quote.date)) {
+    if (quote?.date && /^\d{4}-\d{2}-\d{2}$/.test(quote.date)) {
       dateStr = quote.date.replace(/-/g, '')
     } else {
       const d = new Date()
@@ -778,13 +778,17 @@ export default function QuotesPage() {
     return `${code}_${clientClean || 'cliente'}_${dateStr}`
   }
 
-  // Imprimir / Exportar a PDF
-  const handlePrint = (quoteToPrint?: Quote) => {
-    const q = quoteToPrint || previewQuote
-    if (!q) return
-    if (!previewQuote || previewQuote.id !== q.id) {
-      setPreviewQuote(q)
+  // Imprimir / Exportar a PDF (seguro contra SyntheticEvent de React)
+  const handlePrint = (quoteToPrint?: any) => {
+    let q: Quote | null = null
+    if (quoteToPrint && typeof quoteToPrint === 'object' && ('items' in quoteToPrint || 'quoteNumber' in quoteToPrint || 'clientName' in quoteToPrint)) {
+      q = quoteToPrint as Quote
+    } else if (previewQuote) {
+      q = previewQuote
     }
+    if (!q) return
+
+    setPreviewQuote(q)
     const originalTitle = typeof document !== 'undefined' ? document.title : ""
     const filename = getPdfFilename(q)
     if (typeof document !== 'undefined') {
@@ -797,7 +801,7 @@ export default function QuotesPage() {
           document.title = originalTitle
         }
       }, 1000)
-    }, 100)
+    }, 150)
   }
 
   // Cotizaciones filtradas
@@ -2167,7 +2171,7 @@ export default function QuotesPage() {
                   WhatsApp
                 </Button>
                 <Button 
-                  onClick={handlePrint}
+                  onClick={() => previewQuote && handlePrint(previewQuote)}
                   className="bg-primary hover:bg-primary/90 text-white font-bold text-xs rounded-xl h-9 px-4 gap-1.5 shadow-md shadow-primary/20"
                 >
                   <Printer className="h-3.5 w-3.5" />
