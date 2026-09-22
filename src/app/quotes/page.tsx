@@ -743,9 +743,61 @@ export default function QuotesPage() {
     window.open(url, '_blank')
   }
 
-  // Imprimir
-  const handlePrint = () => {
-    window.print()
+  // Helper para generar el nombre del archivo PDF según el formato solicitado:
+  // "COT_CXXXX_nombre.cliente_aaaammdd.pdf"
+  const getPdfFilename = (quote: Quote) => {
+    let code = "COT"
+    if (quote.quoteNumber) {
+      const digits = quote.quoteNumber.replace(/\D/g, '')
+      if (digits) {
+        code = `COT_C${digits.padStart(4, '0')}`
+      } else {
+        code = quote.quoteNumber.replace(/[^a-zA-Z0-9]/g, '_')
+      }
+    }
+
+    const rawClient = quote.clientName || "cliente"
+    const clientClean = rawClient
+      .trim()
+      .toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // quitar acentos
+      .replace(/[^a-z0-9]+/g, '.') // reemplazar espacios y caracteres especiales por puntos
+      .replace(/^\.+|\.+$/g, '') // eliminar puntos iniciales o finales
+
+    let dateStr = ""
+    if (quote.date && /^\d{4}-\d{2}-\d{2}$/.test(quote.date)) {
+      dateStr = quote.date.replace(/-/g, '')
+    } else {
+      const d = new Date()
+      const yyyy = d.getFullYear()
+      const mm = String(d.getMonth() + 1).padStart(2, '0')
+      const dd = String(d.getDate()).padStart(2, '0')
+      dateStr = `${yyyy}${mm}${dd}`
+    }
+
+    return `${code}_${clientClean || 'cliente'}_${dateStr}`
+  }
+
+  // Imprimir / Exportar a PDF
+  const handlePrint = (quoteToPrint?: Quote) => {
+    const q = quoteToPrint || previewQuote
+    if (!q) return
+    if (!previewQuote || previewQuote.id !== q.id) {
+      setPreviewQuote(q)
+    }
+    const originalTitle = typeof document !== 'undefined' ? document.title : ""
+    const filename = getPdfFilename(q)
+    if (typeof document !== 'undefined') {
+      document.title = filename
+    }
+    setTimeout(() => {
+      window.print()
+      setTimeout(() => {
+        if (typeof document !== 'undefined') {
+          document.title = originalTitle
+        }
+      }, 1000)
+    }, 100)
   }
 
   // Cotizaciones filtradas
@@ -804,7 +856,8 @@ export default function QuotesPage() {
 
   return (
     <div className="flex min-h-screen bg-background w-full overflow-x-hidden">
-      <Sidebar />
+      <div className="no-print flex min-h-screen bg-background w-full overflow-x-hidden">
+        <Sidebar />
       <SidebarInset className="flex-1 w-full pb-32 md:pb-8 p-3 sm:p-6 md:p-8 space-y-6 max-w-full overflow-x-hidden">
         
         {/* Cabecera Principal */}
@@ -2355,7 +2408,168 @@ export default function QuotesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      </div>
 
+      {/* ======================================================== */}
+      {/* SECCIÓN EXCLUSIVA DE IMPRESIÓN / PDF (A4 FULL PAGE)     */}
+      {/* ======================================================== */}
+      {previewQuote && (
+        <div className="print-only w-full p-8 font-sans text-slate-900 bg-white">
+          
+          {/* Encabezado: Logo y Datos de Empresa */}
+          <div className="flex justify-between items-start border-b-2 border-primary/30 pb-4 mb-4">
+            <div>
+              <img 
+                src="/logo-dosimat.png" 
+                alt="Dosimat Pro" 
+                className="h-16 object-contain"
+              />
+            </div>
+
+            <div className="text-right space-y-0.5 text-xs text-slate-600">
+              <h3 className="font-black text-sm text-slate-900">{settings?.name || "DOSIMAT PRO"}</h3>
+              {(settings?.adminPhone || settings?.supportWhatsapp) && (
+                <p>Tel / WA: <span className="font-bold">{settings.adminPhone || settings.supportWhatsapp}</span></p>
+              )}
+              {(settings?.adminEmail || settings?.supportEmail) && (
+                <p>Email: {settings.adminEmail || settings.supportEmail}</p>
+              )}
+              {settings?.address && settings.address.trim() !== "" && (
+                <p>Ubicación: {settings.address}</p>
+              )}
+              {settings?.website && settings.website.trim() !== "" && (
+                <p className="text-primary font-semibold">{settings.website}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Ficha: Datos de Cotización y Cliente */}
+          <div className="grid grid-cols-2 gap-4 my-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <div>
+              <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block mb-0.5">
+                Cliente / Destinatario:
+              </span>
+              <h4 className="text-sm font-black text-slate-900">{previewQuote.clientName}</h4>
+              {previewQuote.clientPhone && <p className="text-xs text-slate-700 mt-0.5">Tel: {previewQuote.clientPhone}</p>}
+              {previewQuote.clientEmail && <p className="text-xs text-slate-700">Email: {previewQuote.clientEmail}</p>}
+              {previewQuote.clientAddress && previewQuote.clientAddress.trim() !== "" && (
+                <p className="text-xs text-slate-700">Dirección: {previewQuote.clientAddress}</p>
+              )}
+            </div>
+
+            <div className="text-right space-y-0.5">
+              <div className="inline-block bg-primary text-white font-black text-xs px-2.5 py-1 rounded-lg uppercase tracking-wider">
+                Presupuesto {previewQuote.quoteNumber}
+              </div>
+              <p className="text-xs text-slate-600 pt-1">
+                Fecha de Emisión: <span className="font-bold text-slate-800">{previewQuote.date ? new Date(previewQuote.date).toLocaleDateString('es-AR') : '-'}</span>
+              </p>
+              {previewQuote.validUntil && (
+                <p className="text-xs text-slate-600">
+                  Validez de Oferta: <span className="font-bold text-slate-800">{new Date(previewQuote.validUntil).toLocaleDateString('es-AR')}</span>
+                </p>
+              )}
+              <p className="text-xs text-slate-600">
+                Moneda: <span className="font-bold text-slate-800">{previewQuote.currency === 'USD' ? 'Dólares (USD)' : 'Pesos (ARS)'}</span>
+              </p>
+            </div>
+          </div>
+
+          {/* Tabla de Artículos con Cantidad + Unidad */}
+          <div className="my-4 border border-slate-300 rounded-lg overflow-hidden">
+            <table className="w-full text-xs border-collapse">
+              <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
+                <tr>
+                  <th className="py-2 px-2.5 text-left w-8 border-r border-slate-200">#</th>
+                  <th className="py-2 px-2.5 text-left border-r border-slate-200">Descripción / Detalle</th>
+                  <th className="py-2 px-2 text-center w-20 border-r border-slate-200">Cant.</th>
+                  <th className="py-2 px-2.5 text-right w-28 border-r border-slate-200">Precio Unit.</th>
+                  {previewQuote.items?.some(it => (it.discount || 0) > 0) && (
+                    <th className="py-2 px-2 text-center w-16 border-r border-slate-200">Desc.</th>
+                  )}
+                  <th className="py-2 px-3 text-right w-28">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {previewQuote.items?.map((item, i) => {
+                  const currencySym = previewQuote.currency === 'USD' ? 'USD $' : '$'
+                  return (
+                    <tr key={item.id || i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
+                      <td className="py-2 px-2.5 font-semibold text-slate-400 border-r border-slate-200">{i + 1}</td>
+                      <td className="py-2 px-2.5 border-r border-slate-200">
+                        <span className="font-bold text-slate-800 block">{item.name}</span>
+                        {item.description && <span className="text-[10px] text-slate-500 block">{item.description}</span>}
+                      </td>
+                      <td className="py-2 px-2 text-center font-bold text-slate-700 whitespace-nowrap border-r border-slate-200">
+                        {item.qty} {item.unit || 'un'}
+                      </td>
+                      <td className="py-2 px-2.5 text-right text-slate-700 border-r border-slate-200">
+                        {currencySym}{Number(item.unitPrice || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      {previewQuote.items?.some(it => (it.discount || 0) > 0) && (
+                        <td className="py-2 px-2 text-center text-emerald-600 font-semibold border-r border-slate-200">
+                          {item.discount ? `${item.discount}%` : '-'}
+                        </td>
+                      )}
+                      <td className="py-2 px-3 text-right font-black text-slate-900">
+                        {currencySym}{Number(item.subtotal || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Totales y Notas */}
+          <div className="grid grid-cols-2 gap-4 items-start mt-4 pt-3 border-t border-slate-200">
+            
+            {/* Notas */}
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1">
+              <h5 className="font-bold text-slate-900 uppercase text-[9px] tracking-wider">Condiciones y Observaciones:</h5>
+              <div className="whitespace-pre-line text-slate-600 leading-relaxed text-[11px]">
+                {previewQuote.notes || "Sin observaciones adicionales."}
+              </div>
+            </div>
+
+            {/* Resumen Total */}
+            <div className="space-y-1.5 bg-slate-50 p-3 rounded-xl border border-slate-200 text-right">
+              <div className="flex justify-between text-xs text-slate-600">
+                <span>Subtotal:</span>
+                <span className="font-bold text-slate-800">
+                  {previewQuote.currency === 'USD' ? 'USD $' : '$'}
+                  {Number(previewQuote.subtotal || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+
+              {previewQuote.globalDiscountAmount > 0 && (
+                <div className="flex justify-between text-xs text-emerald-600 font-bold">
+                  <span>Descuento ({previewQuote.globalDiscountPercent}%):</span>
+                  <span>
+                    -{previewQuote.currency === 'USD' ? 'USD $' : '$'}
+                    {Number(previewQuote.globalDiscountAmount || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+
+              <div className="border-t border-slate-300 pt-1.5 flex justify-between items-baseline">
+                <span className="text-xs font-black uppercase text-slate-900">TOTAL:</span>
+                <span className="text-lg font-black text-primary">
+                  {previewQuote.currency === 'USD' ? 'USD $' : '$'}
+                  {Number(previewQuote.total || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Pie de página */}
+          <div className="mt-8 pt-3 border-t border-slate-200 text-center text-[9px] text-slate-400 space-y-0.5">
+            <p className="font-bold text-slate-600">¡Muchas gracias por confiar en Dosimat!</p>
+            <p>Este documento es una cotización comercial y no constituye una factura fiscal.</p>
+          </div>
+
+        </div>
+      )}
     </div>
   )
 }
