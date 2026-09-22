@@ -13,7 +13,6 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,19 +46,17 @@ import {
   CheckCircle2, 
   XCircle, 
   Clock, 
-  Coins, 
   DollarSign, 
-  Check, 
   Sparkles, 
   Droplets,
   ArrowUpRight,
-  ArrowRightLeft,
-  Tag,
   Package,
   Boxes,
-  HelpCircle,
+  User,
   RefreshCw,
-  MoreVertical
+  MoreVertical,
+  X,
+  Check
 } from "lucide-react"
 
 export interface QuoteItem {
@@ -132,7 +129,7 @@ export default function QuotesPage() {
     }
   }, [userData, isUserLoading, router])
 
-  // Obtener cotizaciones del Dólar en vivo
+  // Cotizaciones Dólar en vivo
   const [exchangeRates, setExchangeRates] = useState<{ official: number; blue: number }>({ official: 1300, blue: 1350 })
 
   useEffect(() => {
@@ -181,10 +178,14 @@ export default function QuotesPage() {
   const [editingQuoteId, setEditingQuoteId] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
-  // Buscador de Catálogo (Popover)
+  // Buscador de Catálogo (Modal dedicado para evitar conflictos de foco)
+  const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false)
   const [catalogSearch, setCatalogSearch] = useState("")
   const [catalogCategoryFilter, setCatalogCategoryFilter] = useState("all")
-  const [isCatalogPopoverOpen, setIsCatalogPopoverOpen] = useState(false)
+
+  // Buscador de Clientes (Modal dedicado)
+  const [isClientModalOpen, setIsClientModalOpen] = useState(false)
+  const [clientSearch, setClientSearch] = useState("")
 
   // Estado del Modal de Vista Previa / Impresión
   const [previewQuote, setPreviewQuote] = useState<Quote | null>(null)
@@ -242,7 +243,26 @@ export default function QuotesPage() {
     return d.toISOString().split('T')[0]
   }
 
-  // Helper para resolver el precio de un producto y convertirlo si es necesario
+  // Clientes ordenados alfabéticamente y filtrados
+  const sortedAndFilteredClients = useMemo(() => {
+    if (!clients) return []
+    return [...clients]
+      .filter((c: any) => {
+        const fullName = `${c.apellido || ""} ${c.nombre || ""}`.toLowerCase()
+        const phone = (c.telefono || "").toLowerCase()
+        const mail = (c.mail || "").toLowerCase()
+        const address = (c.direccion || c.zona || "").toLowerCase()
+        const search = clientSearch.toLowerCase()
+        return fullName.includes(search) || phone.includes(search) || mail.includes(search) || address.includes(search)
+      })
+      .sort((a: any, b: any) => {
+        const nameA = `${a.apellido || ""} ${a.nombre || ""}`.trim()
+        const nameB = `${b.apellido || ""} ${b.nombre || ""}`.trim()
+        return nameA.localeCompare(nameB)
+      })
+  }, [clients, clientSearch])
+
+  // Helper para resolver el precio de un producto y convertirlo
   const resolveProductPrice = (prod: any, targetCurrency: 'ARS' | 'USD', rate: number) => {
     const validRate = Number(rate) > 0 ? Number(rate) : 1350
     const rawPriceARS = Number(prod.priceARS ?? prod.price ?? 0)
@@ -265,7 +285,7 @@ export default function QuotesPage() {
     }
   }
 
-  // Lista ordenada y filtrada de productos del catálogo para el buscador rápido
+  // Lista ordenada y filtrada de productos del catálogo
   const sortedAndFilteredCatalog = useMemo(() => {
     if (!products) return []
     return [...products]
@@ -286,6 +306,7 @@ export default function QuotesPage() {
     setEditingQuoteId(null)
     setCatalogSearch("")
     setCatalogCategoryFilter("all")
+    setClientSearch("")
     setFormData({
       quoteNumber: getNextQuoteNumber(),
       date: todayStr,
@@ -315,6 +336,7 @@ export default function QuotesPage() {
     setEditingQuoteId(quote.id || null)
     setCatalogSearch("")
     setCatalogCategoryFilter("all")
+    setClientSearch("")
     setFormData({
       ...quote,
       exchangeRate: quote.exchangeRate || exchangeRates.blue || 1350,
@@ -340,33 +362,32 @@ export default function QuotesPage() {
     toast({ title: "Cotización duplicada", description: "Se ha creado una copia lista para editar y guardar." })
   }
 
-  // Manejo de Cliente
-  const handleClientSelect = (clientId: string) => {
-    if (clientId === "prospect") {
-      setFormData(prev => ({
-        ...prev,
-        clientId: null,
-        isProspect: true,
-        clientName: "",
-        clientEmail: "",
-        clientPhone: "",
-        clientAddress: ""
-      }))
-      return
-    }
+  // Seleccionar cliente desde el modal buscador
+  const handleSelectClientFromList = (client: any) => {
+    setFormData(prev => ({
+      ...prev,
+      clientId: client.id,
+      isProspect: false,
+      clientName: `${client.apellido || ""}, ${client.nombre || ""}`.trim() || client.nombre || "",
+      clientEmail: client.mail || "",
+      clientPhone: client.telefono || "",
+      clientAddress: client.direccion || client.zona || ""
+    }))
+    setIsClientModalOpen(false)
+    toast({ title: "Cliente seleccionado", description: `${client.apellido || ""} ${client.nombre || ""}`.trim() })
+  }
 
-    const selected = clients?.find(c => c.id === clientId)
-    if (selected) {
-      setFormData(prev => ({
-        ...prev,
-        clientId: selected.id,
-        isProspect: false,
-        clientName: `${selected.apellido || ""}, ${selected.nombre || ""}`.trim() || selected.nombre || "",
-        clientEmail: selected.mail || "",
-        clientPhone: selected.telefono || "",
-        clientAddress: selected.direccion || selected.zona || ""
-      }))
-    }
+  // Activar modo Prospecto
+  const handleSetProspectMode = () => {
+    setFormData(prev => ({
+      ...prev,
+      clientId: null,
+      isProspect: true,
+      clientName: "",
+      clientEmail: "",
+      clientPhone: "",
+      clientAddress: ""
+    }))
   }
 
   // Recalcular Subtotales y Total
@@ -377,19 +398,16 @@ export default function QuotesPage() {
     return { subtotal, globalDiscountAmount, total }
   }
 
-  // Cambiar Moneda y Opcionalmente Convertir Ítems Existentes
+  // Cambiar Moneda y Convertir Ítems
   const handleChangeCurrency = (newCurrency: 'ARS' | 'USD') => {
     if (newCurrency === formData.currency) return
     const rate = Number(formData.exchangeRate) > 0 ? Number(formData.exchangeRate) : 1350
 
-    // Convertir los ítems existentes en la cotización
     const convertedItems = formData.items.map(item => {
       let newUnitPrice = 0
       if (newCurrency === 'USD') {
-        // De ARS a USD
         newUnitPrice = Math.round((item.unitPrice / rate) * 100) / 100
       } else {
-        // De USD a ARS
         newUnitPrice = Math.round(item.unitPrice * rate)
       }
       const qty = Number(item.qty) || 0
@@ -465,7 +483,7 @@ export default function QuotesPage() {
       total
     }))
 
-    setIsCatalogPopoverOpen(false)
+    setIsCatalogModalOpen(false)
     toast({ title: "Artículo agregado", description: `Se añadió "${prod.name}" a la cotización.` })
   }
 
@@ -499,7 +517,6 @@ export default function QuotesPage() {
     const updatedItems = [...formData.items]
     const current = { ...updatedItems[index], [field]: value }
 
-    // Calcular subtotal de línea
     const qty = Number(current.qty) || 0
     const unitPrice = Number(current.unitPrice) || 0
     const discount = Math.min(100, Math.max(0, Number(current.discount) || 0))
@@ -743,13 +760,13 @@ export default function QuotesPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-background w-full">
+    <div className="flex min-h-screen bg-background w-full overflow-x-hidden">
       <Sidebar />
-      <SidebarInset className="flex-1 w-full pb-32 md:pb-8 p-4 md:p-8 space-y-6 overflow-x-hidden">
+      <SidebarInset className="flex-1 w-full pb-32 md:pb-8 p-3 sm:p-6 md:p-8 space-y-6 max-w-full overflow-x-hidden">
         
         {/* Cabecera Principal */}
         <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <SidebarTrigger className="flex" />
             <div className="flex items-center gap-2 md:hidden pr-2 border-r">
                <div className="bg-primary p-1.5 rounded-lg shadow-sm shadow-primary/20">
@@ -770,7 +787,7 @@ export default function QuotesPage() {
 
           <Button 
             onClick={handleOpenNewQuote} 
-            className="bg-primary hover:bg-primary/90 text-white font-bold rounded-2xl h-11 px-5 shadow-lg shadow-primary/20 flex items-center gap-2 shrink-0"
+            className="bg-primary hover:bg-primary/90 text-white font-bold rounded-2xl h-11 px-5 shadow-lg shadow-primary/20 flex items-center gap-2 shrink-0 w-full sm:w-auto justify-center"
           >
             <Plus className="h-5 w-5" />
             Nueva Cotización
@@ -778,67 +795,67 @@ export default function QuotesPage() {
         </header>
 
         {/* Tarjetas de Métricas (KPIs) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <Card className="glass-card shadow-sm border-l-4 border-l-blue-500 rounded-3xl">
-            <CardContent className="p-4 md:p-5 flex items-center justify-between">
+            <CardContent className="p-3 sm:p-5 flex items-center justify-between">
               <div>
-                <p className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Cotizado este mes</p>
-                <h3 className="text-lg md:text-2xl font-black text-slate-800 mt-1">
+                <p className="text-[10px] sm:text-xs font-bold uppercase text-muted-foreground tracking-wider">Cotizado mes</p>
+                <h3 className="text-base sm:text-2xl font-black text-slate-800 mt-1 truncate">
                   ${kpis.totalARS.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
                 </h3>
                 {kpis.totalUSD > 0 && (
-                  <p className="text-xs font-bold text-emerald-600 mt-0.5">
+                  <p className="text-[10px] sm:text-xs font-bold text-emerald-600 mt-0.5">
                     + USD ${kpis.totalUSD.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
                   </p>
                 )}
               </div>
-              <div className="p-3 bg-blue-50 rounded-2xl text-blue-600">
-                <DollarSign className="h-6 w-6" />
+              <div className="p-2 sm:p-3 bg-blue-50 rounded-2xl text-blue-600">
+                <DollarSign className="h-5 w-5 sm:h-6 sm:w-6" />
               </div>
             </CardContent>
           </Card>
 
           <Card className="glass-card shadow-sm border-l-4 border-l-amber-500 rounded-3xl">
-            <CardContent className="p-4 md:p-5 flex items-center justify-between">
+            <CardContent className="p-3 sm:p-5 flex items-center justify-between">
               <div>
-                <p className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Activas / Enviadas</p>
-                <h3 className="text-lg md:text-2xl font-black text-slate-800 mt-1">
+                <p className="text-[10px] sm:text-xs font-bold uppercase text-muted-foreground tracking-wider">Activas</p>
+                <h3 className="text-base sm:text-2xl font-black text-slate-800 mt-1">
                   {kpis.activeCount}
                 </h3>
-                <p className="text-xs text-muted-foreground mt-0.5">Esperando respuesta</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">Esperando respuesta</p>
               </div>
-              <div className="p-3 bg-amber-50 rounded-2xl text-amber-600">
-                <Clock className="h-6 w-6" />
+              <div className="p-2 sm:p-3 bg-amber-50 rounded-2xl text-amber-600">
+                <Clock className="h-5 w-5 sm:h-6 sm:w-6" />
               </div>
             </CardContent>
           </Card>
 
           <Card className="glass-card shadow-sm border-l-4 border-l-emerald-500 rounded-3xl">
-            <CardContent className="p-4 md:p-5 flex items-center justify-between">
+            <CardContent className="p-3 sm:p-5 flex items-center justify-between">
               <div>
-                <p className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Aprobadas / Ventas</p>
-                <h3 className="text-lg md:text-2xl font-black text-emerald-700 mt-1">
+                <p className="text-[10px] sm:text-xs font-bold uppercase text-muted-foreground tracking-wider">Aprobadas</p>
+                <h3 className="text-base sm:text-2xl font-black text-emerald-700 mt-1">
                   {kpis.approvedCount}
                 </h3>
-                <p className="text-xs text-muted-foreground mt-0.5">Presupuestos cerrados</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">Presupuestos cerrados</p>
               </div>
-              <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600">
-                <CheckCircle2 className="h-6 w-6" />
+              <div className="p-2 sm:p-3 bg-emerald-50 rounded-2xl text-emerald-600">
+                <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6" />
               </div>
             </CardContent>
           </Card>
 
           <Card className="glass-card shadow-sm border-l-4 border-l-purple-500 rounded-3xl">
-            <CardContent className="p-4 md:p-5 flex items-center justify-between">
+            <CardContent className="p-3 sm:p-5 flex items-center justify-between">
               <div>
-                <p className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Efectividad</p>
-                <h3 className="text-lg md:text-2xl font-black text-purple-700 mt-1">
+                <p className="text-[10px] sm:text-xs font-bold uppercase text-muted-foreground tracking-wider">Efectividad</p>
+                <h3 className="text-base sm:text-2xl font-black text-purple-700 mt-1">
                   {kpis.conversionRate}%
                 </h3>
-                <p className="text-xs text-muted-foreground mt-0.5">Tasa de aprobación</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">Tasa de cierre</p>
               </div>
-              <div className="p-3 bg-purple-50 rounded-2xl text-purple-600">
-                <Sparkles className="h-6 w-6" />
+              <div className="p-2 sm:p-3 bg-purple-50 rounded-2xl text-purple-600">
+                <Sparkles className="h-5 w-5 sm:h-6 sm:w-6" />
               </div>
             </CardContent>
           </Card>
@@ -846,25 +863,25 @@ export default function QuotesPage() {
 
         {/* Panel de Filtros */}
         <Card className="glass-card shadow-sm border rounded-3xl">
-          <CardContent className="p-4 md:p-5">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-              <div className="space-y-1.5 md:col-span-2">
-                <Label className="text-xs font-bold text-muted-foreground uppercase">Buscar Cotización</Label>
+          <CardContent className="p-3 sm:p-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
+              <div className="space-y-1 sm:col-span-2">
+                <Label className="text-[11px] font-bold text-muted-foreground uppercase">Buscar Cotización</Label>
                 <div className="relative">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input 
-                    placeholder="Buscar por N°, cliente, email o notas..." 
+                    placeholder="Buscar por N°, cliente o notas..." 
                     value={searchTerm} 
                     onChange={e => setSearchTerm(e.target.value)}
-                    className="pl-9 h-11 bg-background border rounded-2xl"
+                    className="pl-9 h-10 bg-background border rounded-2xl text-xs"
                   />
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-muted-foreground uppercase">Estado</Label>
+              <div className="space-y-1">
+                <Label className="text-[11px] font-bold text-muted-foreground uppercase">Estado</Label>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="h-11 bg-background border rounded-2xl">
+                  <SelectTrigger className="h-10 bg-background border rounded-2xl text-xs">
                     <SelectValue placeholder="Todos los estados" />
                   </SelectTrigger>
                   <SelectContent>
@@ -878,10 +895,10 @@ export default function QuotesPage() {
                 </Select>
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-muted-foreground uppercase">Moneda</Label>
+              <div className="space-y-1">
+                <Label className="text-[11px] font-bold text-muted-foreground uppercase">Moneda</Label>
                 <Select value={currencyFilter} onValueChange={setCurrencyFilter}>
-                  <SelectTrigger className="h-11 bg-background border rounded-2xl">
+                  <SelectTrigger className="h-10 bg-background border rounded-2xl text-xs">
                     <SelectValue placeholder="Todas las monedas" />
                   </SelectTrigger>
                   <SelectContent>
@@ -897,35 +914,35 @@ export default function QuotesPage() {
 
         {/* Listado de Cotizaciones */}
         <Card className="glass-card shadow-md border rounded-3xl overflow-hidden">
-          <CardHeader className="pb-3 border-b flex flex-row items-center justify-between">
+          <CardHeader className="p-4 sm:p-6 pb-3 border-b flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-lg font-bold text-slate-800">Historial de Cotizaciones</CardTitle>
-              <CardDescription>Visualiza, exporta y gestiona los presupuestos comerciales.</CardDescription>
+              <CardTitle className="text-base sm:text-lg font-bold text-slate-800">Historial de Cotizaciones</CardTitle>
+              <CardDescription className="text-xs">Visualiza, exporta y gestiona los presupuestos.</CardDescription>
             </div>
-            <Badge variant="secondary" className="font-bold">
-              {filteredQuotes.length} presupuestos
+            <Badge variant="secondary" className="font-bold text-xs">
+              {filteredQuotes.length}
             </Badge>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
+            <div className="w-full overflow-x-auto">
+              <Table className="min-w-full">
                 <TableHeader className="bg-slate-50/60">
                   <TableRow>
-                    <TableHead className="pl-6 font-bold text-xs uppercase text-muted-foreground py-4">N° Cotización</TableHead>
-                    <TableHead className="font-bold text-xs uppercase text-muted-foreground py-4">Cliente</TableHead>
-                    <TableHead className="font-bold text-xs uppercase text-muted-foreground py-4">Fecha / Validez</TableHead>
-                    <TableHead className="font-bold text-xs uppercase text-muted-foreground py-4">Total</TableHead>
-                    <TableHead className="font-bold text-xs uppercase text-muted-foreground py-4">Estado</TableHead>
-                    <TableHead className="pr-6 text-right font-bold text-xs uppercase text-muted-foreground py-4">Acciones</TableHead>
+                    <TableHead className="pl-4 sm:pl-6 font-bold text-xs uppercase text-muted-foreground py-3">N°</TableHead>
+                    <TableHead className="font-bold text-xs uppercase text-muted-foreground py-3">Cliente</TableHead>
+                    <TableHead className="font-bold text-xs uppercase text-muted-foreground py-3 hidden md:table-cell">Fecha</TableHead>
+                    <TableHead className="font-bold text-xs uppercase text-muted-foreground py-3">Total</TableHead>
+                    <TableHead className="font-bold text-xs uppercase text-muted-foreground py-3">Estado</TableHead>
+                    <TableHead className="pr-4 sm:pr-6 text-right font-bold text-xs uppercase text-muted-foreground py-3">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredQuotes.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-16 text-muted-foreground">
-                        <ReceiptText className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-                        <p className="font-bold text-base text-slate-600">No se encontraron cotizaciones</p>
-                        <p className="text-xs text-slate-400 mt-1">Crea tu primera cotización presionando el botón "Nueva Cotización".</p>
+                      <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                        <ReceiptText className="h-10 w-10 text-slate-300 mx-auto mb-2" />
+                        <p className="font-bold text-sm text-slate-600">No se encontraron cotizaciones</p>
+                        <p className="text-xs text-slate-400 mt-0.5">Crea tu primera cotización presionando "Nueva Cotización".</p>
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -936,60 +953,58 @@ export default function QuotesPage() {
 
                       return (
                         <TableRow key={quote.id} className="hover:bg-slate-50/50 transition-colors">
-                          <TableCell className="pl-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <span className="font-black text-sm text-primary tracking-tight">
-                                {quote.quoteNumber}
-                              </span>
-                            </div>
+                          <TableCell className="pl-4 sm:pl-6 py-3">
+                            <span className="font-black text-xs sm:text-sm text-primary">
+                              {quote.quoteNumber}
+                            </span>
                           </TableCell>
 
-                          <TableCell className="py-4">
-                            <div className="flex flex-col">
-                              <span className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                          <TableCell className="py-3">
+                            <div className="flex flex-col max-w-[140px] sm:max-w-xs">
+                              <span className="font-bold text-xs sm:text-sm text-slate-800 truncate flex items-center gap-1">
                                 {quote.clientName}
                                 {quote.isProspect && (
-                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-amber-300 text-amber-700 bg-amber-50">
+                                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-amber-300 text-amber-700 bg-amber-50 shrink-0">
                                     Prospecto
                                   </Badge>
                                 )}
                               </span>
-                              <span className="text-xs text-muted-foreground">
-                                {quote.clientPhone || quote.clientEmail || quote.clientAddress || "Sin datos de contacto"}
+                              <span className="text-[11px] text-muted-foreground truncate">
+                                {quote.clientPhone || quote.clientEmail || quote.clientAddress || "Sin contacto"}
                               </span>
                             </div>
                           </TableCell>
 
-                          <TableCell className="py-4">
+                          <TableCell className="py-3 hidden md:table-cell">
                             <div className="flex flex-col text-xs">
                               <span className="font-semibold text-slate-700">
                                 {quote.date ? new Date(quote.date).toLocaleDateString('es-AR') : '-'}
                               </span>
                               {quote.validUntil && (
-                                <span className="text-muted-foreground text-[11px]">
+                                <span className="text-muted-foreground text-[10px]">
                                   Vence: {new Date(quote.validUntil).toLocaleDateString('es-AR')}
                                 </span>
                               )}
                             </div>
                           </TableCell>
 
-                          <TableCell className="py-4">
+                          <TableCell className="py-3">
                             <div className="flex flex-col">
-                              <span className="font-black text-base text-slate-900">
+                              <span className="font-black text-xs sm:text-sm text-slate-900 whitespace-nowrap">
                                 {currencySym}{Number(quote.total || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
-                              <span className="text-[11px] text-muted-foreground font-semibold">
-                                {quote.items?.length || 0} {(quote.items?.length === 1) ? 'artículo' : 'artículos'}
+                              <span className="text-[10px] text-muted-foreground">
+                                {quote.items?.length || 0} ítems
                               </span>
                             </div>
                           </TableCell>
 
-                          <TableCell className="py-4">
+                          <TableCell className="py-3">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm" className={`h-7 px-2.5 rounded-full text-xs font-bold border ${status.color} hover:opacity-80`}>
-                                  <StatusIcon className="h-3.5 w-3.5 mr-1" />
-                                  {status.label}
+                                <Button variant="ghost" size="sm" className={`h-6 sm:h-7 px-2 rounded-full text-[10px] sm:text-xs font-bold border ${status.color}`}>
+                                  <StatusIcon className="h-3 w-3 mr-1 shrink-0" />
+                                  <span className="truncate max-w-[70px] sm:max-w-none">{status.label}</span>
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="start" className="rounded-2xl p-1">
@@ -1009,7 +1024,7 @@ export default function QuotesPage() {
                             </DropdownMenu>
                           </TableCell>
 
-                          <TableCell className="pr-6 py-4 text-right">
+                          <TableCell className="pr-4 sm:pr-6 py-3 text-right">
                             <div className="flex items-center justify-end gap-1">
                               {/* Ver / Imprimir PDF */}
                               <Button
@@ -1019,7 +1034,7 @@ export default function QuotesPage() {
                                   setPreviewQuote(quote)
                                   setIsPreviewOpen(true)
                                 }}
-                                className="h-8 px-2.5 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-primary gap-1 font-bold text-xs"
+                                className="h-7 sm:h-8 px-2 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-100 gap-1 font-bold text-xs"
                                 title="Ver e imprimir PDF"
                               >
                                 <Printer className="h-3.5 w-3.5" />
@@ -1031,11 +1046,11 @@ export default function QuotesPage() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleShareWhatsApp(quote)}
-                                className="h-8 px-2.5 rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50 gap-1 font-bold text-xs"
+                                className="h-7 sm:h-8 px-2 rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50 gap-1 font-bold text-xs"
                                 title="Compartir por WhatsApp"
                               >
                                 <MessageSquare className="h-3.5 w-3.5 text-emerald-600" />
-                                <span className="hidden sm:inline">WhatsApp</span>
+                                <span className="hidden sm:inline">WA</span>
                               </Button>
 
                               {/* Convertir a Venta */}
@@ -1044,8 +1059,8 @@ export default function QuotesPage() {
                                   variant="default"
                                   size="sm"
                                   onClick={() => setQuoteToConvert(quote)}
-                                  className="h-8 px-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white gap-1 font-bold text-xs shadow-sm"
-                                  title="Convertir a Operación / Venta"
+                                  className="h-7 sm:h-8 px-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white gap-1 font-bold text-xs"
+                                  title="Convertir a Venta"
                                 >
                                   <ArrowUpRight className="h-3.5 w-3.5" />
                                   <span className="hidden lg:inline">A Venta</span>
@@ -1055,7 +1070,7 @@ export default function QuotesPage() {
                               {/* Menú Más Acciones */}
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-xl">
+                                  <Button variant="ghost" size="sm" className="h-7 sm:h-8 w-7 sm:w-8 p-0 rounded-xl">
                                     <MoreVertical className="h-4 w-4" />
                                   </Button>
                                 </DropdownMenuTrigger>
@@ -1087,102 +1102,113 @@ export default function QuotesPage() {
       </SidebarInset>
 
       {/* ======================================================== */}
-      {/* MODAL CREADOR / EDITOR DE COTIZACIÓN                     */}
+      {/* MODAL CREADOR / EDITOR DE COTIZACIÓN (MOBILE FIRST)      */}
       {/* ======================================================== */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto rounded-3xl p-6">
+        <DialogContent className="w-[96vw] max-w-4xl max-h-[92vh] overflow-y-auto rounded-3xl p-4 sm:p-6 overflow-x-hidden">
           <DialogHeader>
-            <div className="flex items-center justify-between pr-4">
+            <div className="flex items-center justify-between pr-2">
               <div>
-                <DialogTitle className="text-2xl font-black text-primary flex items-center gap-2">
-                  <ReceiptText className="h-6 w-6" />
-                  {editingQuoteId ? `Editar Cotización ${formData.quoteNumber}` : "Nueva Cotización"}
+                <DialogTitle className="text-lg sm:text-2xl font-black text-primary flex items-center gap-2">
+                  <ReceiptText className="h-5 w-5 sm:h-6 sm:w-6" />
+                  {editingQuoteId ? `Editar ${formData.quoteNumber}` : "Nueva Cotización"}
                 </DialogTitle>
-                <DialogDescription>
-                  Completa los datos del cliente, selecciona artículos y define las condiciones de pago.
+                <DialogDescription className="text-xs">
+                  Carga los datos del cliente, productos y condiciones.
                 </DialogDescription>
               </div>
-              <Badge className="text-sm px-3 py-1 font-black bg-primary/10 text-primary border-none rounded-xl">
+              <Badge className="text-xs px-2.5 py-1 font-black bg-primary/10 text-primary border-none rounded-xl">
                 {formData.quoteNumber}
               </Badge>
             </div>
           </DialogHeader>
 
-          <form onSubmit={handleSaveQuote} className="space-y-6 pt-2">
+          <form onSubmit={handleSaveQuote} className="space-y-4 sm:space-y-6 pt-1 max-w-full overflow-x-hidden">
             
             {/* Fila 1: Selección de Cliente y Configuración Base */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-3xl border">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-slate-50 p-3 sm:p-4 rounded-3xl border">
               
               {/* Cliente */}
-              <div className="space-y-1.5 md:col-span-2">
+              <div className="space-y-1 md:col-span-2">
                 <div className="flex justify-between items-center">
-                  <Label className="text-xs font-bold uppercase text-slate-700">Cliente / Destinatario</Label>
+                  <Label className="text-[11px] font-bold uppercase text-slate-700">Cliente / Destinatario</Label>
                   <Button 
                     type="button" 
                     variant="link" 
-                    className="p-0 h-auto text-xs text-primary font-bold"
-                    onClick={() => handleClientSelect(formData.isProspect ? "" : "prospect")}
+                    className="p-0 h-auto text-[11px] text-primary font-bold"
+                    onClick={() => {
+                      if (formData.isProspect) {
+                        setIsClientModalOpen(true)
+                      } else {
+                        handleSetProspectMode()
+                      }
+                    }}
                   >
-                    {formData.isProspect ? "← Elegir de Lista de Clientes" : "+ Cliente Ocasional / Prospecto"}
+                    {formData.isProspect ? "← Elegir Cliente Registrado" : "+ Prospecto Ocasional"}
                   </Button>
                 </div>
 
                 {!formData.isProspect ? (
-                  <Select value={formData.clientId || ""} onValueChange={handleClientSelect}>
-                    <SelectTrigger className="h-11 bg-white border rounded-2xl">
-                      <SelectValue placeholder="Selecciona un cliente registrado..." />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-60">
-                      {clients?.map(c => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.apellido ? `${c.apellido}, ${c.nombre}` : c.nombre} {c.telefono ? `(${c.telefono})` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setClientSearch("")
+                        setIsClientModalOpen(true)
+                      }}
+                      className="w-full justify-between h-10 rounded-2xl bg-white text-xs font-semibold px-3 border-slate-200"
+                    >
+                      <span className="truncate flex items-center gap-1.5">
+                        <User className="h-3.5 w-3.5 text-primary shrink-0" />
+                        {formData.clientName || "Buscar y seleccionar cliente..."}
+                      </span>
+                      <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0 ml-1" />
+                    </Button>
+                  </div>
                 ) : (
                   <Input 
-                    placeholder="Nombre completo o Empresa del prospecto..."
+                    placeholder="Nombre completo o Empresa..."
                     value={formData.clientName}
                     onChange={e => setFormData(prev => ({ ...prev, clientName: e.target.value }))}
-                    className="h-11 bg-white border rounded-2xl font-bold"
+                    className="h-10 bg-white border rounded-2xl font-bold text-xs"
                     required
                   />
                 )}
               </div>
 
               {/* Moneda y Tipo de Cambio */}
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <div className="flex justify-between items-center">
-                  <Label className="text-xs font-bold uppercase text-slate-700">Moneda</Label>
-                  <span className="text-[11px] font-bold text-emerald-700">
+                  <Label className="text-[11px] font-bold uppercase text-slate-700">Moneda</Label>
+                  <span className="text-[10px] font-bold text-emerald-700">
                     1 USD = ${formData.exchangeRate.toLocaleString('es-AR')}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-1.5">
                   <Button
                     type="button"
                     variant={formData.currency === 'ARS' ? 'default' : 'outline'}
                     onClick={() => handleChangeCurrency('ARS')}
-                    className={`h-11 rounded-2xl font-bold text-xs ${formData.currency === 'ARS' ? 'bg-primary text-white' : 'bg-white text-slate-700'}`}
+                    className={`h-10 rounded-2xl font-bold text-xs ${formData.currency === 'ARS' ? 'bg-primary text-white' : 'bg-white text-slate-700'}`}
                   >
-                    🇦🇷 Pesos (ARS)
+                    🇦🇷 ARS
                   </Button>
                   <Button
                     type="button"
                     variant={formData.currency === 'USD' ? 'default' : 'outline'}
                     onClick={() => handleChangeCurrency('USD')}
-                    className={`h-11 rounded-2xl font-bold text-xs ${formData.currency === 'USD' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-700'}`}
+                    className={`h-10 rounded-2xl font-bold text-xs ${formData.currency === 'USD' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-700'}`}
                   >
-                    🇺🇸 Dólares (USD)
+                    🇺🇸 USD
                   </Button>
                 </div>
               </div>
 
               {/* Datos de Contacto Secundarios */}
               <div className="space-y-1">
-                <Label className="text-[11px] font-semibold text-slate-500">Teléfono / WhatsApp</Label>
+                <Label className="text-[10px] font-semibold text-slate-500">Teléfono / WhatsApp</Label>
                 <Input 
                   placeholder="Ej: 11 2345-6789"
                   value={formData.clientPhone}
@@ -1192,7 +1218,7 @@ export default function QuotesPage() {
               </div>
 
               <div className="space-y-1">
-                <Label className="text-[11px] font-semibold text-slate-500">Correo Electrónico</Label>
+                <Label className="text-[10px] font-semibold text-slate-500">Correo Electrónico</Label>
                 <Input 
                   type="email"
                   placeholder="cliente@ejemplo.com"
@@ -1204,19 +1230,19 @@ export default function QuotesPage() {
 
               <div className="space-y-1">
                 <div className="flex justify-between items-center">
-                  <Label className="text-[11px] font-semibold text-slate-500">Cotización Dólar</Label>
+                  <Label className="text-[10px] font-semibold text-slate-500">Cotización Dólar Ref.</Label>
                   <div className="flex gap-1">
                     <button 
                       type="button" 
                       onClick={() => handleRateTypeChange('blue')}
-                      className={`text-[9px] px-1 rounded font-bold ${formData.rateType === 'blue' ? 'bg-emerald-100 text-emerald-800' : 'text-slate-400 hover:text-slate-600'}`}
+                      className={`text-[9px] px-1 rounded font-bold ${formData.rateType === 'blue' ? 'bg-emerald-100 text-emerald-800' : 'text-slate-400'}`}
                     >
                       Blue (${exchangeRates.blue})
                     </button>
                     <button 
                       type="button" 
                       onClick={() => handleRateTypeChange('official')}
-                      className={`text-[9px] px-1 rounded font-bold ${formData.rateType === 'official' ? 'bg-blue-100 text-blue-800' : 'text-slate-400 hover:text-slate-600'}`}
+                      className={`text-[9px] px-1 rounded font-bold ${formData.rateType === 'official' ? 'bg-blue-100 text-blue-800' : 'text-slate-400'}`}
                     >
                       Oficial (${exchangeRates.official})
                     </button>
@@ -1233,40 +1259,40 @@ export default function QuotesPage() {
             </div>
 
             {/* Fila 2: Fechas y Estado */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold uppercase text-slate-700">Fecha de Emisión</Label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <Label className="text-[11px] font-bold uppercase text-slate-700">Fecha de Emisión</Label>
                 <Input 
                   type="date"
                   value={formData.date}
                   onChange={e => setFormData(prev => ({ ...prev, date: e.target.value }))}
-                  className="h-11 bg-background border rounded-2xl"
+                  className="h-10 bg-background border rounded-2xl text-xs"
                   required
                 />
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <div className="flex justify-between items-center">
-                  <Label className="text-xs font-bold uppercase text-slate-700">Válido Hasta</Label>
+                  <Label className="text-[11px] font-bold uppercase text-slate-700">Válido Hasta</Label>
                   <div className="flex gap-1">
                     <button 
                       type="button" 
                       onClick={() => setFormData(prev => ({ ...prev, validUntil: calculateDefaultValidity(prev.date, 7) }))}
-                      className="text-[10px] font-bold text-primary hover:underline"
+                      className="text-[9px] font-bold text-primary hover:underline"
                     >
                       +7d
                     </button>
                     <button 
                       type="button" 
                       onClick={() => setFormData(prev => ({ ...prev, validUntil: calculateDefaultValidity(prev.date, 15) }))}
-                      className="text-[10px] font-bold text-primary hover:underline"
+                      className="text-[9px] font-bold text-primary hover:underline"
                     >
                       +15d
                     </button>
                     <button 
                       type="button" 
                       onClick={() => setFormData(prev => ({ ...prev, validUntil: calculateDefaultValidity(prev.date, 30) }))}
-                      className="text-[10px] font-bold text-primary hover:underline"
+                      className="text-[9px] font-bold text-primary hover:underline"
                     >
                       +30d
                     </button>
@@ -1276,17 +1302,17 @@ export default function QuotesPage() {
                   type="date"
                   value={formData.validUntil}
                   onChange={e => setFormData(prev => ({ ...prev, validUntil: e.target.value }))}
-                  className="h-11 bg-background border rounded-2xl"
+                  className="h-10 bg-background border rounded-2xl text-xs"
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold uppercase text-slate-700">Estado Inicial</Label>
+              <div className="space-y-1">
+                <Label className="text-[11px] font-bold uppercase text-slate-700">Estado Inicial</Label>
                 <Select 
                   value={formData.status} 
                   onValueChange={(val: any) => setFormData(prev => ({ ...prev, status: val }))}
                 >
-                  <SelectTrigger className="h-11 bg-background border rounded-2xl">
+                  <SelectTrigger className="h-10 bg-background border rounded-2xl text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1299,135 +1325,33 @@ export default function QuotesPage() {
               </div>
             </div>
 
-            {/* Fila 3: Tabla de Artículos / Servicios con Buscador Rápido */}
-            <div className="space-y-3">
+            {/* Fila 3: Artículos / Servicios */}
+            <div className="space-y-2">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                 <div>
-                  <h4 className="text-sm font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                  <h4 className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
                     <Boxes className="h-4 w-4 text-primary" />
                     Artículos y Servicios
                   </h4>
-                  <p className="text-xs text-muted-foreground">Selecciona ítems del catálogo o ingresa conceptos manuales.</p>
+                  <p className="text-[11px] text-muted-foreground">Agrega productos del catálogo o conceptos personalizados.</p>
                 </div>
 
                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                  
-                  {/* BUSCADOR RÁPIDO DE CATÁLOGO (POPOVER) */}
-                  <Popover open={isCatalogPopoverOpen} onOpenChange={setIsCatalogPopoverOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="default"
-                        size="sm"
-                        className="h-10 rounded-2xl bg-primary hover:bg-primary/90 text-white font-bold text-xs shadow-md shadow-primary/20 gap-1.5"
-                      >
-                        <Search className="h-4 w-4" />
-                        + Buscar en Catálogo ({products?.length || 0})
-                      </Button>
-                    </PopoverTrigger>
-
-                    <PopoverContent align="end" className="w-[360px] sm:w-[480px] p-4 rounded-3xl shadow-2xl border-slate-200">
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center border-b pb-2">
-                          <h5 className="font-black text-sm text-slate-900 flex items-center gap-1.5">
-                            <Package className="h-4 w-4 text-primary" />
-                            Catálogo de Productos y Servicios
-                          </h5>
-                          <Badge variant="secondary" className="text-[10px] font-bold">
-                            {sortedAndFilteredCatalog.length} artículos
-                          </Badge>
-                        </div>
-
-                        {/* Input de Búsqueda Rápida */}
-                        <div className="relative">
-                          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                          <Input 
-                            autoFocus
-                            placeholder="Escribe el nombre del producto..."
-                            value={catalogSearch}
-                            onChange={e => setCatalogSearch(e.target.value)}
-                            className="pl-9 h-10 rounded-xl bg-slate-50 border-slate-200 text-xs font-medium"
-                          />
-                        </div>
-
-                        {/* Filtro por Categorías */}
-                        {categories && categories.length > 0 && (
-                          <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
-                            <button
-                              type="button"
-                              onClick={() => setCatalogCategoryFilter("all")}
-                              className={`text-[10px] px-2 py-0.5 rounded-lg font-bold transition-all ${catalogCategoryFilter === 'all' ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                            >
-                              Todas
-                            </button>
-                            {categories.map((cat: any) => (
-                              <button
-                                key={cat.id}
-                                type="button"
-                                onClick={() => setCatalogCategoryFilter(cat.id)}
-                                className={`text-[10px] px-2 py-0.5 rounded-lg font-bold transition-all ${catalogCategoryFilter === cat.id ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                              >
-                                {cat.name}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Lista de Productos Encontrados */}
-                        <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 pr-1 space-y-1">
-                          {sortedAndFilteredCatalog.length === 0 ? (
-                            <div className="text-center py-8 text-xs text-muted-foreground">
-                              No se encontraron productos que coincidan con la búsqueda.
-                            </div>
-                          ) : (
-                            sortedAndFilteredCatalog.map((prod: any) => {
-                              const rate = Number(formData.exchangeRate) > 0 ? Number(formData.exchangeRate) : 1350
-                              const { price, originalCurrency, originalPrice } = resolveProductPrice(prod, formData.currency, rate)
-                              const catName = categories?.find((c: any) => c.id === prod.categoryId)?.name
-
-                              return (
-                                <div
-                                  key={prod.id}
-                                  onClick={() => handleAddCatalogProduct(prod)}
-                                  className="p-2.5 rounded-2xl hover:bg-slate-50 cursor-pointer transition-all flex items-center justify-between gap-3 group border border-transparent hover:border-slate-200"
-                                >
-                                  <div className="flex flex-col min-w-0">
-                                    <span className="font-bold text-xs text-slate-900 group-hover:text-primary transition-colors truncate">
-                                      {prod.name}
-                                    </span>
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                      {catName && (
-                                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-slate-200 text-slate-500">
-                                          {catName}
-                                        </Badge>
-                                      )}
-                                      {prod.stock !== undefined && prod.trackStock !== false && (
-                                        <span className="text-[10px] text-muted-foreground">
-                                          Stock: <b className={prod.stock <= (prod.minStock || 0) ? 'text-amber-600' : 'text-slate-700'}>{prod.stock}</b>
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  <div className="text-right shrink-0">
-                                    <span className="font-black text-xs text-slate-900 block">
-                                      {formData.currency === 'USD' ? 'USD $' : '$'}
-                                      {price.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </span>
-                                    {originalCurrency !== formData.currency && originalPrice > 0 && (
-                                      <span className="text-[9px] text-muted-foreground block">
-                                        (Orig: {originalCurrency === 'USD' ? 'USD $' : '$'}{originalPrice.toLocaleString('es-AR')})
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              )
-                            })
-                          )}
-                        </div>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                  {/* Botón Abrir Buscador de Catálogo */}
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    onClick={() => {
+                      setCatalogSearch("")
+                      setCatalogCategoryFilter("all")
+                      setIsCatalogModalOpen(true)
+                    }}
+                    className="h-9 rounded-2xl bg-primary hover:bg-primary/90 text-white font-bold text-xs shadow-md shadow-primary/20 gap-1.5 flex-1 sm:flex-none justify-center"
+                  >
+                    <Search className="h-3.5 w-3.5" />
+                    + Buscar en Catálogo ({products?.length || 0})
+                  </Button>
 
                   {/* Botón Ítem Manual */}
                   <Button 
@@ -1435,60 +1359,59 @@ export default function QuotesPage() {
                     variant="outline" 
                     size="sm"
                     onClick={handleAddCustomItem}
-                    className="h-10 rounded-2xl font-bold text-xs shrink-0 border-slate-200"
+                    className="h-9 rounded-2xl font-bold text-xs shrink-0 border-slate-200"
                   >
                     + Ítem Libre
                   </Button>
                 </div>
               </div>
 
-              {/* Tabla de Items */}
-              <div className="border rounded-2xl overflow-hidden bg-white shadow-sm">
-                <Table>
-                  <TableHeader className="bg-slate-50/80">
-                    <TableRow>
-                      <TableHead className="text-xs font-bold text-slate-600 pl-4 py-2.5">Descripción / Concepto</TableHead>
-                      <TableHead className="text-xs font-bold text-slate-600 w-20 py-2.5 text-center">Cant.</TableHead>
-                      <TableHead className="text-xs font-bold text-slate-600 w-36 py-2.5 text-right">
-                        Precio Unit. ({formData.currency})
-                      </TableHead>
-                      <TableHead className="text-xs font-bold text-slate-600 w-24 py-2.5 text-center">Desc. %</TableHead>
-                      <TableHead className="text-xs font-bold text-slate-600 w-36 py-2.5 text-right">Subtotal</TableHead>
-                      <TableHead className="w-10 py-2.5 pr-4"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {formData.items.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-10 text-xs text-muted-foreground">
-                          <Package className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-                          No has agregado artículos. Presiona <b>"+ Buscar en Catálogo"</b> arriba o añade un <b>"Ítem Libre"</b>.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      formData.items.map((item, index) => (
-                        <TableRow key={item.id} className="hover:bg-slate-50/50">
-                          <TableCell className="pl-4 py-2">
-                            <Input 
-                              value={item.name}
-                              onChange={e => handleUpdateItem(index, 'name', e.target.value)}
-                              placeholder="Nombre del artículo o servicio..."
-                              className="h-8 text-xs font-bold rounded-lg border-slate-200"
-                              required
-                            />
-                          </TableCell>
-                          <TableCell className="py-2 text-center">
+              {/* LISTADO DE ITEMS - RESPONSIVE (Cards en Móvil / Tabla en Desktop) */}
+              {formData.items.length === 0 ? (
+                <div className="border border-dashed rounded-2xl p-8 text-center bg-slate-50/50">
+                  <Package className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                  <p className="font-bold text-xs text-slate-600">No has agregado artículos todavía</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Toca <b>"+ Buscar en Catálogo"</b> para seleccionar o crea un <b>"Ítem Libre"</b>.</p>
+                </div>
+              ) : (
+                <>
+                  {/* VISTA MÓVIL (Cards compactas sin scroll horizontal) */}
+                  <div className="block sm:hidden space-y-2.5">
+                    {formData.items.map((item, index) => (
+                      <div key={item.id} className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <Input 
+                            value={item.name}
+                            onChange={e => handleUpdateItem(index, 'name', e.target.value)}
+                            placeholder="Nombre del artículo o servicio..."
+                            className="h-8 text-xs font-bold rounded-lg border-slate-200 flex-1"
+                            required
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveItem(index)}
+                            className="h-8 w-8 p-0 text-slate-400 hover:text-destructive shrink-0"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <Label className="text-[9px] font-bold text-slate-500 uppercase">Cant.</Label>
                             <Input 
                               type="number"
                               min="1"
-                              step="1"
                               value={item.qty}
                               onChange={e => handleUpdateItem(index, 'qty', e.target.value)}
                               className="h-8 text-xs text-center font-bold rounded-lg border-slate-200"
                               required
                             />
-                          </TableCell>
-                          <TableCell className="py-2 text-right">
+                          </div>
+                          <div>
+                            <Label className="text-[9px] font-bold text-slate-500 uppercase">Precio ({formData.currency})</Label>
                             <Input 
                               type="number"
                               step="any"
@@ -1497,8 +1420,9 @@ export default function QuotesPage() {
                               className="h-8 text-xs text-right font-bold rounded-lg border-slate-200"
                               required
                             />
-                          </TableCell>
-                          <TableCell className="py-2 text-center">
+                          </div>
+                          <div>
+                            <Label className="text-[9px] font-bold text-slate-500 uppercase">Desc. %</Label>
                             <Input 
                               type="number"
                               min="0"
@@ -1507,74 +1431,143 @@ export default function QuotesPage() {
                               onChange={e => handleUpdateItem(index, 'discount', e.target.value)}
                               className="h-8 text-xs text-center font-semibold rounded-lg border-slate-200"
                             />
-                          </TableCell>
-                          <TableCell className="py-2 text-right font-black text-xs text-slate-900">
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center pt-1 border-t border-slate-100 text-xs">
+                          <span className="text-[10px] text-muted-foreground font-semibold">Subtotal ítem:</span>
+                          <span className="font-black text-slate-900">
                             {formData.currency === 'USD' ? 'USD $' : '$'}
                             {Number(item.subtotal || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </TableCell>
-                          <TableCell className="pr-4 py-2 text-center">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveItem(index)}
-                              className="h-7 w-7 p-0 text-slate-400 hover:text-destructive rounded-lg"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* VISTA DESKTOP (Tabla tradicional) */}
+                  <div className="hidden sm:block border rounded-2xl overflow-hidden bg-white shadow-sm">
+                    <Table>
+                      <TableHeader className="bg-slate-50/80">
+                        <TableRow>
+                          <TableHead className="text-xs font-bold text-slate-600 pl-4 py-2.5">Descripción / Concepto</TableHead>
+                          <TableHead className="text-xs font-bold text-slate-600 w-20 py-2.5 text-center">Cant.</TableHead>
+                          <TableHead className="text-xs font-bold text-slate-600 w-36 py-2.5 text-right">
+                            Precio ({formData.currency})
+                          </TableHead>
+                          <TableHead className="text-xs font-bold text-slate-600 w-24 py-2.5 text-center">Desc. %</TableHead>
+                          <TableHead className="text-xs font-bold text-slate-600 w-36 py-2.5 text-right">Subtotal</TableHead>
+                          <TableHead className="w-10 py-2.5 pr-4"></TableHead>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
+                      </TableHeader>
+                      <TableBody>
+                        {formData.items.map((item, index) => (
+                          <TableRow key={item.id} className="hover:bg-slate-50/50">
+                            <TableCell className="pl-4 py-2">
+                              <Input 
+                                value={item.name}
+                                onChange={e => handleUpdateItem(index, 'name', e.target.value)}
+                                placeholder="Nombre del artículo..."
+                                className="h-8 text-xs font-bold rounded-lg border-slate-200"
+                                required
+                              />
+                            </TableCell>
+                            <TableCell className="py-2 text-center">
+                              <Input 
+                                type="number"
+                                min="1"
+                                value={item.qty}
+                                onChange={e => handleUpdateItem(index, 'qty', e.target.value)}
+                                className="h-8 text-xs text-center font-bold rounded-lg border-slate-200"
+                                required
+                              />
+                            </TableCell>
+                            <TableCell className="py-2 text-right">
+                              <Input 
+                                type="number"
+                                step="any"
+                                value={item.unitPrice}
+                                onChange={e => handleUpdateItem(index, 'unitPrice', e.target.value)}
+                                className="h-8 text-xs text-right font-bold rounded-lg border-slate-200"
+                                required
+                              />
+                            </TableCell>
+                            <TableCell className="py-2 text-center">
+                              <Input 
+                                type="number"
+                                min="0"
+                                max="100"
+                                value={item.discount || 0}
+                                onChange={e => handleUpdateItem(index, 'discount', e.target.value)}
+                                className="h-8 text-xs text-center font-semibold rounded-lg border-slate-200"
+                              />
+                            </TableCell>
+                            <TableCell className="py-2 text-right font-black text-xs text-slate-900">
+                              {formData.currency === 'USD' ? 'USD $' : '$'}
+                              {Number(item.subtotal || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </TableCell>
+                            <TableCell className="pr-4 py-2 text-center">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveItem(index)}
+                                className="h-7 w-7 p-0 text-slate-400 hover:text-destructive rounded-lg"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Fila 4: Notas / Condiciones & Totales */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start pt-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start pt-2">
               
               {/* Notas y Condiciones */}
               <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <Label className="text-xs font-bold uppercase text-slate-700">Notas y Condiciones Comerciales</Label>
-                </div>
+                <Label className="text-[11px] font-bold uppercase text-slate-700">Notas y Condiciones</Label>
                 
                 {/* Botones de Presets de Notas */}
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-1">
                   <button
                     type="button"
                     onClick={() => handleAppendNotePreset("• Forma de pago: 50% anticipo al confirmar, 50% contra entrega.")}
-                    className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded-lg font-semibold"
+                    className="text-[9px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded-lg font-semibold"
                   >
                     + Pago 50/50
                   </button>
                   <button
                     type="button"
                     onClick={() => handleAppendNotePreset("• Plazo de entrega: Inmediato / dentro de las 48hs hábiles.")}
-                    className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded-lg font-semibold"
+                    className="text-[9px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded-lg font-semibold"
                   >
                     + Entrega 48hs
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleAppendNotePreset(`• Precios en USD pagaderos en ARS según tipo de cambio Dólar Blue al día de pago (Cotización ref: $${formData.exchangeRate}).`)}
-                    className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded-lg font-semibold"
+                    onClick={() => handleAppendNotePreset(`• Precios en USD pagaderos en ARS según cotización Dólar Blue del día de pago (Ref: $${formData.exchangeRate}).`)}
+                    className="text-[9px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded-lg font-semibold"
                   >
                     + Cláusula USD
                   </button>
                   <button
                     type="button"
                     onClick={() => handleAppendNotePreset("• Garantía oficial Dosimat por 6 meses sobre defectos de fabricación.")}
-                    className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded-lg font-semibold"
+                    className="text-[9px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded-lg font-semibold"
                   >
                     + Garantía 6M
                   </button>
                 </div>
 
                 <Textarea 
-                  rows={4}
-                  placeholder="Escribe términos de entrega, cuentas bancarias, garantías u observaciones..."
+                  rows={3}
+                  placeholder="Observaciones comerciales, formas de pago, garantías..."
                   value={formData.notes}
                   onChange={e => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                   className="bg-background text-xs rounded-2xl resize-none"
@@ -1582,9 +1575,9 @@ export default function QuotesPage() {
               </div>
 
               {/* Resumen de Totales */}
-              <div className="bg-slate-50 p-5 rounded-3xl border space-y-3">
+              <div className="bg-slate-50 p-4 rounded-3xl border space-y-2.5">
                 <div className="flex justify-between items-center text-xs font-semibold text-slate-600">
-                  <span>Subtotal Bruto:</span>
+                  <span>Subtotal:</span>
                   <span className="font-bold text-sm text-slate-800">
                     {formData.currency === 'USD' ? 'USD $' : '$'}
                     {formData.subtotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1593,7 +1586,7 @@ export default function QuotesPage() {
 
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-xs font-semibold text-slate-600">Descuento Global (%):</span>
-                  <div className="w-28">
+                  <div className="w-24">
                     <Input 
                       type="number"
                       min="0"
@@ -1616,9 +1609,9 @@ export default function QuotesPage() {
                   </div>
                 )}
 
-                <div className="border-t pt-3 flex justify-between items-center">
-                  <span className="text-sm font-black uppercase text-slate-800 tracking-wide">Total Presupuestado:</span>
-                  <span className="text-2xl font-black text-primary">
+                <div className="border-t pt-2.5 flex justify-between items-center">
+                  <span className="text-xs sm:text-sm font-black uppercase text-slate-800 tracking-wide">TOTAL:</span>
+                  <span className="text-xl sm:text-2xl font-black text-primary">
                     {formData.currency === 'USD' ? 'USD $' : '$'}
                     {formData.total.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
@@ -1627,21 +1620,21 @@ export default function QuotesPage() {
 
             </div>
 
-            <DialogFooter className="gap-2 pt-4 border-t">
+            <DialogFooter className="gap-2 pt-3 border-t flex flex-row justify-end">
               <Button 
                 type="button" 
                 variant="outline" 
                 onClick={() => setIsDialogOpen(false)}
-                className="rounded-2xl h-11 font-bold"
+                className="rounded-2xl h-10 font-bold text-xs"
               >
                 Cancelar
               </Button>
               <Button 
                 type="submit" 
                 disabled={isSaving}
-                className="bg-primary hover:bg-primary/90 text-white rounded-2xl h-11 px-6 font-bold shadow-lg shadow-primary/20"
+                className="bg-primary hover:bg-primary/90 text-white rounded-2xl h-10 px-5 font-bold text-xs shadow-lg shadow-primary/20"
               >
-                {isSaving ? "Guardando..." : (editingQuoteId ? "Actualizar Cotización" : "Crear Cotización")}
+                {isSaving ? "Guardando..." : (editingQuoteId ? "Actualizar" : "Crear Cotización")}
               </Button>
             </DialogFooter>
           </form>
@@ -1649,61 +1642,249 @@ export default function QuotesPage() {
       </Dialog>
 
       {/* ======================================================== */}
+      {/* MODAL BUSCADOR DE CATÁLOGO (DEDICADO SIN CONFLICTOS)     */}
+      {/* ======================================================== */}
+      <Dialog open={isCatalogModalOpen} onOpenChange={setIsCatalogModalOpen}>
+        <DialogContent className="w-[95vw] max-w-lg max-h-[85vh] overflow-y-auto rounded-3xl p-4 sm:p-6">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
+                <Package className="h-5 w-5 text-primary" />
+                Catálogo de Productos
+              </DialogTitle>
+              <Badge variant="secondary" className="font-bold text-xs">
+                {sortedAndFilteredCatalog.length} artículos
+              </Badge>
+            </div>
+            <DialogDescription className="text-xs">
+              Escribe para buscar y haz clic sobre el producto para agregarlo.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 pt-2">
+            {/* Input de Búsqueda */}
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input 
+                autoFocus
+                placeholder="Buscar por nombre de producto o servicio..."
+                value={catalogSearch}
+                onChange={e => setCatalogSearch(e.target.value)}
+                className="pl-9 h-11 rounded-2xl bg-slate-50 border-slate-200 text-xs font-medium"
+              />
+            </div>
+
+            {/* Categorías */}
+            {categories && categories.length > 0 && (
+              <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto pr-1">
+                <button
+                  type="button"
+                  onClick={() => setCatalogCategoryFilter("all")}
+                  className={`text-[10px] px-2.5 py-1 rounded-xl font-bold transition-all ${catalogCategoryFilter === 'all' ? 'bg-primary text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                >
+                  Todas
+                </button>
+                {categories.map((cat: any) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setCatalogCategoryFilter(cat.id)}
+                    className={`text-[10px] px-2.5 py-1 rounded-xl font-bold transition-all ${catalogCategoryFilter === cat.id ? 'bg-primary text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  >
+                    {cat.name}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Listado de Artículos */}
+            <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 space-y-1 pr-1">
+              {sortedAndFilteredCatalog.length === 0 ? (
+                <div className="text-center py-10 text-xs text-muted-foreground">
+                  No se encontraron productos que coincidan con "{catalogSearch}".
+                </div>
+              ) : (
+                sortedAndFilteredCatalog.map((prod: any) => {
+                  const rate = Number(formData.exchangeRate) > 0 ? Number(formData.exchangeRate) : 1350
+                  const { price, originalCurrency, originalPrice } = resolveProductPrice(prod, formData.currency, rate)
+                  const catName = categories?.find((c: any) => c.id === prod.categoryId)?.name
+
+                  return (
+                    <div
+                      key={prod.id}
+                      onClick={() => handleAddCatalogProduct(prod)}
+                      className="p-3 rounded-2xl hover:bg-slate-50 cursor-pointer transition-all flex items-center justify-between gap-3 group border border-transparent hover:border-slate-200"
+                    >
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-bold text-xs text-slate-900 group-hover:text-primary transition-colors truncate">
+                          {prod.name}
+                        </span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {catName && (
+                            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-slate-200 text-slate-500">
+                              {catName}
+                            </Badge>
+                          )}
+                          {prod.stock !== undefined && prod.trackStock !== false && (
+                            <span className="text-[10px] text-muted-foreground">
+                              Stock: <b className={prod.stock <= (prod.minStock || 0) ? 'text-amber-600' : 'text-slate-700'}>{prod.stock}</b>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className="font-black text-xs text-slate-900 block">
+                          {formData.currency === 'USD' ? 'USD $' : '$'}
+                          {price.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                        {originalCurrency !== formData.currency && originalPrice > 0 && (
+                          <span className="text-[9px] text-muted-foreground block">
+                            (Orig: {originalCurrency === 'USD' ? 'USD $' : '$'}{originalPrice.toLocaleString('es-AR')})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ======================================================== */}
+      {/* MODAL BUSCADOR DE CLIENTES (DEDICADO Y ORDENADO)        */}
+      {/* ======================================================== */}
+      <Dialog open={isClientModalOpen} onOpenChange={setIsClientModalOpen}>
+        <DialogContent className="w-[95vw] max-w-lg max-h-[85vh] overflow-y-auto rounded-3xl p-4 sm:p-6">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
+                <User className="h-5 w-5 text-primary" />
+                Seleccionar Cliente
+              </DialogTitle>
+              <Badge variant="secondary" className="font-bold text-xs">
+                {sortedAndFilteredClients.length} clientes
+              </Badge>
+            </div>
+            <DialogDescription className="text-xs">
+              Busca por nombre, teléfono, correo o dirección.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 pt-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input 
+                autoFocus
+                placeholder="Escribe el nombre, teléfono o dirección del cliente..."
+                value={clientSearch}
+                onChange={e => setClientSearch(e.target.value)}
+                className="pl-9 h-11 rounded-2xl bg-slate-50 border-slate-200 text-xs font-medium"
+              />
+            </div>
+
+            <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 space-y-1 pr-1">
+              {sortedAndFilteredClients.length === 0 ? (
+                <div className="text-center py-10 text-xs text-muted-foreground">
+                  No se encontraron clientes con "{clientSearch}".
+                </div>
+              ) : (
+                sortedAndFilteredClients.map((c: any) => {
+                  const fullName = `${c.apellido || ""} ${c.nombre || ""}`.trim() || c.nombre || "Cliente sin nombre"
+                  return (
+                    <div
+                      key={c.id}
+                      onClick={() => handleSelectClientFromList(c)}
+                      className="p-3 rounded-2xl hover:bg-slate-50 cursor-pointer transition-all flex items-center justify-between gap-3 group border border-transparent hover:border-slate-200"
+                    >
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-bold text-xs text-slate-900 group-hover:text-primary transition-colors truncate">
+                          {fullName}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground truncate">
+                          {c.telefono ? `Tel: ${c.telefono}` : ''} {c.mail ? `• ${c.mail}` : ''}
+                        </span>
+                        {c.direccion && (
+                          <span className="text-[10px] text-slate-400 truncate mt-0.5">
+                            📍 {c.direccion} {c.zona ? `(${c.zona})` : ''}
+                          </span>
+                        )}
+                      </div>
+
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        className="h-8 px-2 rounded-xl text-primary font-bold text-xs group-hover:bg-primary group-hover:text-white shrink-0"
+                      >
+                        Elegir
+                      </Button>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ======================================================== */}
       {/* MODAL VISTA PREVIA E IMPRESIÓN PDF A4                    */}
       {/* ======================================================== */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto rounded-3xl p-6 sm:p-8">
+        <DialogContent className="w-[96vw] max-w-4xl max-h-[95vh] overflow-y-auto rounded-3xl p-4 sm:p-8">
           <DialogHeader className="no-print">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4">
               <div>
-                <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                <DialogTitle className="text-base sm:text-xl font-bold flex items-center gap-2">
                   <Printer className="h-5 w-5 text-primary" />
-                  Vista Previa de Cotización {previewQuote?.quoteNumber}
+                  Presupuesto {previewQuote?.quoteNumber}
                 </DialogTitle>
-                <DialogDescription>
-                  Formato A4 profesional optimizado para guardar como PDF o imprimir.
+                <DialogDescription className="text-xs">
+                  Formato A4 optimizado para PDF e impresión.
                 </DialogDescription>
               </div>
 
               <div className="flex items-center gap-2">
                 <Button 
                   onClick={() => previewQuote && handleShareWhatsApp(previewQuote)}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl h-10 px-4 gap-1.5 shadow-sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl h-9 px-3 gap-1.5 shadow-sm"
                 >
-                  <MessageSquare className="h-4 w-4" />
+                  <MessageSquare className="h-3.5 w-3.5" />
                   WhatsApp
                 </Button>
                 <Button 
                   onClick={handlePrint}
-                  className="bg-primary hover:bg-primary/90 text-white font-bold text-xs rounded-xl h-10 px-5 gap-1.5 shadow-md shadow-primary/20"
+                  className="bg-primary hover:bg-primary/90 text-white font-bold text-xs rounded-xl h-9 px-4 gap-1.5 shadow-md shadow-primary/20"
                 >
-                  <Printer className="h-4 w-4" />
+                  <Printer className="h-3.5 w-3.5" />
                   Imprimir / PDF
                 </Button>
               </div>
             </div>
           </DialogHeader>
 
-          {/* Plantilla A4 (Visible en pantalla y capturada por @media print) */}
+          {/* Plantilla A4 */}
           {previewQuote && (
-            <div className="bg-white text-slate-900 p-6 sm:p-10 rounded-2xl border shadow-sm my-2 font-sans">
+            <div className="bg-white text-slate-900 p-4 sm:p-10 rounded-2xl border shadow-sm my-2 font-sans overflow-x-hidden">
               
               {/* Encabezado: Logo y Datos de Empresa */}
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 border-b-2 border-primary/20 pb-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b-2 border-primary/20 pb-4">
                 <div>
                   <img 
                     src="/logo-dosimat.png" 
                     alt="Dosimat Pro" 
-                    className="h-16 sm:h-20 object-contain"
+                    className="h-12 sm:h-16 object-contain"
                   />
-                  <p className="text-[11px] font-bold text-primary tracking-wide uppercase mt-1">
+                  <p className="text-[10px] font-bold text-primary tracking-wide uppercase mt-1">
                     La opción inteligente para su pileta
                   </p>
                 </div>
 
-                <div className="text-right sm:text-right space-y-0.5 text-xs text-slate-600">
+                <div className="text-left sm:text-right space-y-0.5 text-xs text-slate-600">
                   <h3 className="font-black text-sm text-slate-900">{settings?.name || "DOSIMAT PRO"}</h3>
-                  {settings?.supportWhatsapp && <p>Tel / WhatsApp: <span className="font-bold">{settings.supportWhatsapp}</span></p>}
+                  {settings?.supportWhatsapp && <p>Tel / WA: <span className="font-bold">{settings.supportWhatsapp}</span></p>}
                   {settings?.supportEmail && <p>Email: {settings.supportEmail}</p>}
                   {settings?.address && <p>Ubicación: {settings.address}</p>}
                   {settings?.website && <p className="text-primary font-semibold">{settings.website}</p>}
@@ -1711,21 +1892,19 @@ export default function QuotesPage() {
               </div>
 
               {/* Ficha: Datos de Cotización y Cliente */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 my-6 bg-slate-50/70 p-5 rounded-2xl border border-slate-200">
-                {/* Cliente */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 my-4 bg-slate-50/70 p-4 rounded-2xl border border-slate-200">
                 <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block mb-0.5">
                     Cliente / Destinatario:
                   </span>
-                  <h4 className="text-base font-black text-slate-900">{previewQuote.clientName}</h4>
+                  <h4 className="text-sm sm:text-base font-black text-slate-900">{previewQuote.clientName}</h4>
                   {previewQuote.clientPhone && <p className="text-xs text-slate-700 mt-0.5">Tel: {previewQuote.clientPhone}</p>}
                   {previewQuote.clientEmail && <p className="text-xs text-slate-700">Email: {previewQuote.clientEmail}</p>}
                   {previewQuote.clientAddress && <p className="text-xs text-slate-700">Dirección: {previewQuote.clientAddress}</p>}
                 </div>
 
-                {/* Cotización */}
-                <div className="sm:text-right space-y-1">
-                  <div className="inline-block bg-primary text-white font-black text-sm px-3 py-1 rounded-xl uppercase tracking-wider">
+                <div className="sm:text-right space-y-0.5">
+                  <div className="inline-block bg-primary text-white font-black text-xs px-2.5 py-1 rounded-xl uppercase tracking-wider">
                     Presupuesto {previewQuote.quoteNumber}
                   </div>
                   <p className="text-xs text-slate-600 pt-1">
@@ -1743,18 +1922,18 @@ export default function QuotesPage() {
               </div>
 
               {/* Tabla de Artículos */}
-              <div className="my-6 border border-slate-200 rounded-xl overflow-hidden">
+              <div className="my-4 border border-slate-200 rounded-xl overflow-hidden">
                 <table className="w-full text-xs">
                   <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-200">
                     <tr>
-                      <th className="py-3 px-3 text-left w-12">#</th>
-                      <th className="py-3 px-3 text-left">Descripción / Detalle</th>
-                      <th className="py-3 px-3 text-center w-16">Cant.</th>
-                      <th className="py-3 px-3 text-right w-28">Precio Unit.</th>
+                      <th className="py-2.5 px-2.5 text-left w-8">#</th>
+                      <th className="py-2.5 px-2.5 text-left">Descripción / Detalle</th>
+                      <th className="py-2.5 px-2 text-center w-12">Cant.</th>
+                      <th className="py-2.5 px-2.5 text-right w-24">Precio Unit.</th>
                       {previewQuote.items?.some(it => (it.discount || 0) > 0) && (
-                        <th className="py-3 px-3 text-center w-20">Desc.</th>
+                        <th className="py-2.5 px-2 text-center w-16">Desc.</th>
                       )}
-                      <th className="py-3 px-4 text-right w-28">Subtotal</th>
+                      <th className="py-2.5 px-3 text-right w-24">Subtotal</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -1762,21 +1941,21 @@ export default function QuotesPage() {
                       const currencySym = previewQuote.currency === 'USD' ? 'USD $' : '$'
                       return (
                         <tr key={item.id || i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
-                          <td className="py-2.5 px-3 font-semibold text-slate-400">{i + 1}</td>
-                          <td className="py-2.5 px-3">
+                          <td className="py-2 px-2.5 font-semibold text-slate-400">{i + 1}</td>
+                          <td className="py-2 px-2.5">
                             <span className="font-bold text-slate-800 block">{item.name}</span>
                             {item.description && <span className="text-[10px] text-slate-500 block">{item.description}</span>}
                           </td>
-                          <td className="py-2.5 px-3 text-center font-bold text-slate-700">{item.qty}</td>
-                          <td className="py-2.5 px-3 text-right text-slate-700">
+                          <td className="py-2 px-2 text-center font-bold text-slate-700">{item.qty}</td>
+                          <td className="py-2 px-2.5 text-right text-slate-700">
                             {currencySym}{Number(item.unitPrice || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                           {previewQuote.items?.some(it => (it.discount || 0) > 0) && (
-                            <td className="py-2.5 px-3 text-center text-emerald-600 font-semibold">
+                            <td className="py-2 px-2 text-center text-emerald-600 font-semibold">
                               {item.discount ? `${item.discount}%` : '-'}
                             </td>
                           )}
-                          <td className="py-2.5 px-4 text-right font-black text-slate-900">
+                          <td className="py-2 px-3 text-right font-black text-slate-900">
                             {currencySym}{Number(item.subtotal || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                         </tr>
@@ -1787,18 +1966,18 @@ export default function QuotesPage() {
               </div>
 
               {/* Totales y Notas */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-start mt-6 pt-4 border-t border-slate-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start mt-4 pt-3 border-t border-slate-200">
                 
-                {/* Notas y Condiciones */}
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs space-y-1.5">
-                  <h5 className="font-bold text-slate-900 uppercase text-[10px] tracking-wider">Condiciones y Observaciones:</h5>
-                  <div className="whitespace-pre-line text-slate-600 leading-relaxed">
+                {/* Notas */}
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1">
+                  <h5 className="font-bold text-slate-900 uppercase text-[9px] tracking-wider">Condiciones y Observaciones:</h5>
+                  <div className="whitespace-pre-line text-slate-600 leading-relaxed text-[11px]">
                     {previewQuote.notes || "Sin observaciones adicionales."}
                   </div>
                 </div>
 
-                {/* Resumen de Total */}
-                <div className="space-y-2 bg-slate-50 p-4 rounded-xl border border-slate-200 sm:text-right">
+                {/* Resumen Total */}
+                <div className="space-y-1.5 bg-slate-50 p-3 rounded-xl border border-slate-200 sm:text-right">
                   <div className="flex justify-between text-xs text-slate-600">
                     <span>Subtotal:</span>
                     <span className="font-bold text-slate-800">
@@ -1809,7 +1988,7 @@ export default function QuotesPage() {
 
                   {previewQuote.globalDiscountAmount > 0 && (
                     <div className="flex justify-between text-xs text-emerald-600 font-bold">
-                      <span>Descuento Global ({previewQuote.globalDiscountPercent}%):</span>
+                      <span>Descuento ({previewQuote.globalDiscountPercent}%):</span>
                       <span>
                         -{previewQuote.currency === 'USD' ? 'USD $' : '$'}
                         {Number(previewQuote.globalDiscountAmount || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1817,9 +1996,9 @@ export default function QuotesPage() {
                     </div>
                   )}
 
-                  <div className="border-t border-slate-300 pt-2 flex justify-between items-baseline">
-                    <span className="text-xs font-black uppercase text-slate-900">TOTAL FINAL:</span>
-                    <span className="text-xl font-black text-primary">
+                  <div className="border-t border-slate-300 pt-1.5 flex justify-between items-baseline">
+                    <span className="text-xs font-black uppercase text-slate-900">TOTAL:</span>
+                    <span className="text-lg sm:text-xl font-black text-primary">
                       {previewQuote.currency === 'USD' ? 'USD $' : '$'}
                       {Number(previewQuote.total || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
@@ -1828,7 +2007,7 @@ export default function QuotesPage() {
               </div>
 
               {/* Pie de página */}
-              <div className="mt-12 pt-4 border-t border-slate-200 text-center text-[10px] text-slate-400 space-y-1">
+              <div className="mt-8 pt-3 border-t border-slate-200 text-center text-[9px] text-slate-400 space-y-0.5">
                 <p className="font-bold text-slate-600">¡Muchas gracias por confiar en Dosimat!</p>
                 <p>Este documento es una cotización informativa y no constituye una factura fiscal.</p>
               </div>
@@ -1842,18 +2021,18 @@ export default function QuotesPage() {
       {/* DIÁLOGO CONFIRMAR BORRADO                                */}
       {/* ======================================================== */}
       <AlertDialog open={!!quoteToDelete} onOpenChange={(open) => !open && setQuoteToDelete(null)}>
-        <AlertDialogContent className="rounded-3xl">
+        <AlertDialogContent className="w-[95vw] max-w-md rounded-3xl p-5">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-xl font-bold">¿Eliminar cotización?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se eliminará permanentemente la cotización <span className="font-bold">{quoteToDelete?.quoteNumber}</span> correspondiente a <span className="font-bold">{quoteToDelete?.clientName}</span>. Esta acción no se puede deshacer.
+            <AlertDialogTitle className="text-lg font-bold">¿Eliminar cotización?</AlertDialogTitle>
+            <AlertDialogDescription className="text-xs">
+              Se eliminará <span className="font-bold">{quoteToDelete?.quoteNumber}</span> ({quoteToDelete?.clientName}). Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2">
-            <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
+          <AlertDialogFooter className="gap-2 pt-2">
+            <AlertDialogCancel className="rounded-xl h-9 text-xs">Cancelar</AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleDeleteQuote}
-              className="bg-destructive hover:bg-destructive/90 text-white font-bold rounded-xl"
+              className="bg-destructive hover:bg-destructive/90 text-white font-bold rounded-xl h-9 text-xs"
             >
               Eliminar
             </AlertDialogAction>
@@ -1865,29 +2044,29 @@ export default function QuotesPage() {
       {/* DIÁLOGO CONVERTIR A VENTA                                */}
       {/* ======================================================== */}
       <AlertDialog open={!!quoteToConvert} onOpenChange={(open) => !open && setQuoteToConvert(null)}>
-        <AlertDialogContent className="rounded-3xl">
+        <AlertDialogContent className="w-[95vw] max-w-md rounded-3xl p-5">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-xl font-bold flex items-center gap-2">
-              <ArrowUpRight className="h-6 w-6 text-purple-600" />
-              ¿Convertir Cotización a Venta?
+            <AlertDialogTitle className="text-lg font-bold flex items-center gap-2">
+              <ArrowUpRight className="h-5 w-5 text-purple-600" />
+              ¿Convertir a Venta?
             </AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2">
+            <AlertDialogDescription className="space-y-1.5 text-xs">
               <p>
-                Se registrará automáticamente una nueva operación en <span className="font-bold text-slate-800">Operaciones</span> por un monto de <span className="font-black text-slate-900">{quoteToConvert?.currency === 'USD' ? 'USD $' : '$'}{Number(quoteToConvert?.total || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>.
+                Se registrará una operación por <span className="font-black text-slate-900">{quoteToConvert?.currency === 'USD' ? 'USD $' : '$'}{Number(quoteToConvert?.total || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>.
               </p>
-              <p className="text-xs text-muted-foreground">
-                La cotización quedará marcada como "Convertida a Venta" para mantener el historial comercial.
+              <p className="text-[11px] text-muted-foreground">
+                La cotización quedará marcada como "Convertida a Venta".
               </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2">
-            <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
+          <AlertDialogFooter className="gap-2 pt-2">
+            <AlertDialogCancel className="rounded-xl h-9 text-xs">Cancelar</AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleConfirmConversion}
               disabled={isConverting}
-              className="bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl"
+              className="bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl h-9 text-xs"
             >
-              {isConverting ? "Generando venta..." : "Confirmar y Crear Operación"}
+              {isConverting ? "Generando..." : "Confirmar Venta"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
