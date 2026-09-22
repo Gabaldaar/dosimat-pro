@@ -54,9 +54,7 @@ import {
   Boxes,
   User,
   RefreshCw,
-  MoreVertical,
-  X,
-  Check
+  MoreVertical
 } from "lucide-react"
 
 export interface QuoteItem {
@@ -65,6 +63,7 @@ export interface QuoteItem {
   name: string
   description?: string
   qty: number
+  unit: string // Ej: un, m, kg, lt, hs, etc.
   unitPrice: number
   discount: number // porcentaje 0-100
   subtotal: number
@@ -341,7 +340,10 @@ export default function QuotesPage() {
       ...quote,
       exchangeRate: quote.exchangeRate || exchangeRates.blue || 1350,
       rateType: quote.rateType || 'blue',
-      items: quote.items || []
+      items: (quote.items || []).map(it => ({
+        ...it,
+        unit: it.unit || "un"
+      }))
     })
     setIsDialogOpen(true)
   }
@@ -357,6 +359,10 @@ export default function QuotesPage() {
       validUntil: calculateDefaultValidity(todayStr, 15),
       status: 'draft',
       convertedTransactionId: undefined,
+      items: (quote.items || []).map(it => ({
+        ...it,
+        unit: it.unit || "un"
+      }))
     })
     setIsDialogOpen(true)
     toast({ title: "Cotización duplicada", description: "Se ha creado una copia lista para editar y guardar." })
@@ -464,6 +470,7 @@ export default function QuotesPage() {
       name: prod.name || "Producto sin nombre",
       description: prod.description || "",
       qty: 1,
+      unit: prod.unit || "un",
       unitPrice: price,
       discount: 0,
       subtotal: price,
@@ -494,6 +501,7 @@ export default function QuotesPage() {
       name: "",
       description: "",
       qty: 1,
+      unit: "un",
       unitPrice: 0,
       discount: 0,
       subtotal: 0,
@@ -649,6 +657,7 @@ export default function QuotesPage() {
         items: quoteToConvert.items.map(it => ({
           name: it.name,
           qty: it.qty,
+          unit: it.unit || "un",
           price: it.unitPrice,
           discount: it.discount,
           subtotal: it.subtotal
@@ -685,7 +694,7 @@ export default function QuotesPage() {
   const handleShareWhatsApp = (quote: Quote) => {
     const phone = quote.clientPhone ? quote.clientPhone.replace(/\D/g, '') : ""
     const currencySym = quote.currency === 'USD' ? 'USD $' : '$'
-    const itemsList = quote.items.map(it => `• ${it.qty}x ${it.name} (${currencySym}${it.unitPrice.toLocaleString('es-AR')})`).join('\n')
+    const itemsList = quote.items.map(it => `• ${it.qty} ${it.unit || 'un'} x ${it.name} (${currencySym}${it.unitPrice.toLocaleString('es-AR')})`).join('\n')
     
     const message = `Hola ${quote.clientName}, te adjuntamos el detalle del presupuesto *${quote.quoteNumber}* de *Dosimat*:\n\n` +
       `${itemsList}\n\n` +
@@ -1102,10 +1111,10 @@ export default function QuotesPage() {
       </SidebarInset>
 
       {/* ======================================================== */}
-      {/* MODAL CREADOR / EDITOR DE COTIZACIÓN (MOBILE FIRST)      */}
+      {/* MODAL CREADOR / EDITOR DE COTIZACIÓN (AMPLIO Y RESPONSIVE)*/}
       {/* ======================================================== */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="w-[96vw] max-w-4xl max-h-[92vh] overflow-y-auto rounded-3xl p-4 sm:p-6 overflow-x-hidden">
+        <DialogContent className="w-[96vw] max-w-5xl max-h-[92vh] overflow-y-auto rounded-3xl p-4 sm:p-7 overflow-x-hidden">
           <DialogHeader>
             <div className="flex items-center justify-between pr-2">
               <div>
@@ -1114,7 +1123,7 @@ export default function QuotesPage() {
                   {editingQuoteId ? `Editar ${formData.quoteNumber}` : "Nueva Cotización"}
                 </DialogTitle>
                 <DialogDescription className="text-xs">
-                  Carga los datos del cliente, productos y condiciones.
+                  Carga los datos del cliente, productos, cantidades, unidades y condiciones.
                 </DialogDescription>
               </div>
               <Badge className="text-xs px-2.5 py-1 font-black bg-primary/10 text-primary border-none rounded-xl">
@@ -1366,7 +1375,7 @@ export default function QuotesPage() {
                 </div>
               </div>
 
-              {/* LISTADO DE ITEMS - RESPONSIVE (Cards en Móvil / Tabla en Desktop) */}
+              {/* LISTADO DE ITEMS - RESPONSIVE (Cards en Móvil / Tabla Cómoda en Desktop) */}
               {formData.items.length === 0 ? (
                 <div className="border border-dashed rounded-2xl p-8 text-center bg-slate-50/50">
                   <Package className="h-8 w-8 text-slate-300 mx-auto mb-2" />
@@ -1375,7 +1384,7 @@ export default function QuotesPage() {
                 </div>
               ) : (
                 <>
-                  {/* VISTA MÓVIL (Cards compactas sin scroll horizontal) */}
+                  {/* VISTA MÓVIL (Cards compactas) */}
                   <div className="block sm:hidden space-y-2.5">
                     {formData.items.map((item, index) => (
                       <div key={item.id} className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm space-y-2">
@@ -1398,7 +1407,7 @@ export default function QuotesPage() {
                           </Button>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-4 gap-1.5">
                           <div>
                             <Label className="text-[9px] font-bold text-slate-500 uppercase">Cant.</Label>
                             <Input 
@@ -1406,8 +1415,18 @@ export default function QuotesPage() {
                               min="1"
                               value={item.qty}
                               onChange={e => handleUpdateItem(index, 'qty', e.target.value)}
-                              className="h-8 text-xs text-center font-bold rounded-lg border-slate-200"
+                              className="h-8 text-xs text-center font-bold rounded-lg border-slate-200 px-1"
                               required
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-[9px] font-bold text-slate-500 uppercase">Unidad</Label>
+                            <Input 
+                              type="text"
+                              value={item.unit || "un"}
+                              onChange={e => handleUpdateItem(index, 'unit', e.target.value)}
+                              placeholder="un"
+                              className="h-8 text-xs text-center font-bold rounded-lg border-slate-200 px-1 uppercase"
                             />
                           </div>
                           <div>
@@ -1417,7 +1436,7 @@ export default function QuotesPage() {
                               step="any"
                               value={item.unitPrice}
                               onChange={e => handleUpdateItem(index, 'unitPrice', e.target.value)}
-                              className="h-8 text-xs text-right font-bold rounded-lg border-slate-200"
+                              className="h-8 text-xs text-right font-bold rounded-lg border-slate-200 px-1"
                               required
                             />
                           </div>
@@ -1429,13 +1448,15 @@ export default function QuotesPage() {
                               max="100"
                               value={item.discount || 0}
                               onChange={e => handleUpdateItem(index, 'discount', e.target.value)}
-                              className="h-8 text-xs text-center font-semibold rounded-lg border-slate-200"
+                              className="h-8 text-xs text-center font-semibold rounded-lg border-slate-200 px-1"
                             />
                           </div>
                         </div>
 
                         <div className="flex justify-between items-center pt-1 border-t border-slate-100 text-xs">
-                          <span className="text-[10px] text-muted-foreground font-semibold">Subtotal ítem:</span>
+                          <span className="text-[10px] text-muted-foreground font-semibold">
+                            Subtotal ({item.qty} {item.unit || 'un'}):
+                          </span>
                           <span className="font-black text-slate-900">
                             {formData.currency === 'USD' ? 'USD $' : '$'}
                             {Number(item.subtotal || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1445,74 +1466,94 @@ export default function QuotesPage() {
                     ))}
                   </div>
 
-                  {/* VISTA DESKTOP (Tabla tradicional) */}
+                  {/* VISTA DESKTOP (Tabla espaciosa y sin recortes) */}
                   <div className="hidden sm:block border rounded-2xl overflow-hidden bg-white shadow-sm">
                     <Table>
                       <TableHeader className="bg-slate-50/80">
                         <TableRow>
-                          <TableHead className="text-xs font-bold text-slate-600 pl-4 py-2.5">Descripción / Concepto</TableHead>
-                          <TableHead className="text-xs font-bold text-slate-600 w-20 py-2.5 text-center">Cant.</TableHead>
-                          <TableHead className="text-xs font-bold text-slate-600 w-36 py-2.5 text-right">
-                            Precio ({formData.currency})
+                          <TableHead className="text-xs font-bold text-slate-600 pl-4 py-3 min-w-[200px]">
+                            Descripción / Concepto
                           </TableHead>
-                          <TableHead className="text-xs font-bold text-slate-600 w-24 py-2.5 text-center">Desc. %</TableHead>
-                          <TableHead className="text-xs font-bold text-slate-600 w-36 py-2.5 text-right">Subtotal</TableHead>
-                          <TableHead className="w-10 py-2.5 pr-4"></TableHead>
+                          <TableHead className="text-xs font-bold text-slate-600 w-24 min-w-[90px] py-3 text-center">
+                            Cant.
+                          </TableHead>
+                          <TableHead className="text-xs font-bold text-slate-600 w-24 min-w-[85px] py-3 text-center">
+                            Unidad
+                          </TableHead>
+                          <TableHead className="text-xs font-bold text-slate-600 w-36 min-w-[120px] py-3 text-right">
+                            Precio Unit. ({formData.currency})
+                          </TableHead>
+                          <TableHead className="text-xs font-bold text-slate-600 w-24 min-w-[80px] py-3 text-center">
+                            Desc. %
+                          </TableHead>
+                          <TableHead className="text-xs font-bold text-slate-600 w-36 min-w-[120px] py-3 text-right">
+                            Subtotal
+                          </TableHead>
+                          <TableHead className="w-12 py-3 pr-4"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {formData.items.map((item, index) => (
                           <TableRow key={item.id} className="hover:bg-slate-50/50">
-                            <TableCell className="pl-4 py-2">
+                            <TableCell className="pl-4 py-2.5">
                               <Input 
                                 value={item.name}
                                 onChange={e => handleUpdateItem(index, 'name', e.target.value)}
-                                placeholder="Nombre del artículo..."
-                                className="h-8 text-xs font-bold rounded-lg border-slate-200"
+                                placeholder="Nombre del artículo o servicio..."
+                                className="h-9 text-xs font-bold rounded-xl border-slate-200"
                                 required
                               />
                             </TableCell>
-                            <TableCell className="py-2 text-center">
+                            <TableCell className="py-2.5 text-center">
                               <Input 
                                 type="number"
                                 min="1"
                                 value={item.qty}
                                 onChange={e => handleUpdateItem(index, 'qty', e.target.value)}
-                                className="h-8 text-xs text-center font-bold rounded-lg border-slate-200"
+                                className="h-9 text-xs text-center font-bold rounded-xl border-slate-200 px-2 w-full"
                                 required
                               />
                             </TableCell>
-                            <TableCell className="py-2 text-right">
+                            <TableCell className="py-2.5 text-center">
+                              <Input 
+                                type="text"
+                                value={item.unit || "un"}
+                                onChange={e => handleUpdateItem(index, 'unit', e.target.value)}
+                                placeholder="un"
+                                className="h-9 text-xs text-center font-bold rounded-xl border-slate-200 px-2 w-full uppercase"
+                              />
+                            </TableCell>
+                            <TableCell className="py-2.5 text-right">
                               <Input 
                                 type="number"
                                 step="any"
                                 value={item.unitPrice}
                                 onChange={e => handleUpdateItem(index, 'unitPrice', e.target.value)}
-                                className="h-8 text-xs text-right font-bold rounded-lg border-slate-200"
+                                className="h-9 text-xs text-right font-bold rounded-xl border-slate-200 px-2 w-full"
                                 required
                               />
                             </TableCell>
-                            <TableCell className="py-2 text-center">
+                            <TableCell className="py-2.5 text-center">
                               <Input 
                                 type="number"
                                 min="0"
                                 max="100"
                                 value={item.discount || 0}
                                 onChange={e => handleUpdateItem(index, 'discount', e.target.value)}
-                                className="h-8 text-xs text-center font-semibold rounded-lg border-slate-200"
+                                className="h-9 text-xs text-center font-semibold rounded-xl border-slate-200 px-1 w-full"
                               />
                             </TableCell>
-                            <TableCell className="py-2 text-right font-black text-xs text-slate-900">
+                            <TableCell className="py-2.5 text-right font-black text-xs text-slate-900 whitespace-nowrap">
                               {formData.currency === 'USD' ? 'USD $' : '$'}
                               {Number(item.subtotal || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </TableCell>
-                            <TableCell className="pr-4 py-2 text-center">
+                            <TableCell className="pr-4 py-2.5 text-center">
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleRemoveItem(index)}
-                                className="h-7 w-7 p-0 text-slate-400 hover:text-destructive rounded-lg"
+                                className="h-8 w-8 p-0 text-slate-400 hover:text-destructive rounded-lg"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -1725,6 +1766,11 @@ export default function QuotesPage() {
                               {catName}
                             </Badge>
                           )}
+                          {prod.unit && (
+                            <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 bg-slate-100 text-slate-600 uppercase">
+                              {prod.unit}
+                            </Badge>
+                          )}
                           {prod.stock !== undefined && prod.trackStock !== false && (
                             <span className="text-[10px] text-muted-foreground">
                               Stock: <b className={prod.stock <= (prod.minStock || 0) ? 'text-amber-600' : 'text-slate-700'}>{prod.stock}</b>
@@ -1869,17 +1915,14 @@ export default function QuotesPage() {
           {previewQuote && (
             <div className="bg-white text-slate-900 p-4 sm:p-10 rounded-2xl border shadow-sm my-2 font-sans overflow-x-hidden">
               
-              {/* Encabezado: Logo y Datos de Empresa */}
+              {/* Encabezado: Logo Limpio (sin texto duplicado) y Datos de Empresa */}
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b-2 border-primary/20 pb-4">
                 <div>
                   <img 
                     src="/logo-dosimat.png" 
                     alt="Dosimat Pro" 
-                    className="h-12 sm:h-16 object-contain"
+                    className="h-14 sm:h-20 object-contain"
                   />
-                  <p className="text-[10px] font-bold text-primary tracking-wide uppercase mt-1">
-                    La opción inteligente para su pileta
-                  </p>
                 </div>
 
                 <div className="text-left sm:text-right space-y-0.5 text-xs text-slate-600">
@@ -1921,14 +1964,14 @@ export default function QuotesPage() {
                 </div>
               </div>
 
-              {/* Tabla de Artículos */}
+              {/* Tabla de Artículos con Cantidad + Unidad */}
               <div className="my-4 border border-slate-200 rounded-xl overflow-hidden">
                 <table className="w-full text-xs">
                   <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-200">
                     <tr>
                       <th className="py-2.5 px-2.5 text-left w-8">#</th>
                       <th className="py-2.5 px-2.5 text-left">Descripción / Detalle</th>
-                      <th className="py-2.5 px-2 text-center w-12">Cant.</th>
+                      <th className="py-2.5 px-2 text-center w-20">Cant.</th>
                       <th className="py-2.5 px-2.5 text-right w-24">Precio Unit.</th>
                       {previewQuote.items?.some(it => (it.discount || 0) > 0) && (
                         <th className="py-2.5 px-2 text-center w-16">Desc.</th>
@@ -1946,7 +1989,9 @@ export default function QuotesPage() {
                             <span className="font-bold text-slate-800 block">{item.name}</span>
                             {item.description && <span className="text-[10px] text-slate-500 block">{item.description}</span>}
                           </td>
-                          <td className="py-2 px-2 text-center font-bold text-slate-700">{item.qty}</td>
+                          <td className="py-2 px-2 text-center font-bold text-slate-700 whitespace-nowrap">
+                            {item.qty} {item.unit || 'un'}
+                          </td>
                           <td className="py-2 px-2.5 text-right text-slate-700">
                             {currencySym}{Number(item.unitPrice || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
