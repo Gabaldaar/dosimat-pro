@@ -150,7 +150,8 @@ export default function AccountsPage() {
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [txType, setTxType] = useState<'income' | 'expense' | 'adjustment'>('income')
   const [newCategoryName, setNewCategoryName] = useState("")
-  const [exchangeRate, setExchangeRate] = useState(1)
+  const [exchangeRate, setExchangeRate] = useState<number>(1350)
+  const [exchangeRates, setExchangeRates] = useState<{ official: number; blue: number }>({ official: 1300, blue: 1350 })
   
   const selectedAccount = useMemo(() => {
     if (!accounts || !selectedAccountId) return null
@@ -189,14 +190,15 @@ export default function AccountsPage() {
 
   useEffect(() => {
     if (isTransferDialogOpen && fromAcc && toAcc && fromAcc.currency !== toAcc.currency) {
-      fetch('https://dolarapi.com/v1/dolares/oficial')
-        .then(res => res.json())
-        .then(data => {
-          if (data && data.venta) {
-            setExchangeRate(data.venta);
-          }
-        })
-        .catch(err => console.error("Error fetching rate:", err));
+      Promise.all([
+        fetch('https://dolarapi.com/v1/dolares/oficial').then(r => r.json()).catch(() => null),
+        fetch('https://dolarapi.com/v1/dolares/blue').then(r => r.json()).catch(() => null)
+      ]).then(([off, blue]) => {
+        const offRate = Number(off?.venta) || 1300
+        const blueRate = Number(blue?.venta) || 1350
+        setExchangeRates({ official: offRate, blue: blueRate })
+        setExchangeRate(prev => (prev === 1 || prev === 1350 || prev === 1300) ? blueRate : prev)
+      }).catch(err => console.error("Error fetching rate:", err));
     }
   }, [isTransferDialogOpen, fromAcc, toAcc]);
 
@@ -329,13 +331,15 @@ export default function AccountsPage() {
 
     let finalAmountTo = Number(amount);
     if (fromAcc.currency !== toAcc.currency) {
+      const validRate = Number(exchangeRate) > 0 ? Number(exchangeRate) : 1;
       if (fromAcc.currency === 'ARS' && toAcc.currency === 'USD') {
-        finalAmountTo = Number(amount) / exchangeRate;
+        finalAmountTo = Math.round((Number(amount) / validRate) * 100) / 100;
       } else if (fromAcc.currency === 'USD' && toAcc.currency === 'ARS') {
-        finalAmountTo = Number(amount) * exchangeRate;
+        finalAmountTo = Math.round(Number(amount) * validRate * 100) / 100;
       }
     }
 
+    const rateSuffix = fromAcc.currency !== toAcc.currency ? ` [T/C: $${Number(exchangeRate).toLocaleString('es-AR')}]` : '';
     const finalDate = new Date(date + 'T12:00:00').toISOString();
 
     updateDocumentNonBlocking(doc(db, 'financial_accounts', fromId), { initialBalance: increment(-Number(amount)) })
@@ -349,7 +353,8 @@ export default function AccountsPage() {
       financialAccountId: fromId,
       transferFromAccountId: fromId,
       transferToAccountId: toId,
-      description: description || `Transferencia a ${toAcc.name} (${toAcc.currency})`,
+      exchangeRate: fromAcc.currency !== toAcc.currency ? Number(exchangeRate) : undefined,
+      description: description || `Transferencia a ${toAcc.name} (${toAcc.currency})${rateSuffix}`,
       accountBalanceAfter: Number(fromAcc.initialBalance || 0) - Number(amount)
     })
 
@@ -361,7 +366,8 @@ export default function AccountsPage() {
       financialAccountId: toId,
       transferFromAccountId: fromId,
       transferToAccountId: toId,
-      description: description || `Transferencia desde ${fromAcc.name} (${fromAcc.currency})`,
+      exchangeRate: fromAcc.currency !== toAcc.currency ? Number(exchangeRate) : undefined,
+      description: description || `Transferencia desde ${fromAcc.name} (${fromAcc.currency})${rateSuffix}`,
       accountBalanceAfter: Number(toAcc.initialBalance || 0) + finalAmountTo
     })
 
@@ -786,54 +792,111 @@ export default function AccountsPage() {
         </Dialog>
 
         <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Transferencia entre Cajas</DialogTitle></DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Fecha</Label>
-                <Input type="date" value={transferFormData.date} onChange={(e) => setTransferFormData({...transferFormData, date: e.target.value})} />
+          <DialogContent className="max-w-lg rounded-3xl p-6">
+            <DialogHeader><DialogTitle className="text-xl font-black font-headline text-primary">Transferencia entre Cajas</DialogTitle></DialogHeader>
+            <div className="space-y-4 py-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold uppercase text-muted-foreground">Fecha</Label>
+                <Input type="date" value={transferFormData.date} onChange={(e) => setTransferFormData({...transferFormData, date: e.target.value})} className="rounded-xl font-medium" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Origen</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold uppercase text-muted-foreground">Caja Origen (Debita)</Label>
                   <Select value={transferFormData.fromId} onValueChange={(v) => setTransferFormData({...transferFormData, fromId: v})}>
-                    <SelectTrigger><SelectValue placeholder="Caja..." /></SelectTrigger>
-                    <SelectContent>
+                    <SelectTrigger className="rounded-xl"><SelectValue placeholder="Caja..." /></SelectTrigger>
+                    <SelectContent className="rounded-2xl">
                       {sortedAccounts?.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency}) - Saldo: {a.currency === 'USD' ? 'u$s' : '$'}{a.initialBalance.toLocaleString('es-AR')}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label>Destino</Label>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold uppercase text-muted-foreground">Caja Destino (Acredita)</Label>
                   <Select value={transferFormData.toId} onValueChange={(v) => setTransferFormData({...transferFormData, toId: v})}>
-                    <SelectTrigger><SelectValue placeholder="Caja..." /></SelectTrigger>
-                    <SelectContent>
+                    <SelectTrigger className="rounded-xl"><SelectValue placeholder="Caja..." /></SelectTrigger>
+                    <SelectContent className="rounded-2xl">
                       {sortedAccounts?.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency}) - Saldo: {a.currency === 'USD' ? 'u$s' : '$'}{a.initialBalance.toLocaleString('es-AR')}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Monto a transferir ({fromAcc?.currency || '...' })</Label>
-                <Input type="number" value={transferFormData.amount} onChange={(e) => setTransferFormData({...transferFormData, amount: Number(e.target.value)})} />
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold uppercase text-slate-700">Monto a transferir ({fromAcc?.currency || '...' })</Label>
+                <Input 
+                  type="number" 
+                  step="any"
+                  placeholder="0.00"
+                  value={transferFormData.amount === 0 ? "" : transferFormData.amount} 
+                  onChange={(e) => setTransferFormData({...transferFormData, amount: Number(e.target.value)})} 
+                  className="rounded-xl font-bold text-base"
+                />
               </div>
-              {calculatedReceipt !== null && (
-                <div className="p-3 bg-accent/5 rounded border text-xs font-bold flex justify-between">
-                  <span>Recibirá en destino ({toAcc?.currency}):</span>
-                  <span>{toAcc?.currency === 'USD' ? 'u$s' : '$'}{calculatedReceipt.toLocaleString('es-AR')}</span>
+
+              {/* Conversión y Cotización editable si difieren las monedas */}
+              {fromAcc && toAcc && fromAcc.currency !== toAcc.currency && (
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold text-primary uppercase flex items-center gap-1.5">
+                      Cotización Dólar (1 USD = $ ARS)
+                    </Label>
+                    <div className="flex gap-1.5">
+                      <button 
+                        type="button" 
+                        onClick={() => setExchangeRate(exchangeRates.blue)}
+                        className={`text-[10px] px-2 py-0.5 rounded-lg font-bold transition-all ${exchangeRate === exchangeRates.blue ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white border text-slate-600 hover:bg-slate-100'}`}
+                      >
+                        Blue (${exchangeRates.blue})
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => setExchangeRate(exchangeRates.official)}
+                        className={`text-[10px] px-2 py-0.5 rounded-lg font-bold transition-all ${exchangeRate === exchangeRates.official ? 'bg-blue-600 text-white shadow-sm' : 'bg-white border text-slate-600 hover:bg-slate-100'}`}
+                      >
+                        Oficial (${exchangeRates.official})
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Input 
+                      type="number" 
+                      step="any"
+                      value={exchangeRate} 
+                      onChange={(e) => setExchangeRate(Number(e.target.value))}
+                      placeholder="Ingresar cotización acordada..."
+                      className="bg-white rounded-xl font-bold text-sm border-primary/30"
+                    />
+                    <p className="text-[10px] text-muted-foreground italic">
+                      Puedes modificar el valor del dólar manualmente si no coincide con la cotización de referencia.
+                    </p>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-xs">
+                    <span className="font-semibold text-slate-600">Recibirá en destino ({toAcc.currency}):</span>
+                    <span className="font-black text-sm text-emerald-700">
+                      {toAcc.currency === 'USD' ? 'u$s ' : '$ '}
+                      {(fromAcc.currency === 'ARS' 
+                        ? (Number(exchangeRate) > 0 ? Math.round((Number(transferFormData.amount) / Number(exchangeRate)) * 100) / 100 : 0)
+                        : Math.round(Number(transferFormData.amount) * Number(exchangeRate) * 100) / 100
+                      ).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
                 </div>
               )}
-              <div className="space-y-2">
-                <Label>Descripción / Notas</Label>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold uppercase text-muted-foreground">Descripción / Notas</Label>
                 <Input 
-                  placeholder="Ej: Retiro para sueldos, Pago proveedor..." 
+                  placeholder="Ej: Conversión de divisas, Retiro para sueldos..." 
                   value={transferFormData.description} 
                   onChange={(e) => setTransferFormData({...transferFormData, description: e.target.value})} 
+                  className="rounded-xl text-xs"
                 />
               </div>
             </div>
-            <DialogFooter>
-              <Button onClick={handleTransfer}>Transferir</Button>
+            <DialogFooter className="gap-2 pt-2">
+              <Button variant="outline" onClick={() => setIsTransferDialogOpen(false)} className="rounded-xl font-bold text-xs">Cancelar</Button>
+              <Button onClick={handleTransfer} className="rounded-xl font-bold text-xs px-5 bg-primary text-white">Transferir Fondos</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

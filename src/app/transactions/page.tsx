@@ -312,7 +312,8 @@ function TransactionsContent() {
 
   const [isEditTransferDialogOpen, setIsEditTransferDialogOpen] = useState(false)
   const [editingTransferData, setEditingTransferData] = useState<any | null>(null)
-  const [editExchangeRate, setEditExchangeRate] = useState(1)
+  const [editExchangeRate, setEditExchangeRate] = useState<number>(1350)
+  const [editExchangeRates, setEditExchangeRates] = useState<{ official: number; blue: number }>({ official: 1300, blue: 1350 })
 
   const editFromAcc = useMemo(() => accounts?.find((a: any) => a.id === editingTransferData?.fromId), [accounts, editingTransferData?.fromId]);
   const editToAcc = useMemo(() => accounts?.find((a: any) => a.id === editingTransferData?.toId), [accounts, editingTransferData?.toId]);
@@ -324,14 +325,14 @@ function TransactionsContent() {
 
   useEffect(() => {
     if (isEditTransferDialogOpen && editFromAcc && editToAcc && editFromAcc.currency !== editToAcc.currency) {
-      fetch('https://dolarapi.com/v1/dolares/oficial')
-        .then(res => res.json())
-        .then(data => {
-          if (data && data.venta) {
-            setEditExchangeRate(data.venta);
-          }
-        })
-        .catch(err => console.error("Error fetching rate:", err));
+      Promise.all([
+        fetch('https://dolarapi.com/v1/dolares/oficial').then(r => r.json()).catch(() => null),
+        fetch('https://dolarapi.com/v1/dolares/blue').then(r => r.json()).catch(() => null)
+      ]).then(([off, blue]) => {
+        const offRate = Number(off?.venta) || 1300
+        const blueRate = Number(blue?.venta) || 1350
+        setEditExchangeRates({ official: offRate, blue: blueRate })
+      }).catch(err => console.error("Error fetching rate:", err));
     }
   }, [isEditTransferDialogOpen, editFromAcc, editToAcc]);
 
@@ -467,6 +468,16 @@ function TransactionsContent() {
       const fromId = txOut.transferFromAccountId || txOut.financialAccountId;
       const toId = txIn.transferToAccountId || txIn.financialAccountId;
       const amount = Math.abs(txOut.amount);
+
+      let initialRate = txOut.exchangeRate || txIn.exchangeRate;
+      if (!initialRate && txOut.currency !== txIn.currency && txOut.amount && txIn.amount) {
+        initialRate = txOut.currency === 'USD' 
+          ? Math.round((Math.abs(txIn.amount) / Math.abs(txOut.amount)) * 100) / 100
+          : Math.round((Math.abs(txOut.amount) / Math.abs(txIn.amount)) * 100) / 100;
+      }
+      if (initialRate && initialRate > 0) {
+        setEditExchangeRate(initialRate);
+      }
 
       setEditingTransferData({
         txOutId: txOut.id,
@@ -649,12 +660,15 @@ function TransactionsContent() {
 
     let finalAmountTo = Number(amount);
     if (fromAcc.currency !== toAcc.currency) {
+      const validRate = Number(editExchangeRate) > 0 ? Number(editExchangeRate) : 1;
       if (fromAcc.currency === 'ARS' && toAcc.currency === 'USD') {
-        finalAmountTo = Number(amount) / editExchangeRate;
+        finalAmountTo = Math.round((Number(amount) / validRate) * 100) / 100;
       } else if (fromAcc.currency === 'USD' && toAcc.currency === 'ARS') {
-        finalAmountTo = Number(amount) * editExchangeRate;
+        finalAmountTo = Math.round(Number(amount) * validRate * 100) / 100;
       }
     }
+
+    const rateSuffix = fromAcc.currency !== toAcc.currency ? ` [T/C: $${Number(editExchangeRate).toLocaleString('es-AR')}]` : '';
 
     setIsEditTransferDialogOpen(false);
 
@@ -676,7 +690,8 @@ function TransactionsContent() {
       financialAccountId: fromId,
       transferFromAccountId: fromId,
       transferToAccountId: toId,
-      description: description || `Transferencia a ${toAcc.name} (${toAcc.currency})`,
+      exchangeRate: fromAcc.currency !== toAcc.currency ? Number(editExchangeRate) : undefined,
+      description: description || `Transferencia a ${toAcc.name} (${toAcc.currency})${rateSuffix}`,
       accountBalanceAfter: Number(fromAcc.initialBalance || 0) + Number(originalAmount) - Number(amount)
     });
 
@@ -687,7 +702,8 @@ function TransactionsContent() {
       financialAccountId: toId,
       transferFromAccountId: fromId,
       transferToAccountId: toId,
-      description: description || `Transferencia desde ${fromAcc.name} (${fromAcc.currency})`,
+      exchangeRate: fromAcc.currency !== toAcc.currency ? Number(editExchangeRate) : undefined,
+      description: description || `Transferencia desde ${fromAcc.name} (${fromAcc.currency})${rateSuffix}`,
       accountBalanceAfter: Number(toAcc.initialBalance || 0) - Number(originalFinalAmountTo) + finalAmountTo
     });
 
@@ -1584,32 +1600,77 @@ function TransactionsContent() {
                         </Select>
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Monto a transferir ({editFromAcc?.currency || '...' })</Label>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-bold uppercase text-slate-700">Monto a transferir ({editFromAcc?.currency || '...' })</Label>
                       <Input 
                         type="number" 
+                        step="any"
+                        placeholder="0.00"
                         value={editingTransferData.amount} 
                         onChange={(e) => setEditingTransferData({...editingTransferData, amount: Number(e.target.value)})} 
+                        className="rounded-xl font-bold text-base"
                       />
                     </div>
+
+                    {/* Conversión y Cotización editable si difieren las monedas */}
                     {editFromAcc && editToAcc && editFromAcc.currency !== editToAcc.currency && (
-                      <div className="p-3 bg-accent/5 rounded border text-xs font-bold flex justify-between">
-                        <span>Recibirá estimado en destino ({editToAcc.currency}):</span>
-                        <span>
-                          {editToAcc.currency === 'USD' ? 'u$s' : '$'}
-                          {(editFromAcc.currency === 'ARS' 
-                            ? Number(editingTransferData.amount) / editExchangeRate 
-                            : Number(editingTransferData.amount) * editExchangeRate
-                          ).toLocaleString('es-AR')}
-                        </span>
+                      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs font-bold text-primary uppercase flex items-center gap-1.5">
+                            Cotización Dólar (1 USD = $ ARS)
+                          </Label>
+                          <div className="flex gap-1.5">
+                            <button 
+                              type="button" 
+                              onClick={() => setEditExchangeRate(editExchangeRates.blue)}
+                              className={`text-[10px] px-2 py-0.5 rounded-lg font-bold transition-all ${editExchangeRate === editExchangeRates.blue ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white border text-slate-600 hover:bg-slate-100'}`}
+                            >
+                              Blue (${editExchangeRates.blue})
+                            </button>
+                            <button 
+                              type="button" 
+                              onClick={() => setEditExchangeRate(editExchangeRates.official)}
+                              className={`text-[10px] px-2 py-0.5 rounded-lg font-bold transition-all ${editExchangeRate === editExchangeRates.official ? 'bg-blue-600 text-white shadow-sm' : 'bg-white border text-slate-600 hover:bg-slate-100'}`}
+                            >
+                              Oficial (${editExchangeRates.official})
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Input 
+                            type="number" 
+                            step="any"
+                            value={editExchangeRate} 
+                            onChange={(e) => setEditExchangeRate(Number(e.target.value))}
+                            placeholder="Ingresar cotización acordada..."
+                            className="bg-white rounded-xl font-bold text-sm border-primary/30"
+                          />
+                          <p className="text-[10px] text-muted-foreground italic">
+                            Puedes modificar el valor del dólar manualmente si no coincide con la cotización de referencia.
+                          </p>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-xs">
+                          <span className="font-semibold text-slate-600">Recibirá en destino ({editToAcc.currency}):</span>
+                          <span className="font-black text-sm text-emerald-700">
+                            {editToAcc.currency === 'USD' ? 'u$s ' : '$ '}
+                            {(editFromAcc.currency === 'ARS' 
+                              ? (Number(editExchangeRate) > 0 ? Math.round((Number(editingTransferData.amount) / Number(editExchangeRate)) * 100) / 100 : 0)
+                              : Math.round(Number(editingTransferData.amount) * Number(editExchangeRate) * 100) / 100
+                            ).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
                       </div>
                     )}
-                    <div className="space-y-2">
-                      <Label>Descripción / Notas</Label>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-bold uppercase text-muted-foreground">Descripción / Notas</Label>
                       <Input 
-                        placeholder="Ej: Retiro para sueldos, Pago proveedor..." 
+                        placeholder="Ej: Conversión de divisas, Retiro para sueldos..." 
                         value={editingTransferData.description} 
                         onChange={(e) => setEditingTransferData({...editingTransferData, description: e.target.value})} 
+                        className="rounded-xl text-xs"
                       />
                     </div>
                   </div>
