@@ -257,6 +257,7 @@ function TransactionsContent() {
     const amount = searchParams.get('amount')
     const currency = searchParams.get('currency')
     const desc = searchParams.get('description')
+    const dateParam = searchParams.get('date')
 
     if (mode === 'new') setMainView("register")
     if (clientId && clientId !== 'none') { 
@@ -268,6 +269,7 @@ function TransactionsContent() {
     if (amount) setManualAmount(Number(amount))
     if (currency) setManualCurrency(currency)
     if (desc) setTxDescription(decodeURIComponent(desc))
+    if (dateParam) setOperationDate(dateParam.split('T')[0])
   }, [searchParams])
 
   useEffect(() => {
@@ -288,6 +290,7 @@ function TransactionsContent() {
     const acidoQty = Number(searchParams.get('acido') || 0);
     const cash = Number(searchParams.get('cash') || 0);
     const notes = searchParams.get('notes') || '';
+    const dateParam = searchParams.get('date');
 
     const newItems: any[] = [];
     if (cloroQty > 0) {
@@ -307,6 +310,7 @@ function TransactionsContent() {
     if (newItems.length > 0) setSelectedItems(newItems);
     if (cash > 0) setPaidAmounts(prev => ({ ...prev, ARS: cash }));
     if (notes) setTxDescription(notes);
+    if (dateParam) setOperationDate(dateParam.split('T')[0]);
     setHasAutoPopulated(true);
   }, [catalog, searchParams, hasAutoPopulated]);
 

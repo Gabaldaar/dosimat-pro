@@ -551,7 +551,22 @@ function RoutesContent() {
     if (item.others) noteParts.push(`[Ruta]: ${item.others}`)
     if (item.notes) noteParts.push(`[Entrega]: ${item.notes}`)
     const combinedNotes = noteParts.join(' | ')
-    const queryParams = new URLSearchParams({ mode: 'new', clientId: item.clientId, type: 'refill', cloro: (item.realChlorine ?? 0).toString(), acido: (item.realAcid ?? 0).toString(), cash: (item.cashCollected ?? 0).toString(), notes: combinedNotes, routeId: selectedSheetId!, fromRoute: 'true' }).toString()
+    const sheetDate = selectedSheet?.date ? String(selectedSheet.date).split('T')[0] : ''
+    const paramsObj: Record<string, string> = {
+      mode: 'new',
+      clientId: item.clientId,
+      type: 'refill',
+      cloro: (item.realChlorine ?? 0).toString(),
+      acido: (item.realAcid ?? 0).toString(),
+      cash: (item.cashCollected ?? 0).toString(),
+      notes: combinedNotes,
+      routeId: selectedSheetId!,
+      fromRoute: 'true'
+    }
+    if (sheetDate) {
+      paramsObj.date = sheetDate
+    }
+    const queryParams = new URLSearchParams(paramsObj).toString()
     router.push(`/transactions?${queryParams}`)
   }
 
