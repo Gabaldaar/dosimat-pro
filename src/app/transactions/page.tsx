@@ -86,7 +86,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking, useUser } from "../../firebase"
-import { collection, doc, increment, query, orderBy } from "firebase/firestore"
+import { collection, doc, increment, query, orderBy, getDoc } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 import { SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -526,6 +526,10 @@ function TransactionsContent() {
   };
 
   const handleSaveTransaction = () => {
+    const isFromRoute = searchParams.get('fromRoute') === 'true';
+    const routeIdParam = searchParams.get('routeId');
+    const routeClientIdParam = searchParams.get('clientId');
+
     // Prevent saving if items have mixed currencies
     if (selectedItems.length > 0) {
       const baseCurr = selectedItems[0].currency;
@@ -566,7 +570,26 @@ function TransactionsContent() {
         const overrideVal = convertedAmountOverride !== null ? convertedAmountOverride * sign : finalConvertedAmount;
         finalAmountValue = overrideVal; finalCurrency = acc.currency; accountMovementAmount = overrideVal;
       }
-      const txData = { id: txId, date: finalDateStr, clientId: selectedCustomerId === "none" ? null : selectedCustomerId, type: activeTab, amount: finalAmountValue, currency: finalCurrency, originalAmount: isCrossCurrency ? baseManualAmount : null, originalCurrency: isCrossCurrency ? manualCurrency : null, description: txDescription || `${txTypeMap[activeTab].label} manual`, financialAccountId: manualAccountId === "pending" ? null : manualAccountId, expenseCategoryId: (activeTab === 'Expense' || activeTab === 'adjustment') ? (manualCategoryId || null) : null, paidAmount: Math.abs(accountMovementAmount), pendingAmount: (activeTab === 'adjustment' && baseManualAmount < 0) ? baseManualAmount : 0, imputations: activeTab === 'cobro' ? imputations : null, accountBalanceAfter: (Number(acc?.initialBalance || 0)) + accountMovementAmount, accountMovementAmount };
+      const txData = { 
+        id: txId, 
+        date: finalDateStr, 
+        clientId: selectedCustomerId === "none" ? null : selectedCustomerId, 
+        type: activeTab, 
+        amount: finalAmountValue, 
+        currency: finalCurrency, 
+        originalAmount: isCrossCurrency ? baseManualAmount : null, 
+        originalCurrency: isCrossCurrency ? manualCurrency : null, 
+        description: txDescription || `${txTypeMap[activeTab].label} manual`, 
+        financialAccountId: manualAccountId === "pending" ? null : manualAccountId, 
+        expenseCategoryId: (activeTab === 'Expense' || activeTab === 'adjustment') ? (manualCategoryId || null) : null, 
+        paidAmount: Math.abs(accountMovementAmount), 
+        pendingAmount: (activeTab === 'adjustment' && baseManualAmount < 0) ? baseManualAmount : 0, 
+        imputations: activeTab === 'cobro' ? imputations : null, 
+        accountBalanceAfter: (Number(acc?.initialBalance || 0)) + accountMovementAmount, 
+        accountMovementAmount,
+        routeSheetId: isFromRoute ? (routeIdParam || null) : (editingTx?.routeSheetId || null),
+        routeClientId: isFromRoute ? (routeClientIdParam || null) : (editingTx?.routeClientId || null)
+      };
       setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
       if (manualAccountId !== "pending") updateDocumentNonBlocking(doc(db, 'financial_accounts', manualAccountId), { initialBalance: increment(accountMovementAmount) });
       if (client) { const field = manualCurrency === 'ARS' ? 'saldoActual' : 'saldoUSD'; updateDocumentNonBlocking(doc(db, 'clients', client.id), { [field]: increment(baseManualAmount) }); }
@@ -578,13 +601,57 @@ function TransactionsContent() {
         const debt = total - paid;
         const txId = editingTx?.id || Math.random().toString(36).substring(2, 11);
         const acc = destinationAccounts[curr] !== "pending" ? accounts?.find(a => a.id === destinationAccounts[curr]) : null;
-        const txData = { id: txId, date: finalDateStr, clientId: selectedCustomerId === "none" ? null : selectedCustomerId, type: activeTab === 'refill' ? 'Reposición' : activeTab, amount: -Number(total), paidAmount: paid, debtAmount: debt, currency: curr, description: txDescription || `Operación ${txTypeMap[activeTab].label}`, financialAccountId: (destinationAccounts[curr]==="pending" || paid === 0) ? null : destinationAccounts[curr], items: selectedItems.filter(i => i.currency === curr), pendingAmount: -debt, accountBalanceAfter: (Number(acc?.initialBalance || 0)) + paid, accountMovementAmount: paid };
+        const txData = { 
+          id: txId, 
+          date: finalDateStr, 
+          clientId: selectedCustomerId === "none" ? null : selectedCustomerId, 
+          type: activeTab === 'refill' ? 'Reposición' : activeTab, 
+          amount: -Number(total), 
+          paidAmount: paid, 
+          debtAmount: debt, 
+          currency: curr, 
+          description: txDescription || `Operación ${txTypeMap[activeTab].label}`, 
+          financialAccountId: (destinationAccounts[curr]==="pending" || paid === 0) ? null : destinationAccounts[curr], 
+          items: selectedItems.filter(i => i.currency === curr), 
+          pendingAmount: -debt, 
+          accountBalanceAfter: (Number(acc?.initialBalance || 0)) + paid, 
+          accountMovementAmount: paid,
+          routeSheetId: isFromRoute ? (routeIdParam || null) : (editingTx?.routeSheetId || null),
+          routeClientId: isFromRoute ? (routeClientIdParam || null) : (editingTx?.routeClientId || null)
+        };
         setDocumentNonBlocking(doc(db, 'transactions', txId), txData, { merge: true })
         if (destinationAccounts[curr] !== "pending" && paid !== 0) updateDocumentNonBlocking(doc(db, 'financial_accounts', destinationAccounts[curr]), { initialBalance: increment(paid) });
         if (client && debt !== 0) { const field = curr === 'ARS' ? 'saldoActual' : 'saldoUSD'; updateDocumentNonBlocking(doc(db, 'clients', client.id), { [field]: increment(-debt) }); }
       })
     }
-    toast({ title: editingTx ? "Operación actualizada" : "Operación registrada" }); resetRegisterForm(); setMainView("history");
+
+    if (isFromRoute && routeIdParam && routeClientIdParam) {
+      getDoc(doc(db, 'route_sheets', routeIdParam)).then(snap => {
+        if (snap.exists()) {
+          const sheetData = snap.data();
+          const currentItems = sheetData.items || [];
+          const updatedItems = currentItems.map((i: any) =>
+            i.clientId === routeClientIdParam ? { ...i, processed: true } : i
+          );
+          updateDocumentNonBlocking(doc(db, 'route_sheets', routeIdParam), { items: updatedItems });
+        }
+      }).catch(err => {
+        console.error("Error al marcar entrega como operada en hoja de ruta:", err);
+      });
+    }
+
+    if (isFromRoute && routeIdParam) {
+      toast({ 
+        title: "Operación registrada", 
+        description: "La entrega fue marcada automáticamente como OPERADA en la Hoja de Ruta." 
+      });
+      resetRegisterForm();
+      router.push(`/routes?sheetId=${routeIdParam}`);
+    } else {
+      toast({ title: editingTx ? "Operación actualizada" : "Operación registrada" });
+      resetRegisterForm();
+      setMainView("history");
+    }
   }
 
   const resetRegisterForm = () => {
@@ -629,8 +696,31 @@ function TransactionsContent() {
         updateDocumentNonBlocking(doc(db, 'transactions', targetId), { pendingAmount: increment(-Number(amount)) });
       });
     }
+
+    if (tx.routeSheetId && (tx.routeClientId || tx.clientId)) {
+      const rId = tx.routeSheetId;
+      const cId = tx.routeClientId || tx.clientId;
+      getDoc(doc(db, 'route_sheets', rId)).then(snap => {
+        if (snap.exists()) {
+          const sheetData = snap.data();
+          const currentItems = sheetData.items || [];
+          const updatedItems = currentItems.map((i: any) =>
+            i.clientId === cId ? { ...i, processed: false } : i
+          );
+          updateDocumentNonBlocking(doc(db, 'route_sheets', rId), { items: updatedItems });
+        }
+      }).catch(err => {
+        console.error("Error al desmarcar entrega en hoja de ruta al anular transacción:", err);
+      });
+    }
+
     deleteDocumentNonBlocking(doc(db, 'transactions', tx.id));
-    toast({ title: "Operación eliminada", description: "Los saldos fueron revertidos." });
+    toast({ 
+      title: "Operación eliminada", 
+      description: tx.routeSheetId 
+        ? "Los saldos fueron revertidos y la entrega en la Hoja de Ruta volvió a quedar pendiente." 
+        : "Los saldos fueron revertidos." 
+    });
     setTxToDelete(null);
   }
 
