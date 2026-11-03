@@ -118,13 +118,51 @@ export function Sidebar({ className }: { className?: string }) {
     return query(collection(db, 'client_requests'), where('needsStaffReview', '==', true));
   }, [db, isStaff])
 
+  const completedRouteSheetsQSidebar = useMemoFirebase(() => {
+    if (!isStaff) return null;
+    return query(collection(db, 'route_sheets'), where('status', '==', 'completed'));
+  }, [db, isStaff])
+
   const { data: openProd } = useCollection(prodQ)
   const { data: openPurch } = useCollection(purchQ)
   const { data: pendingOrders } = useCollection(pendingOrdersQ)
   const { data: reviewOrdersSidebar } = useCollection(reviewOrdersQSidebar)
+  const { data: completedRouteSheetsSidebar } = useCollection(completedRouteSheetsQSidebar)
 
   const catalogCount = (openProd?.length || 0) + (openPurch?.length || 0);
   const pendingOrdersCount = (pendingOrders?.length || 0) + (reviewOrdersSidebar?.length || 0);
+  
+  const canManageBilling = Boolean(userData && ['Admin', 'Employee'].includes(userData.role));
+
+  const unoperatedDeliveriesCount = React.useMemo(() => {
+    if (!completedRouteSheetsSidebar || !canManageBilling) return 0;
+    return completedRouteSheetsSidebar.reduce((sum, sheet: any) => {
+      const unoperatedInSheet = (sheet.items || []).filter((item: any) =>
+        !item.processed && (
+          Number(item.realChlorine || 0) > 0 ||
+          Number(item.realAcid || 0) > 0 ||
+          Boolean(item.isDelivered) ||
+          Number(item.cashCollected || 0) > 0
+        )
+      ).length;
+      return sum + unoperatedInSheet;
+    }, 0);
+  }, [completedRouteSheetsSidebar, canManageBilling]);
+
+  const unoperatedRoutesCount = React.useMemo(() => {
+    if (!completedRouteSheetsSidebar || !canManageBilling) return 0;
+    return completedRouteSheetsSidebar.reduce((sum, sheet: any) => {
+      const hasUnoperated = (sheet.items || []).some((item: any) =>
+        !item.processed && (
+          Number(item.realChlorine || 0) > 0 ||
+          Number(item.realAcid || 0) > 0 ||
+          Boolean(item.isDelivered) ||
+          Number(item.cashCollected || 0) > 0
+        )
+      );
+      return sum + (hasUnoperated ? 1 : 0);
+    }, 0);
+  }, [completedRouteSheetsSidebar, canManageBilling]);
   
   // Check if the current user is also a client
   const isAlsoClient = !!userData?.clientId;
@@ -197,17 +235,29 @@ export function Sidebar({ className }: { className?: string }) {
 
     const mapped = items.map(item => {
       let badgeCount = 0;
-      if (item.href === '/routes') badgeCount = pendingOrdersCount;
+      let badgeColor = "bg-rose-500";
+      let badgeTitle: string | undefined = undefined;
+
+      if (item.href === '/routes') {
+        badgeCount = pendingOrdersCount + unoperatedDeliveriesCount;
+        if (unoperatedDeliveriesCount > 0) {
+          badgeColor = "bg-amber-500 hover:bg-amber-600";
+          badgeTitle = `${unoperatedDeliveriesCount} ${unoperatedDeliveriesCount === 1 ? 'entrega por operar' : 'entregas por operar'} (${unoperatedRoutesCount} ${unoperatedRoutesCount === 1 ? 'hoja de ruta' : 'hojas de ruta'})`;
+          if (pendingOrdersCount > 0) {
+            badgeTitle += ` · ${pendingOrdersCount} pedidos portal`;
+          }
+        }
+      }
       if (item.href === '/catalog') badgeCount = catalogCount;
-      return { ...item, badgeCount };
+      return { ...item, badgeCount, badgeColor, badgeTitle };
     });
 
     if (isAlsoClient) {
-      mapped.push({ href: "/portal", label: "Panel Cliente", icon: UserCircle, badgeCount: 0 });
+      mapped.push({ href: "/portal", label: "Panel Cliente", icon: UserCircle, badgeCount: 0, badgeColor: "bg-rose-500", badgeTitle: undefined });
     }
 
     return mapped;
-  }, [userData, pendingOrdersCount, catalogCount, isAlsoClient]);
+  }, [userData, pendingOrdersCount, catalogCount, unoperatedDeliveriesCount, unoperatedRoutesCount, isAlsoClient]);
 
   return (
     <SidebarUI collapsible="icon" className={cn("border-r no-print", className)}>
@@ -238,7 +288,13 @@ export function Sidebar({ className }: { className?: string }) {
                 </Link>
               </SidebarMenuButton>
               {item.badgeCount > 0 && (
-                <SidebarMenuBadge className="bg-rose-500 text-white rounded-full text-[9px] min-w-4 h-4 flex items-center justify-center p-0 font-black animate-in fade-in zoom-in">
+                <SidebarMenuBadge 
+                  title={item.badgeTitle}
+                  className={cn(
+                    "text-white rounded-full text-[9px] min-w-4 h-4 px-1 flex items-center justify-center font-black animate-in fade-in zoom-in shadow-xs",
+                    item.badgeColor || "bg-rose-500"
+                  )}
+                >
                   {item.badgeCount}
                 </SidebarMenuBadge>
               )}
@@ -322,10 +378,33 @@ export function MobileNav() {
     return query(collection(db, 'client_requests'), where('needsStaffReview', '==', true));
   }, [db, isStaff])
 
+  const completedRouteSheetsQMobile = useMemoFirebase(() => {
+    if (!isStaff) return null;
+    return query(collection(db, 'route_sheets'), where('status', '==', 'completed'));
+  }, [db, isStaff])
+
   const { data: pendingOrders } = useCollection(pendingOrdersQ)
   const { data: reviewOrders } = useCollection(reviewOrdersQ)
+  const { data: completedRouteSheetsMobile } = useCollection(completedRouteSheetsQMobile)
 
   const pendingOrdersCount = (pendingOrders?.length || 0) + (reviewOrders?.length || 0);
+
+  const canManageBillingMobile = Boolean(userData && ['Admin', 'Employee'].includes(userData.role));
+
+  const unoperatedDeliveriesCountMobile = React.useMemo(() => {
+    if (!completedRouteSheetsMobile || !canManageBillingMobile) return 0;
+    return completedRouteSheetsMobile.reduce((sum, sheet: any) => {
+      const unoperatedInSheet = (sheet.items || []).filter((item: any) =>
+        !item.processed && (
+          Number(item.realChlorine || 0) > 0 ||
+          Number(item.realAcid || 0) > 0 ||
+          Boolean(item.isDelivered) ||
+          Number(item.cashCollected || 0) > 0
+        )
+      ).length;
+      return sum + unoperatedInSheet;
+    }, 0);
+  }, [completedRouteSheetsMobile, canManageBillingMobile]);
 
   const isAlsoClient = !!userData?.clientId;
   
@@ -356,7 +435,9 @@ export function MobileNav() {
 
     const mapped = base.map(item => {
       let count = 0;
-      if (item.href === '/routes') count = pendingOrdersCount;
+      if (item.href === '/routes') {
+        count = pendingOrdersCount + unoperatedDeliveriesCountMobile;
+      }
       return { ...item, count };
     });
 
@@ -365,7 +446,7 @@ export function MobileNav() {
     }
 
     return mapped;
-  }, [userData, pendingOrdersCount, isAlsoClient]);
+  }, [userData, pendingOrdersCount, unoperatedDeliveriesCountMobile, isAlsoClient]);
 
   return (
     <>
