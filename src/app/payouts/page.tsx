@@ -131,6 +131,33 @@ function PayoutsContent() {
   const selectedCollab = useMemo(() => collaborators?.find(c => c.id === selectedCollabId), [collaborators, selectedCollabId])
   const selectedAccount = useMemo(() => accounts?.find(a => a.id === accountId), [accounts, accountId])
 
+  const validCollaborators = useMemo(() => {
+    if (!collaborators) return [];
+    const staffRoles = ['Admin', 'Employee', 'Collaborator', 'Communicator', 'Replenisher', 'Socio', 'Colaborador'];
+    return collaborators
+      .filter((c: any) => {
+        const hasValidRole = staffRoles.includes(c.role);
+        const isNotClient = c.role !== 'Client' && c.role !== 'Pending' && c.role !== 'Blocked';
+        const isActive = c.status !== 'inactive';
+        const hasName = Boolean(c.name && c.name.trim().length > 0);
+        return hasValidRole && isNotClient && isActive && hasName;
+      })
+      .sort((a: any, b: any) => (a.name || "").localeCompare(b.name || "", 'es', { sensitivity: 'base' }));
+  }, [collaborators]);
+
+  const historyCollaborators = useMemo(() => {
+    const map = new Map<string, { id: string, name: string, role?: string }>();
+    validCollaborators.forEach(c => {
+      map.set(c.id, { id: c.id, name: c.name, role: c.role });
+    });
+    payouts?.forEach((p: any) => {
+      if (p.userId && !map.has(p.userId) && p.userName && p.userName.trim().length > 0) {
+        map.set(p.userId, { id: p.userId, name: p.userName, role: 'Anterior' });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
+  }, [validCollaborators, payouts]);
+
   useEffect(() => {
     const pId = searchParams.get('payoutId');
     if (pId && payouts) {
@@ -539,7 +566,7 @@ function PayoutsContent() {
                       <Select value={selectedCollabId === "all" ? "" : selectedCollabId} onValueChange={setSelectedCollabId}>
                         <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
                         <SelectContent>
-                          {collaborators?.filter(c => ['Admin', 'Employee', 'Communicator', 'Replenisher', 'Socio', 'Colaborador'].includes(c.role)).map(c => (
+                          {validCollaborators.map(c => (
                             <SelectItem key={c.id} value={c.id}>{c.name} ({c.role})</SelectItem>
                           ))}
                         </SelectContent>
@@ -761,10 +788,10 @@ function PayoutsContent() {
                 <div className="space-y-1">
                   <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Filtrar por Colaborador</Label>
                   <Select value={selectedCollabId} onValueChange={setSelectedCollabId}>
-                    <SelectTrigger className="w-[200px] bg-white h-10 font-bold"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="w-[220px] bg-white h-10 font-bold"><SelectValue placeholder="Todos los colaboradores" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todos los miembros</SelectItem>
-                      {collaborators?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      <SelectItem value="all">Todos los colaboradores</SelectItem>
+                      {historyCollaborators.map(c => <SelectItem key={c.id} value={c.id}>{c.name} {c.role ? `(${c.role})` : ''}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
