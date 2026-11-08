@@ -51,7 +51,8 @@ import {
   HelpCircle,
   Lock,
   Sparkles,
-  Plus
+  Plus,
+  FileText
 } from "lucide-react"
 import { useToast } from "../../hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -576,6 +577,11 @@ function TransactionsContent() {
         const overrideVal = convertedAmountOverride !== null ? convertedAmountOverride * sign : finalConvertedAmount;
         finalAmountValue = overrideVal; finalCurrency = acc.currency; accountMovementAmount = overrideVal;
       }
+      const selectedCat = (activeTab === 'Expense' || activeTab === 'adjustment') && manualCategoryId 
+        ? expenseCategories?.find((c: any) => c.id === manualCategoryId) 
+        : null;
+      const defaultDesc = txDescription || (selectedCat ? `Gasto: ${selectedCat.name}` : `${txTypeMap[activeTab].label} manual`);
+
       const txData = { 
         id: txId, 
         date: finalDateStr, 
@@ -585,7 +591,7 @@ function TransactionsContent() {
         currency: finalCurrency, 
         originalAmount: isCrossCurrency ? baseManualAmount : null, 
         originalCurrency: isCrossCurrency ? manualCurrency : null, 
-        description: txDescription || `${txTypeMap[activeTab].label} manual`, 
+        description: defaultDesc, 
         financialAccountId: manualAccountId === "pending" ? null : manualAccountId, 
         expenseCategoryId: (activeTab === 'Expense' || activeTab === 'adjustment') ? (manualCategoryId || null) : null, 
         paidAmount: Math.abs(accountMovementAmount), 
@@ -1067,7 +1073,9 @@ function TransactionsContent() {
     if (!transactions || filterAccount === "all" || filterAccount === "null") return transactions || [];
     const targetAccount = accounts?.find(a => a.id === filterAccount);
     if (!targetAccount) return transactions;
-    const accountTxs = transactions.filter(tx => tx.financialAccountId === filterAccount);
+    const accountTxs = [...transactions]
+      .filter(tx => tx.financialAccountId === filterAccount)
+      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
     let runningBalance = Number(targetAccount.initialBalance || 0);
     return accountTxs.map((tx: any) => {
       const movement = getMovementAmount(tx);
@@ -1481,6 +1489,7 @@ function TransactionsContent() {
                     const cust = customers?.find(c => c.id === tx.clientId)
                     const acc = accounts?.find(a => a.id === tx.financialAccountId)
                     const info = txTypeMap[tx.type] || { label: tx.type, icon: ShoppingBag, color: "text-slate-600 bg-slate-50" }
+                    const expCat = tx.expenseCategoryId ? expenseCategories?.find((c: any) => c.id === tx.expenseCategoryId) : null
                     const Icon = info.icon
                     const symbol = tx.currency === "USD" ? "u$s" : "$"
                     const movement = getMovementAmount(tx)
@@ -1493,11 +1502,21 @@ function TransactionsContent() {
                           <span className="text-[10px] font-black text-muted-foreground uppercase bg-muted/50 px-2 py-0.5 rounded">{formatLocalDate(tx.date)}</span>
                           <div onClick={(e) => e.stopPropagation()}>{renderTxActions(tx, isLatest)}</div>
                         </div>
-                        <h4 className="font-black text-sm mb-2">{cust ? `${cust.apellido}, ${cust.nombre}` : "Global"}</h4>
-                        <div className="flex flex-col gap-1 mb-3">
+                        <h4 className="font-black text-sm mb-2">
+                          {cust 
+                            ? `${cust.apellido}, ${cust.nombre}` 
+                            : (tx.type === 'Expense' ? (expCat ? expCat.name : "Gasto General") : "Global")}
+                        </h4>
+                        <div className="flex flex-wrap items-center gap-1.5 mb-2">
                           <Badge variant="outline" className={cn("text-[9px] font-black uppercase w-fit gap-1", info.color)}><Icon className="h-3 w-3" />{info.label}</Badge>
-                          {tx.description && <p className="text-[11px] text-muted-foreground line-clamp-2">{tx.description}</p>}
+                          {expCat && (
+                            <Badge variant="secondary" className="text-[9px] font-black uppercase w-fit gap-1 bg-rose-50 text-rose-700 border border-rose-200">
+                              <Tag className="h-2.5 w-2.5" />
+                              {expCat.name}
+                            </Badge>
+                          )}
                         </div>
+                        {tx.description && <p className="text-[11px] text-muted-foreground line-clamp-2 mb-3">{tx.description}</p>}
                         <div className="grid grid-cols-2 gap-3 text-sm border-t pt-3">
                           <div>
                             <p className="text-[9px] font-black uppercase text-muted-foreground">Total Operación</p>
@@ -1568,7 +1587,7 @@ function TransactionsContent() {
                           <div className="p-3 bg-muted/20 rounded-xl border">
                             <Label className="text-[10px] font-bold uppercase text-muted-foreground">Cliente</Label>
                             <p className="font-bold text-sm mt-1">
-                              {customers?.find(c => c.id === selectedTxDetails.clientId)?.apellido || "Global"},{" "}
+                              {customers?.find(c => c.id === selectedTxDetails.clientId)?.apellido || (selectedTxDetails.type === 'Expense' ? "Gasto Interno / General" : "Global")},{" "}
                               {customers?.find(c => c.id === selectedTxDetails.clientId)?.nombre || ""}
                             </p>
                           </div>
@@ -1576,6 +1595,15 @@ function TransactionsContent() {
                             <Label className="text-[10px] font-bold uppercase text-muted-foreground">Caja</Label>
                             <p className="font-bold text-sm mt-1">{accounts?.find(a => a.id === selectedTxDetails.financialAccountId)?.name || "A Cuenta"}</p>
                           </div>
+                          {selectedTxDetails.expenseCategoryId && (
+                            <div className="p-3 bg-rose-50/50 rounded-xl border border-rose-100 col-span-1 md:col-span-2">
+                              <Label className="text-[10px] font-bold uppercase text-rose-600">Rubro / Categoría de Gasto</Label>
+                              <p className="font-extrabold text-sm mt-1 text-rose-700 flex items-center gap-1.5">
+                                <Tag className="h-4 w-4 text-rose-500" />
+                                {expenseCategories?.find((c: any) => c.id === selectedTxDetails.expenseCategoryId)?.name || "Sin categoría"}
+                              </p>
+                            </div>
+                          )}
                         </>
                       )}
                     </section>
@@ -1654,8 +1682,13 @@ function TransactionsContent() {
                         </div>
                       </div>
                     )}
-                    <div className="p-4 bg-muted/30 rounded-xl border text-sm italic text-slate-700 min-h-[60px]">
-                      {selectedTxDetails.description || "Sin descripción adicional."}
+                    <div className="p-4 bg-muted/20 rounded-xl border space-y-1">
+                      <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-wider flex items-center gap-1.5">
+                        <FileText className="h-3 w-3" /> Concepto / Comentarios
+                      </Label>
+                      <p className="text-sm font-semibold text-slate-800 whitespace-pre-wrap">
+                        {selectedTxDetails.description || "Sin comentarios adicionales."}
+                      </p>
                     </div>
                     <div className="flex gap-2 justify-center">
                       <Button variant="outline" size="sm" onClick={() => handleCopyWhatsApp(selectedTxDetails)}><Copy className="h-4 w-4 mr-2" /> Copiar</Button>

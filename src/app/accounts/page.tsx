@@ -293,12 +293,17 @@ export default function AccountsPage() {
       initialBalance: increment(finalAmount)
     })
 
+    const category = expenseCategories?.find((c: any) => c.id === txFormData.categoryId);
+    const defaultDesc = txFormData.description 
+      ? txFormData.description 
+      : (txType === 'expense' && category ? `Gasto: ${category.name}` : (txType === 'income' ? 'Ingreso manual' : txType === 'expense' ? 'Gasto manual' : 'Ajuste manual'));
+
     addDocumentNonBlocking(collection(db, 'transactions'), {
       date: finalDate,
       type: txType === 'expense' ? 'Expense' : 'Adjustment',
       amount: finalAmount,
       currency: selectedAccount.currency,
-      description: txFormData.description || (txType === 'income' ? 'Ingreso manual' : txType === 'expense' ? 'Gasto manual' : 'Ajuste manual'),
+      description: defaultDesc,
       financialAccountId: selectedAccount.id,
       expenseCategoryId: txFormData.categoryId || null,
       accountBalanceAfter: Number(selectedAccount.initialBalance || 0) + finalAmount
@@ -633,6 +638,7 @@ export default function AccountsPage() {
                   recentTxs.map((move: any) => {
                     const typeInfo = txTypeMap[move.type] || { label: move.type, icon: RefreshCw, color: "text-slate-600 bg-slate-50" };
                     const Icon = typeInfo.icon;
+                    const expCat = move.expenseCategoryId ? expenseCategories?.find((c: any) => c.id === move.expenseCategoryId) : null;
                     return (
                       <div key={move.id} className="flex items-center justify-between p-4 hover:bg-muted/5 transition-colors">
                         <div className="flex items-center gap-4">
@@ -640,9 +646,10 @@ export default function AccountsPage() {
                             <Icon className="h-4 w-4" />
                           </div>
                           <div>
-                            <p className="text-sm font-bold leading-none">{move.description || typeInfo.label}</p>
+                            <p className="text-sm font-bold leading-none">{move.description || (expCat ? expCat.name : typeInfo.label)}</p>
                             <p className="text-[10px] text-muted-foreground mt-1 uppercase">
                               {move.date ? new Date(move.date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' }) : 'S/D'} • <span className="font-bold">{typeInfo.label}</span>
+                              {expCat && <span className="font-bold text-rose-600 ml-1.5">• {expCat.name}</span>}
                             </p>
                           </div>
                         </div>
