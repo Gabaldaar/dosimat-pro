@@ -330,7 +330,8 @@ export default function AccountsPage() {
     setIsTransferDialogOpen(false)
 
     let finalAmountTo = Number(amount);
-    if (fromAcc.currency !== toAcc.currency) {
+    const isCrossCurrency = fromAcc.currency !== toAcc.currency;
+    if (isCrossCurrency) {
       const validRate = Number(exchangeRate) > 0 ? Number(exchangeRate) : 1;
       if (fromAcc.currency === 'ARS' && toAcc.currency === 'USD') {
         finalAmountTo = Math.round((Number(amount) / validRate) * 100) / 100;
@@ -339,13 +340,14 @@ export default function AccountsPage() {
       }
     }
 
-    const rateSuffix = fromAcc.currency !== toAcc.currency ? ` [T/C: $${Number(exchangeRate).toLocaleString('es-AR')}]` : '';
+    const rateSuffix = isCrossCurrency ? ` [T/C: $${Number(exchangeRate).toLocaleString('es-AR')}]` : '';
     const finalDate = new Date(date + 'T12:00:00').toISOString();
+    const transferGroupId = `tr_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
     updateDocumentNonBlocking(doc(db, 'financial_accounts', fromId), { initialBalance: increment(-Number(amount)) })
     updateDocumentNonBlocking(doc(db, 'financial_accounts', toId), { initialBalance: increment(finalAmountTo) })
 
-    addDocumentNonBlocking(collection(db, 'transactions'), {
+    const outData: any = {
       date: finalDate,
       type: 'FinancialTransferOut',
       amount: -Number(amount),
@@ -353,12 +355,16 @@ export default function AccountsPage() {
       financialAccountId: fromId,
       transferFromAccountId: fromId,
       transferToAccountId: toId,
-      exchangeRate: fromAcc.currency !== toAcc.currency ? Number(exchangeRate) : undefined,
+      transferGroupId,
       description: description || `Transferencia a ${toAcc.name} (${toAcc.currency})${rateSuffix}`,
       accountBalanceAfter: Number(fromAcc.initialBalance || 0) - Number(amount)
-    })
+    };
+    if (isCrossCurrency && Number(exchangeRate) > 0) {
+      outData.exchangeRate = Number(exchangeRate);
+    }
+    addDocumentNonBlocking(collection(db, 'transactions'), outData);
 
-    addDocumentNonBlocking(collection(db, 'transactions'), {
+    const inData: any = {
       date: finalDate,
       type: 'FinancialTransferIn',
       amount: finalAmountTo,
@@ -366,10 +372,14 @@ export default function AccountsPage() {
       financialAccountId: toId,
       transferFromAccountId: fromId,
       transferToAccountId: toId,
-      exchangeRate: fromAcc.currency !== toAcc.currency ? Number(exchangeRate) : undefined,
+      transferGroupId,
       description: description || `Transferencia desde ${fromAcc.name} (${fromAcc.currency})${rateSuffix}`,
       accountBalanceAfter: Number(toAcc.initialBalance || 0) + finalAmountTo
-    })
+    };
+    if (isCrossCurrency && Number(exchangeRate) > 0) {
+      inData.exchangeRate = Number(exchangeRate);
+    }
+    addDocumentNonBlocking(collection(db, 'transactions'), inData);
 
     setTransferFormData({
       fromId: "",

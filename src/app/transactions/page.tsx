@@ -215,7 +215,7 @@ function TransactionsContent() {
       } else if (tx.type === 'FinancialTransferIn') {
         const pair = transactions?.find(t => 
           t.type === 'FinancialTransferOut' && 
-          t.date === tx.date
+          (tx.transferGroupId && t.transferGroupId ? t.transferGroupId === tx.transferGroupId : t.date === tx.date)
         );
         if (pair) {
           const acc = accounts?.find(a => a.id === pair.financialAccountId);
@@ -236,7 +236,7 @@ function TransactionsContent() {
       } else if (tx.type === 'FinancialTransferOut') {
         const pair = transactions?.find(t => 
           t.type === 'FinancialTransferIn' && 
-          t.date === tx.date
+          (tx.transferGroupId && t.transferGroupId ? t.transferGroupId === tx.transferGroupId : t.date === tx.date)
         );
         if (pair) {
           const acc = accounts?.find(a => a.id === pair.financialAccountId);
@@ -461,8 +461,14 @@ function TransactionsContent() {
 
     if (tx.type === 'FinancialTransferOut' || tx.type === 'FinancialTransferIn') {
       const isOut = tx.type === 'FinancialTransferOut';
-      const txOut = isOut ? tx : transactions?.find((t: any) => t.type === 'FinancialTransferOut' && t.date === tx.date);
-      const txIn = !isOut ? tx : transactions?.find((t: any) => t.type === 'FinancialTransferIn' && t.date === tx.date);
+      const txOut = isOut ? tx : transactions?.find((t: any) => 
+        t.type === 'FinancialTransferOut' && 
+        (tx.transferGroupId && t.transferGroupId ? t.transferGroupId === tx.transferGroupId : t.date === tx.date)
+      );
+      const txIn = !isOut ? tx : transactions?.find((t: any) => 
+        t.type === 'FinancialTransferIn' && 
+        (tx.transferGroupId && t.transferGroupId ? t.transferGroupId === tx.transferGroupId : t.date === tx.date)
+      );
 
       if (!txOut || !txIn) {
         toast({ title: "Error", description: "No se encontró la contrapartida de la transferencia para poder editarla.", variant: "destructive" });
@@ -664,8 +670,14 @@ function TransactionsContent() {
 
     if (tx.type === 'FinancialTransferOut' || tx.type === 'FinancialTransferIn') {
       const isOut = tx.type === 'FinancialTransferOut';
-      const txOut = isOut ? tx : transactions?.find((t: any) => t.type === 'FinancialTransferOut' && t.date === tx.date);
-      const txIn = !isOut ? tx : transactions?.find((t: any) => t.type === 'FinancialTransferIn' && t.date === tx.date);
+      const txOut = isOut ? tx : transactions?.find((t: any) => 
+        t.type === 'FinancialTransferOut' && 
+        (tx.transferGroupId && t.transferGroupId ? t.transferGroupId === tx.transferGroupId : t.date === tx.date)
+      );
+      const txIn = !isOut ? tx : transactions?.find((t: any) => 
+        t.type === 'FinancialTransferIn' && 
+        (tx.transferGroupId && t.transferGroupId ? t.transferGroupId === tx.transferGroupId : t.date === tx.date)
+      );
 
       if (txOut) {
         const fromId = txOut.transferFromAccountId || txOut.financialAccountId;
@@ -762,7 +774,8 @@ function TransactionsContent() {
       }
     }
 
-    const rateSuffix = fromAcc.currency !== toAcc.currency ? ` [T/C: $${Number(editExchangeRate).toLocaleString('es-AR')}]` : '';
+    const isCrossCurrency = fromAcc.currency !== toAcc.currency;
+    const rateSuffix = isCrossCurrency ? ` [T/C: $${Number(editExchangeRate).toLocaleString('es-AR')}]` : '';
 
     setIsEditTransferDialogOpen(false);
 
@@ -777,29 +790,36 @@ function TransactionsContent() {
     const finalDate = new Date(date + 'T12:00:00').toISOString();
 
     // Update transactions
-    updateDocumentNonBlocking(doc(db, 'transactions', txOutId), {
+    const txOutUpdate: any = {
       date: finalDate,
       amount: -Number(amount),
       currency: fromAcc.currency,
       financialAccountId: fromId,
       transferFromAccountId: fromId,
       transferToAccountId: toId,
-      exchangeRate: fromAcc.currency !== toAcc.currency ? Number(editExchangeRate) : undefined,
       description: description || `Transferencia a ${toAcc.name} (${toAcc.currency})${rateSuffix}`,
       accountBalanceAfter: Number(fromAcc.initialBalance || 0) + Number(originalAmount) - Number(amount)
-    });
+    };
+    if (isCrossCurrency && Number(editExchangeRate) > 0) {
+      txOutUpdate.exchangeRate = Number(editExchangeRate);
+    }
 
-    updateDocumentNonBlocking(doc(db, 'transactions', txInId), {
+    const txInUpdate: any = {
       date: finalDate,
       amount: finalAmountTo,
       currency: toAcc.currency,
       financialAccountId: toId,
       transferFromAccountId: fromId,
       transferToAccountId: toId,
-      exchangeRate: fromAcc.currency !== toAcc.currency ? Number(editExchangeRate) : undefined,
       description: description || `Transferencia desde ${fromAcc.name} (${fromAcc.currency})${rateSuffix}`,
       accountBalanceAfter: Number(toAcc.initialBalance || 0) - Number(originalFinalAmountTo) + finalAmountTo
-    });
+    };
+    if (isCrossCurrency && Number(editExchangeRate) > 0) {
+      txInUpdate.exchangeRate = Number(editExchangeRate);
+    }
+
+    updateDocumentNonBlocking(doc(db, 'transactions', txOutId), txOutUpdate);
+    updateDocumentNonBlocking(doc(db, 'transactions', txInId), txInUpdate);
 
     toast({ title: "Transferencia actualizada con éxito" });
     setEditingTransferData(null);
